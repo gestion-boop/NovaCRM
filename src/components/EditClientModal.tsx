@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Save, Pencil } from 'lucide-react';
 import { Contact, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
-import { htDepuisTtc, ttcDepuisHt } from '@/lib/utils';
+import { htDepuisTtc, ttcDepuisHt, formatVille } from '@/lib/utils';
 import { useAssignableUsers } from '@/hooks/useAssignableUsers';
 
 interface Props {
@@ -103,7 +103,7 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
         honoraires: honorairesTtc === '' ? undefined : Math.round(htDepuisTtc(Number(honorairesTtc)) * 100) / 100,
         advisorCommissionTtc: advisorCommission === '' ? undefined : Number(advisorCommission),
         mandateNumber,
-        secteur: secteur.trim(),
+        secteur: formatVille(secteur.trim()),
         typeBien: typeBien.trim(),
         assignedTo,
         coBorrower: coBorrower.trim(),
@@ -248,7 +248,12 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={label}>Secteur</label>
-              <input value={secteur} onChange={(e) => setSecteur(e.target.value)} className={field} />
+              <input
+                value={secteur}
+                onChange={(e) => setSecteur(e.target.value)}
+                onBlur={() => setSecteur((v) => formatVille(v.trim()))}
+                className={field}
+              />
             </div>
             <div>
               <label className={label}>Type de bien / projet</label>

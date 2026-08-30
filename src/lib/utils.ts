@@ -49,3 +49,27 @@ export function ttcDepuisHt(ht?: number | null): number {
   if (ht === null || ht === undefined || Number.isNaN(Number(ht))) return 0;
   return Number(ht) * (1 + TVA_RATE);
 }
+
+
+/**
+ * Met une majuscule à chaque mot d'un nom de ville.
+ *
+ * Demandé : « quand je remplis le secteur, je veux qu'il y ait toujours une
+ * majuscule sur la première lettre ». Les villes étaient saisies au fil de
+ * l'eau ("quarante", "blagnac", "SIGEAN"), ce qui donnait un affichage
+ * incohérent dans les fiches et dans le détail des statistiques.
+ *
+ * Les traits d'union et les apostrophes comptent comme des séparateurs
+ * (Saint-Jean, L'Isle), et les particules restent en minuscules.
+ */
+const PARTICULES = new Set(['de', 'du', 'des', 'le', 'la', 'les', 'sur', 'sous', 'en', 'et', 'aux', 'au', 'lès', 'd', 'l']);
+
+export function formatVille(value: string): string {
+  if (!value) return '';
+  return value
+    .toLocaleLowerCase('fr')
+    .replace(/([^\s'-]+)/g, (mot, _m, index) => {
+      if (index > 0 && PARTICULES.has(mot)) return mot;
+      return mot.charAt(0).toLocaleUpperCase('fr') + mot.slice(1);
+    });
+}

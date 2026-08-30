@@ -3,6 +3,7 @@ import { X, UserPlus, Building, Building2, ChevronDown, ChevronUp, User, Briefca
 import { toast } from 'sonner';
 import { Contact, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { formatVille } from '@/lib/utils';
 
 interface NouveauLeadModalProps {
   isOpen: boolean;
@@ -188,7 +189,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         contactType,
         clientType,
         budgetMax: budgetMax === '' ? 0 : Number(budgetMax),
-        secteur: secteur.trim(),
+        secteur: formatVille(secteur.trim()),
         typeBien: typeBien.trim(),
         pipeline,
         statutLead,
