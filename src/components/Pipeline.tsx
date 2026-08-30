@@ -1,0 +1,2063 @@
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+// Ticket #114/#116 (suivi) : migré de @hello-pangea/dnd vers @dnd-kit — même
+// mécanisme déjà utilisé pour les tuiles de l'accueil (dont la fluidité sert
+// justement de référence dans le retour utilisateur), pour une sensation de
+// glisser-déposer cohérente dans tout le CRM.
+import {
+  DndContext,
+  DragOverlay,
+  DragStartEvent,
+  DragEndEvent,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  closestCenter,
+} from '@dnd-kit/core';
+import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
+import { formatCurrency } from '@/lib/utils';
+// Ticket #277 (suite) : même détection de mode jour que l'accueil, pour que
+// les colonnes du pipeline suivent la même bascule vers de vraies couleurs
+// claires (au lieu du filtre global qui pâlit juste le bleu canard).
+import { useIsLightMode } from './AccueilGrid';
+import TransactionChecklistModal, {
+  STAGE_CHECKLISTS,
+  IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID,
+  usePreviousStageMissingCount,
+  useCurrentStageChecklistCount,
+} from './TransactionChecklistModal';
+import { ClipboardList } from 'lucide-react';
+
+import {
+  AlertTriangle,
+  GripVertical,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Star,
+  Trash2,
+} from 'lucide-react';
+
+import {
+  AGENCIES,
+  Contact,
+  Deal,
+  PipelineDef,
+} from '@/types';
+
+
+
+import {
+  useAuth,
+} from '@/context/AuthContext';
+
+import {
+  useDeals,
+} from '@/hooks/useDeals';
+
+import {
+  useContacts,
+} from '@/hooks/useContacts';
+
+import {
+  useTasks,
+} from '@/hooks/useTasks';
+
+import { getTaskDateStatus } from '@/lib/taskUtils';
+
+// Ticket #106 : "toujours conditionner la création d'un pipeline à un
+// renommage, ne jamais laisser un nom générique type « Mon Pipeline »" —
+// bloque les intitulés placeholder les plus courants (création ET
+// renommage), pour ne plus jamais se retrouver avec un pipeline qui reste
+// nommé comme un brouillon.
+const GENERIC_PIPELINE_NAMES = ['mon pipeline', 'nouveau pipeline', 'pipeline', 'sans titre', 'sans nom'];
+const isGenericPipelineName = (name: string) => GENERIC_PIPELINE_NAMES.includes(name.trim().toLowerCase());
+
+const BASE_PIPELINES: PipelineDef[] = [
+  {
+    id: 'pipe-principal',
+    name: 'Pipeline principal',
+    stages: [
+      'Nouveau',
+      'À contacter',
+      'En cours',
+      'En attente',
+      'Finalisation',
+      'Terminé',
+    ],
+  },
+];
+
+interface StoredPipeline extends PipelineDef {
+  agencyId: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PipelineProps {
+  onSelectContact?: (contactId: string) => void;
+  // Ticket #105 : venant d'un clic sur une colonne du graphique du tableau
+  // de bord, fait défiler directement jusqu'à cette étape du pipeline et la
+  // met brièvement en surbrillance. `onInitialStageHandled` prévient une
+  // fois le défilement fait, pour ne pas re-déclencher au moindre re-render.
+  initialStage?: string | null;
+  onInitialStageHandled?: () => void;
+  // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (14/16) : ouvre le
+  // composeur Mail avec un brouillon pré-rempli (jamais d'envoi automatique)
+  // — voir App.tsx (mailComposeTo/Subject/Body) et MailView.tsx.
+  onOpenMailDraft?: (to: string, subject: string, body: string) => void;
+  // Demande explicite : "mets Nova dans Pipeline" — ouvre Nova avec le
+  // libellé du dossier déjà prêt à compléter (voir App.tsx).
+  onOpenNova?: (dealTitle: string) => void;
+}
+
+// Palette cyclique de liserets colorés par colonne, pour un effet plus vivant
+// sans dépendre du nom métier de l'étape.
+const STAGE_ACCENT_COLORS = [
+  '#F7BC5F', // ambre (marque)
+  '#38BDF8', // sky
+  '#34D399', // emerald
+  '#A78BFA', // violet
+  '#FB7185', // rose
+  '#22D3EE', // cyan
+];
+
+// Contenu visuel d'une carte, sans les hooks de glisser-déposer — réutilisé
+// tel quel par la carte "vivante" (PipelineCard) ET par son clone flottant
+// affiché dans le DragOverlay pendant le glisser.
+// Demande explicite (28/08/2026, Immosphera / Pipeline Transactions V2) :
+// checklist par étape, construite une étape à la fois — voir
+// TransactionChecklistModal.tsx. N'apparaît QUE sur cette pipeline précise,
+// jamais ailleurs.
+const TransactionsV2ChecklistBadge: React.FC<{ deal: Deal; onOpen: () => void }> = ({ deal, onOpen }) => {
+  const hasChecklist = !!STAGE_CHECKLISTS[deal.stage];
+  const missingFromPrevStage = usePreviousStageMissingCount(deal.contactId, deal.stage);
+  const currentCount = useCurrentStageChecklistCount(deal.contactId, deal.stage);
+
+  if (!hasChecklist && !missingFromPrevStage) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+      {hasChecklist && (
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onOpen(); }}
+          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] text-[10px] font-bold hover:bg-[#F7BC5F]/25 transition-colors"
+        >
+          <ClipboardList className="w-3 h-3" />
+          Checklist
+          {currentCount && <span className="text-[9px] opacity-80">{currentCount.done}/{currentCount.total}</span>}
+        </button>
+      )}
+      {!!missingFromPrevStage && (
+        <span
+          title={`${missingFromPrevStage} document(s) obligatoire(s) manquant(s) à l'étape précédente — n'empêche pas d'avancer, juste un rappel.`}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-300 text-[10px] font-black"
+        >
+          {missingFromPrevStage} manquant{missingFromPrevStage > 1 ? 's' : ''}
+        </span>
+      )}
+    </div>
+  );
+};
+
+const PipelineCardContent: React.FC<{
+  deal: Deal;
+  contact: Contact | undefined;
+  taskStatus: ReturnType<typeof getTaskDateStatus> | null | undefined;
+  onDelete?: (dealId: string) => void;
+  onOpenChecklist?: (deal: Deal) => void;
+  onOpenNova?: (dealTitle: string) => void;
+}> = ({ deal, contact, taskStatus, onDelete, onOpenChecklist, onOpenNova }) => (
+  <>
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          {taskStatus !== undefined && (
+            taskStatus ? (
+              <span
+                title={`Prochaine tâche : ${taskStatus.label}`}
+                className={`w-2 h-2 rounded-full shrink-0 ${taskStatus.dotClass}`}
+              />
+            ) : (
+              <span title="Aucune tâche planifiée pour ce client" className="shrink-0">
+                <AlertTriangle className="w-3 h-3 text-rose-400" />
+              </span>
+            )
+          )}
+          <h4 className="text-sm sm:text-xs font-bold text-white truncate">{deal.title}</h4>
+        </div>
+        {contact && <p className="text-xs sm:text-[10px] text-gray-400 mt-1">{contact.name}</p>}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        {/* Demande explicite : "mets Nova dans Pipeline" — même principe que
+            la fiche client (ClientProfileView) : ouvre Nova avec le nom du
+            dossier déjà prêt à être dicté/complété, sans avoir à le taper. */}
+        {onOpenNova && (
+          <button
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onOpenNova(deal.title); }}
+            title="Demander à Nova (changer d'étape, ajouter une note...)"
+            className="w-5 h-5 rounded-full overflow-hidden shrink-0 hover:scale-110 transition-transform"
+          >
+            <img src="/nova-mascotte.png" alt="Nova" className="w-full h-full object-cover" />
+          </button>
+        )}
+        {onDelete && (
+          <button
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onDelete(deal.id); }}
+            className="text-gray-600 hover:text-rose-300 shrink-0 p-1 -m-1"
+          >
+            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+    <p className="text-sm sm:text-xs font-black text-[#F7BC5F] mt-3">{deal.amount.toLocaleString('fr-FR')} €</p>
+    {onOpenChecklist && deal.pipelineId === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID && (
+      <TransactionsV2ChecklistBadge deal={deal} onOpen={() => onOpenChecklist(deal)} />
+    )}
+  </>
+);
+
+// Carte déplaçable d'un dossier — pas de réordonnancement au sein d'une
+// colonne (aucune position n'est persistée, seule l'étape compte), donc un
+// simple `useDraggable` suffit : plus léger et sans effet de "poussée" des
+// voisines pendant le survol, contrairement à un `useSortable` complet.
+// Rendue invisible pendant le glisser (le vrai rendu visible passe par le
+// DragOverlay, qui échappe au `overflow-hidden` de la colonne).
+// Signalé : "le déplacement des cartes saccade, pas fluide". Cause réelle
+// trouvée (même bug que sur le tableau des tâches internes, voir
+// InternalProjectBoard.tsx) : `useDroppable` (dropzone de la colonne)
+// change de valeur `isOver` à chaque déplacement du pointeur pendant un
+// glisser — sans React.memo, CETTE colonne se re-rend alors en entier à
+// chaque frame, ce qui recrée TOUTES ses cartes (même la carte
+// actuellement déplacée n'affecte pas cette colonne — c'est le simple
+// survol qui déclenche ça). Les props (`onSelectContact`, `onDelete`)
+// étaient déjà stables ici (passées telles quelles, pas de closure recréée
+// dans le `.map()`), donc React.memo suffit à éliminer ce re-rendu
+// inutile.
+const PipelineCard = React.memo<{
+  deal: Deal;
+  contact: Contact | undefined;
+  taskStatus: ReturnType<typeof getTaskDateStatus> | null | undefined;
+  onSelectContact?: (contactId: string) => void;
+  onDelete: (dealId: string) => void;
+  onOpenChecklist?: (deal: Deal) => void;
+  onOpenNova?: (dealTitle: string) => void;
+}>(function PipelineCard({ deal, contact, taskStatus, onSelectContact, onDelete, onOpenChecklist, onOpenNova }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: deal.id,
+    data: { type: 'card' as const, stage: deal.stage },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onClick={() => { if (contact && onSelectContact) onSelectContact(contact.id); }}
+      className={`p-4 sm:p-3 rounded-xl bg-[#0b1719] border transition-colors duration-150 touch-none select-none ${
+        contact ? 'cursor-pointer' : ''
+      } ${
+        isDragging
+          ? 'opacity-0'
+          : 'border-white/20 hover:border-[#F7BC5F]/40 hover:shadow-[0_0_0_3px_rgba(229,184,66,0.15),0_8px_20px_-6px_rgba(0,0,0,0.5)] hover:-translate-y-0.5'
+      }`}
+    >
+      <PipelineCardContent deal={deal} contact={contact} taskStatus={taskStatus} onDelete={onDelete} onOpenChecklist={onOpenChecklist} onOpenNova={onOpenNova} />
+    </div>
+  );
+});
+
+// Une colonne du pipeline : déplaçable elle-même (réordonnancement des
+// étapes, poignée dédiée) ET zone de dépôt pour les cartes glissées depuis
+// une autre colonne. Deux identifiants distincts (`stage` pour la colonne
+// triable, `dropzone-${stage}` pour la zone de dépôt des cartes) pour ne
+// jamais les confondre côté détection de collision.
+const PipelineColumn: React.FC<{
+  stage: string;
+  stageDeals: Deal[];
+  stageTotal: number;
+  accentColor: string;
+  canManageStructure: boolean;
+  contactsById: Map<string, Contact>;
+  taskStatusByContactId: Map<string, ReturnType<typeof getTaskDateStatus> | null>;
+  onSelectContact?: (contactId: string) => void;
+  onDeleteDeal: (dealId: string) => void;
+  onOpenChecklist?: (deal: Deal) => void;
+  onOpenNova?: (dealTitle: string) => void;
+  onRename: (stage: string) => void;
+  onRequestDelete: (stage: string) => void;
+  justArrived: boolean;
+}> = ({
+  stage, stageDeals, stageTotal, accentColor, canManageStructure,
+  contactsById, taskStatusByContactId, onSelectContact, onDeleteDeal, onOpenChecklist, onOpenNova, onRename, onRequestDelete, justArrived,
+}) => {
+  const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
+    id: stage,
+    disabled: !canManageStructure,
+    data: { type: 'column' as const },
+  });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `dropzone-${stage}`,
+    data: { type: 'dropzone' as const, stage },
+  });
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      id={`pipeline-stage-${stage}`}
+      ref={setSortableRef}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        borderTopColor: accentColor,
+        boxShadow: isDragging
+          ? `0 16px 32px -8px rgba(0,0,0,0.6), 0 0 0 1px ${accentColor}55`
+          : justArrived
+          ? `0 0 0 2px ${accentColor}, 0 0 32px 4px ${accentColor}55`
+          : hovered
+          ? `0 0 0 1px ${accentColor}66, 0 0 24px 2px ${accentColor}33`
+          : undefined,
+      }}
+      // Signalé : colonnes trop transparentes (gris quasi invisible même à
+      // 20% d'opacité) — remplacé par le bleu canard (dark teal) déjà
+      // utilisé comme fond de carte partout ailleurs dans le CRM (#0a1e20),
+      // en plein (non transparent) pour bien se détacher du fond de page.
+      // Correctif annulé (mode jour) : garder cette couleur dans les deux
+      // modes, pas de fond blanc uni — seul le filtre global l'éclaircit.
+      // Essai (30/08/2026, demande explicite) : "le blanc en mode jour ne
+      // mets pas ça, plutôt un gris hyper clair anthracite... 30% [d'opacité]
+      // pour voir. Essaye d'abord sur le panneau pipeline." — classe dédiée
+      // `pipeline-column-bg` ajoutée UNIQUEMENT pour cibler cette colonne
+      // précisément en CSS (voir index.css), sans toucher aux autres
+      // éléments qui partagent le même bg-[#0a1e20] ailleurs dans l'appli
+      // (essai isolé, pas encore généralisé).
+      className={`pipeline-column-bg w-[85vw] max-w-[320px] sm:w-[310px] shrink-0 snap-center snap-always bg-[#0a1e20] border border-white/20 border-t-4 rounded-2xl overflow-hidden transition-shadow duration-200 ${
+        isDragging ? 'scale-[1.01] opacity-70 z-30' : ''
+      }`}
+    >
+      <div className="p-3 border-b border-white/20 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {canManageStructure && (
+            <span {...attributes} {...listeners} className="text-gray-500 cursor-grab touch-none">
+              <GripVertical className="w-4 h-4" />
+            </span>
+          )}
+          <div>
+            <h3 className="text-xs font-bold text-white">{stage}</h3>
+            <div className="flex items-center gap-1.5">
+              <p className="text-[10px] text-gray-500">{stageDeals.length} affaire(s)</p>
+              {stageTotal > 0 && (
+                <>
+                  <span className="text-[10px] text-gray-600">·</span>
+                  <p className="text-[10px] font-bold" style={{ color: accentColor }}>{formatCurrency(stageTotal)}</p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {canManageStructure && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onRename(stage)}
+              className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white"
+              title="Renommer la colonne"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onRequestDelete(stage)}
+              className="p-1.5 rounded-lg hover:bg-rose-500/10 text-gray-400 hover:text-rose-300"
+              title="Supprimer la colonne"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div
+        ref={setDropRef}
+        style={{
+          boxShadow: isOver ? `inset 0 0 0 2px ${accentColor}88, inset 0 0 32px 4px ${accentColor}22` : undefined,
+          backgroundColor: isOver ? `${accentColor}0d` : undefined,
+        }}
+        className="p-3 min-h-[180px] space-y-2.5 sm:space-y-2 rounded-b-2xl transition-shadow duration-150"
+      >
+        {stageDeals.map((deal) => {
+          const contact = contactsById.get(deal.contactId);
+          const taskStatus = contact ? taskStatusByContactId.get(contact.id) ?? null : undefined;
+          return (
+            <PipelineCard
+              key={deal.id}
+              deal={deal}
+              contact={contact}
+              taskStatus={taskStatus}
+              onSelectContact={onSelectContact}
+              onDelete={onDeleteDeal}
+              onOpenChecklist={onOpenChecklist}
+              onOpenNova={onOpenNova}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStage, onInitialStageHandled, onOpenMailDraft, onOpenNova }) => {
+  const {
+    currentUser,
+    userProfile,
+    activeAgency,
+  } = useAuth();
+
+  const {
+    deals,
+    allDeals,
+    addDeal,
+    updateDeal,
+    deleteDeal,
+  } = useDeals();
+
+  const queryClient = useQueryClient();
+
+  const {
+    contacts,
+  } = useContacts();
+
+  const {
+    tasks,
+  } = useTasks();
+
+  // Pastille de statut par carte, basée sur la tâche la plus urgente (non
+  // terminée) rattachée au contact du dossier — même logique de couleurs
+  // que Rappels (rouge = en retard/aujourd'hui, orange = demain, vert =
+  // plus tard). `null` = aucune tâche planifiée pour ce contact.
+  const taskStatusByContactId = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getTaskDateStatus> | null>();
+    contacts.forEach((contact) => {
+      const pendingTasks = tasks.filter((t) => t.contactId === contact.id && !t.completed);
+      if (pendingTasks.length === 0) {
+        map.set(contact.id, null);
+        return;
+      }
+      const statuses = pendingTasks.map((t) => getTaskDateStatus(t.dueDate));
+      // La plus urgente = celle avec le plus petit diffDays (en retard en premier).
+      const mostUrgent = statuses.reduce((a, b) => (a.diffDays <= b.diffDays ? a : b));
+      map.set(contact.id, mostUrgent);
+    });
+    return map;
+  }, [contacts, tasks]);
+
+  // Ticket #114 : chaque carte du pipeline cherchait son contact avec
+  // `contacts.find(...)` (recherche linéaire) à CHAQUE rendu — avec des
+  // centaines de dossiers, ça retombait sur du O(dossiers × contacts) à
+  // chaque frame pendant un glisser-déposer (hello-pangea re-rend tout le
+  // plateau en continu), d'où la latence/les blocages remontés. Un Map
+  // (recherche O(1)), recalculé seulement quand `contacts` change.
+  const contactsById = useMemo(() => {
+    const map = new Map<string, (typeof contacts)[number]>();
+    contacts.forEach((contact) => map.set(contact.id, contact));
+    return map;
+  }, [contacts]);
+
+  const [
+    pipelines,
+    setPipelines,
+  ] = useState<StoredPipeline[]>([]);
+
+  const [
+    activePipelineId,
+    setActivePipelineId,
+  ] = useState('');
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    error,
+    setError,
+  ] = useState<string | null>(null);
+
+  const [
+    success,
+    setSuccess,
+  ] = useState<string | null>(null);
+
+  const [
+    showCreatePipelineModal,
+    setShowCreatePipelineModal,
+  ] = useState(false);
+
+  const [
+    showRenamePipelineModal,
+    setShowRenamePipelineModal,
+  ] = useState(false);
+
+  const [
+    showDeletePipelineModal,
+    setShowDeletePipelineModal,
+  ] = useState(false);
+
+  const [
+    showAddStageModal,
+    setShowAddStageModal,
+  ] = useState(false);
+
+  const [
+    newPipelineName,
+    setNewPipelineName,
+  ] = useState('');
+
+  const [
+    renamePipelineTitle,
+    setRenamePipelineTitle,
+  ] = useState('');
+
+  const [
+    newStageName,
+    setNewStageName,
+  ] = useState('');
+
+  const [
+    stageToDelete,
+    setStageToDelete,
+  ] = useState<string | null>(null);
+
+  const [
+    stageToRename,
+    setStageToRename,
+  ] = useState<string | null>(null);
+
+  const [
+    renameStageValue,
+    setRenameStageValue,
+  ] = useState('');
+
+  // Checklist par étape (Immosphera / Pipeline Transactions V2) — voir
+  // TransactionChecklistModal.tsx.
+  const [checklistDeal, setChecklistDeal] = useState<Deal | null>(null);
+
+  const canManageStructure = !!currentUser && userProfile?.role === 'super_admin';
+
+  // Ticket #219 : le Pipeline était volontairement verrouillé sur Conseils
+  // Finances ("temporaire", cf. historique) — toutes les autres agences
+  // affichaient donc silencieusement les pipelines de Conseils Finances au
+  // lieu des leurs, et un déplacement de dossier y écrivait par erreur.
+  // On utilise désormais la véritable agence active du sélecteur, comme le
+  // reste de l'application (`activeAgency` déjà utilisé plus bas dans ce
+  // fichier pour `agencyDeals`/la répartition par colonne).
+  const currentAgencyId = activeAgency.id;
+
+  const currentAgency =
+    AGENCIES.find(
+      (agency) =>
+        agency.id === currentAgencyId
+    );
+
+  const activePipeline =
+    pipelines.find(
+      (pipeline) =>
+        pipeline.id ===
+        activePipelineId
+    ) ||
+    pipelines[0];
+
+  // Pipeline par défaut choisi par l'utilisateur (par société), restauré à
+  // chaque ouverture de l'onglet Pipeline au lieu du premier de la liste.
+  const defaultPipelineStorageKey = currentUser
+    ? `novasphere_default_pipeline_${currentUser.uid}_${currentAgencyId}`
+    : null;
+
+  const [defaultPipelineId, setDefaultPipelineId] = useState<string | null>(null);
+
+  // Ticket #105 : colonne visée depuis le tableau de bord — surbrillance
+  // temporaire le temps que l'utilisateur la repère, puis s'efface seule.
+  const [justArrivedStage, setJustArrivedStage] = useState<string | null>(null);
+
+  // Ticket #114/#116 (suivi) : glisser-déposer @dnd-kit — mêmes réglages de
+  // capteurs que les tuiles de l'accueil (distance de 8px avant activation à
+  // la souris, léger délai au toucher pour ne pas voler le scroll tactile).
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+  );
+  const [activeDragDeal, setActiveDragDeal] = useState<Deal | null>(null);
+
+  useEffect(() => {
+    if (!initialStage || !activePipeline) return;
+    if (!activePipeline.stages.includes(initialStage)) return;
+    const el = document.getElementById(`pipeline-stage-${initialStage}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      setJustArrivedStage(initialStage);
+      const timer = setTimeout(() => setJustArrivedStage(null), 2500);
+      onInitialStageHandled?.();
+      return () => clearTimeout(timer);
+    }
+    onInitialStageHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialStage, activePipeline]);
+
+  useEffect(() => {
+    if (!defaultPipelineStorageKey) {
+      setDefaultPipelineId(null);
+      return;
+    }
+    setDefaultPipelineId(localStorage.getItem(defaultPipelineStorageKey));
+  }, [defaultPipelineStorageKey]);
+
+  const isActivePipelineDefault = !!activePipeline && defaultPipelineId === activePipeline.id;
+
+  const setPipelineAsDefault = () => {
+    if (!defaultPipelineStorageKey || !activePipeline) return;
+    localStorage.setItem(defaultPipelineStorageKey, activePipeline.id);
+    setDefaultPipelineId(activePipeline.id);
+  };
+
+  // On filtre `allDeals` (NON scopé par l'agence active du sélecteur en
+  // haut à gauche), pas `deals` : `deals` est déjà filtré par
+  // `activeAgency` via useDeals(), donc filtrer une seconde fois sur
+  // Conseils Finances ne donnait un résultat non-vide QUE si le sélecteur
+  // pointait déjà sur Conseils Finances — dès qu'on changeait d'agence
+  // ailleurs dans l'app, le Pipeline (censé être verrouillé sur Conseils
+  // Finances, cf. currentAgencyId ci-dessus) se vidait silencieusement, et
+  // ses chiffres décrochaient de ceux du Tableau de bord.
+  const agencyDeals =
+    useMemo(() => {
+      if (
+        currentAgencyId === 'all'
+      ) {
+        return [];
+      }
+
+      // Ticket #107 : `allDeals` (par design, cf. commentaire ci-dessus)
+      // n'exclut pas les dossiers archivés comme le fait `deals` — sans ce
+      // `!deal.archivedAt`, un client archivé réapparaissait dans le
+      // pipeline dès qu'on changeait d'agence.
+      return allDeals.filter(
+        (deal) =>
+          deal.agencyId ===
+          currentAgencyId &&
+          !deal.archivedAt
+      );
+    }, [
+      allDeals,
+      currentAgencyId,
+    ]);
+
+  // Ticket #114 : chaque colonne refaisait `agencyDeals.filter(...)` sur
+  // TOUTE la liste à CHAQUE rendu (donc à chaque frame pendant un
+  // glisser-déposer, hello-pangea-dnd re-rendant tout le plateau en
+  // continu) — avec beaucoup de dossiers, ce O(colonnes × dossiers) répété
+  // en boucle est ce qui donnait l'impression de lenteur/blocages. Un seul
+  // regroupement mémoïsé, recalculé seulement quand `agencyDeals` change.
+  const dealsByStage = useMemo(() => {
+    const map = new Map<string, typeof agencyDeals>();
+    if (!activePipeline) return map;
+    agencyDeals.forEach((deal) => {
+      if ((deal.pipelineId || activePipeline.id) !== activePipeline.id) return;
+      const existing = map.get(deal.stage);
+      if (existing) existing.push(deal);
+      else map.set(deal.stage, [deal]);
+    });
+    return map;
+  }, [agencyDeals, activePipeline]);
+  const EMPTY_DEALS: typeof agencyDeals = [];
+
+  /*
+   * =====================================================
+   * CONFIGURATION PIPELINE PAR SOCIÉTÉ
+   * =====================================================
+   *
+   * Collection :
+   * pipeline_configs/{agencyId}__{pipelineId}
+   *
+   * Chaque société possède sa propre copie de configuration.
+   * Au premier démarrage, les 3 sociétés reçoivent la même
+   * structure de base, mais elles évoluent indépendamment.
+   */
+  useEffect(() => {
+    if (!currentUser) {
+      setPipelines([]);
+      setLoading(false);
+      return;
+    }
+
+    if (currentAgencyId === 'all') {
+      setPipelines([]);
+      setActivePipelineId('');
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoading(true);
+
+    const loadPipelines = async () => {
+      try {
+        const { data: rawPipes, error: pipeErr } = await supabase
+          .from('pipelines')
+          .select('*')
+          .eq('agency_id', currentAgencyId);
+
+        if (pipeErr) throw pipeErr;
+
+        let pipeList = rawPipes ? [...rawPipes] : [];
+
+        if (pipeList.length === 0 && canManageStructure) {
+          const now = new Date().toISOString();
+          for (let i = 0; i < BASE_PIPELINES.length; i++) {
+            const basePipe = BASE_PIPELINES[i];
+            const { data: newPipe } = await supabase
+              .from('pipelines')
+              .insert({
+                agency_id: currentAgencyId,
+                name: basePipe.name,
+                is_default: i === 0,
+                created_at: now,
+              })
+              .select()
+              .single();
+
+            if (newPipe) {
+              pipeList.push(newPipe);
+              const stageInserts = basePipe.stages.map((stageName, pos) => ({
+                agency_id: currentAgencyId,
+                pipeline_id: newPipe.id,
+                name: stageName,
+                position: pos,
+                created_at: now,
+              }));
+              await supabase.from('pipeline_stages').insert(stageInserts);
+            }
+          }
+        }
+
+        // Demande explicite : certains utilisateurs ne doivent avoir accès
+        // qu'à un sous-ensemble des pipelines de leur agence (ex. Isabelle →
+        // uniquement "Pipeline Transactions V2"). Table déjà prévue en base
+        // pour ça (user_pipeline_hidden) mais jamais exploitée côté front
+        // jusqu'ici — appliquée ici en excluant les pipelines que CET
+        // utilisateur a explicitement en liste masquée.
+        const { data: hiddenRows } = await supabase
+          .from('user_pipeline_hidden')
+          .select('pipeline_id')
+          .eq('user_id', currentUser.uid);
+        const hiddenPipelineIds = new Set((hiddenRows || []).map((r: any) => r.pipeline_id));
+        if (hiddenPipelineIds.size > 0) {
+          pipeList = pipeList.filter((p) => !hiddenPipelineIds.has(p.id));
+        }
+
+        const pipeIds = pipeList.map((p) => p.id);
+        const { data: stagesData } = pipeIds.length
+          ? await supabase
+              .from('pipeline_stages')
+              .select('*')
+              .in('pipeline_id', pipeIds)
+              .order('position', { ascending: true })
+          : { data: [] };
+
+        const loadedPipelines: StoredPipeline[] = pipeList.map((p) => {
+          const pStages = (stagesData || [])
+            .filter((s) => s.pipeline_id === p.id)
+            .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+            .map((s) => s.name);
+
+          return {
+            id: p.id,
+            pipelineId: p.id,
+            name: p.name,
+            agencyId: p.agency_id,
+            stages: pStages.length > 0 ? pStages : [...BASE_PIPELINES[0].stages],
+            sortOrder: p.is_default ? 0 : 1,
+            createdAt: p.created_at,
+          };
+        });
+
+        if (isMounted) {
+          setPipelines(loadedPipelines);
+          if (loadedPipelines.length > 0) {
+            const storedDefaultId = currentUser
+              ? localStorage.getItem(`novasphere_default_pipeline_${currentUser.uid}_${currentAgencyId}`)
+              : null;
+            const preferredId =
+              storedDefaultId && loadedPipelines.some((lp) => lp.id === storedDefaultId)
+                ? storedDefaultId
+                : loadedPipelines[0].id;
+
+            setActivePipelineId((prev) =>
+              loadedPipelines.some((lp) => lp.id === prev) ? prev : preferredId
+            );
+          }
+        }
+      } catch (snapshotError) {
+        console.error(snapshotError);
+        if (isMounted) setError("Impossible de charger le pipeline de cette société depuis Supabase.");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadPipelines();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser?.uid, currentAgencyId, canManageStructure]);
+
+  const updatePipelineConfig = async (
+    pipelineId: string,
+    updates: Partial<Pick<StoredPipeline, 'name' | 'stages' | 'sortOrder'>>
+  ) => {
+    if (!canManageStructure) {
+      setError("Vous n'avez pas la permission de modifier la structure du pipeline.");
+      throw new Error('Accès refusé');
+    }
+
+    if (updates.name) {
+      const { error: err } = await supabase
+        .from('pipelines')
+        .update({ name: updates.name })
+        .eq('id', pipelineId);
+      if (err) throw err;
+    }
+
+    if (updates.stages) {
+      await supabase.from('pipeline_stages').delete().eq('pipeline_id', pipelineId);
+      const stageInserts = updates.stages.map((stageName, idx) => ({
+        agency_id: currentAgencyId,
+        pipeline_id: pipelineId,
+        name: stageName,
+        position: idx,
+      }));
+      const { error: stageErr } = await supabase.from('pipeline_stages').insert(stageInserts);
+      if (stageErr) throw stageErr;
+    }
+  };
+
+  const handleCreatePipeline = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!canManageStructure || !newPipelineName.trim() || currentAgencyId === 'all') {
+      return;
+    }
+
+    const name = newPipelineName.trim();
+
+    if (isGenericPipelineName(name)) {
+      setError('Choisissez un nom qui décrit vraiment ce pipeline (pas « Mon Pipeline » ou « Nouveau pipeline »).');
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    try {
+      setError(null);
+      const { data: createdPipe, error: pipeErr } = await supabase
+        .from('pipelines')
+        .insert({
+          agency_id: currentAgencyId,
+          name,
+          is_default: false,
+          created_at: now,
+        })
+        .select()
+        .single();
+
+      if (pipeErr || !createdPipe) throw pipeErr || new Error('Erreur création pipeline');
+
+      const initialStages = [...BASE_PIPELINES[0].stages];
+      const stageInserts = initialStages.map((stageName, idx) => ({
+        agency_id: currentAgencyId,
+        pipeline_id: createdPipe.id,
+        name: stageName,
+        position: idx,
+        created_at: now,
+      }));
+
+      await supabase.from('pipeline_stages').insert(stageInserts);
+
+      const newPipeObj: StoredPipeline = {
+        id: createdPipe.id,
+        pipelineId: createdPipe.id,
+        agencyId: currentAgencyId,
+        name,
+        stages: initialStages,
+        sortOrder: pipelines.length,
+        createdAt: now,
+      };
+
+      setPipelines((prev) => [...prev, newPipeObj]);
+      setActivePipelineId(createdPipe.id);
+      setNewPipelineName('');
+      setShowCreatePipelineModal(false);
+      setSuccess('Pipeline créé pour cette société dans Supabase.');
+    } catch (createError: any) {
+      console.error(createError);
+      setError('Impossible de créer le pipeline.');
+    }
+  };
+
+  const handleRenamePipeline = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!activePipeline || !renamePipelineTitle.trim()) {
+      return;
+    }
+
+    const newName = renamePipelineTitle.trim();
+
+    if (isGenericPipelineName(newName)) {
+      setError('Choisissez un nom qui décrit vraiment ce pipeline (pas « Mon Pipeline » ou « Nouveau pipeline »).');
+      return;
+    }
+
+    try {
+      setError(null);
+      await updatePipelineConfig(activePipeline.id, {
+        name: newName,
+      });
+
+      setPipelines((prev) =>
+        prev.map((p) => (p.id === activePipeline.id ? { ...p, name: newName } : p))
+      );
+
+      setShowRenamePipelineModal(false);
+      setSuccess('Pipeline renommé pour cette société.');
+    } catch (renameError: any) {
+      console.error(renameError);
+      setError(renameError?.message || 'Impossible de renommer le pipeline.');
+    }
+  };
+
+  const handleDeletePipeline = async () => {
+    if (!activePipeline || !canManageStructure) {
+      return;
+    }
+
+    if (pipelines.length <= 1) {
+      setError('Il faut conserver au moins un pipeline.');
+      return;
+    }
+
+    const fallback = pipelines.find((pipeline) => pipeline.id !== activePipeline.id);
+
+    if (!fallback) {
+      return;
+    }
+
+    // Ticket #231 (v3) : la suppression directe côté client
+    // (`supabase.from('pipelines').delete()`) était bloquée en silence par
+    // les policies RLS pour certains pipelines/agences — l'interface
+    // annonçait "supprimé" alors que rien n'avait réellement disparu en
+    // base. On passe désormais par une route serveur dédiée
+    // (/api/admin/announcements?resource=pipeline, réservée aux super admins, clé
+    // service_role) qui garantit la suppression réelle ET réaffecte
+    // elle-même les dossiers concernés vers le pipeline de repli — plus
+    // besoin de le faire ici en double. Le second `window.confirm()` natif
+    // qui pouvait rester invisible par-dessus la fenêtre déjà affichée a
+    // aussi été retiré : le nombre d'affaires concernées est annoncé
+    // directement dans la fenêtre de confirmation de l'application.
+
+    try {
+      if (!currentUser) throw new Error('Utilisateur non authentifié.');
+      const token = await currentUser.getIdToken();
+      const response = await fetch(
+        `/api/admin/announcements?resource=pipeline&id=${encodeURIComponent(activePipeline.id)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body?.error || `Erreur HTTP ${response.status}`);
+      }
+
+      setPipelines((prev) => prev.filter((p) => p.id !== activePipeline.id));
+      setActivePipelineId(fallback.id);
+      setShowDeletePipelineModal(false);
+      setSuccess('Pipeline supprimé dans Supabase.');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['deals'] }),
+        queryClient.invalidateQueries({ queryKey: ['contacts_all'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] }),
+      ]);
+    } catch (deleteError: any) {
+      console.error(deleteError);
+      setError(deleteError?.message || 'Impossible de supprimer le pipeline.');
+    }
+  };
+
+  const handleAddStage =
+    async (
+      event: React.FormEvent
+    ) => {
+      event.preventDefault();
+
+      if (
+        !activePipeline ||
+        !newStageName.trim()
+      ) {
+        return;
+      }
+
+      const name =
+        newStageName.trim();
+
+      if (
+        activePipeline.stages.includes(
+          name
+        )
+      ) {
+        setError(
+          'Cette colonne existe déjà.'
+        );
+        return;
+      }
+
+      try {
+        await updatePipelineConfig(
+          activePipeline.id,
+          {
+            stages: [
+              ...activePipeline.stages,
+              name,
+            ],
+          }
+        );
+
+        setNewStageName('');
+        setShowAddStageModal(
+          false
+        );
+
+        setSuccess(
+          'Colonne ajoutée à cette société.'
+        );
+      } catch (
+        addStageError
+      ) {
+        console.error(
+          addStageError
+        );
+      }
+    };
+
+  const handleRenameStage =
+    async (
+      event: React.FormEvent
+    ) => {
+      event.preventDefault();
+
+      if (
+        !activePipeline ||
+        !stageToRename ||
+        !renameStageValue.trim()
+      ) {
+        return;
+      }
+
+      const newName = renameStageValue.trim();
+
+      try {
+        setError(null);
+        const updatedStages = activePipeline.stages.map((stage) =>
+          stage === stageToRename ? newName : stage
+        );
+
+        await updatePipelineConfig(activePipeline.id, {
+          stages: updatedStages,
+        });
+
+        setPipelines((prev) =>
+          prev.map((p) =>
+            p.id === activePipeline.id ? { ...p, stages: updatedStages } : p
+          )
+        );
+
+        const affectedDeals =
+          agencyDeals.filter(
+            (deal) =>
+              deal.pipelineId ===
+                activePipeline.id &&
+              deal.stage ===
+                stageToRename
+          );
+
+        for (const deal of affectedDeals) {
+          await updateDeal.mutateAsync({
+            id:
+              deal.id,
+
+            updates: {
+              stage:
+                newName,
+            },
+          });
+        }
+
+        setStageToRename(
+          null
+        );
+
+        setRenameStageValue(
+          ''
+        );
+
+        setSuccess(
+          'Colonne renommée pour cette société.'
+        );
+      } catch (
+        renameStageError
+      ) {
+        console.error(
+          renameStageError
+        );
+
+        setError(
+          'Impossible de renommer la colonne.'
+        );
+      }
+    };
+
+  const handleDeleteStage =
+    async () => {
+      if (
+        !activePipeline ||
+        !stageToDelete ||
+        !canManageStructure
+      ) {
+        return;
+      }
+
+      if (
+        activePipeline.stages
+          .length <= 1
+      ) {
+        setError(
+          'Il faut conserver au moins une colonne.'
+        );
+        return;
+      }
+
+      const fallbackStage =
+        activePipeline.stages.find(
+          (stage) =>
+            stage !==
+            stageToDelete
+        );
+
+      if (!fallbackStage) {
+        return;
+      }
+
+      const affectedDeals =
+        agencyDeals.filter(
+          (deal) =>
+            deal.pipelineId ===
+              activePipeline.id &&
+            deal.stage ===
+              stageToDelete
+        );
+
+      const confirmed =
+        affectedDeals.length ===
+        0 ||
+        window.confirm(
+          `${affectedDeals.length} affaire(s) seront déplacées vers "${fallbackStage}". Continuer ?`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        for (const deal of affectedDeals) {
+          await updateDeal.mutateAsync({
+            id:
+              deal.id,
+
+            updates: {
+              stage:
+                fallbackStage,
+            },
+          });
+        }
+
+        await updatePipelineConfig(
+          activePipeline.id,
+          {
+            stages:
+              activePipeline.stages.filter(
+                (stage) =>
+                  stage !==
+                  stageToDelete
+              ),
+          }
+        );
+
+        setStageToDelete(
+          null
+        );
+
+        setSuccess(
+          'Colonne supprimée pour cette société.'
+        );
+      } catch (
+        deleteStageError
+      ) {
+        console.error(
+          deleteStageError
+        );
+
+        setError(
+          'Impossible de supprimer la colonne.'
+        );
+      }
+    };
+
+  // Ticket #114/#116 (suivi) : `over.id` peut être soit la zone de dépôt
+  // d'une colonne (`dropzone-<stage>`, visée en lâchant une carte), soit
+  // directement le nom d'une étape (visée en lâchant une colonne sur une
+  // autre) — on résout les deux vers le même nom d'étape ici.
+  const resolveStageFromOverId = (id: string): string | null => {
+    if (!activePipeline) return null;
+    const idStr = String(id);
+    if (idStr.startsWith('dropzone-')) {
+      const stage = idStr.slice('dropzone-'.length);
+      return activePipeline.stages.includes(stage) ? stage : null;
+    }
+    return activePipeline.stages.includes(idStr) ? idStr : null;
+  };
+
+  const handlePipelineDragStart = (event: DragStartEvent) => {
+    if (event.active.data.current?.type === 'card') {
+      const deal = agencyDeals.find((d) => d.id === String(event.active.id));
+      setActiveDragDeal(deal || null);
+    }
+  };
+
+  // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (14/16) : "quand un
+  // client change d'étape avec automatisation, propose 'Oui, préparer
+  // l'email' / 'Non' — jamais d'envoi silencieux". Confirmation manuelle
+  // avant tout, résolue APRÈS le déplacement réel de la carte (jamais avant
+  // — la carte doit bouger même si l'utilisateur répond Non).
+  const [pendingAutomationPrompt, setPendingAutomationPrompt] = useState<{
+    dealId: string;
+    dealTitle: string;
+    contactEmail: string | null;
+    contactName: string;
+    subject: string;
+    body: string;
+  } | null>(null);
+
+  // Demande explicite : "quand on déplace un dossier dans une colonne, on
+  // puisse mettre un message relance programmé — 3/5/10/15 jours — et Nova
+  // nous dise où on en est quand ça fait un moment qu'il n'y a pas eu de
+  // mouvement." Proposée juste après un déplacement réel de carte (voir
+  // handlePipelineDragEnd) — jamais bloquant, comme pendingAutomationPrompt
+  // juste au-dessus. `contactId` d'un deal = l'id du lead (voir useDeals.ts).
+  const [pendingFollowupPrompt, setPendingFollowupPrompt] = useState<{
+    dealId: string;
+    dealTitle: string;
+    leadId: string;
+  } | null>(null);
+
+  const scheduleFollowup = async (days: number) => {
+    if (!pendingFollowupPrompt || !currentUser?.uid) { setPendingFollowupPrompt(null); return; }
+    const { leadId, dealTitle } = pendingFollowupPrompt;
+    setPendingFollowupPrompt(null);
+    const dueAt = new Date(Date.now() + days * 86400_000).toISOString();
+    const { error } = await supabase.from('deal_followups' as any).insert({
+      lead_id: leadId,
+      agency_id: activeAgency.id,
+      created_by: currentUser.uid,
+      due_at: dueAt,
+      message: `Où en êtes-vous sur le dossier "${dealTitle}" ?`,
+      status: 'pending',
+    } as any);
+    if (error) {
+      console.error('Erreur programmation relance :', error);
+      toast.error("Impossible de programmer la relance — la fonctionnalité n'est peut-être pas encore activée côté base.");
+    } else {
+      toast.success(`Relance programmée dans ${days} jour${days > 1 ? 's' : ''}.`);
+    }
+  };
+
+  // Une relance en attente n'a plus lieu d'être si le dossier a réellement
+  // bougé depuis — c'est exactement le signal "il y a eu du mouvement" qui
+  // évite une relance inutile.
+  const cancelPendingFollowups = (leadId: string) => {
+    supabase
+      .from('deal_followups' as any)
+      .update({ status: 'cancelled' } as any)
+      .eq('lead_id', leadId)
+      .eq('status', 'pending')
+      .then(() => {}, () => {});
+  };
+
+  const handlePipelineDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragDeal(null);
+    if (!over || !activePipeline) {
+      return;
+    }
+
+    if (active.data.current?.type === 'card') {
+      const dealId = String(active.id);
+      const deal = agencyDeals.find((item) => item.id === dealId);
+      if (!deal) return;
+
+      const destinationStage = resolveStageFromOverId(String(over.id));
+      if (!destinationStage || destinationStage === deal.stage) return;
+
+      await updateDeal.mutateAsync({
+        id: deal.id,
+        updates: {
+          stage: destinationStage,
+          pipelineId: activePipeline.id,
+        },
+      });
+
+      // Relance programmée (voir plus haut) : un vrai mouvement vient
+      // d'avoir lieu, toute relance en attente sur ce dossier n'a plus lieu
+      // d'être — et on propose d'en programmer une nouvelle depuis cette
+      // étape fraîchement atteinte.
+      if (deal.contactId) {
+        cancelPendingFollowups(deal.contactId);
+        setPendingFollowupPrompt({ dealId: deal.id, dealTitle: deal.title, leadId: deal.contactId });
+      }
+
+      // Automatisation éventuelle pour cette étape — jamais bloquant, jamais
+      // silencieux : la carte a déjà bougé, on propose juste ensuite.
+      // Signalé : "pas de fenêtre qui apparaît" sans la moindre erreur —
+      // l'échec de cette vérification était auparavant totalement silencieux
+      // (console.warn uniquement, invisible pour l'utilisateur). setError la
+      // rend visible pour diagnostiquer si ça se reproduit.
+      try {
+        const { data: matches, error: automationQueryError } = await supabase
+          .from('pipeline_automations' as any)
+          .select('*')
+          .eq('agency_id', activeAgency.id)
+          .eq('stage_name', destinationStage)
+          .eq('is_active', true)
+          .limit(1);
+        if (automationQueryError) throw automationQueryError;
+        const automation = (matches as any[])?.[0];
+        if (automation) {
+          const contact = contacts.find((c) => c.id === deal.contactId);
+          const firstName = (contact?.name || '').split(' ')[0] || '';
+          const lastName = (contact?.name || '').split(' ').slice(1).join(' ') || '';
+          const subject = String(automation.email_subject || '').replace(/\{\{prenom\}\}/gi, firstName).replace(/\{\{nom\}\}/gi, lastName);
+          const body = String(automation.email_body || '').replace(/\{\{prenom\}\}/gi, firstName).replace(/\{\{nom\}\}/gi, lastName);
+          setPendingAutomationPrompt({
+            dealId: deal.id,
+            dealTitle: deal.title,
+            contactEmail: contact?.email || null,
+            contactName: contact?.name || 'ce client',
+            subject,
+            body,
+          });
+        }
+      } catch (automationErr: any) {
+        console.warn('Erreur vérification automatisation pipeline :', automationErr);
+        setError(`Vérification automatisation impossible : ${automationErr?.message || automationErr}`);
+      }
+      return;
+    }
+
+    // Colonne (réordonnancement des étapes)
+    if (!canManageStructure) {
+      setError("Seul un administrateur peut modifier l'ordre des colonnes.");
+      return;
+    }
+
+    const activeStage = String(active.id);
+    const targetStage = resolveStageFromOverId(String(over.id));
+    if (!targetStage || activeStage === targetStage) return;
+
+    const oldIndex = activePipeline.stages.indexOf(activeStage);
+    const newIndex = activePipeline.stages.indexOf(targetStage);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(activePipeline.stages, oldIndex, newIndex);
+
+    try {
+      await updatePipelineConfig(activePipeline.id, { stages: reordered });
+      setSuccess("Ordre des colonnes modifié pour cette société.");
+    } catch (reorderError) {
+      console.error(reorderError);
+    }
+  };
+
+  if (
+    activeAgency.id ===
+    'all'
+  ) {
+    return (
+      <div className="p-6 text-white">
+        <div className="p-8 rounded-2xl bg-white/5 border border-white/10">
+          <h2 className="text-lg font-bold">
+            Pipeline
+          </h2>
+
+          <p className="text-sm text-gray-400 mt-2">
+            Sélectionnez Conseils Finances, NovaVisio ou ImmoSphera pour afficher son pipeline indépendant.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (
+    loading
+  ) {
+    return (
+      <div className="p-12 text-center text-gray-400">
+        Chargement du pipeline de {currentAgency?.name || 'la société'}...
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-5 text-white">
+      {/* Signalé (30/08/2026) : titre + sous-titre directement sur l'image
+          de fond personnalisée, sans fond — illisible par endroits. Les
+          colonnes du kanban plus bas ont déjà leur propre fond opaque, donc
+          seul ce bandeau d'en-tête a besoin d'un fond, même principe que le
+          panneau Chat équipe (bg-[#050f11], blanc en mode jour). */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#050f11] rounded-2xl p-4">
+        <div>
+          <h1 className="text-xl font-bold">
+            Pipeline • {currentAgency?.name}
+          </h1>
+
+          <p className="text-xs text-gray-400 mt-1">
+            Configuration indépendante de cette société.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={
+              activePipelineId
+            }
+            onChange={(
+              event
+            ) =>
+              setActivePipelineId(
+                event.target.value
+              )
+            }
+            className="px-3 py-2 rounded-xl bg-[#0b1719] border border-white/10 text-xs text-white"
+          >
+            {pipelines.map(
+              (pipeline) => (
+                <option
+                  key={
+                    pipeline.id
+                  }
+                  value={
+                    pipeline.id
+                  }
+                >
+                  {
+                    pipeline.name
+                  }
+                </option>
+              )
+            )}
+          </select>
+
+          <button
+            onClick={setPipelineAsDefault}
+            disabled={isActivePipelineDefault}
+            title={isActivePipelineDefault ? 'Ce pipeline est déjà votre pipeline par défaut' : 'Définir comme pipeline par défaut'}
+            className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+              isActivePipelineDefault
+                ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F] cursor-default'
+                : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white cursor-pointer'
+            }`}
+          >
+            <Star className={`w-3.5 h-3.5 ${isActivePipelineDefault ? 'fill-[#F7BC5F]' : ''}`} />
+            <span className="hidden sm:inline">{isActivePipelineDefault ? 'Par défaut' : 'Définir par défaut'}</span>
+          </button>
+
+          {canManageStructure && (
+            <>
+              <button
+                onClick={() => {
+                  setError(null);
+                  setRenamePipelineTitle(
+                    activePipeline?.name || ''
+                  );
+                  setShowRenamePipelineModal(
+                    true
+                  );
+                }}
+                className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs flex items-center gap-1.5"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Renommer pipeline
+              </button>
+
+              <button
+                onClick={() => {
+                  setError(null);
+                  setShowCreatePipelineModal(
+                    true
+                  );
+                }}
+                className="px-3 py-2 rounded-xl bg-[#F7BC5F] text-black text-xs font-bold flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Nouveau pipeline
+              </button>
+
+              <button
+                onClick={() =>
+                  setShowDeletePipelineModal(
+                    true
+                  )
+                }
+                className="px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Supprimer pipeline
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 text-xs">
+          {success}
+        </div>
+      )}
+
+      {!activePipeline ? (
+        <div className="p-10 text-center text-gray-500 border border-dashed border-white/10 rounded-2xl">
+          Aucun pipeline disponible pour cette société.
+        </div>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handlePipelineDragStart}
+          onDragEnd={(event) => void handlePipelineDragEnd(event)}
+          // Ticket #114 (suivi) : la ligne des colonnes a un scroll-snap
+          // CSS (pour le swipe mobile entre colonnes, ticket #93) — le
+          // défilement automatique par défaut de dnd-kit essayait de
+          // scroller la même rangée pendant le glisser d'une carte près
+          // du bord, et le snap-mandatory forçait un "retour en arrière"
+          // à chaque tentative : exactement la saccade remontée en
+          // changeant de colonne. Désactivé ici, le swipe manuel (hors
+          // glisser-déposer) n'est pas concerné et reste fluide.
+          autoScroll={false}
+        >
+          <SortableContext items={activePipeline.stages} strategy={horizontalListSortingStrategy}>
+            <div
+              // Demande explicite (mobile) : le défilement horizontal entre
+              // colonnes de pipeline "flottait" sans jamais se caler —
+              // snap-x/snap-mandatory fait que chaque swipe se bloque
+              // proprement sur une colonne entière, centrée à l'écran
+              // (snap-center sur chaque colonne ci-dessous).
+              className="flex gap-3 sm:gap-4 overflow-x-auto pb-6 -webkit-overflow-scrolling-touch touch-pan-x snap-x snap-mandatory scroll-px-4"
+            >
+              {activePipeline.stages.map((stage, stageIndex) => {
+                const stageDeals = dealsByStage.get(stage) || EMPTY_DEALS;
+                const stageTotal = stageDeals.reduce((sum, deal) => sum + (deal.amount || 0), 0);
+                const accentColor = STAGE_ACCENT_COLORS[stageIndex % STAGE_ACCENT_COLORS.length];
+
+                return (
+                  <PipelineColumn
+                    key={stage}
+                    stage={stage}
+                    stageDeals={stageDeals}
+                    stageTotal={stageTotal}
+                    accentColor={accentColor}
+                    canManageStructure={canManageStructure}
+                    contactsById={contactsById}
+                    taskStatusByContactId={taskStatusByContactId}
+                    onSelectContact={onSelectContact}
+                    onDeleteDeal={(dealId) => void deleteDeal.mutateAsync(dealId)}
+                    onOpenChecklist={(deal) => setChecklistDeal(deal)}
+                    onOpenNova={onOpenNova}
+                    onRename={(s) => { setStageToRename(s); setRenameStageValue(s); }}
+                    onRequestDelete={(s) => setStageToDelete(s)}
+                    justArrived={justArrivedStage === stage}
+                  />
+                );
+              })}
+
+              {canManageStructure && (
+                <button
+                  onClick={() => setShowAddStageModal(true)}
+                  className="w-[220px] shrink-0 min-h-[130px] rounded-2xl border border-dashed border-[#F7BC5F]/30 text-[#F7BC5F] hover:bg-[#F7BC5F]/5 flex flex-col items-center justify-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span className="text-xs font-bold">Ajouter une colonne</span>
+                </button>
+              )}
+            </div>
+          </SortableContext>
+
+          {/* Clone flottant d'une carte en cours de glisser — rendu hors de
+              la colonne (portée par dnd-kit dans document.body), donc jamais
+              rogné par le `overflow-hidden` de la colonne d'origine.
+              `dropAnimation={null}` : sans ça, dnd-kit anime par défaut le
+              retour de ce clone vers sa position de départ au lâcher (pensé
+              pour un `useSortable`, absent ici — simple `useDraggable`),
+              provoquant un rebond parasite vers la colonne d'origine
+              (signalé). Le clone disparaît maintenant instantanément, pile
+              là où la souris l'a lâché. */}
+          <DragOverlay dropAnimation={null}>
+            {activeDragDeal ? (
+              <div className="p-4 sm:p-3 rounded-xl bg-[#0b1719] border border-[#F7BC5F]/60 shadow-[0_20px_36px_-10px_rgba(0,0,0,0.7),0_0_0_3px_rgba(229,184,66,0.25)] scale-[1.03] rotate-1 w-[280px] cursor-grabbing">
+                <PipelineCardContent
+                  deal={activeDragDeal}
+                  contact={contactsById.get(activeDragDeal.contactId)}
+                  taskStatus={
+                    contactsById.get(activeDragDeal.contactId)
+                      ? taskStatusByContactId.get(contactsById.get(activeDragDeal.contactId)!.id) ?? null
+                      : undefined
+                  }
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      )}
+
+      {/* CREATE PIPELINE */}
+      {showCreatePipelineModal && (
+        <ModalShell
+          title="Créer un pipeline"
+          onClose={() =>
+            setShowCreatePipelineModal(
+              false
+            )
+          }
+        >
+          <form
+            onSubmit={
+              handleCreatePipeline
+            }
+            className="space-y-4"
+          >
+            <input
+              value={
+                newPipelineName
+              }
+              onChange={(
+                event
+              ) =>
+                setNewPipelineName(
+                  event.target.value
+                )
+              }
+              placeholder="Nom du pipeline (ex: Prêts immobiliers, Prospection...)"
+              className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-sm text-white"
+            />
+
+            {error && (
+              <p className="text-xs text-rose-300 -mt-2">{error}</p>
+            )}
+
+            <ModalActions
+              onCancel={() =>
+                setShowCreatePipelineModal(
+                  false
+                )
+              }
+              submitLabel="Créer"
+            />
+          </form>
+        </ModalShell>
+      )}
+
+      {/* RENAME PIPELINE */}
+      {showRenamePipelineModal && (
+        <ModalShell
+          title="Renommer le pipeline"
+          onClose={() =>
+            setShowRenamePipelineModal(
+              false
+            )
+          }
+        >
+          <form
+            onSubmit={
+              handleRenamePipeline
+            }
+            className="space-y-4"
+          >
+            <input
+              value={
+                renamePipelineTitle
+              }
+              onChange={(
+                event
+              ) =>
+                setRenamePipelineTitle(
+                  event.target.value
+                )
+              }
+              className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-sm text-white"
+            />
+
+            {error && (
+              <p className="text-xs text-rose-300 -mt-2">{error}</p>
+            )}
+
+            <ModalActions
+              onCancel={() =>
+                setShowRenamePipelineModal(
+                  false
+                )
+              }
+              submitLabel="Enregistrer"
+            />
+          </form>
+        </ModalShell>
+      )}
+
+      {/* DELETE PIPELINE */}
+      {showDeletePipelineModal && (
+        <ModalShell
+          title="Supprimer le pipeline"
+          onClose={() =>
+            setShowDeletePipelineModal(
+              false
+            )
+          }
+        >
+          <p className="text-sm text-gray-300">
+            Cette suppression concerne uniquement {currentAgency?.name}.
+          </p>
+
+          {activePipeline && (() => {
+            const affectedCount = agencyDeals.filter(
+              (deal) => deal.pipelineId === activePipeline.id
+            ).length;
+            const fallback = pipelines.find((p) => p.id !== activePipeline.id);
+            if (affectedCount === 0 || !fallback) return null;
+            return (
+              <p className="text-sm text-amber-400 mt-2">
+                {affectedCount} affaire(s) seront déplacées vers « {fallback.name} ».
+              </p>
+            );
+          })()}
+
+          <div className="flex justify-end gap-2 mt-5">
+            <button
+              onClick={() =>
+                setShowDeletePipelineModal(
+                  false
+                )
+              }
+              className="px-4 py-2 rounded-xl bg-white/5 text-xs"
+            >
+              Annuler
+            </button>
+
+            <button
+              onClick={() =>
+                void handleDeletePipeline()
+              }
+              className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold"
+            >
+              Supprimer
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
+      {/* ADD STAGE */}
+      {showAddStageModal && (
+        <ModalShell
+          title="Ajouter une colonne"
+          onClose={() =>
+            setShowAddStageModal(
+              false
+            )
+          }
+        >
+          <form
+            onSubmit={
+              handleAddStage
+            }
+            className="space-y-4"
+          >
+            <input
+              value={
+                newStageName
+              }
+              onChange={(
+                event
+              ) =>
+                setNewStageName(
+                  event.target.value
+                )
+              }
+              placeholder="Nom de la colonne"
+              className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-sm text-white"
+            />
+
+            <ModalActions
+              onCancel={() =>
+                setShowAddStageModal(
+                  false
+                )
+              }
+              submitLabel="Ajouter"
+            />
+          </form>
+        </ModalShell>
+      )}
+
+      {checklistDeal && (
+        <TransactionChecklistModal
+          leadId={checklistDeal.contactId}
+          pipelineId={checklistDeal.pipelineId || IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID}
+          stageName={checklistDeal.stage}
+          onClose={() => setChecklistDeal(null)}
+        />
+      )}
+
+      {/* RENAME STAGE */}
+      {stageToRename && (
+        <ModalShell
+          title="Renommer la colonne"
+          onClose={() =>
+            setStageToRename(
+              null
+            )
+          }
+        >
+          <form
+            onSubmit={
+              handleRenameStage
+            }
+            className="space-y-4"
+          >
+            <input
+              value={
+                renameStageValue
+              }
+              onChange={(
+                event
+              ) =>
+                setRenameStageValue(
+                  event.target.value
+                )
+              }
+              className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-sm text-white"
+            />
+
+            <ModalActions
+              onCancel={() =>
+                setStageToRename(
+                  null
+                )
+              }
+              submitLabel="Enregistrer"
+            />
+          </form>
+        </ModalShell>
+      )}
+
+      {/* DELETE STAGE */}
+      {stageToDelete && (
+        <ModalShell
+          title="Supprimer la colonne"
+          onClose={() =>
+            setStageToDelete(
+              null
+            )
+          }
+        >
+          <p className="text-sm text-gray-300">
+            Cette suppression concerne uniquement {currentAgency?.name}.
+          </p>
+
+          <div className="flex justify-end gap-2 mt-5">
+            <button
+              onClick={() =>
+                setStageToDelete(
+                  null
+                )
+              }
+              className="px-4 py-2 rounded-xl bg-white/5 text-xs"
+            >
+              Annuler
+            </button>
+
+            <button
+              onClick={() =>
+                void handleDeleteStage()
+              }
+              className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold"
+            >
+              Supprimer
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
+      {pendingFollowupPrompt && (
+        <ModalShell title="Programmer une relance ?" onClose={() => setPendingFollowupPrompt(null)}>
+          <p className="text-sm text-gray-300 mb-4">
+            "{pendingFollowupPrompt.dealTitle}" vient de changer d'étape. Nova peut vous demander où vous en êtes si le dossier reste sans mouvement.
+          </p>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            {[3, 5, 10, 15].map((days) => (
+              <button
+                key={days}
+                onClick={() => void scheduleFollowup(days)}
+                className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-[#F7BC5F]/15 border border-white/10 hover:border-[#F7BC5F]/40 text-sm font-semibold text-white transition-colors"
+              >
+                Dans {days} jours
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setPendingFollowupPrompt(null)}
+            className="w-full text-center text-xs text-gray-500 hover:text-gray-300 mt-2"
+          >
+            Non merci
+          </button>
+        </ModalShell>
+      )}
+
+      {pendingAutomationPrompt && (
+        <ModalShell title="Automatisation détectée" onClose={() => setPendingAutomationPrompt(null)}>
+          <p className="text-sm text-gray-300 mb-4">
+            "{pendingAutomationPrompt.dealTitle}" vient d'atteindre une étape avec une automatisation configurée. Préparer l'e-mail pour {pendingAutomationPrompt.contactName} ?
+          </p>
+          <div className="rounded-xl bg-white/5 border border-white/10 p-3 mb-4 space-y-1">
+            <p className="text-xs text-gray-400">Sujet : <span className="text-white font-semibold">{pendingAutomationPrompt.subject}</span></p>
+            <p className="text-xs text-gray-400 line-clamp-3">{pendingAutomationPrompt.body}</p>
+          </div>
+          {!pendingAutomationPrompt.contactEmail && (
+            <p className="text-xs text-amber-400 mb-3">Ce client n'a pas d'adresse e-mail renseignée — le brouillon s'ouvrira sans destinataire, à compléter manuellement.</p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setPendingAutomationPrompt(null)}
+              className="px-4 py-2 rounded-xl bg-white/5 text-gray-300 text-xs font-bold"
+            >
+              Non
+            </button>
+            <button
+              onClick={() => {
+                onOpenMailDraft?.(pendingAutomationPrompt.contactEmail || '', pendingAutomationPrompt.subject, pendingAutomationPrompt.body);
+                setPendingAutomationPrompt(null);
+              }}
+              className="px-4 py-2 rounded-xl bg-[#F7BC5F] text-slate-950 text-xs font-bold"
+            >
+              Oui, préparer l'e-mail
+            </button>
+          </div>
+        </ModalShell>
+      )}
+    </div>
+  );
+};
+
+function ModalShell({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-3xl bg-[#0b1719] border border-white/10 p-5">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h2 className="text-base font-bold text-white">
+            {title}
+          </h2>
+
+          <button
+            onClick={
+              onClose
+            }
+            className="text-gray-500 hover:text-white"
+          >
+            ×
+          </button>
+        </div>
+
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ModalActions({
+  onCancel,
+  submitLabel,
+}: {
+  onCancel: () => void;
+  submitLabel: string;
+}) {
+  return (
+    <div className="flex justify-end gap-2">
+      <button
+        type="button"
+        onClick={
+          onCancel
+        }
+        className="px-4 py-2 rounded-xl bg-white/5 text-xs"
+      >
+        Annuler
+      </button>
+
+      <button
+        type="submit"
+        className="px-4 py-2 rounded-xl bg-[#F7BC5F] text-black text-xs font-bold"
+      >
+        {
+          submitLabel
+        }
+      </button>
+    </div>
+  );
+}
+
+export default Pipeline;

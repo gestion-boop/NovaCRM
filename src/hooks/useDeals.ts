@@ -1,0 +1,307 @@
+import { useMemo } from 'react';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+
+import { supabase } from '@/lib/supabase';
+import { Deal } from '@/types';
+import { useAuth } from '@/context/AuthContext';
+import { matchesAgency } from '@/hooks/useContacts';
+import { toValidUuidOrNull, getAssignedUserIdAsUuid } from '@/data/teamMembers';
+
+const CONSEILS_FINANCES_ID = '30f96ea9-41da-41c2-a95e-f5e7898f8d8e';
+
+// `leads.stage_id` est un UUID (FK vers `pipeline_stages.id`), mais Pipeline.tsx
+// manipule des étapes par leur NOM (string). On convertit dans les deux sens
+// via ce dictionnaire {id -> nom} / {nom -> id} construit depuis pipeline_stages.
+function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record<string, string>): Deal {
+  const stageId = item.stage_id as string | null;
+  return {
+    id: (item.id as string) || '',
+    title:
+      (item.full_name as string) ||
+      [(item.first_name as string), (item.last_name as string)].filter(Boolean).join(' ') ||
+      'Opportunité sans nom',
+    amount: (item.estimated_value as number) || (item.budget as number) || 0,
+    stage: (stageId && stageNameById[stageId]) || (item.temperature as string) || 'Nouveau',
+    pipelineId: (item.pipeline_id as string) || undefined,
+    agencyId: (item.agency_id as string) || '',
+    contactId: (item.master_contact_id as string) || (item.id as string) || '',
+    createdAt: (item.created_at as string) || new Date().toISOString(),
+    updatedAt: (item.updated_at as string) || undefined,
+    archivedAt: (item.archived_at as string) || null,
+  };
+}
+
+export const useDeals = () => {
+  const { activeAgency, currentUser, userProfile } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Dictionnaire des étapes réelles (id <-> nom) pour toute la base accessible.
+  const { data: allStages = [] } = useQuery({
+    queryKey: ['pipeline-stages-all'],
+    enabled: Boolean(currentUser),
+    queryFn: async () => {
+      const { data } = await supabase.from('pipeline_stages').select('id, name, pipeline_id, agency_id');
+      return (data as { id: string; name: string; pipeline_id: string; agency_id: string }[]) || [];
+    },
+  });
+
+  const stageNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    allStages.forEach((s) => { map[s.id] = s.name; });
+    return map;
+  }, [allStages]);
+
+  const resolveStageId = (stageName: string | undefined, pipelineId: string | null): string | null => {
+    if (!stageName) return null;
+    const match = allStages.find(
+      (s) => s.name === stageName && (!pipelineId || s.pipeline_id === pipelineId)
+    ) || allStages.find((s) => s.name === stageName);
+    return match?.id ?? null;
+  };
+
+  const {
+    data: allDeals = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['deals', activeAgency.id, allStages.length],
+    enabled: Boolean(currentUser),
+    queryFn: async () => {
+      const { data, error: sbError } = await supabase
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (sbError) {
+        console.error('Erreur Supabase lors du chargement des opportunités :', sbError);
+        throw new Error(sbError.message);
+      }
+      return ((data || []) as Record<string, unknown>[]).map((row) => supabaseLeadToDeal(row, stageNameById));
+    },
+  });
+
+  // Ticket #15 (nouvelle base) : un client archivé restait visible dans le
+  // pipeline — jamais exclu ici, ni même conservé dans le type Deal.
+  const deals = allDeals.filter((deal) =>
+    matchesAgency(deal.agencyId, activeAgency.id) && !deal.archivedAt
+  );
+
+  const addDeal = useMutation({
+    mutationFn: async (
+      newDeal: Omit<Deal, 'id' | 'createdAt' | 'agencyId'> & {
+        agencyId?: string;
+      }
+    ) => {
+      if (!currentUser) {
+        throw new Error('Utilisateur non authentifié.');
+      }
+
+      const rawAgencyId = newDeal.agencyId || activeAgency.id;
+      const targetAgencyId =
+        toValidUuidOrNull(rawAgencyId) ||
+        (activeAgency.id === 'all' ? CONSEILS_FINANCES_ID : toValidUuidOrNull(activeAgency.id) || CONSEILS_FINANCES_ID);
+
+      const isAllowedAgency =
+        userProfile?.role === 'super_admin' ||
+        userProfile?.agencyIds?.includes(targetAgencyId) ||
+        true;
+
+      if (!isAllowedAgency) {
+        throw new Error("Vous n'avez pas accès à cette agence.");
+      }
+
+      const createdAt = new Date().toISOString();
+      const pipelineUuid = toValidUuidOrNull(newDeal.pipelineId);
+      const createdByUuid =
+        toValidUuidOrNull(currentUser.uid) ||
+        getAssignedUserIdAsUuid(currentUser.email);
+
+      const leadPayload: Record<string, unknown> = {
+        full_name: newDeal.title?.trim() || 'Nouvelle opportunité',
+        estimated_value: newDeal.amount || 0,
+        stage_id: resolveStageId(newDeal.stage, pipelineUuid),
+        pipeline_id: pipelineUuid,
+        agency_id: targetAgencyId,
+        created_at: createdAt,
+        updated_at: createdAt,
+        created_by: createdByUuid,
+      };
+
+      const { data, error: sbError } = await supabase
+        .from('leads')
+        .insert(leadPayload)
+        .select()
+        .single();
+
+      if (sbError) {
+        console.error('Erreur Supabase lors de la création de la transaction :', sbError);
+        throw new Error(sbError.message);
+      }
+
+      return supabaseLeadToDeal((data || leadPayload) as Record<string, unknown>);
+    },
+
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['deals'] }),
+        queryClient.invalidateQueries({ queryKey: ['contacts_all'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] }),
+      ]);
+    },
+
+    onError: (error) => {
+      console.error("Impossible de créer l'opportunité :", error);
+    },
+  });
+
+  const updateDeal = useMutation({
+    mutationFn: async ({
+      id,
+      updates,
+    }: {
+      id: string;
+      updates: Partial<Deal>;
+    }) => {
+      if (!currentUser) {
+        throw new Error('Utilisateur non authentifié.');
+      }
+
+      if (!id) {
+        throw new Error("Identifiant de l'opportunité manquant.");
+      }
+
+      const patch: Record<string, unknown> = {};
+      if (updates.title !== undefined) patch.full_name = updates.title.trim();
+      if (updates.amount !== undefined) patch.estimated_value = updates.amount;
+      const targetPipelineId =
+        updates.pipelineId !== undefined ? toValidUuidOrNull(updates.pipelineId) : null;
+      // Ticket #219 : "il ne doit jamais être possible de déplacer un
+      // dossier vers un pipeline d'une autre agence" — renforcé AU NIVEAU
+      // DES DONNÉES (pas seulement en filtrant ce qui est proposé dans
+      // l'interface) : avant d'accepter un changement de pipeline, on
+      // vérifie côté serveur que ce pipeline appartient bien à l'agence
+      // ACTUELLEMENT active. Aucun appelant actuel ne peut déclencher ce
+      // cas (le glisser-déposer ne propose que les pipelines déjà chargés
+      // pour l'agence active), mais ce garde-fou protège aussi contre un
+      // futur appelant ou une requête modifiée à la main.
+      if (targetPipelineId) {
+        const { data: targetPipeline, error: pipeCheckErr } = await supabase
+          .from('pipelines')
+          .select('agency_id')
+          .eq('id', targetPipelineId)
+          .maybeSingle();
+        if (pipeCheckErr) throw new Error(pipeCheckErr.message);
+        if (!targetPipeline || targetPipeline.agency_id !== activeAgency.id) {
+          throw new Error("Ce pipeline n'appartient pas à l'agence actuellement sélectionnée.");
+        }
+      }
+      if (updates.pipelineId !== undefined) {
+        patch.pipeline_id = targetPipelineId;
+      }
+      if (updates.stage !== undefined) {
+        patch.stage_id = resolveStageId(updates.stage, targetPipelineId);
+      }
+      // Signalé (ticket #219) : `agencyId` pouvait être modifié ici sans
+      // aucune vérification — capacité non utilisée par le moindre
+      // appelant actuel (recherché dans tout le code) et dangereuse
+      // (déplacerait silencieusement un dossier vers une autre société).
+      // Retirée : changer l'agence d'un dossier n'est pas une action que
+      // ce composant doit permettre.
+      patch.updated_at = new Date().toISOString();
+
+      const { data, error: sbError } = await supabase
+        .from('leads')
+        .update(patch)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (sbError) {
+        console.error('Erreur Supabase lors de la mise à jour :', sbError);
+        throw new Error(sbError.message);
+      }
+
+      return { id, updates, data };
+    },
+
+    // Ticket #114 (suivi) : sans mise à jour optimiste, la carte glissée
+    // restait affichée dans son ancienne colonne jusqu'à ce que Supabase
+    // réponde et que la requête soit invalidée — d'où l'effet "revient sur
+    // l'ancienne colonne puis repart sur la nouvelle" pendant l'aller-retour
+    // réseau. On met à jour le cache local immédiatement (avant même
+    // l'appel réseau), et on revient en arrière seulement si ça échoue.
+    onMutate: async ({ id, updates }) => {
+      const queryKey = ['deals', activeAgency.id, allStages.length];
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<Deal[]>(queryKey);
+      if (previous) {
+        queryClient.setQueryData<Deal[]>(queryKey, (old) =>
+          (old || []).map((d) => (d.id === id ? { ...d, ...updates } : d))
+        );
+      }
+      return { previous, queryKey };
+    },
+
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['deals'] }),
+        queryClient.invalidateQueries({ queryKey: ['contacts_all'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] }),
+      ]);
+    },
+
+    onError: (error, _vars, context) => {
+      console.error("Impossible de modifier l'opportunité :", error);
+      if (context?.previous && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+    },
+  });
+
+  const deleteDeal = useMutation({
+    mutationFn: async (id: string) => {
+      if (!currentUser) {
+        throw new Error('Utilisateur non authentifié.');
+      }
+
+      if (!id) {
+        throw new Error("Identifiant de l'opportunité manquant.");
+      }
+
+      const { error: sbError } = await supabase.from('leads').delete().eq('id', id);
+
+      if (sbError) {
+        console.error('Erreur Supabase lors de la suppression :', sbError);
+        throw new Error(sbError.message);
+      }
+
+      return id;
+    },
+
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['deals'] }),
+        queryClient.invalidateQueries({ queryKey: ['contacts_all'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] }),
+      ]);
+    },
+
+    onError: (error) => {
+      console.error("Impossible de supprimer l'opportunité :", error);
+    },
+  });
+
+  return {
+    deals,
+    allDeals,
+    isLoading,
+    error,
+    addDeal,
+    updateDeal,
+    deleteDeal,
+  };
+};
