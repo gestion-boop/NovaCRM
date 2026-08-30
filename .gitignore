@@ -29,3 +29,6 @@ dist-ssr
 
 # Fichiers temporaires laissés par Vite lors du rechargement de sa config
 vite.config.ts.timestamp-*.mjs
+
+# Réglages Claude Code propres à la machine (contiennent des jetons en clair)
+.claude/settings.local.json
