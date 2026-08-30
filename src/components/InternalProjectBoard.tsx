@@ -8,12 +8,13 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
-  useDraggable,
   useDroppable,
   pointerWithin,
   rectIntersection,
   type CollisionDetection,
 } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { ChevronLeft, Plus, Trash2, Calendar, X, Loader2, User, CheckSquare, Image as ImageIcon, Mic, Square, Send, Paperclip, MessageCircle, Eye, Users as UsersIcon, Check, Pencil } from 'lucide-react';
@@ -178,10 +179,19 @@ const TaskCard = React.memo<{
   selected,
   onToggleSelect,
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id, data: { type: 'task' as const } });
+  // Demandé : « on ne peut pas faire un drop dans le vertical, il faudrait
+  // qu'on ait la possibilité de mettre l'ordre qu'on a envie ». Les cartes
+  // étaient de simples `useDraggable` : on pouvait changer de colonne, mais
+  // pas se placer à un rang précis. `useSortable` donne le rang, la colonne
+  // `position` (déjà présente en base et déjà relue triée) enregistre l'ordre.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    data: { type: 'task' as const, status: task.status },
+  });
   return (
     <div
       ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       {...(selectable ? {} : attributes)}
       {...(selectable ? {} : listeners)}
       onClick={() => (selectable ? onToggleSelect?.(task.id) : onOpen(task))}
@@ -238,6 +248,7 @@ const BoardColumn: React.FC<{
         style={{ boxShadow: isOver ? `inset 0 0 0 2px ${column.accent}88` : undefined, backgroundColor: isOver ? `${column.accent}0d` : undefined }}
         className="p-2.5 min-h-[140px] space-y-2 transition-shadow duration-150"
       >
+        <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         {tasks.map((task) => (
           <TaskCard
             key={task.id}
@@ -252,6 +263,7 @@ const BoardColumn: React.FC<{
             onToggleSelect={onToggleSelect}
           />
         ))}
+        </SortableContext>
       </div>
     </div>
   );
@@ -369,18 +381,55 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
     return rectIntersection(args);
   };
 
-  const tasksByStatus = (status: InternalTaskStatus) => tasks.filter((t) => t.status === status);
+  const tasksByStatus = (status: InternalTaskStatus) =>
+    tasks.filter((t) => t.status === status).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
   const handleDragStart = (event: DragStartEvent) => {
     const task = tasks.find((t) => t.id === String(event.active.id));
     setActiveDragTask(task || null);
   };
 
+  // Enregistre l'ordre d'une colonne : un rang par carte, dans l'ordre reçu.
+  const persistOrder = (orderedIds: string[]) => {
+    void Promise.all(
+      orderedIds.map((id, index) => updateTask.mutateAsync({ id, updates: { position: index } }))
+    ).catch((err: any) => {
+      toast.error(err?.message || "Impossible d'enregistrer le nouvel ordre.");
+    });
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     const overId = over ? String(over.id) : '';
-    const destinationStatus = overId.startsWith('column-') ? (overId.slice('column-'.length) as InternalTaskStatus) : null;
     const task = tasks.find((t) => t.id === String(active.id));
+
+    // Lâcher sur une AUTRE CARTE = choisir son rang, éventuellement dans une
+    // autre colonne. Lâcher sur le fond d'une colonne = y placer la carte en
+    // dernier, comme avant.
+    const overTask = tasks.find((t) => t.id === overId);
+    if (task && overTask) {
+      const targetStatus = overTask.status;
+      const column = tasksByStatus(targetStatus).map((t) => t.id);
+      const from = column.indexOf(task.id);
+      const to = column.indexOf(overTask.id);
+
+      setActiveDragTask(null);
+      if (task.status !== targetStatus) {
+        setTaskStatusOptimistic(task.id, targetStatus);
+        const next = [...column];
+        next.splice(to, 0, task.id);
+        void updateTask
+          .mutateAsync({ id: task.id, updates: { status: targetStatus } })
+          .then(() => persistOrder(next))
+          .catch((err: any) => toast.error(err?.message || "Impossible de déplacer cette tâche."));
+        return;
+      }
+      if (from === -1 || to === -1 || from === to) return;
+      persistOrder(arrayMove(column, from, to));
+      return;
+    }
+
+    const destinationStatus = overId.startsWith('column-') ? (overId.slice('column-'.length) as InternalTaskStatus) : null;
 
     // Signalé : "léger flash quand je déplace la carte" — la carte doit
     // basculer dans sa nouvelle colonne EXACTEMENT au moment où la vignette
@@ -514,9 +563,8 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
               la souris et suivre le déplacement" — cause réelle : sans
               `dropAnimation` explicite, dnd-kit essaie par défaut d'animer
               le retour de la vignette flottante vers la position finale
-              d'un élément "sortable", mécanisme qui n'existe pas ici (les
-              cartes sont de simples `useDraggable`, pas `useSortable`) —
-              il retombait alors visiblement vers son point de départ avant
+              d'un élément "sortable" — il retombait visiblement vers son
+              point de départ avant
               de disparaître, provoquant ce rebond parasite. Le désactiver
               entièrement fait disparaître la vignette instantanément au
               lâcher, exactement là où la souris l'a lâchée. */}
