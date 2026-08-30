@@ -1868,7 +1868,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                     const pickerItems = (
                                       <>
                                         {NOVA_QUICK_REACTIONS.map((e) => (
-                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className="text-xl leading-none hover:scale-125 transition-transform p-1.5 rounded-lg hover:bg-white/10">
+                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className="text-4xl leading-none hover:scale-110 transition-transform p-2 rounded-xl hover:bg-white/10">
                                             {/* Signalé : "grossis quand même les Novadji, ils
                                                 sont moins visibles que les émoticônes
                                                 classiques" — image à taille fixe (w-5 h-5 par
@@ -1876,14 +1876,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                                 visuellement plus petite malgré la même
                                                 hauteur nominale (glyphe emoji avec sa propre
                                                 marge). Agrandie pour un poids visuel comparable. */}
-                                            {renderEmojiOrNova(e, 'w-7 h-7')}
+                                            {renderEmojiOrNova(e, 'w-12 h-12')}
                                           </button>
                                         ))}
                                         {/* Suite #240 : séparation visuelle nette entre les
                                             mini-expressions Nova et "les vrais" emojis. */}
                                         <div className="col-span-10 h-px bg-[#153c3f] my-1" />
                                         {QUICK_EMOJIS.map((e) => (
-                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className="text-xl leading-none hover:scale-125 transition-transform p-1.5 rounded-lg hover:bg-white/10">
+                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className="text-4xl leading-none hover:scale-110 transition-transform p-2 rounded-xl hover:bg-white/10">
                                             {e}
                                           </button>
                                         ))}
@@ -1912,13 +1912,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                           <div className="fixed inset-0 z-20 flex items-center justify-center p-6">
                                             <div
                                               ref={reactionPickerRef}
-                                              className="grid grid-cols-8 gap-1.5 bg-[#0b1c1e] border border-[#153c3f] rounded-2xl p-4 shadow-xl w-full max-w-[340px] max-h-[70vh] overflow-y-auto custom-scrollbar"
+                                              className="grid grid-cols-5 gap-2.5 bg-[#0b1c1e] border border-[#153c3f] rounded-2xl p-4 shadow-xl w-full max-w-[440px] max-h-[70vh] overflow-y-auto custom-scrollbar"
                                             >
                                               {pickerItems}
                                             </div>
                                           </div>
                                         ) : (
-                                          <div ref={reactionPickerRef} className={`absolute z-20 ${convReactionPickerUp ? 'bottom-full mb-1' : 'top-full mt-1'} grid grid-cols-10 gap-1 bg-[#0b1c1e] border border-[#153c3f] rounded-xl p-3 shadow-xl w-max max-w-[360px] max-h-[220px] overflow-y-auto custom-scrollbar ${mine ? 'right-0' : 'left-0'}`}>
+                                          <div ref={reactionPickerRef} className={`absolute z-20 ${convReactionPickerUp ? 'bottom-full mb-1' : 'top-full mt-1'} grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-[#153c3f] rounded-xl p-3 shadow-xl w-max max-w-[440px] max-h-[340px] overflow-y-auto custom-scrollbar ${mine ? 'right-0' : 'left-0'}`}>
                                             {pickerItems}
                                           </div>
                                         )}
@@ -1978,7 +1978,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                   onClick={() => void handleToggleConvReaction(m.id, emoji)}
                                   className={`px-1.5 py-0.5 rounded-full text-xs flex items-center gap-1 border ${list.some((r) => r.userId === currentUser?.uid) ? 'border-[#F7BC5F]/50 bg-[#F7BC5F]/10' : 'border-[#153c3f] bg-[#0b1c1e]'}`}
                                 >
-                                  <span>{renderEmojiOrNova(emoji, 'w-4 h-4')}</span>
+                                  <span>{renderEmojiOrNova(emoji, 'w-5 h-5')}</span>
                                   {list.length > 1 && <span className="text-[10px] text-slate-400">{list.length}</span>}
                                 </button>
                               ))}
@@ -2068,13 +2068,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <Smile className="w-5 h-5" />
                         </button>
                         {showConvEmoji && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-10 gap-1 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[360px] max-h-[220px] overflow-y-auto custom-scrollbar">
+                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[440px] max-h-[340px] overflow-y-auto custom-scrollbar">
                             {QUICK_EMOJIS.map((e) => (
                               <button
                                 key={e}
                                 type="button"
                                 onClick={() => setConvDraft((v) => v + e)}
-                                className="text-xl leading-none hover:scale-125 transition-transform p-1.5 rounded-lg hover:bg-white/10"
+                                className="text-4xl leading-none hover:scale-110 transition-transform p-2 rounded-xl hover:bg-white/10"
                               >
                                 {e}
                               </button>
@@ -2092,13 +2092,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-6 h-6 object-contain" />
                         </button>
                         {showConvNovaPicker && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-1.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max">
+                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max">
                             {NOVA_QUICK_REACTIONS.map((src) => (
                               <button
                                 key={src}
                                 type="button"
                                 onClick={() => { setShowConvNovaPicker(false); void insertConvMessage('image', src); }}
-                                className="w-12 h-12 hover:scale-110 transition-transform rounded-lg hover:bg-white/10 p-1"
+                                className="w-20 h-20 hover:scale-110 transition-transform rounded-xl hover:bg-white/10 p-1.5"
                               >
                                 <img src={src} alt="Nova" className="w-full h-full object-contain" />
                               </button>
@@ -2251,13 +2251,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <Smile className="w-5 h-5" />
                   </button>
                   {showChannelEmoji && (
-                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-10 gap-1 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[360px] max-h-[220px] overflow-y-auto custom-scrollbar">
+                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[440px] max-h-[340px] overflow-y-auto custom-scrollbar">
                       {QUICK_EMOJIS.map((e) => (
                         <button
                           key={e}
                           type="button"
                           onClick={() => setDraft((v) => v + e)}
-                          className="text-xl leading-none hover:scale-125 transition-transform p-1.5 rounded-lg hover:bg-white/10"
+                          className="text-4xl leading-none hover:scale-110 transition-transform p-2 rounded-xl hover:bg-white/10"
                         >
                           {e}
                         </button>
@@ -2275,13 +2275,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-6 h-6 object-contain" />
                   </button>
                   {showChannelNovaPicker && (
-                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-1.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max">
+                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max">
                       {NOVA_QUICK_REACTIONS.map((src) => (
                         <button
                           key={src}
                           type="button"
                           onClick={() => void sendNovaChannelMessage(src)}
-                          className="w-12 h-12 hover:scale-110 transition-transform rounded-lg hover:bg-white/10 p-1"
+                          className="w-20 h-20 hover:scale-110 transition-transform rounded-xl hover:bg-white/10 p-1.5"
                         >
                           <img src={src} alt="Nova" className="w-full h-full object-contain" />
                         </button>
