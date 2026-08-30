@@ -1,8 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { DndContext, DragEndEvent, PointerSensor, TouchSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Loader2, Palette } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID, IMMOSPHERA_AGENCY_ID } from './TransactionChecklistModal';
 
@@ -27,8 +24,6 @@ import { IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID, IMMOSPHERA_AGENCY_ID } from './
 // recentré au milieu du panneau plutôt qu'en pleine largeur comme les
 // rangées agent.
 
-const ORDER_KEY = 'novasphere:stats-etiquettes-order';
-const COLOR_KEY = 'novasphere:stats-etiquettes-colors';
 
 const LABEL_COLORS = [
   { name: 'Ivoire (défaut)', value: '#F3EAD3' },
@@ -118,65 +113,26 @@ const AgentSeal: React.FC<{ display: string; fullName: string; color: string }> 
   </div>
 );
 
-const SortableAgentRow: React.FC<{
-  row: AgentRow;
-  color: string;
-  onPickColor: () => void;
-}> = ({ row, color, onPickColor }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.agentId });
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-  };
+// Demandé : « ne fais pas un drag and drop, cela sera soumis uniquement aux
+// résultats des conseillers » — le classement se calcule, il ne se range plus
+// à la main. Le sélecteur de couleur d'étiquette est retiré de même.
+const AgentRow: React.FC<{ row: AgentRow; color: string }> = ({ row, color }) => (
+  <div className="relative flex items-center gap-3 sm:gap-5 rounded-xl border border-[#3a2f1a] bg-[#1b1712]/80 px-3 sm:px-4 py-3">
+    <AgentSeal display={row.agentDisplay} fullName={row.agentFullName} color={color} />
 
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="relative flex items-center gap-3 sm:gap-5 rounded-xl border border-[#3a2f1a] bg-[#1b1712]/80 px-3 sm:px-4 py-3"
-    >
-      <button
-        {...attributes}
-        {...listeners}
-        className="shrink-0 text-[#9C7A2E] hover:text-[#D4AF37] cursor-grab active:cursor-grabbing touch-none"
-        title="Glisser pour réordonner"
-      >
-        <GripVertical size={18} />
-      </button>
+    <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 sm:gap-4">
+      <BrassLabel count={row.offre} color={color} caption="Offre" />
+      <BrassLabel count={row.compromis} color={color} caption="Compromis" />
+      <BrassLabel count={row.signature} color={color} caption="Signature" />
+    </div>
 
-      <AgentSeal display={row.agentDisplay} fullName={row.agentFullName} color={color} />
-
-      {/* Demande explicite : "centre-les par rapport au rectangle en
-          dessous" — centrer par rapport à l'ESPACE RESTANT (entre le cachet
-          agent et le total) ne donnait pas le même centre que le médaillon
-          "Total agence" plus bas (lui centré sur toute la largeur du
-          panneau), car le bloc agent et le bloc total/couleur n'ont pas la
-          même largeur. Position absolue au centre EXACT de la rangée — donc
-          de la même largeur que le panneau — pour que les deux s'alignent
-          verticalement, quelle que soit la longueur du nom de l'agent. */}
-      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 sm:gap-4">
-        <BrassLabel count={row.offre} color={color} caption="Offre" />
-        <BrassLabel count={row.compromis} color={color} caption="Compromis" />
-        <BrassLabel count={row.signature} color={color} caption="Signature" />
-      </div>
-
-      <div className="ml-auto flex items-center gap-3 sm:gap-4 shrink-0">
-        <div className="rounded-lg border-2 border-[#D4AF37] bg-[#2A2211] px-3 py-1.5 text-center min-w-[2.5rem]">
-          <span className="text-base sm:text-lg font-bold text-[#D4AF37] tabular-nums">{row.total}</span>
-        </div>
-        <button
-          onClick={onPickColor}
-          className="shrink-0 w-7 h-7 rounded-full border border-[#6B5220] flex items-center justify-center hover:brightness-110"
-          style={{ background: color }}
-          title="Couleur des étiquettes de cet agent"
-        >
-          <Palette size={12} className="text-[#3A2E12]" />
-        </button>
+    <div className="ml-auto flex items-center gap-3 sm:gap-4 shrink-0">
+      <div className="rounded-lg border-2 border-[#D4AF37] bg-[#2A2211] px-3 py-1.5 text-center min-w-[2.5rem]">
+        <span className="text-base sm:text-lg font-bold text-[#D4AF37] tabular-nums">{row.total}</span>
       </div>
     </div>
-  );
-};
+  </div>
+);
 
 const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: string) => void }> = ({ onSelectContact }) => {
   const [loading, setLoading] = useState(true);
@@ -186,26 +142,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
   // sur un chiffre, et ouvrir la fiche depuis la liste.
   const [details, setDetails] = useState<StageLead[]>([]);
   const [detailFor, setDetailFor] = useState<{ stage: StageKey; agentId: string | null; title: string } | null>(null);
-  const [order, setOrder] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(ORDER_KEY) || '[]');
-    } catch {
-      return [];
-    }
-  });
-  const [colors, setColors] = useState<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(COLOR_KEY) || '{}');
-    } catch {
-      return {};
-    }
-  });
-  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } })
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -293,28 +230,19 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
     return () => { cancelled = true; };
   }, []);
 
-  const orderedRows = useMemo(() => {
-    const byId = new Map(rows.map((r) => [r.agentId, r]));
-    const known = order.map((id) => byId.get(id)).filter(Boolean) as AgentRow[];
-    const rest = rows.filter((r) => !order.includes(r.agentId)).sort((a, b) => b.total - a.total);
-    return [...known, ...rest];
-  }, [rows, order]);
+  // Classement par résultats : le conseiller le plus performant en tête.
+  const orderedRows = useMemo(
+    () => [...rows].sort((a, b) => b.total - a.total || a.agentFullName.localeCompare(b.agentFullName, 'fr')),
+    [rows]
+  );
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const ids = orderedRows.map((r) => r.agentId);
-    const oldIndex = ids.indexOf(String(active.id));
-    const newIndex = ids.indexOf(String(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
-    const next = arrayMove(ids, oldIndex, newIndex);
-    setOrder(next);
-    localStorage.setItem(ORDER_KEY, JSON.stringify(next));
-  };
 
   // Trois onglets séparés, un par étape, plus la vue d'ensemble existante
   // (conservée telle quelle : elle avait été réglée avec vous).
   const [tab, setTab] = useState<'apercu' | 'offre' | 'compromis' | 'signature'>('apercu');
+  // Demandé : deux classements — un sur le nombre de ventes, un sur le
+  // chiffre d'affaires rentré dans l'agence. Le podium suit le critère choisi.
+  const [rankBy, setRankBy] = useState<'ca' | 'ventes'>('ca');
 
   const TABS = [
     { key: 'apercu' as const, label: "Vue d'ensemble" },
@@ -338,8 +266,8 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
     return orderedRows
       .map((r) => ({ ...r, ...pick(r) }))
       .filter((r) => r.count > 0 || r.ca > 0)
-      .sort((a, b) => b.ca - a.ca || b.count - a.count);
-  }, [orderedRows, tab]);
+      .sort((a, b) => (rankBy === 'ca' ? b.ca - a.ca || b.count - a.count : b.count - a.count || b.ca - a.ca));
+  }, [orderedRows, tab, rankBy]);
 
   const stageTotal = useMemo(
     () => stageRows.reduce((acc, r) => ({ count: acc.count + r.count, ca: acc.ca + r.ca }), { count: 0, ca: 0 }),
@@ -421,6 +349,28 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           ))}
         </div>
 
+        {tab !== 'apercu' && (
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-[10px] uppercase tracking-widest text-[#C9B67B]">Classer par</span>
+            {([
+              { key: 'ca' as const, label: "Chiffre d'affaires" },
+              { key: 'ventes' as const, label: 'Nombre de ventes' },
+            ]).map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setRankBy(opt.key)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                  rankBy === opt.key
+                    ? 'bg-[#6B5220] text-[#F3EAD3] border-[#D4AF37]'
+                    : 'bg-transparent text-[#C9B67B] border-[#3a2f1a] hover:text-[#F3EAD3]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center py-16 text-[#C9B67B]">
             <Loader2 className="animate-spin mr-2" size={18} /> Chargement des statistiques…
@@ -492,20 +442,11 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
             Aucun dossier en Offre, Compromis ou Signature pour le moment.
           </div>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={orderedRows.map((r) => r.agentId)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-2">
-                {orderedRows.map((row) => (
-                  <SortableAgentRow
-                    key={row.agentId}
-                    row={row}
-                    color={colors[row.agentId] || LABEL_COLORS[0].value}
-                    onPickColor={() => setColorPickerFor(row.agentId)}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+          <div className="space-y-2">
+            {orderedRows.map((row) => (
+              <AgentRow key={row.agentId} row={row} color={LABEL_COLORS[0].value} />
+            ))}
+          </div>
         )}
 
         {/* Total agence — recentré au milieu du panneau, en médaillon, plutôt
@@ -537,41 +478,6 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           </div>
         )}
       </div>
-
-      {colorPickerFor && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-          onClick={() => setColorPickerFor(null)}
-        >
-          <div
-            className="bg-[#1b1712] border border-[#3a2f1a] rounded-2xl p-4 sm:p-5 w-full max-w-xs"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-sm font-semibold text-[#F3EAD3] mb-3">Couleur des étiquettes</h3>
-            <div className="grid grid-cols-3 gap-3">
-              {LABEL_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  onClick={() => {
-                    const next = { ...colors, [colorPickerFor]: c.value };
-                    setColors(next);
-                    localStorage.setItem(COLOR_KEY, JSON.stringify(next));
-                    setColorPickerFor(null);
-                  }}
-                  className="flex flex-col items-center gap-1.5 group"
-                  title={c.name}
-                >
-                  <span
-                    className="w-10 h-10 rounded-lg border-2 border-[#9C7A2E] group-hover:scale-105 transition-transform"
-                    style={{ background: c.value }}
-                  />
-                  <span className="text-[10px] text-[#C9B67B] text-center leading-tight">{c.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Demandé : au clic sur un chiffre, savoir QUI est dans cette case —
           et pouvoir ouvrir la fiche directement depuis la liste. */}
