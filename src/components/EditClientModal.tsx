@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Save, Pencil } from 'lucide-react';
-import { Contact } from '@/types';
+import { Contact, AGENCIES } from '@/types';
+import { supabase } from '@/lib/supabase';
+import { useAssignableUsers } from '@/hooks/useAssignableUsers';
 
 interface Props {
   client: Contact;
@@ -8,16 +10,63 @@ interface Props {
   onSave: (updates: Partial<Contact>) => Promise<void>;
 }
 
+/**
+ * Modification d'une fiche client.
+ *
+ * Demandé : « une fois le client créé, je veux pouvoir tout modifier comme si
+ * je l'inscrivais à nouveau. » Cette fenêtre ne reprenait que 8 des 16 champs
+ * du formulaire de création — structure, type de client, type de contact,
+ * pipeline, honoraires, agent lié et deuxième personne n'étaient modifiables
+ * nulle part, ou seulement en passant par d'autres écrans. Elle couvre
+ * désormais exactement le même périmètre que la création.
+ */
 export default function EditClientModal({ client, onClose, onSave }: Props) {
   const [name, setName] = useState(client.name || '');
   const [email, setEmail] = useState(client.email || '');
   const [phone, setPhone] = useState(client.phone || '');
-  const [statutLead, setStatutLead] = useState(client.statutLead || 'Froid - Prospect peu intéressé');
+  const [agencyId, setAgencyId] = useState(client.agencyId || '');
+  const [clientType, setClientType] = useState(client.clientType || 'Acheteur');
+  const [contactType, setContactType] = useState(client.contactType || 'Particulier');
+  const [pipeline, setPipeline] = useState(client.pipeline || '');
+  // Valeurs de l'enum Postgres `lead_temperature` (froid/tiede/chaud), comme
+  // à la création : un libellé descriptif y était rejeté par la base sans
+  // aucun message (ticket #119).
+  const [statutLead, setStatutLead] = useState(() => {
+    const raw = (client.statutLead || client.status || 'froid').toLowerCase();
+    if (raw.startsWith('chaud')) return 'chaud';
+    if (raw.startsWith('ti')) return 'tiede';
+    return 'froid';
+  });
   const [budgetMax, setBudgetMax] = useState(client.budgetMax ? String(client.budgetMax) : '');
+  const [honoraires, setHonoraires] = useState(client.honoraires ? String(client.honoraires) : '');
   const [secteur, setSecteur] = useState(client.secteur || '');
   const [typeBien, setTypeBien] = useState(client.typeBien || client.projectType || '');
+  const [assignedTo, setAssignedTo] = useState(client.assignedTo || '');
+  const [coBorrower, setCoBorrower] = useState(client.coBorrower || '');
   const [comments, setComments] = useState(client.comments || '');
   const [saving, setSaving] = useState(false);
+
+  // Collaborateurs réellement inscrits, restreints à la structure choisie —
+  // la liste suit donc le champ « Structure » ci-dessous.
+  const assignableUsers = useAssignableUsers(agencyId);
+
+  // Pipelines de la structure choisie. Les valeurs sont les identifiants
+  // réels : `pipeline_id` passe par un filtre UUID côté enregistrement, un
+  // nom y serait silencieusement remplacé par null.
+  const [pipelines, setPipelines] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from('pipelines').select('id, name, agency_id').order('name');
+      if (cancelled) return;
+      const rows = (data || [])
+        .filter((p: { agency_id: string }) => !agencyId || p.agency_id === agencyId)
+        .map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }));
+      setPipelines(rows);
+      setPipeline((current) => (current && !rows.some((p) => p.id === current) ? '' : current));
+    })().catch(() => { if (!cancelled) setPipelines([]); });
+    return () => { cancelled = true; };
+  }, [agencyId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,10 +76,17 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim(),
+        agencyId,
+        clientType,
+        contactType,
+        pipeline,
         statutLead,
         budgetMax: budgetMax === '' ? undefined : Number(budgetMax),
+        honoraires: honoraires === '' ? undefined : Number(honoraires),
         secteur: secteur.trim(),
         typeBien: typeBien.trim(),
+        assignedTo,
+        coBorrower: coBorrower.trim(),
         comments: comments.trim(),
       });
       onClose();
@@ -39,9 +95,12 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
     }
   };
 
+  const field = 'w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]';
+  const label = 'block text-xs font-bold text-slate-300 mb-1';
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="bg-[#07191b] border border-[#1b4e52] rounded-2xl max-w-lg w-full p-6 text-white shadow-2xl relative animate-scale-up max-h-[85vh] flex flex-col">
+      <div onClick={(e) => e.stopPropagation()} className="bg-[#07191b] border border-[#1b4e52] rounded-2xl max-w-2xl w-full p-6 text-white shadow-2xl relative animate-scale-up max-h-[88vh] flex flex-col">
         <div className="flex items-start justify-between mb-4 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[#143c3f] border border-[#1a5155] flex items-center justify-center text-[#F9C977]">
@@ -56,87 +115,119 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
 
         <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto custom-scrollbar pr-1">
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">Nom complet</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
-            />
+            <label className={label}>Nom complet</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} className={field} />
           </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">E-mail</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
-              />
+              <label className={label}>E-mail</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={field} />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Téléphone</label>
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
-              />
+              <label className={label}>Téléphone</label>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} className={field} />
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">Statut</label>
-            <select
-              value={statutLead}
-              onChange={(e) => setStatutLead(e.target.value)}
-              className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
-            >
-              <option value="Froid - Prospect peu intéressé">🔵 Froid - Peu intéressé</option>
-              <option value="Tiède - Intérêt modéré">🟠 Tiède - Intérêt modéré</option>
-              <option value="Chaud - Très intéressé">🔴 Chaud - Très intéressé</option>
-            </select>
-          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Budget max (€)</label>
-              <input
-                type="number"
-                value={budgetMax}
-                onChange={(e) => setBudgetMax(e.target.value)}
-                className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
-              />
+              <label className={label}>Structure / Agence</label>
+              <select value={agencyId} onChange={(e) => setAgencyId(e.target.value)} className={field}>
+                {AGENCIES.filter((a) => a.id !== 'all').map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Secteur</label>
-              <input
-                type="text"
-                value={secteur}
-                onChange={(e) => setSecteur(e.target.value)}
-                className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
-              />
+              <label className={label}>Utilisateur / agent lié</label>
+              <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className={field}>
+                <option value="">— Non attribué —</option>
+                {assignableUsers.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">Type de bien / projet</label>
-            <input
-              type="text"
-              value={typeBien}
-              onChange={(e) => setTypeBien(e.target.value)}
-              className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
-            />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={label}>Type</label>
+              <select value={clientType} onChange={(e) => setClientType(e.target.value)} className={field}>
+                <option value="Acheteur">Acheteur</option>
+                <option value="Vendeur">Vendeur</option>
+                <option value="Locataire">Locataire</option>
+                <option value="Investisseur">Investisseur</option>
+              </select>
+            </div>
+            <div>
+              <label className={label}>Type de contact</label>
+              <select value={contactType} onChange={(e) => setContactType(e.target.value)} className={field}>
+                <option value="Particulier">Particulier</option>
+                <option value="Professionnel">Professionnel</option>
+              </select>
+            </div>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={label}>Pipeline</label>
+              <select value={pipeline} onChange={(e) => setPipeline(e.target.value)} className={field}>
+                <option value="">Aucun (libre)</option>
+                {pipelines.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={label}>Statut</label>
+              <select value={statutLead} onChange={(e) => setStatutLead(e.target.value)} className={field}>
+                <option value="froid">🔵 Froid - Peu intéressé</option>
+                <option value="tiede">🟠 Tiède - Intérêt modéré</option>
+                <option value="chaud">🔴 Chaud - Très intéressé</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={label}>Budget max (€)</label>
+              <input type="number" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} className={field} />
+            </div>
+            <div>
+              <label className={label}>Honoraires (€)</label>
+              <input type="number" value={honoraires} onChange={(e) => setHonoraires(e.target.value)} className={field} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={label}>Secteur</label>
+              <input value={secteur} onChange={(e) => setSecteur(e.target.value)} className={field} />
+            </div>
+            <div>
+              <label className={label}>Type de bien / projet</label>
+              <input value={typeBien} onChange={(e) => setTypeBien(e.target.value)} className={field} />
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">Commentaires</label>
-            <textarea
-              value={comments}
-              onChange={(e) => setComments(e.target.value)}
-              rows={3}
-              className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] resize-y"
+            <label className={label}>Deuxième personne (conjoint, co-contact)</label>
+            <input
+              value={coBorrower}
+              onChange={(e) => setCoBorrower(e.target.value)}
+              placeholder="Nom, téléphone, e-mail…"
+              className={`${field} placeholder-slate-500`}
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2 shrink-0">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer">
+          <div>
+            <label className={label}>Commentaires</label>
+            <textarea rows={4} value={comments} onChange={(e) => setComments(e.target.value)} className={`${field} resize-y`} />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 shrink-0">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-slate-300 hover:text-white text-xs font-bold">
               Annuler
             </button>
             <button
@@ -144,8 +235,7 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
               disabled={saving}
               className="px-5 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg flex items-center gap-2"
             >
-              <Save className="w-4 h-4" />
-              {saving ? 'Enregistrement...' : 'Enregistrer'}
+              <Save className="w-4 h-4" /> {saving ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </div>
         </form>
