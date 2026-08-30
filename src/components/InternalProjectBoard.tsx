@@ -637,6 +637,7 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
             setShowAddFor(null);
           }}
         />
+      )}
 
       {showDefaultTeam && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowDefaultTeam(false)}>
@@ -688,7 +689,6 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
             </div>
           </div>
         </div>
-      )}
       )}
 
       {openTask && (
