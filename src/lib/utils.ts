@@ -38,3 +38,14 @@ export function htDepuisTtc(ttc?: number | null): number {
   if (ttc === null || ttc === undefined || Number.isNaN(Number(ttc))) return 0;
   return Number(ttc) / (1 + TVA_RATE);
 }
+
+/**
+ * La commission de l'agence est STOCKÉE en HT — les montants déjà saisis le
+ * sont, et les statistiques s'appuient dessus : les réécrire fausserait
+ * l'historique. La fiche client, elle, se saisit et s'affiche en TTC. La
+ * conversion se fait donc aux deux bords du formulaire, jamais en base.
+ */
+export function ttcDepuisHt(ht?: number | null): number {
+  if (ht === null || ht === undefined || Number.isNaN(Number(ht))) return 0;
+  return Number(ht) * (1 + TVA_RATE);
+}

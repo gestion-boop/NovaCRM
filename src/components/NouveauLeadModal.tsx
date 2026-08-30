@@ -192,7 +192,8 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         typeBien: typeBien.trim(),
         pipeline,
         statutLead,
-        honoraires: honoraires === '' ? 0 : Number(honoraires),
+        // Saisi en TTC, stocké en HT — voir EditClientModal et lib/utils.
+        honoraires: honoraires === '' ? 0 : Math.round((Number(honoraires) / 1.2) * 100) / 100,
         advisorCommissionTtc: advisorCommission === '' ? undefined : Number(advisorCommission),
         mandateNumber: mandateNumber.trim() || undefined,
         comments: (comments.trim() + companyComments).trim(),
@@ -445,7 +446,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     chiffre d'affaires de l'agence, celui qui alimente les
                     statistiques ; saisi en HT. */}
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-200">Commission agence (€ HT)</label>
+                  <label className="block text-xs font-bold text-slate-200">Commission agence (€ TTC)</label>
                   <input
                     type="number"
                     placeholder="ex: 5000"

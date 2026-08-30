@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Save, Pencil } from 'lucide-react';
 import { Contact, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
-import { htDepuisTtc } from '@/lib/utils';
+import { htDepuisTtc, ttcDepuisHt } from '@/lib/utils';
 import { useAssignableUsers } from '@/hooks/useAssignableUsers';
 
 interface Props {
@@ -42,7 +42,10 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
   // Demandé pour ImmoSphera : « au lieu de honoraires, mets commission agence
   // et commission conseiller immobilier ». Les montants déjà saisis dans
   // Honoraires sont ceux de l'agence, et déjà HT — ils ne sont pas convertis.
-  const [honoraires, setHonoraires] = useState(client.honoraires ? String(client.honoraires) : '');
+  // Le champ se saisit en TTC ; la base conserve le HT (voir ttcDepuisHt).
+  const [honorairesTtc, setHonorairesTtc] = useState(
+    client.honoraires ? String(Math.round(ttcDepuisHt(client.honoraires) * 100) / 100) : ''
+  );
   const [advisorCommission, setAdvisorCommission] = useState(
     client.advisorCommissionTtc ? String(client.advisorCommissionTtc) : ''
   );
@@ -97,7 +100,7 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
         pipeline,
         statutLead,
         budgetMax: budgetMax === '' ? undefined : Number(budgetMax),
-        honoraires: honoraires === '' ? undefined : Number(honoraires),
+        honoraires: honorairesTtc === '' ? undefined : Math.round(htDepuisTtc(Number(honorairesTtc)) * 100) / 100,
         advisorCommissionTtc: advisorCommission === '' ? undefined : Number(advisorCommission),
         mandateNumber,
         secteur: secteur.trim(),
@@ -223,9 +226,13 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={label}>Commission agence (€ HT)</label>
-              <input type="number" value={honoraires} onChange={(e) => setHonoraires(e.target.value)} className={field} />
-              <p className="mt-1 text-[10px] text-slate-500">Chiffre d'affaires de l'agence. C'est ce montant qui alimente les statistiques.</p>
+              <label className={label}>Commission agence (€ TTC)</label>
+              <input type="number" value={honorairesTtc} onChange={(e) => setHonorairesTtc(e.target.value)} className={field} />
+              <p className="mt-1 text-[10px] text-slate-500">
+                {honorairesTtc !== '' && !Number.isNaN(Number(honorairesTtc))
+                  ? `Soit ${htDepuisTtc(Number(honorairesTtc)).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} € HT — c'est ce montant qui alimente les statistiques.`
+                  : "Saisir le TTC. Le HT est conservé en base et alimente les statistiques."}
+              </p>
             </div>
             <div>
               <label className={label}>Commission conseiller immobilier (€ TTC)</label>
