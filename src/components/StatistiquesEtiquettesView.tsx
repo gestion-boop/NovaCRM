@@ -42,6 +42,11 @@ interface StageLead {
   agentId: string;
   stage: StageKey;
   honoraires: number;
+  ville: string;
+  // Le numéro de mandat n'existe pas encore sur les fiches clients : la
+  // colonne reste à créer en base. La ligne est prête à l'afficher dès
+  // qu'elle existera.
+  mandat: string;
 }
 
 interface AgentRow {
@@ -79,29 +84,20 @@ const firstNamePlusInitial = (fullName: string): string => {
 // d'un coup d'œil sans remonter à l'en-tête. `count` de 0 s'affiche grisée
 // (agent sans dossier sur cette étape, mais on ne le masque pas — il reste
 // visible dans le tableau).
-const BrassLabel: React.FC<{ count: number; color: string; caption: string }> = ({ count, color, caption }) => (
-  <div className="relative w-20 sm:w-24 shrink-0" style={{ opacity: count === 0 ? 0.35 : 1 }}>
-    <div
-      className="rounded-lg border-[3px] px-2 pt-2 pb-1.5 text-center shadow-[0_2px_4px_rgba(0,0,0,0.35)]"
-      style={{ borderColor: '#9C7A2E', background: `linear-gradient(180deg, ${color} 0%, ${color} 100%)` }}
-    >
-      <span className="block text-lg sm:text-xl font-bold text-[#3A2E12] tabular-nums leading-none">{count}</span>
-      <span className="block text-[8px] sm:text-[9px] font-semibold uppercase tracking-wider text-[#6B5220] mt-1 whitespace-nowrap">{caption}</span>
-    </div>
-    {/* petits rivets, coin haut-gauche/droit, comme sur le casier photographié */}
-    <div className="absolute -top-1 -left-1 w-2 h-2 rounded-full bg-[#B8923F] border border-[#6B5220]" />
-    <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#B8923F] border border-[#6B5220]" />
-    {/* languette arrondie en bas, effet étiquette suspendue */}
-    <div
-      className="mx-auto -mt-1 w-6 h-2 rounded-b-full border-x-[3px] border-b-[3px]"
-      style={{ borderColor: '#9C7A2E', background: color }}
-    />
-  </div>
+const BrassLabel: React.FC<{ count: number; color: string; caption: string; onClick?: () => void }> = ({ count, color, caption, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={!onClick || count === 0}
+    title={count > 0 ? 'Voir les dossiers concernés' : undefined}
+    className="rounded-xl border-2 px-3 sm:px-4 py-1.5 text-center min-w-[4.5rem] disabled:cursor-default enabled:hover:brightness-110 transition"
+    style={{ borderColor: '#9C7A2E', background: count > 0 ? color : '#4d5f5a' }}
+  >
+    <div className="text-lg sm:text-xl font-bold text-[#3A2E12] tabular-nums leading-none">{count}</div>
+    <div className="text-[9px] uppercase tracking-widest text-[#3A2E12]/70 mt-1">{caption}</div>
+  </button>
 );
 
-// Plaquette ovale façon porte-nom, avec "Prénom N." (demande explicite :
-// "Isabelle G", pas juste l'initiale) — remplace le cachet à une seule
-// lettre.
 const AgentSeal: React.FC<{ display: string; fullName: string; color: string }> = ({ display, fullName, color }) => (
   <div
     className="relative shrink-0 rounded-full border-[3px] flex items-center justify-center px-3 py-1.5 min-w-[6rem] sm:min-w-[7rem] shadow-[0_2px_5px_rgba(0,0,0,0.45)]"
@@ -116,14 +112,14 @@ const AgentSeal: React.FC<{ display: string; fullName: string; color: string }> 
 // Demandé : « ne fais pas un drag and drop, cela sera soumis uniquement aux
 // résultats des conseillers » — le classement se calcule, il ne se range plus
 // à la main. Le sélecteur de couleur d'étiquette est retiré de même.
-const AgentRow: React.FC<{ row: AgentRow; color: string }> = ({ row, color }) => (
+const AgentRow: React.FC<{ row: AgentRow; color: string; onOpen?: (stage: StageKey) => void }> = ({ row, color, onOpen }) => (
   <div className="relative flex items-center gap-3 sm:gap-5 rounded-xl border border-[#3a2f1a] bg-[#1b1712]/80 px-3 sm:px-4 py-3">
     <AgentSeal display={row.agentDisplay} fullName={row.agentFullName} color={color} />
 
     <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 sm:gap-4">
-      <BrassLabel count={row.offre} color={color} caption="Offre" />
-      <BrassLabel count={row.compromis} color={color} caption="Compromis" />
-      <BrassLabel count={row.signature} color={color} caption="Signature" />
+      <BrassLabel count={row.offre} color={color} caption="Offre" onClick={onOpen && (() => onOpen('offre'))} />
+      <BrassLabel count={row.compromis} color={color} caption="Compromis" onClick={onOpen && (() => onOpen('compromis'))} />
+      <BrassLabel count={row.signature} color={color} caption="Signature" onClick={onOpen && (() => onOpen('signature'))} />
     </div>
 
     <div className="ml-auto flex items-center gap-3 sm:gap-4 shrink-0">
@@ -160,7 +156,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
 
       const { data: leads } = await supabase
         .from('leads')
-        .select('id, stage_id, assigned_to, created_by, archived_at, estimated_value, full_name, first_name, last_name')
+        .select('id, stage_id, assigned_to, created_by, archived_at, estimated_value, full_name, first_name, last_name, sector')
         .eq('pipeline_id', IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID)
         .eq('agency_id', IMMOSPHERA_AGENCY_ID);
 
@@ -219,6 +215,8 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
         agentId: (l.assigned_to || l.created_by) as string,
         stage: stageOf(l.stage_id) as StageKey,
         honoraires: Number(l.estimated_value) || 0,
+        ville: (l.sector || '').trim(),
+        mandat: (l.mandate_number || '').trim(),
       })).filter((d) => d.stage);
 
       if (!cancelled) {
@@ -444,7 +442,12 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
         ) : (
           <div className="space-y-2">
             {orderedRows.map((row) => (
-              <AgentRow key={row.agentId} row={row} color={LABEL_COLORS[0].value} />
+              <AgentRow
+                key={row.agentId}
+                row={row}
+                color={LABEL_COLORS[0].value}
+                onOpen={(stage) => setDetailFor({ stage, agentId: row.agentId, title: row.agentFullName })}
+              />
             ))}
           </div>
         )}
@@ -516,7 +519,13 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
                     disabled={!onSelectContact}
                     className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-[#3a2f1a] bg-[#2A2211] text-left hover:border-[#D4AF37] transition-colors disabled:cursor-default"
                   >
-                    <span className="text-sm text-[#F3EAD3] truncate">{lead.name}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm text-[#F3EAD3] truncate">{lead.name}</span>
+                      <span className="block text-[11px] text-[#C9B67B] truncate">
+                        Mandat : {lead.mandat || '—'}
+                        {lead.ville ? ` · ${lead.ville}` : ''}
+                      </span>
+                    </span>
                     <span className="text-xs font-bold text-[#D4AF37] tabular-nums shrink-0">{formatEuros(lead.honoraires)}</span>
                   </button>
                 ))
