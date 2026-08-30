@@ -367,6 +367,14 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
       .sort((a, b) => b.honoraires - a.honoraires || a.name.localeCompare(b.name, 'fr'));
   }, [details, detailFor]);
 
+  // Demandé : podium sur le classement — or, argent, bronze, médaille à côté
+  // du nom. Au-delà du 3e, présentation neutre.
+  const PODIUM = [
+    { medal: '🥇', border: '#D4AF37', bg: '#2A2211', name: '#F7BC5F' },
+    { medal: '🥈', border: '#B0BEC9', bg: '#242628', name: '#DDE3E8' },
+    { medal: '🥉', border: '#B8863F', bg: '#2A2018', name: '#E0A66B' },
+  ];
+
   const STAGE_LABEL: Record<StageKey, string> = {
     offre: "Offres d'achat",
     compromis: 'Compromis',
@@ -425,16 +433,29 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           ) : (
             <div className="space-y-2">
               <div className="flex items-center px-4 py-2 text-[9px] uppercase tracking-widest text-[#C9B67B]">
+                <span className="w-7 shrink-0" />
                 <span className="flex-1">Conseiller</span>
                 <span className="w-20 text-center">Dossiers</span>
                 <span className="w-32 text-right">Chiffre d'affaires</span>
               </div>
-              {stageRows.map((r) => (
+              {stageRows.map((r, rank) => {
+                const podium = PODIUM[rank];
+                return (
                 <div
                   key={r.agentId}
-                  className="flex items-center rounded-xl border border-[#6B5220] bg-[#2A2211] px-4 py-3"
+                  className="flex items-center rounded-xl px-4 py-3"
+                  style={{
+                    border: `${podium ? '2px' : '1px'} solid ${podium ? podium.border : '#6B5220'}`,
+                    background: podium ? podium.bg : '#2A2211',
+                  }}
                 >
-                  <span className="flex-1 text-sm font-bold text-[#F3EAD3] truncate">{r.agentFullName}</span>
+                  <span className="w-7 shrink-0 text-base leading-none" aria-hidden="true">{podium ? podium.medal : ''}</span>
+                  <span
+                    className="flex-1 text-sm font-bold truncate"
+                    style={{ color: podium ? podium.name : '#F3EAD3' }}
+                  >
+                    {r.agentFullName}
+                  </span>
                   <button
                     type="button"
                     onClick={() => setDetailFor({ stage: tab as StageKey, agentId: r.agentId, title: r.agentFullName })}
@@ -445,8 +466,10 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
                   </button>
                   <span className="w-32 text-right text-sm font-bold text-[#D4AF37] tabular-nums">{formatEuros(r.ca)}</span>
                 </div>
-              ))}
+                );
+              })}
               <div className="flex items-center rounded-xl border-2 border-[#D4AF37] bg-[#1b1712] px-4 py-3 mt-3">
+                <span className="w-7 shrink-0" />
                 <span className="flex-1 text-xs font-bold uppercase tracking-widest text-[#D4AF37]">Total agence</span>
                 <button
                   type="button"
