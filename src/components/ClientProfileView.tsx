@@ -46,6 +46,7 @@ import { getCachedAccessToken, requestWorkspaceAccessToken, hydrateAccessTokenFr
 import { uploadDocumentToDrive } from '@/lib/documentDrive';
 import { getTaskDateStatus } from '@/lib/taskUtils';
 import { TEAM_MEMBERS, getAssignedUser } from '@/data/teamMembers';
+import { useAssignableUsers } from '@/hooks/useAssignableUsers';
 import ParcoursCreditModal from './ParcoursCreditModal';
 import EditClientModal from './EditClientModal';
 
@@ -589,6 +590,7 @@ export default function ClientProfileView({
   const [shareTargetId, setShareTargetId] = useState('');
   const [shareSaving, setShareSaving] = useState(false);
 
+  const assignableUsers = useAssignableUsers(client?.agencyId);
   const colleagues = TEAM_MEMBERS.filter(
     (m) => m.agencyId === client?.agencyId && m.id !== currentUserId
   );
@@ -2374,7 +2376,8 @@ export default function ClientProfileView({
                     onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { assignedTo: e.target.value } })}
                     className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
                   >
-                    {TEAM_MEMBERS.map(m => (
+                    <option value="">— Non attribué —</option>
+                    {assignableUsers.map(m => (
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
                   </select>
@@ -3627,7 +3630,7 @@ export default function ClientProfileView({
                       className="bg-black/30 border border-amber-500/40 rounded-lg px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-amber-400 shrink-0"
                     >
                       <option value="" disabled>Assigner un conseiller...</option>
-                      {TEAM_MEMBERS.map((m) => (
+                      {assignableUsers.map((m) => (
                         <option key={m.id} value={m.id}>{m.name}</option>
                       ))}
                     </select>
