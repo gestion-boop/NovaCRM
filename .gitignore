@@ -26,3 +26,6 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Fichiers temporaires laissés par Vite lors du rechargement de sa config
+vite.config.ts.timestamp-*.mjs
