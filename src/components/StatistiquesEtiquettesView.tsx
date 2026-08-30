@@ -34,7 +34,9 @@ const LABEL_COLORS = [
   { name: 'Or pâle', value: '#F3EAC0' },
 ];
 
-type StageKey = 'offre' | 'compromis' | 'signature';
+// « Location » vient en tête : l'ordre demandé est location, offre d'achat,
+// compromis, acte authentique.
+type StageKey = 'location' | 'offre' | 'compromis' | 'signature';
 
 interface StageLead {
   id: string;
@@ -50,6 +52,7 @@ interface AgentRow {
   agentId: string;
   agentDisplay: string;
   agentFullName: string;
+  location: number;
   offre: number;
   compromis: number;
   signature: number;
@@ -58,6 +61,7 @@ interface AgentRow {
   // trois étapes. Source : le champ « Honoraires (€) » de la fiche client
   // (colonne `estimated_value`), c'est-à-dire ce que l'agence encaisse —
   // et non le budget, qui est le prix du bien.
+  caLocation: number;
   caOffre: number;
   caCompromis: number;
   caSignature: number;
@@ -114,6 +118,7 @@ const AgentRow: React.FC<{ row: AgentRow; color: string; onOpen?: (stage: StageK
     <AgentSeal display={row.agentDisplay} fullName={row.agentFullName} color={color} />
 
     <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 sm:gap-4">
+      <BrassLabel count={row.location} color={color} caption="Location" onClick={onOpen && (() => onOpen('location'))} />
       <BrassLabel count={row.offre} color={color} caption="Offre" onClick={onOpen && (() => onOpen('offre'))} />
       <BrassLabel count={row.compromis} color={color} caption="Compromis" onClick={onOpen && (() => onOpen('compromis'))} />
       <BrassLabel count={row.signature} color={color} caption="Signature" onClick={onOpen && (() => onOpen('signature'))} />
@@ -147,6 +152,9 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
         .select('id, name')
         .eq('pipeline_id', IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID);
 
+      // Nom repéré par motif plutôt qu'à l'identique : l'étape a été créée
+      // « Locations validées », et rien ne garantit la casse ni le pluriel.
+      const locationStageId = (stages || []).find((s: any) => /location/i.test(s.name))?.id;
       const offreStageId = (stages || []).find((s: any) => s.name === "Offre d'achat")?.id;
       const compromisStageId = (stages || []).find((s: any) => s.name === 'Signature compromis')?.id;
       const signatureStageId = (stages || []).find((s: any) => s.name === 'signature acte authentique')?.id;
@@ -168,7 +176,10 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
         (l: any) =>
           !l.archived_at &&
           (l.assigned_to || l.created_by) &&
-          (l.stage_id === offreStageId || l.stage_id === compromisStageId || l.stage_id === signatureStageId)
+          (l.stage_id === locationStageId ||
+            l.stage_id === offreStageId ||
+            l.stage_id === compromisStageId ||
+            l.stage_id === signatureStageId)
       );
 
       const assignedIds = Array.from(new Set(relevant.map((l: any) => l.assigned_to || l.created_by)));
@@ -187,16 +198,19 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
             agentId: id,
             agentFullName: fullName,
             agentDisplay: firstNamePlusInitial(fullName),
+            location: 0,
             offre: 0,
             compromis: 0,
             signature: 0,
             total: 0,
+            caLocation: 0,
             caOffre: 0,
             caCompromis: 0,
             caSignature: 0,
           };
         }
         const honoraires = Number(l.estimated_value) || 0;
+        if (l.stage_id === locationStageId) { byAgent[id].location += 1; byAgent[id].caLocation += honoraires; }
         if (l.stage_id === offreStageId) { byAgent[id].offre += 1; byAgent[id].caOffre += honoraires; }
         if (l.stage_id === compromisStageId) { byAgent[id].compromis += 1; byAgent[id].caCompromis += honoraires; }
         if (l.stage_id === signatureStageId) { byAgent[id].signature += 1; byAgent[id].caSignature += honoraires; }
@@ -204,7 +218,8 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
       });
 
       const stageOf = (stageId: string): StageKey | null =>
-        stageId === offreStageId ? 'offre' : stageId === compromisStageId ? 'compromis' : stageId === signatureStageId ? 'signature' : null;
+        stageId === locationStageId ? 'location'
+        : stageId === offreStageId ? 'offre' : stageId === compromisStageId ? 'compromis' : stageId === signatureStageId ? 'signature' : null;
 
       const detailRows: StageLead[] = relevant.map((l: any) => ({
         id: l.id,
@@ -234,13 +249,14 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
 
   // Trois onglets séparés, un par étape, plus la vue d'ensemble existante
   // (conservée telle quelle : elle avait été réglée avec vous).
-  const [tab, setTab] = useState<'apercu' | 'offre' | 'compromis' | 'signature'>('apercu');
+  const [tab, setTab] = useState<'apercu' | StageKey>('apercu');
   // Demandé : deux classements — un sur le nombre de ventes, un sur le
   // chiffre d'affaires rentré dans l'agence. Le podium suit le critère choisi.
   const [rankBy, setRankBy] = useState<'ca' | 'ventes'>('ca');
 
   const TABS = [
     { key: 'apercu' as const, label: "Vue d'ensemble" },
+    { key: 'location' as const, label: 'Locations' },
     { key: 'offre' as const, label: "Offres d'achat" },
     { key: 'compromis' as const, label: 'Compromis' },
     { key: 'signature' as const, label: 'Actes authentiques' },
@@ -253,11 +269,13 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
   const stageRows = useMemo(() => {
     if (tab === 'apercu') return [];
     const pick = (r: AgentRow) =>
-      tab === 'offre'
-        ? { count: r.offre, ca: r.caOffre }
-        : tab === 'compromis'
-          ? { count: r.compromis, ca: r.caCompromis }
-          : { count: r.signature, ca: r.caSignature };
+      tab === 'location'
+        ? { count: r.location, ca: r.caLocation }
+        : tab === 'offre'
+          ? { count: r.offre, ca: r.caOffre }
+          : tab === 'compromis'
+            ? { count: r.compromis, ca: r.caCompromis }
+            : { count: r.signature, ca: r.caSignature };
     return orderedRows
       .map((r) => ({ ...r, ...pick(r) }))
       .filter((r) => r.count > 0 || r.ca > 0)
@@ -273,12 +291,13 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
     () =>
       orderedRows.reduce(
         (acc, r) => ({
+          location: acc.location + r.location,
           offre: acc.offre + r.offre,
           compromis: acc.compromis + r.compromis,
           signature: acc.signature + r.signature,
           total: acc.total + r.total,
         }),
-        { offre: 0, compromis: 0, signature: 0, total: 0 }
+        { location: 0, offre: 0, compromis: 0, signature: 0, total: 0 }
       ),
     [orderedRows]
   );
@@ -299,6 +318,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
   ];
 
   const STAGE_LABEL: Record<StageKey, string> = {
+    location: 'Locations',
     offre: "Offres d'achat",
     compromis: 'Compromis',
     signature: 'Actes authentiques',
@@ -322,7 +342,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
         ))}
 
         <div className="mb-4 sm:mb-5">
-          <h2 className="text-lg sm:text-2xl font-bold text-[#F3EAD3] tracking-wide">Statistiques — Offres, Compromis &amp; Signatures</h2>
+          <h2 className="text-lg sm:text-2xl font-bold text-[#F3EAD3] tracking-wide">Statistiques — Locations, Offres, Compromis &amp; Signatures</h2>
           <p className="text-xs sm:text-sm text-[#C9B67B] mt-1">
             Répartition en direct par agent ImmoSphera sur le pipeline Transactions V2.
           </p>
@@ -434,7 +454,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           )
         ) : orderedRows.length === 0 ? (
           <div className="py-16 text-center text-sm text-[#C9B67B]">
-            Aucun dossier en Offre, Compromis ou Signature pour le moment.
+            Aucun dossier en Location, Offre, Compromis ou Signature pour le moment.
           </div>
         ) : (
           <div className="space-y-2">
@@ -456,6 +476,10 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
             <div className="flex items-center gap-4 sm:gap-6 rounded-2xl border-2 border-[#D4AF37] bg-[#2A2211] px-5 sm:px-7 py-3 sm:py-4 shadow-[0_4px_14px_rgba(0,0,0,0.4)]">
               <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-[#D4AF37]">Total agence</span>
               <div className="flex items-center gap-3 sm:gap-4">
+                <div className="text-center">
+                  <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.location}</div>
+                  <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Location</div>
+                </div>
                 <div className="text-center">
                   <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.offre}</div>
                   <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Offre</div>
