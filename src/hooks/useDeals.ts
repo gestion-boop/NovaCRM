@@ -25,6 +25,10 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
       [(item.first_name as string), (item.last_name as string)].filter(Boolean).join(' ') ||
       'Opportunité sans nom',
     amount: (item.estimated_value as number) || (item.budget as number) || 0,
+    advisorCommissionTtc:
+      item.advisor_commission_ttc === null || item.advisor_commission_ttc === undefined
+        ? undefined
+        : Number(item.advisor_commission_ttc),
     stage: (stageId && stageNameById[stageId]) || (item.temperature as string) || 'Nouveau',
     pipelineId: (item.pipeline_id as string) || undefined,
     agencyId: (item.agency_id as string) || '',

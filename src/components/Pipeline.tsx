@@ -27,7 +27,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, htDepuisTtc } from '@/lib/utils';
 // Ticket #277 (suite) : même détection de mode jour que l'accueil, pour que
 // les colonnes du pipeline suivent la même bascule vers de vraies couleurs
 // claires (au lieu du filtre global qui pâlit juste le bleu canard).
@@ -293,6 +293,8 @@ const PipelineColumn: React.FC<{
   stage: string;
   stageDeals: Deal[];
   stageTotal: number;
+  // Commission conseiller cumulée de la colonne, convertie en HT.
+  stageAdvisorHt: number;
   accentColor: string;
   canManageStructure: boolean;
   contactsById: Map<string, Contact>;
@@ -305,7 +307,7 @@ const PipelineColumn: React.FC<{
   onRequestDelete: (stage: string) => void;
   justArrived: boolean;
 }> = ({
-  stage, stageDeals, stageTotal, accentColor, canManageStructure,
+  stage, stageDeals, stageTotal, stageAdvisorHt, accentColor, canManageStructure,
   contactsById, taskStatusByContactId, onSelectContact, onDeleteDeal, onOpenChecklist, onOpenNova, onRename, onRequestDelete, justArrived,
 }) => {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
@@ -368,7 +370,15 @@ const PipelineColumn: React.FC<{
               {stageTotal > 0 && (
                 <>
                   <span className="text-[10px] text-gray-600">·</span>
-                  <p className="text-[10px] font-bold" style={{ color: accentColor }}>{formatCurrency(stageTotal)}</p>
+                  <p className="text-[10px] font-bold" style={{ color: accentColor }} title="Commission agence, hors taxes">{formatCurrency(stageTotal)}</p>
+                  {stageAdvisorHt > 0 && (
+                    <>
+                      <span className="text-[10px] text-gray-600">·</span>
+                      <p className="text-[10px] text-gray-400" title="Commission conseiller, saisie TTC et convertie hors taxes">
+                        dont conseiller {formatCurrency(stageAdvisorHt)} HT
+                      </p>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -1668,6 +1678,12 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
               {activePipeline.stages.map((stage, stageIndex) => {
                 const stageDeals = dealsByStage.get(stage) || EMPTY_DEALS;
                 const stageTotal = stageDeals.reduce((sum, deal) => sum + (deal.amount || 0), 0);
+                // Demandé : la commission conseiller est saisie TTC et doit
+                // remonter en HT sur la colonne.
+                const stageAdvisorHt = stageDeals.reduce(
+                  (sum, deal) => sum + htDepuisTtc(deal.advisorCommissionTtc),
+                  0
+                );
                 const accentColor = STAGE_ACCENT_COLORS[stageIndex % STAGE_ACCENT_COLORS.length];
 
                 return (
@@ -1676,6 +1692,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                     stage={stage}
                     stageDeals={stageDeals}
                     stageTotal={stageTotal}
+                    stageAdvisorHt={stageAdvisorHt}
                     accentColor={accentColor}
                     canManageStructure={canManageStructure}
                     contactsById={contactsById}

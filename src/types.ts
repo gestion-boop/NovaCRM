@@ -45,7 +45,11 @@ export interface PipelineDef {
 export interface Deal {
   id: string;
   title: string;
+  // Commission de l'agence, stockée en HT (colonne `estimated_value`).
   amount: number;
+  // Commission du conseiller, stockée en TTC ; affichée en HT dans les
+  // colonnes du pipeline (voir htDepuisTtc).
+  advisorCommissionTtc?: number;
   stage: string;
   pipelineId?: string;
   agencyId: string;
