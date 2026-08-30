@@ -846,15 +846,85 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     }
 
     if (updates.stages) {
-      await supabase.from('pipeline_stages').delete().eq('pipeline_id', pipelineId);
-      const stageInserts = updates.stages.map((stageName, idx) => ({
-        agency_id: currentAgencyId,
-        pipeline_id: pipelineId,
-        name: stageName,
-        position: idx,
-      }));
-      const { error: stageErr } = await supabase.from('pipeline_stages').insert(stageInserts);
-      if (stageErr) throw stageErr;
+      // INCIDENT DU 30/08/2026 — « j'ai créé une colonne Location validée et
+      // cela m'a effacé tout ce qu'il y avait dans les autres colonnes ».
+      //
+      // Ce bloc faisait un DELETE de toutes les étapes du pipeline suivi d'un
+      // INSERT complet. Les étapes étaient donc recréées avec de NOUVEAUX
+      // identifiants, et les dossiers, qui pointent sur `stage_id`, perdaient
+      // leur position — 21 dossiers détachés d'un coup ce soir-là, sur la
+      // simple AJOUT d'une colonne. Le même code s'exécutait à chaque
+      // renommage ou réorganisation d'étape, sur tous les pipelines.
+      //
+      // On ne détruit plus rien : les étapes conservées gardent leur ligne
+      // (donc leur identifiant, donc les dossiers qui s'y trouvent), seules
+      // les étapes réellement retirées sont supprimées, et seules les
+      // nouvelles sont créées.
+      const { data: existing } = await supabase
+        .from('pipeline_stages')
+        .select('id, name, position')
+        .eq('pipeline_id', pipelineId);
+
+      const normalize = (value: string) => value.trim().toLowerCase();
+      const remaining = [...(existing || [])];
+      const wanted = updates.stages;
+
+      // Rapprochement par nom : c'est le seul lien stable entre la liste
+      // affichée (des chaînes) et les lignes en base.
+      const matched = new Map<number, { id: string; name: string }>();
+      wanted.forEach((stageName, idx) => {
+        const hit = remaining.findIndex((row) => normalize(row.name) === normalize(stageName));
+        if (hit !== -1) {
+          matched.set(idx, remaining[hit] as { id: string; name: string });
+          remaining.splice(hit, 1);
+        }
+      });
+
+      // Une étape non retrouvée par son nom, alors qu'il reste des lignes
+      // orphelines, est très probablement un RENOMMAGE : on réutilise la
+      // ligne plutôt que d'en créer une neuve, ce qui garderait les dossiers
+      // sur l'ancien nom.
+      wanted.forEach((stageName, idx) => {
+        if (matched.has(idx) || remaining.length === 0) return;
+        const reused = remaining.shift() as { id: string; name: string };
+        matched.set(idx, reused);
+      });
+
+      const toUpdate = wanted
+        .map((stageName, idx) => ({ stageName, idx, row: matched.get(idx) }))
+        .filter((entry) => entry.row);
+      const toInsert = wanted
+        .map((stageName, idx) => ({ stageName, idx }))
+        .filter((entry) => !matched.has(entry.idx));
+
+      for (const entry of toUpdate) {
+        const { error: upErr } = await supabase
+          .from('pipeline_stages')
+          .update({ name: entry.stageName, position: entry.idx })
+          .eq('id', (entry.row as { id: string }).id);
+        if (upErr) throw upErr;
+      }
+
+      if (toInsert.length > 0) {
+        const { error: insErr } = await supabase.from('pipeline_stages').insert(
+          toInsert.map((entry) => ({
+            agency_id: currentAgencyId,
+            pipeline_id: pipelineId,
+            name: entry.stageName,
+            position: entry.idx,
+          }))
+        );
+        if (insErr) throw insErr;
+      }
+
+      // Ce qui reste après appariement a réellement été retiré de la liste.
+      for (const leftover of remaining) {
+        const { error: delErr } = await supabase
+          .from('pipeline_stages')
+          .delete()
+          .eq('id', (leftover as { id: string }).id);
+        if (delErr) throw delErr;
+      }
     }
   };
 
