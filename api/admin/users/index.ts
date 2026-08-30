@@ -151,9 +151,18 @@ export default async function handler(req: any, res: any) {
     // 6. Envoi de l'e-mail d'invitation — signalé : rien n'était envoyé
     // jusqu'ici (le lien était juste copié dans le presse-papiers). Part
     // toujours du Gmail de Sylvain, quel que soit l'admin qui invite.
+    // Demandé : pouvoir créer les comptes de toute l'équipe MAINTENANT, pour
+    // pouvoir attribuer des contacts, sans prévenir les intéressés tout de
+    // suite (`leads.assigned_to` référence `profiles`, elle-même liée à
+    // auth.users : sans compte, aucune attribution n'est possible). Le
+    // formulaire envoie donc `sendInviteEmail: false` dans ce cas, et
+    // l'appelant récupère `actionLink` pour le transmettre lui-même quand il
+    // le décidera. Le comportement par défaut reste l'envoi, pour ne rien
+    // changer aux invitations classiques.
+    const sendInviteEmail = req.body?.sendInviteEmail !== false;
     let emailSent = false;
     let emailError: string | null = null;
-    if (actionLink) {
+    if (actionLink && sendInviteEmail) {
       const result = await sendSystemEmail(email, 'Votre invitation Nova CRM', inviteEmailHtml(fullName, actionLink));
       emailSent = result.ok;
       emailError = result.error || null;
@@ -168,9 +177,12 @@ export default async function handler(req: any, res: any) {
       actionLink,
       emailSent,
       emailError,
+      emailSkipped: !sendInviteEmail,
       message: emailSent
         ? `L'utilisateur ${email} a été créé et un e-mail d'invitation lui a été envoyé.`
-        : `L'utilisateur ${email} a été créé et associé aux agences. L'e-mail d'invitation n'a pas pu être envoyé automatiquement — le lien reste copié dans le presse-papiers.`,
+        : !sendInviteEmail
+          ? `L'utilisateur ${email} a été créé et associé aux agences. Aucun e-mail n'a été envoyé : le lien de connexion est à lui transmettre vous-même.`
+          : `L'utilisateur ${email} a été créé et associé aux agences. L'e-mail d'invitation n'a pas pu être envoyé automatiquement — le lien reste copié dans le presse-papiers.`,
     });
   } catch (e: any) {
     console.error('[api/admin/users] error:', e);
