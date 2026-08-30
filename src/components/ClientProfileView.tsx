@@ -2372,7 +2372,15 @@ export default function ClientProfileView({
                 <div>
                   <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Utilisateur / Agent Lié</label>
                   <select
-                    value={getAssignedUser(client.assignedTo).id}
+                    // Signalé : « cela reste au premier qui est mis ». La
+                    // valeur affichée passait par getAssignedUser(), qui
+                    // retombe sur TEAM_MEMBERS[0] (Sylvain Grazia) dès que
+                    // l'identifiant n'est pas dans la liste figée — donc
+                    // pour tout collaborateur réel. Le champ ne reflétait
+                    // jamais l'attribution enregistrée et revenait au
+                    // premier nom après chaque changement. On lit
+                    // directement la valeur stockée.
+                    value={client.assignedTo || ''}
                     onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { assignedTo: e.target.value } })}
                     className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
                   >

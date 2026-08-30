@@ -777,7 +777,15 @@ export default function Contacts({
                 <div>
                   <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Utilisateur Lié (Agent)</label>
                   <select
-                    value={getAssignedUser(selectedContact.assignedTo).id}
+                    // Signalé : « cela reste au premier qui est mis ». La
+                    // valeur affichée passait par getAssignedUser(), qui
+                    // retombe sur TEAM_MEMBERS[0] (Sylvain Grazia) dès que
+                    // l'identifiant n'est pas dans la liste figée — donc
+                    // pour tout collaborateur réel. Le champ ne reflétait
+                    // jamais l'attribution enregistrée et revenait au
+                    // premier nom après chaque changement. On lit
+                    // directement la valeur stockée.
+                    value={selectedContact.assignedTo || ''}
                     onChange={async (e) => {
                       const newUserId = e.target.value;
                       await updateContact.mutateAsync({ id: selectedContact.id, updates: { assignedTo: newUserId } });
