@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- interactive-widget=resizes-content : sur les navigateurs récents qui le supportent,
+         demande au navigateur de rétrécir lui-même la zone visible (dvh, visualViewport) quand
+         le clavier virtuel s'ouvre, au lieu de faire défiler toute la page pour révéler le champ
+         actif — évite que les panneaux plein écran (ex. Nova IA) se retrouvent coupés en haut. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- TODO: Set the document title to the name of your application -->
+    <title>NovaSphere</title>
+    <meta name="description" content="ConnectSphere CRM is a robust customer relationship management application for sales teams across multiple agencies.">
+    <meta name="author" content="Lovable" />
+
+    <!-- PWA / Mobile -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#081318" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="icon" href="/favicon.png" type="image/png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="NovaSphere" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Anti-flash thème : pose la classe light/dark AVANT le 1er paint -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("app-theme");
+          if (t !== "light" && t !== "dark") t = "dark";
+          document.documentElement.classList.add(t);
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
+
+    <!-- TODO: Update og:title to match your application name -->
+    
+    
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/nn6XyzPWX3NKmoLxpVLo8pWtSff2/social-images/social-1777656258456-NovaSphere.webp">
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@Lovable" />
+    <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/nn6XyzPWX3NKmoLxpVLo8pWtSff2/social-images/social-1777656258456-NovaSphere.webp">
+    <meta property="og:title" content="NovaSphere">
+  <meta name="twitter:title" content="NovaSphere">
+  <meta property="og:description" content="ConnectSphere CRM is a robust customer relationship management application for sales teams across multiple agencies.">
+  <meta name="twitter:description" content="ConnectSphere CRM is a robust customer relationship management application for sales teams across multiple agencies.">
+</head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,4 @@
+id;agency_id;theme_id;home_background_color;home_background_url;home_background_opacity;home_layout;chat_layout;agenda_layout;created_at;updated_at
+0471f178-1d2f-4937-8f08-3a95fa376029;0cd9362c-316e-4b57-af0b-b6cea092961b;novasphere;#10b981;;0.18;{};{};{};2026-05-10 10:21:34.231999+00;2026-05-23 16:34:03.722306+00
+110a9fc0-fe75-42d6-adbb-db36614dadcc;15157da9-71ea-4760-ae1c-3bc99d9caa20;ocean;#3b82f6;;0.18;{};{};{};2026-05-10 10:21:34.231999+00;2026-05-23 20:24:00.446166+00
+949aa4ab-dcc3-4ca2-a0c9-af1c4df99b09;30f96ea9-41da-41c2-a95e-f5e7898f8d8e;graphite;#d4a843;;0.24;{};{};{};2026-05-10 10:21:34.231999+00;2026-06-16 06:41:48.854679+00

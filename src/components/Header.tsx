@@ -1,0 +1,350 @@
+import React, { useMemo, useRef, useState } from 'react';
+
+import {
+  Bell,
+  HelpCircle,
+  Home,
+  Maximize,
+  Menu as MenuIcon,
+  Minimize,
+  Moon,
+  Plus,
+  Search,
+  Settings,
+  Sun,
+  Users,
+  X,
+} from 'lucide-react';
+
+import {
+  useContacts,
+} from '@/hooks/useContacts';
+
+import {
+  useAuth,
+} from '@/context/AuthContext';
+
+import { supabase } from '@/lib/supabase';
+import { TEAM_MEMBERS } from '@/data/teamMembers';
+
+interface HeaderProps {
+  onOpenNouveauLead: () => void;
+  onOpenSqlImport?: () => void;
+  onOpenTutorial: () => void;
+  onOpenCameraReservation?: () => void;
+
+  unreadCount?: number;
+
+  isDarkMode: boolean;
+  onToggleTheme: () => void;
+
+  selectedAgencyName: string;
+  selectedAgencyId?: string;
+
+  onNavigate?: (
+    nav: string
+  ) => void;
+
+  onSelectContact?: (
+    contactId: string
+  ) => void;
+
+  onToggleMobileMenu?: () => void;
+  onToggleNotifications?: () => void;
+  // État du panneau "Menu" (partagé avec le tiroir mobile existant) — sert
+  // uniquement à l'accessibilité (aria-expanded) du bouton "Menu" du header.
+  menuOpen?: boolean;
+}
+
+export const Header: React.FC<
+  HeaderProps
+> = ({
+  onOpenNouveauLead,
+  onOpenSqlImport,
+  onOpenTutorial,
+  onOpenCameraReservation,
+
+  unreadCount = 0,
+
+  isDarkMode,
+  onToggleTheme,
+
+  selectedAgencyName,
+  selectedAgencyId,
+
+  onNavigate,
+  onSelectContact,
+
+  onToggleMobileMenu,
+  onToggleNotifications,
+  menuOpen = false,
+}) => {
+  const {
+    activeAgency,
+    userProfile,
+    currentUser,
+  } = useAuth();
+
+
+  const agencyLogoByName: Record<string, string> = {
+    'conseils finances': '/Logo%20ConseilsFinances.png',
+    'novavisio': '/Logo%20NovaVisio.png',
+    'immosphera': '/Logo%20Immosphera.png',
+    'novasphere': '/nova-mascotte.png',
+    'toutes les sociétés': '/nova-mascotte.png',
+  };
+
+  const normalizeAgencyName = (value?: string) => (value || '').trim().toLowerCase();
+  const currentAgencyLogo = agencyLogoByName[normalizeAgencyName(selectedAgencyName || activeAgency?.name)] || agencyLogoByName[normalizeAgencyName(activeAgency?.name)] || '/nova-mascotte.png';
+
+  const {
+    contacts = [],
+  } = useContacts();
+
+
+  const handleNotificationsClick = () => {
+    onToggleNotifications?.();
+  };
+
+  // ── Recherche client/dossier — filtre la vraie liste de contacts déjà
+  // chargée (useContacts, plus haut) et ouvre la fiche via le même chemin
+  // que partout ailleurs dans l'app (onSelectContact → setSelectedClientProfileId).
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  // Plein écran navigateur (Fullscreen API) — équivalent desktop de
+  // l'affichage "app installée" sans barre du navigateur qu'on a sur
+  // mobile. `fullscreenchange` couvre aussi une sortie via Échap.
+  const [isFullscreen, setIsFullscreen] = useState(
+    typeof document !== 'undefined' && !!document.fullscreenElement
+  );
+  React.useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void document.documentElement.requestFullscreen().catch(() => {});
+    }
+  };
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return contacts.filter((c: any) => (c.name || '').toLowerCase().includes(q)).slice(0, 8);
+  }, [searchQuery, contacts]);
+
+  const displayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'Utilisateur';
+  const avatarPhotoUrl =
+    userProfile?.photoURL ||
+    currentUser?.photoURL ||
+    TEAM_MEMBERS.find((m) => m.email.toLowerCase() === (currentUser?.email || '').toLowerCase())?.avatarUrl ||
+    null;
+  const avatarInitials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part: string) => part[0]?.toUpperCase())
+    .join('') || 'U';
+
+  return (
+    // Barre du haut masquée en mobile : la navigation du bas (Accueil / Chat
+    // / IA / Alertes / Menu) couvre déjà tous ces accès sur petit écran.
+    <header className="hidden md:flex bg-[#081318] border-b border-white/5 px-2.5 sm:px-6 items-center justify-between z-40 shrink-0 select-none pt-[env(safe-area-inset-top,0px)] min-h-[3.5rem] sm:min-h-[4rem] pb-1.5 sm:pb-0">
+      {/* BRAND + MENU */}
+      <div className="flex items-center gap-1.5 sm:gap-3 overflow-hidden">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <img
+            data-tour="header-logo"
+            src="/nova-mascotte.png"
+            alt="Nova CRM Logo"
+            className="w-7 h-7 sm:w-9 sm:h-9 rounded-full object-cover border border-[#F7BC5F]/40 shadow-md shrink-0 bg-[#0a2528]"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.currentTarget;
+              target.onerror = null;
+              target.src = "/icon-192.png";
+            }}
+          />
+
+          <span className="text-white font-bold text-sm sm:text-xl tracking-tight hidden sm:inline-block">
+            Nova CRM
+          </span>
+        </div>
+
+        {/* Icône "Accueil" — toujours visible, ramène directement à l'accueil
+            depuis n'importe quelle tuile/page, comme un bouton retour
+            universel (aucune des pages ouvertes depuis une tuile n'a de
+            bouton retour propre). */}
+        <button
+          type="button"
+          onClick={() => onNavigate?.('accueil')}
+          title="Retour à l'accueil"
+          className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 flex items-center justify-center rounded-lg bg-[#0b1c1e] hover:bg-[#102a2d] border border-white/10 text-gray-300 hover:text-[#F7BC5F] transition-colors"
+        >
+          <Home className="w-4 h-4" />
+        </button>
+
+        {/* Bouton "Menu" — ouvre le panneau de navigation coulissant (Sidebar
+            en mode overlay, réutilisé tel quel : mêmes routes, permissions,
+            badges et ordre personnalisable qu'avant). */}
+        <button
+          data-tour="header-menu"
+          type="button"
+          onClick={onToggleMobileMenu}
+          aria-expanded={menuOpen}
+          aria-controls="novasphere-nav-menu"
+          className="flex items-center gap-1.5 h-9 sm:h-10 px-2.5 sm:px-3 rounded-lg bg-[#0b1c1e] hover:bg-[#102a2d] border border-[#F7BC5F]/25 text-gray-200 hover:text-white transition-colors shrink-0"
+        >
+          <MenuIcon className="w-4 h-4 text-[#F7BC5F]" />
+          <span className="hidden sm:inline text-xs font-semibold">Menu</span>
+        </button>
+
+        <div className="hidden lg:flex items-center gap-1 sm:gap-2 overflow-hidden">
+          <span className="text-[10px] sm:text-xs bg-[#F7BC5F]/20 text-[#F7BC5F] border border-[#F7BC5F]/40 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full font-bold flex items-center gap-1 shadow-sm shrink-0">
+            <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            <span>{contacts.length}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* RECHERCHE */}
+      <div data-tour="header-search" className="hidden md:block flex-1 max-w-md mx-4 relative">
+        <Search className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+          placeholder="Rechercher un client, un dossier..."
+          className="w-full bg-[#0b1c1e] border border-white/10 focus:border-[#F7BC5F]/50 rounded-xl pl-10 pr-9 py-2 text-sm text-white placeholder-gray-500 outline-none transition-colors"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-gray-500 hover:text-white hover:bg-white/10"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {searchFocused && searchResults.length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-2 bg-[#0E1A20] border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 max-h-72 overflow-y-auto custom-scrollbar">
+            {searchResults.map((c: any) => (
+              <button
+                key={c.id}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onSelectContact?.(c.id);
+                  setSearchQuery('');
+                  setSearchFocused(false);
+                }}
+                className="w-full text-left px-3.5 py-2 text-sm text-gray-200 hover:bg-white/5 hover:text-white transition-colors truncate"
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* OUTILS HEADER */}
+      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        <button
+          data-tour="header-nouveau-lead"
+          onClick={onOpenNouveauLead}
+          className="bg-[#F7BC5F] hover:bg-[#d9ab38] text-black font-semibold text-xs px-2.5 sm:px-3.5 py-1.5 rounded-lg flex items-center gap-1 shadow-md hover:shadow-gold/20 transition-all active:scale-95 shrink-0"
+        >
+          <Plus className="w-4 h-4 stroke-[3]" />
+          <span className="hidden sm:inline">Nouveau lead</span>
+          <span className="sm:hidden text-[11px] font-bold">Lead</span>
+        </button>
+
+        <button
+          data-tour="header-theme"
+          onClick={onToggleTheme}
+          title="Changer de thème"
+          className="p-1.5 sm:p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors border border-white/5 shrink-0"
+        >
+          {isDarkMode ? (
+            <Sun className="w-4 h-4 text-[#F9C977]" />
+          ) : (
+            <Moon className="w-4 h-4" />
+          )}
+        </button>
+
+        <button
+          data-tour="header-fullscreen"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? 'Quitter le plein écran' : 'Passer en plein écran (comme sur mobile)'}
+          className="hidden md:flex p-1.5 sm:p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors border border-white/5 shrink-0"
+        >
+          {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+        </button>
+
+        <button
+          data-tour="header-tutoriel"
+          onClick={onOpenTutorial}
+          className="hidden md:flex items-center gap-1.5 text-xs text-gray-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+        >
+          <HelpCircle className="w-4 h-4 text-[#F7BC5F]" />
+          <span>Tutoriel</span>
+        </button>
+
+        {/* Bouton "Réserver caméra" retiré du header (la tuile "Réserver
+            caméra" dans "Mes espaces" reste le seul accès désormais). */}
+
+        {/* AVATAR — ticket #17 (nouvelle base) : l'avatar tout à droite du
+            header restait toujours en initiales, jamais la vraie photo,
+            même quand le profil (ou l'annuaire équipe) en a une. */}
+        <button
+          data-tour="header-avatar"
+          onClick={() => onNavigate?.('parametres')}
+          title={displayName}
+          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/40 text-[#F7BC5F] font-bold text-xs sm:text-sm flex items-center justify-center shrink-0 hover:bg-[#F7BC5F]/25 transition-colors overflow-hidden"
+        >
+          {avatarPhotoUrl ? (
+            <img src={avatarPhotoUrl} alt={displayName} className="w-full h-full object-cover" />
+          ) : (
+            avatarInitials
+          )}
+        </button>
+
+        {/* ROUE PARAMÈTRES — remplace l'ancienne tuile "Paramètres Système"
+            de l'accueil, placée juste à côté de la clochette. */}
+        <button
+          data-tour="header-settings"
+          onClick={() => onNavigate?.('parametres')}
+          title="Paramètres"
+          className="p-1.5 sm:p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors border border-white/5 shrink-0"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+
+        {/* CLOCHETTE : CENTRE NOTIFICATIONS — tout à droite du header
+            (après l'avatar), demandé pour rester visible en dernier sur
+            desktop. */}
+        <button
+          data-tour="header-bell"
+          onClick={handleNotificationsClick}
+          className="p-1.5 sm:p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors border border-white/5 relative shrink-0"
+          title="Ouvrir le centre de notifications"
+        >
+          <Bell className="w-4 h-4" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white font-bold text-[9px] min-w-3.5 h-3.5 px-1 rounded-full flex items-center justify-center shadow-sm">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+
+      </div>
+    </header>
+  );
+};
+
+export default Header;
