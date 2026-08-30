@@ -43,9 +43,6 @@ interface StageLead {
   stage: StageKey;
   honoraires: number;
   ville: string;
-  // Le numéro de mandat n'existe pas encore sur les fiches clients : la
-  // colonne reste à créer en base. La ligne est prête à l'afficher dès
-  // qu'elle existera.
   mandat: string;
 }
 
@@ -156,7 +153,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
 
       const { data: leads } = await supabase
         .from('leads')
-        .select('id, stage_id, assigned_to, created_by, archived_at, estimated_value, full_name, first_name, last_name, sector')
+        .select('id, stage_id, assigned_to, created_by, archived_at, estimated_value, full_name, first_name, last_name, sector, mandate_number')
         .eq('pipeline_id', IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID)
         .eq('agency_id', IMMOSPHERA_AGENCY_ID);
 
