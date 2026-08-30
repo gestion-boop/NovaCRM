@@ -39,6 +39,16 @@ const LABEL_COLORS = [
   { name: 'Or pâle', value: '#F3EAC0' },
 ];
 
+type StageKey = 'offre' | 'compromis' | 'signature';
+
+interface StageLead {
+  id: string;
+  name: string;
+  agentId: string;
+  stage: StageKey;
+  honoraires: number;
+}
+
 interface AgentRow {
   agentId: string;
   agentDisplay: string;
@@ -47,6 +57,13 @@ interface AgentRow {
   compromis: number;
   signature: number;
   total: number;
+  // Demandé : le chiffre d'affaires de chaque conseiller sur chacune des
+  // trois étapes. Source : le champ « Honoraires (€) » de la fiche client
+  // (colonne `estimated_value`), c'est-à-dire ce que l'agence encaisse —
+  // et non le budget, qui est le prix du bien.
+  caOffre: number;
+  caCompromis: number;
+  caSignature: number;
 }
 
 // Demande explicite : "mets le prénom par exemple Isabelle G, c'est comme ça
@@ -161,9 +178,14 @@ const SortableAgentRow: React.FC<{
   );
 };
 
-const StatistiquesEtiquettesView: React.FC = () => {
+const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: string) => void }> = ({ onSelectContact }) => {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<AgentRow[]>([]);
+  // Demandé : « savoir qui est présent dans cette case ». On garde le détail
+  // des dossiers (nom + conseiller + étape) pour pouvoir les lister au clic
+  // sur un chiffre, et ouvrir la fiche depuis la liste.
+  const [details, setDetails] = useState<StageLead[]>([]);
+  const [detailFor, setDetailFor] = useState<{ stage: StageKey; agentId: string | null; title: string } | null>(null);
   const [order, setOrder] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(ORDER_KEY) || '[]');
@@ -201,7 +223,7 @@ const StatistiquesEtiquettesView: React.FC = () => {
 
       const { data: leads } = await supabase
         .from('leads')
-        .select('id, stage_id, assigned_to, created_by, archived_at')
+        .select('id, stage_id, assigned_to, created_by, archived_at, estimated_value, full_name, first_name, last_name')
         .eq('pipeline_id', IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID)
         .eq('agency_id', IMMOSPHERA_AGENCY_ID);
 
@@ -239,16 +261,32 @@ const StatistiquesEtiquettesView: React.FC = () => {
             compromis: 0,
             signature: 0,
             total: 0,
+            caOffre: 0,
+            caCompromis: 0,
+            caSignature: 0,
           };
         }
-        if (l.stage_id === offreStageId) byAgent[id].offre += 1;
-        if (l.stage_id === compromisStageId) byAgent[id].compromis += 1;
-        if (l.stage_id === signatureStageId) byAgent[id].signature += 1;
+        const honoraires = Number(l.estimated_value) || 0;
+        if (l.stage_id === offreStageId) { byAgent[id].offre += 1; byAgent[id].caOffre += honoraires; }
+        if (l.stage_id === compromisStageId) { byAgent[id].compromis += 1; byAgent[id].caCompromis += honoraires; }
+        if (l.stage_id === signatureStageId) { byAgent[id].signature += 1; byAgent[id].caSignature += honoraires; }
         byAgent[id].total += 1;
       });
 
+      const stageOf = (stageId: string): StageKey | null =>
+        stageId === offreStageId ? 'offre' : stageId === compromisStageId ? 'compromis' : stageId === signatureStageId ? 'signature' : null;
+
+      const detailRows: StageLead[] = relevant.map((l: any) => ({
+        id: l.id,
+        name: (l.full_name || [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Sans nom').trim(),
+        agentId: (l.assigned_to || l.created_by) as string,
+        stage: stageOf(l.stage_id) as StageKey,
+        honoraires: Number(l.estimated_value) || 0,
+      })).filter((d) => d.stage);
+
       if (!cancelled) {
         setRows(Object.values(byAgent));
+        setDetails(detailRows);
         setLoading(false);
       }
     })();
@@ -274,6 +312,40 @@ const StatistiquesEtiquettesView: React.FC = () => {
     localStorage.setItem(ORDER_KEY, JSON.stringify(next));
   };
 
+  // Trois onglets séparés, un par étape, plus la vue d'ensemble existante
+  // (conservée telle quelle : elle avait été réglée avec vous).
+  const [tab, setTab] = useState<'apercu' | 'offre' | 'compromis' | 'signature'>('apercu');
+
+  const TABS = [
+    { key: 'apercu' as const, label: "Vue d'ensemble" },
+    { key: 'offre' as const, label: "Offres d'achat" },
+    { key: 'compromis' as const, label: 'Compromis' },
+    { key: 'signature' as const, label: 'Actes authentiques' },
+  ];
+
+  const formatEuros = (value: number) =>
+    value.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+
+  // Classement du conseiller le plus au moins performant sur l'étape choisie.
+  const stageRows = useMemo(() => {
+    if (tab === 'apercu') return [];
+    const pick = (r: AgentRow) =>
+      tab === 'offre'
+        ? { count: r.offre, ca: r.caOffre }
+        : tab === 'compromis'
+          ? { count: r.compromis, ca: r.caCompromis }
+          : { count: r.signature, ca: r.caSignature };
+    return orderedRows
+      .map((r) => ({ ...r, ...pick(r) }))
+      .filter((r) => r.count > 0 || r.ca > 0)
+      .sort((a, b) => b.ca - a.ca || b.count - a.count);
+  }, [orderedRows, tab]);
+
+  const stageTotal = useMemo(
+    () => stageRows.reduce((acc, r) => ({ count: acc.count + r.count, ca: acc.ca + r.ca }), { count: 0, ca: 0 }),
+    [stageRows]
+  );
+
   const totals = useMemo(
     () =>
       orderedRows.reduce(
@@ -287,6 +359,19 @@ const StatistiquesEtiquettesView: React.FC = () => {
       ),
     [orderedRows]
   );
+
+  const detailLeads = useMemo(() => {
+    if (!detailFor) return [];
+    return details
+      .filter((d) => d.stage === detailFor.stage && (!detailFor.agentId || d.agentId === detailFor.agentId))
+      .sort((a, b) => b.honoraires - a.honoraires || a.name.localeCompare(b.name, 'fr'));
+  }, [details, detailFor]);
+
+  const STAGE_LABEL: Record<StageKey, string> = {
+    offre: "Offres d'achat",
+    compromis: 'Compromis',
+    signature: 'Actes authentiques',
+  };
 
   return (
     <div className="p-3 sm:p-6">
@@ -312,10 +397,73 @@ const StatistiquesEtiquettesView: React.FC = () => {
           </p>
         </div>
 
+        <div className="flex flex-wrap gap-1.5 mb-4 sm:mb-5">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold tracking-wide transition-colors border ${
+                tab === t.key
+                  ? 'bg-[#D4AF37] text-[#1b1712] border-[#D4AF37]'
+                  : 'bg-[#2A2211] text-[#C9B67B] border-[#6B5220] hover:text-[#F3EAD3]'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-16 text-[#C9B67B]">
             <Loader2 className="animate-spin mr-2" size={18} /> Chargement des statistiques…
           </div>
+        ) : tab !== 'apercu' ? (
+          stageRows.length === 0 ? (
+            <div className="py-16 text-center text-sm text-[#C9B67B]">
+              Aucun dossier à cette étape pour le moment.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center px-4 py-2 text-[9px] uppercase tracking-widest text-[#C9B67B]">
+                <span className="flex-1">Conseiller</span>
+                <span className="w-20 text-center">Dossiers</span>
+                <span className="w-32 text-right">Chiffre d'affaires</span>
+              </div>
+              {stageRows.map((r) => (
+                <div
+                  key={r.agentId}
+                  className="flex items-center rounded-xl border border-[#6B5220] bg-[#2A2211] px-4 py-3"
+                >
+                  <span className="flex-1 text-sm font-bold text-[#F3EAD3] truncate">{r.agentFullName}</span>
+                  <button
+                    type="button"
+                    onClick={() => setDetailFor({ stage: tab as StageKey, agentId: r.agentId, title: r.agentFullName })}
+                    className="w-20 text-center text-sm text-[#C9B67B] tabular-nums hover:text-[#F3EAD3] underline decoration-dotted underline-offset-4"
+                    title="Voir les clients concernés"
+                  >
+                    {r.count}
+                  </button>
+                  <span className="w-32 text-right text-sm font-bold text-[#D4AF37] tabular-nums">{formatEuros(r.ca)}</span>
+                </div>
+              ))}
+              <div className="flex items-center rounded-xl border-2 border-[#D4AF37] bg-[#1b1712] px-4 py-3 mt-3">
+                <span className="flex-1 text-xs font-bold uppercase tracking-widest text-[#D4AF37]">Total agence</span>
+                <button
+                  type="button"
+                  onClick={() => setDetailFor({ stage: tab as StageKey, agentId: null, title: 'Toute l\'agence' })}
+                  className="w-20 text-center text-sm font-bold text-[#F3EAD3] tabular-nums hover:text-[#D4AF37] underline decoration-dotted underline-offset-4"
+                  title="Voir tous les clients de cette étape"
+                >
+                  {stageTotal.count}
+                </button>
+                <span className="w-32 text-right text-base font-bold text-[#D4AF37] tabular-nums">{formatEuros(stageTotal.ca)}</span>
+              </div>
+              <p className="pt-2 text-[10px] text-[#C9B67B]">
+                Chiffre d'affaires = champ « Honoraires (€) » de la fiche client. Un dossier sans
+                honoraires renseignés compte pour 0 €.
+              </p>
+            </div>
+          )
         ) : orderedRows.length === 0 ? (
           <div className="py-16 text-center text-sm text-[#C9B67B]">
             Aucun dossier en Offre, Compromis ou Signature pour le moment.
@@ -397,6 +545,53 @@ const StatistiquesEtiquettesView: React.FC = () => {
                   <span className="text-[10px] text-[#C9B67B] text-center leading-tight">{c.name}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Demandé : au clic sur un chiffre, savoir QUI est dans cette case —
+          et pouvoir ouvrir la fiche directement depuis la liste. */}
+      {detailFor && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setDetailFor(null)}
+        >
+          <div
+            className="bg-[#1b1712] border-2 border-[#6B5220] rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 p-4 border-b border-[#3a2f1a]">
+              <div>
+                <h3 className="text-sm font-bold text-[#F3EAD3]">{STAGE_LABEL[detailFor.stage]}</h3>
+                <p className="text-[11px] text-[#C9B67B] mt-0.5">
+                  {detailFor.title} — {detailLeads.length} dossier{detailLeads.length > 1 ? 's' : ''}
+                </p>
+              </div>
+              <button onClick={() => setDetailFor(null)} className="text-[#C9B67B] hover:text-[#F3EAD3] text-lg leading-none px-1">×</button>
+            </div>
+
+            <div className="overflow-y-auto custom-scrollbar p-3 space-y-1.5">
+              {detailLeads.length === 0 ? (
+                <p className="py-8 text-center text-xs text-[#C9B67B]">Aucun dossier.</p>
+              ) : (
+                detailLeads.map((lead) => (
+                  <button
+                    key={lead.id}
+                    type="button"
+                    onClick={() => {
+                      if (!onSelectContact) return;
+                      setDetailFor(null);
+                      onSelectContact(lead.id);
+                    }}
+                    disabled={!onSelectContact}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-[#3a2f1a] bg-[#2A2211] text-left hover:border-[#D4AF37] transition-colors disabled:cursor-default"
+                  >
+                    <span className="text-sm text-[#F3EAD3] truncate">{lead.name}</span>
+                    <span className="text-xs font-bold text-[#D4AF37] tabular-nums shrink-0">{formatEuros(lead.honoraires)}</span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>

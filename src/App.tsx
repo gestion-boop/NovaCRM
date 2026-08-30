@@ -921,7 +921,7 @@ export function App() {
 
           {currentNav === 'agenda' && <AgendaView />}
 
-          {currentNav === 'statistiques-etiquettes' && <StatistiquesEtiquettesView />}
+          {currentNav === 'statistiques-etiquettes' && <StatistiquesEtiquettesView onSelectContact={setSelectedClientProfileId} />}
 
           {currentNav === 'rappels' && (
             <RappelsView
