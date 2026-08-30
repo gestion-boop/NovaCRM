@@ -376,6 +376,8 @@ body {
   --nv-wash: rgba(255, 255, 255, 0.12);    /* bg-white/x  : éclaircissement   */
   --nv-hairline: rgba(255, 255, 255, 0.22); /* border-white/x                 */
   --nv-sunken: rgba(0, 0, 0, 0.25);        /* bg-black/x  : creux discret     */
+  --nv-field: #0b2427;                     /* fond des champs de saisie       */
+  --nv-field-border: #24595e;              /* liseré des champs               */
 
   /* Encres. --ink-1/2/3 = hiérarchie du texte ; les autres = teintes de
      statut. En mode nuit ce sont exactement les couleurs Tailwind d'origine
@@ -430,6 +432,8 @@ body {
   --nv-wash: rgba(15, 30, 45, 0.045);
   --nv-hairline: rgba(15, 30, 45, 0.1);
   --nv-sunken: rgba(15, 30, 45, 0.05);
+  --nv-field: #f7f9fb;
+  --nv-field-border: #cbd5e0;
 
   /* Encres. Teintes 700 de la palette Tailwind, pas 500/600 : sur fond
      blanc, seules les 700 tiennent le ratio de contraste 4.5:1 exigé pour
@@ -1062,6 +1066,24 @@ main[class*="bg-[#071015]/55" i] {
 .light-mode ::-webkit-scrollbar-track { background: var(--nv-surface-app); }
 .light-mode ::-webkit-scrollbar-thumb { background: #c3ccd6; }
 .light-mode ::-webkit-scrollbar-thumb:hover { background: #a9b4c0; }
+
+/* ── 8 ter. Champs de saisie ─────────────────────────────────────────────── */
+/* Signalé : « on ne voit rien » dans les fenêtres de modification. Les fonds
+   codés en dur étant tous ramenés à la teinte de carte unique, un champ
+   (`bg-[#030d0f]`), son liseré (`border-[#153c3f]`) et le panneau qui le
+   contient (`bg-[#07191b]`) finissaient exactement de la même couleur : le
+   champ disparaissait dans son panneau. On lui rend ici un fond en retrait et
+   un liseré net.
+   `input[class]` plutôt que `input` : la spécificité (0,1,1) passe devant les
+   utilitaires Tailwind `bg-…`/`border-…` (0,1,0) sans `!important`, ce qui
+   laisse les règles plus spécifiques — le liseré doré au focus,
+   `.focus:border-[#F7BC5F]:focus` (0,2,0) — continuer de l'emporter. */
+input[class]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+select[class],
+textarea[class] {
+  background-color: var(--nv-field);
+  border-color: var(--nv-field-border);
+}
 
 /* ── 8 bis. Panneau de contenu ───────────────────────────────────────────── */
 /* À poser sur tout bloc qui affiche du texte directement au-dessus du fond
