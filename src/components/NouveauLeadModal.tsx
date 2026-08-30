@@ -54,7 +54,11 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   const [pipeline, setPipeline] = useState('');
   const [agencyPipelines, setAgencyPipelines] = useState<{ id: string; name: string }[]>([]);
   const [statutLead, setStatutLead] = useState('froid');
+  // Renommé « Commission agence » (demande ImmoSphera). S'y ajoutent la
+  // commission du conseiller, saisie TTC, et le numéro de mandat.
   const [honoraires, setHonoraires] = useState<number | ''>('');
+  const [advisorCommission, setAdvisorCommission] = useState<number | ''>('');
+  const [mandateNumber, setMandateNumber] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
   const [comments, setComments] = useState('');
 
@@ -189,6 +193,8 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         pipeline,
         statutLead,
         honoraires: honoraires === '' ? 0 : Number(honoraires),
+        advisorCommissionTtc: advisorCommission === '' ? undefined : Number(advisorCommission),
+        mandateNumber: mandateNumber.trim() || undefined,
         comments: (comments.trim() + companyComments).trim(),
         coBorrower: coBorrowerInfo || undefined,
         assignedTo: assignedTo || undefined,
@@ -435,15 +441,40 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                   />
                 </div>
 
-                {/* Honoraires */}
+                {/* Commission agence — anciennement « Honoraires ». C'est le
+                    chiffre d'affaires de l'agence, celui qui alimente les
+                    statistiques ; saisi en HT. */}
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-200">Honoraires (€)</label>
+                  <label className="block text-xs font-bold text-slate-200">Commission agence (€ HT)</label>
                   <input
                     type="number"
                     placeholder="ex: 5000"
                     value={honoraires}
                     onChange={(e) => setHonoraires(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
+                  />
+                </div>
+
+                {/* Commission du conseiller — saisie TTC, affichée HT ailleurs. */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-200">Commission conseiller (€ TTC)</label>
+                  <input
+                    type="number"
+                    placeholder="ex: 3000"
+                    value={advisorCommission}
+                    onChange={(e) => setAdvisorCommission(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
+                  />
+                </div>
+
+                {/* Numéro de mandat */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-200">Numéro de mandat</label>
+                  <input
+                    placeholder="ex: 2026-0142"
+                    value={mandateNumber}
+                    onChange={(e) => setMandateNumber(e.target.value)}
+                    className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
                   />
                 </div>
               </div>

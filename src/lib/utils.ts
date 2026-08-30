@@ -21,3 +21,20 @@ export function formatDate(dateStr: string): string {
     return dateStr;
   }
 }
+
+
+/**
+ * Taux de TVA appliqué aux commissions saisies TTC.
+ *
+ * Les conseillers saisissent leur commission TTC ; les colonnes du pipeline
+ * et les statistiques l'affichent hors taxes. La conversion se fait à
+ * l'affichage et non au stockage : le montant saisi reste celui que le
+ * conseiller a sous les yeux, et un changement de taux ne réécrit pas
+ * l'historique.
+ */
+export const TVA_RATE = 0.2;
+
+export function htDepuisTtc(ttc?: number | null): number {
+  if (ttc === null || ttc === undefined || Number.isNaN(Number(ttc))) return 0;
+  return Number(ttc) / (1 + TVA_RATE);
+}
