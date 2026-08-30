@@ -180,6 +180,7 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
               <select value={clientType} onChange={(e) => setClientType(e.target.value)} className={field}>
                 <option value="Acheteur">Acheteur</option>
                 <option value="Vendeur">Vendeur</option>
+                <option value="Location">Location</option>
                 <option value="Locataire">Locataire</option>
                 <option value="Investisseur">Investisseur</option>
               </select>
