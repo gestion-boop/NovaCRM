@@ -71,3 +71,20 @@ with check (
     where m.user_id = auth.uid() and m.agency_id = pipeline_position_snapshots.agency_id
   )
 );
+
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 3. Équipe par défaut d'un projet interne.
+--
+--    Demandé : les tâches créées dans le projet de Sarah doivent être
+--    affiliées d'office à Sarah et Mélanie. Plutôt que d'inscrire deux noms
+--    dans le code — ce qui a rendu l'attribution des contacts inutilisable —
+--    chaque projet porte sa propre équipe par défaut, réglable depuis son
+--    en-tête.
+-- ─────────────────────────────────────────────────────────────────────────
+
+alter table public.task_boards
+  add column if not exists default_collaborator_ids uuid[] not null default '{}';
+
+comment on column public.task_boards.default_collaborator_ids is
+  'Collaborateurs assignés d''office à chaque nouvelle tâche du projet.';

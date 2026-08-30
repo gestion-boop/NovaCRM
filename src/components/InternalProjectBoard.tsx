@@ -294,6 +294,44 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
   const [renameValue, setRenameValue] = useState(boardTitle);
   useEffect(() => { setTitle(boardTitle); setRenameValue(boardTitle); }, [boardTitle]);
 
+  // Demandé : « tous les tableaux créés à l'intérieur du projet Sarah
+  // doivent être affiliés automatiquement à Sarah et Mélanie ». Plutôt que
+  // d'inscrire deux noms dans le code — c'est exactement ce qui a rendu
+  // l'attribution des contacts inutilisable — chaque projet porte sa propre
+  // équipe par défaut, réglable depuis son en-tête. Toute tâche créée dans
+  // le projet part avec ces personnes déjà assignées.
+  const [defaultCollaborators, setDefaultCollaborators] = useState<string[]>([]);
+  const [showDefaultTeam, setShowDefaultTeam] = useState(false);
+
+  useEffect(() => {
+    if (scope.type !== 'board') return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('task_boards')
+        .select('default_collaborator_ids')
+        .eq('id', scope.boardId)
+        .maybeSingle();
+      if (cancelled) return;
+      setDefaultCollaborators(((data?.default_collaborator_ids as string[]) || []).filter(Boolean));
+    })().catch(() => { /* colonne absente : on reste sans équipe par défaut */ });
+    return () => { cancelled = true; };
+  }, [scope]);
+
+  const saveDefaultCollaborators = async (next: string[]) => {
+    if (scope.type !== 'board') return;
+    const previous = defaultCollaborators;
+    setDefaultCollaborators(next);
+    const { error } = await supabase
+      .from('task_boards')
+      .update({ default_collaborator_ids: next })
+      .eq('id', scope.boardId);
+    if (error) {
+      setDefaultCollaborators(previous);
+      toast.error("Impossible d'enregistrer l'équipe par défaut : " + error.message);
+    }
+  };
+
   const saveTitle = async () => {
     const next = renameValue.trim();
     setRenaming(false);
@@ -486,6 +524,16 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
           )}
           <p className="text-xs text-gray-400">{tasks.length} tâche(s) au total</p>
         </div>
+        {scope.type === 'board' && canCreateTasks && (
+          <button
+            onClick={() => setShowDefaultTeam(true)}
+            className="shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors bg-white/5 border-white/10 text-gray-300 hover:text-white hover:bg-white/10"
+            title="Personnes assignées d'office à chaque nouvelle tâche de ce projet"
+          >
+            <UsersIcon className="w-3.5 h-3.5" />
+            Équipe par défaut{defaultCollaborators.length > 0 ? ` (${defaultCollaborators.length})` : ''}
+          </button>
+        )}
         {canCreateTasks && tasks.length > 0 && (
           <button
             onClick={toggleSelectionMode}
@@ -582,12 +630,65 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
         <AddTaskModal
           status={showAddFor}
           users={users}
+          initialCollaboratorIds={defaultCollaborators}
           onClose={() => setShowAddFor(null)}
           onCreate={async (payload) => {
             await addTask.mutateAsync({ boardId: scope.boardId, agencyId: agencyId || '', ...payload });
             setShowAddFor(null);
           }}
         />
+
+      {showDefaultTeam && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowDefaultTeam(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-[#07191b] border border-[#1b4e52] rounded-2xl w-full max-w-sm max-h-[80vh] flex flex-col shadow-2xl">
+            <div className="p-4 border-b border-white/10">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <UsersIcon className="w-4 h-4 text-[#F9C977]" /> Équipe par défaut
+              </h3>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Ces personnes sont assignées d'office à chaque nouvelle tâche de ce projet. Elles
+                restent modifiables tâche par tâche.
+              </p>
+            </div>
+            <div className="overflow-y-auto custom-scrollbar p-3 space-y-1.5">
+              {users.length === 0 ? (
+                <p className="py-6 text-center text-xs text-gray-500">Aucun collaborateur disponible.</p>
+              ) : (
+                users.map((u) => {
+                  const selected = defaultCollaborators.includes(u.uid);
+                  return (
+                    <button
+                      key={u.uid}
+                      type="button"
+                      onClick={() =>
+                        void saveDefaultCollaborators(
+                          selected
+                            ? defaultCollaborators.filter((id) => id !== u.uid)
+                            : [...defaultCollaborators, u.uid]
+                        )
+                      }
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                        selected ? 'border-[#F7BC5F] bg-[#F7BC5F]/10' : 'border-white/10 bg-white/5 hover:border-white/25'
+                      }`}
+                    >
+                      <span className="text-sm text-white truncate">{u.displayName}</span>
+                      {selected && <Check className="w-4 h-4 text-[#F7BC5F] shrink-0" strokeWidth={3} />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <div className="p-3 border-t border-white/10">
+              <button
+                onClick={() => setShowDefaultTeam(false)}
+                className="w-full px-4 py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-bold text-sm"
+              >
+                Terminé
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       )}
 
       {openTask && (
@@ -612,14 +713,16 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
 const AddTaskModal: React.FC<{
   status: InternalTaskStatus;
   users: NovaSphereUserProfile[];
+  // Équipe par défaut du projet : pré-cochée, et modifiable tâche par tâche.
+  initialCollaboratorIds?: string[];
   onClose: () => void;
   onCreate: (payload: { title: string; description?: string; priority?: InternalTask['priority']; dueDate?: string | null; collaboratorIds?: string[] }) => Promise<void>;
-}> = ({ status, users, onClose, onCreate }) => {
+}> = ({ status, users, initialCollaboratorIds = [], onClose, onCreate }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<InternalTask['priority']>('normale');
   const [dueDate, setDueDate] = useState('');
-  const [collaboratorIds, setCollaboratorIds] = useState<string[]>([]);
+  const [collaboratorIds, setCollaboratorIds] = useState<string[]>(initialCollaboratorIds);
   const [saving, setSaving] = useState(false);
   const columnLabel = COLUMNS.find((c) => c.id === status)?.label || status;
 
