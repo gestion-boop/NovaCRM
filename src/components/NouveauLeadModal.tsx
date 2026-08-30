@@ -43,7 +43,16 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   const [typeBien, setTypeBien] = useState('');
 
   // Pipeline & Status
-  const [pipeline, setPipeline] = useState('Aucun (libre)');
+  // Signalé : « en agence ImmoSphera, la création de client propose les
+  // pipelines de Conseils Finances ». La liste était codée en dur avec quatre
+  // ÉTAPES de Conseils Finances, sans aucun lien avec l'agence. Pire : la
+  // valeur part dans `pipeline_id` après `toValidUuidOrNull()` (voir
+  // useContacts) — un nom n'étant pas un UUID, le choix était silencieusement
+  // remplacé par null et aucun pipeline n'était jamais enregistré.
+  // La liste vient maintenant de la table `pipelines`, filtrée sur l'agence
+  // du lead, et les valeurs sont les vrais identifiants.
+  const [pipeline, setPipeline] = useState('');
+  const [agencyPipelines, setAgencyPipelines] = useState<{ id: string; name: string }[]>([]);
   const [statutLead, setStatutLead] = useState('froid');
   const [honoraires, setHonoraires] = useState<number | ''>('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -71,11 +80,18 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         // renseigné, on ne propose que les collaborateurs de la société du
         // lead. Sinon (table vide, collaborateur multi-agences), on propose
         // tout le monde plutôt que de bloquer l'attribution.
-        const [{ data: profiles }, { data: members }] = await Promise.all([
+        const [{ data: profiles }, { data: members }, { data: pipelines }] = await Promise.all([
           supabase.from('profiles').select('id, full_name, email, job_title'),
           supabase.from('agency_members').select('user_id, agency_id'),
+          supabase.from('pipelines').select('id, name, agency_id').order('name'),
         ]);
         if (cancelled) return;
+
+        const scopedPipelines = (pipelines || [])
+          .filter((pl: { agency_id: string }) => selectedAgencyId === 'all' || pl.agency_id === selectedAgencyId)
+          .map((pl: { id: string; name: string }) => ({ id: pl.id, name: pl.name }));
+        setAgencyPipelines(scopedPipelines);
+        setPipeline((current) => (current && !scopedPipelines.some((pl) => pl.id === current) ? '' : current));
         const idsForAgency = new Set(
           (members || []).filter((m: { agency_id: string }) => m.agency_id === selectedAgencyId)
             .map((m: { user_id: string }) => m.user_id)
@@ -341,10 +357,10 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                       onChange={(e) => setPipeline(e.target.value)}
                       className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 pr-7 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none"
                     >
-                      <option value="Aucun (libre)">Aucun (libre)</option>
-                      <option value="Prise de contact">Prise de contact</option>
-                      <option value="Montage bancaire">Montage bancaire</option>
-                      <option value="En Banque">En Banque</option>
+                      <option value="">Aucun (libre)</option>
+                      {agencyPipelines.map((pl) => (
+                        <option key={pl.id} value={pl.id}>{pl.name}</option>
+                      ))}
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                   </div>
