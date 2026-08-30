@@ -15,7 +15,8 @@ import {
   type CollisionDetection,
 } from '@dnd-kit/core';
 import { toast } from 'sonner';
-import { ChevronLeft, Plus, Trash2, Calendar, X, Loader2, User, CheckSquare, Image as ImageIcon, Mic, Square, Send, Paperclip, MessageCircle, Eye, Users as UsersIcon, Check } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { ChevronLeft, Plus, Trash2, Calendar, X, Loader2, User, CheckSquare, Image as ImageIcon, Mic, Square, Send, Paperclip, MessageCircle, Eye, Users as UsersIcon, Check, Pencil } from 'lucide-react';
 import { InternalTask, InternalTaskStatus } from '@/types';
 import { NovaSphereUserProfile, useAuth } from '@/context/AuthContext';
 import { useInternalProjectTasks, InternalTasksScope } from '@/hooks/useInternalProjectTasks';
@@ -266,13 +267,36 @@ interface InternalProjectBoardProps {
   agencyId?: string;
   users: NovaSphereUserProfile[];
   onBack?: () => void;
+  // Demandé : pouvoir renommer LE PROJET une fois ouvert (et non les
+  // tableaux qu'il contient). Le renommage n'existait que dans la liste.
+  onRenamed?: (title: string) => void;
   // En mode "mine", créer/supprimer une tâche n'a pas de sens pour le
   // stagiaire (RLS l'interdit déjà, mais on évite aussi de montrer un
   // bouton qui échouerait systématiquement).
   canCreateTasks?: boolean;
 }
 
-export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scope, boardTitle, agencyId, users, onBack, canCreateTasks = true }) => {
+export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scope, boardTitle, agencyId, users, onBack, onRenamed, canCreateTasks = true }) => {
+  const [title, setTitle] = useState(boardTitle);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(boardTitle);
+  useEffect(() => { setTitle(boardTitle); setRenameValue(boardTitle); }, [boardTitle]);
+
+  const saveTitle = async () => {
+    const next = renameValue.trim();
+    setRenaming(false);
+    if (!next || next === title || scope.type !== 'board') { setRenameValue(title); return; }
+    const previous = title;
+    setTitle(next);
+    const { error } = await supabase.from('task_boards').update({ name: next }).eq('id', scope.boardId);
+    if (error) {
+      setTitle(previous);
+      setRenameValue(previous);
+      toast.error("Impossible de renommer ce projet : " + error.message);
+      return;
+    }
+    onRenamed?.(next);
+  };
   const { tasks, isLoading, addTask, updateTask, deleteTask, setTaskStatusOptimistic } = useInternalProjectTasks(scope);
   const checklistCounts = useChecklistCounts(tasks.map((t) => t.id));
   const messageCounts = useTaskMessageCounts(tasks.map((t) => t.id));
@@ -385,7 +409,32 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
           </button>
         )}
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-bold text-white">{boardTitle}</h2>
+          {renaming ? (
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={() => void saveTitle()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveTitle();
+                if (e.key === 'Escape') { setRenameValue(title); setRenaming(false); }
+              }}
+              className="w-full max-w-md bg-white/5 border border-[#F7BC5F]/50 rounded-lg px-2 py-1 text-lg font-bold text-white focus:outline-none focus:border-[#F7BC5F]"
+            />
+          ) : (
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-lg font-bold text-white truncate">{title}</h2>
+              {scope.type === 'board' && (
+                <button
+                  onClick={() => { setRenameValue(title); setRenaming(true); }}
+                  className="shrink-0 p-1 rounded-lg text-gray-400 hover:text-[#F7BC5F] hover:bg-[#F7BC5F]/10 transition-colors"
+                  title="Renommer le projet"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
           <p className="text-xs text-gray-400">{tasks.length} tâche(s) au total</p>
         </div>
         {canCreateTasks && tasks.length > 0 && (

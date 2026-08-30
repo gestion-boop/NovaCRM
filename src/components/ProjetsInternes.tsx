@@ -772,6 +772,12 @@ export const ProjetsInternes: React.FC<
           agencyId={openBoard.agencyId}
           users={users}
           onBack={() => setOpenBoard(null)}
+          onRenamed={(title) => {
+            // Le titre renommé depuis l'intérieur du projet doit se refléter
+            // aussitôt dans la liste, sans rechargement.
+            setOpenBoard((b) => (b ? { ...b, title } : b));
+            setProjects((prev) => prev.map((p) => (p.id === openBoard.id ? { ...p, title } : p)));
+          }}
         />
       </div>
     );
