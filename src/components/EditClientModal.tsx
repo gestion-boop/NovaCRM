@@ -45,6 +45,12 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
   const [coBorrower, setCoBorrower] = useState(client.coBorrower || '');
   const [comments, setComments] = useState(client.comments || '');
   const [saving, setSaving] = useState(false);
+  // Signalé : « je ne peux pas l'enregistrer ». L'enregistrement échouait
+  // sans rien afficher — `onSave` rejetait, le `finally` remettait juste le
+  // bouton actif, et l'utilisateur n'avait aucun moyen de savoir ce que la
+  // base reprochait. Même classe de bug que les valeurs silencieusement
+  // remplacées par null ailleurs dans cet écran : ce qui échoue doit se voir.
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Collaborateurs réellement inscrits, restreints à la structure choisie —
   // la liste suit donc le champ « Structure » ci-dessous.
@@ -71,6 +77,7 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setSaveError(null);
     try {
       await onSave({
         name: name.trim(),
@@ -90,6 +97,10 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
         comments: comments.trim(),
       });
       onClose();
+    } catch (error) {
+      const message = (error as { message?: string })?.message || String(error);
+      console.error('Enregistrement de la fiche client refusé :', error);
+      setSaveError(message);
     } finally {
       setSaving(false);
     }
@@ -225,6 +236,13 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
             <label className={label}>Commentaires</label>
             <textarea rows={4} value={comments} onChange={(e) => setComments(e.target.value)} className={`${field} resize-y`} />
           </div>
+
+          {saveError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/40 text-xs text-rose-200">
+              <b className="block mb-1">Enregistrement refusé</b>
+              {saveError}
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2 shrink-0">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-slate-300 hover:text-white text-xs font-bold">
