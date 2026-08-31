@@ -1169,6 +1169,51 @@ ${
     let content: any[] = data.content || [];
     let properties: any[] | undefined;
 
+    // ── Rattrapage des demandes combinées (31/08/2026) ──────────────────────
+    // Signalé : « quand on demande à Nova de créer une note ET une tâche, des
+    // fois il ne crée pas l'un des deux ».
+    //
+    // Le serveur renvoie bien tous les appels d'outils reçus, et le client les
+    // exécute tous en boucle — la perte est en amont : le modèle n'émet
+    // parfois qu'un seul `tool_use` malgré la règle impérative du prompt
+    // système, qui lui demande déjà explicitement de tous les émettre d'un
+    // coup. Une consigne ne suffit donc pas ; on vérifie.
+    //
+    // Quand la demande est visiblement multiple (« et », « puis », « ainsi
+    // que »…) et qu'un seul outil a été appelé, on relance Claude une fois en
+    // lui montrant sa propre réponse et en lui demandant les outils manquants.
+    // Ciblé volontairement : une seule passe supplémentaire, et seulement dans
+    // ce cas précis, pour ne pas doubler le coût de chaque échange.
+    const dernierMessageUtilisateur = [...cleaned].reverse()
+      .find((m: any) => m.role === 'user');
+    const texteDemande = typeof dernierMessageUtilisateur?.content === 'string'
+      ? dernierMessageUtilisateur.content
+      : (dernierMessageUtilisateur?.content || [])
+          .filter((b: any) => b.type === 'text').map((b: any) => b.text).join(' ');
+    const demandeMultiple = /\b(et|puis|ainsi que|également|aussi)\b/i.test(texteDemande || '');
+    const outilsAppeles = content.filter((b: any) => b.type === 'tool_use');
+
+    if (demandeMultiple && outilsAppeles.length === 1) {
+      const relance = await callClaude([
+        ...cleaned,
+        { role: 'assistant', content },
+        {
+          role: 'user',
+          content: [{
+            type: 'text',
+            text: `Tu n'as appelé qu'un seul outil (${outilsAppeles[0].name}) alors que ma demande en contenait plusieurs. `
+              + `Appelle MAINTENANT, dans cette réponse, les outils correspondant aux actions restantes — `
+              + `sans redemander de précisions et sans refaire celle déjà faite. `
+              + `Si tu hésites sur un détail, choisis une valeur raisonnable. `
+              + `Si vraiment il ne restait rien à faire, réponds simplement "OK" sans appeler d'outil.`,
+          }],
+        },
+      ]);
+      const complement = (relance?.content || [])
+        .filter((b: any) => b.type === 'tool_use' && b.name !== outilsAppeles[0].name);
+      if (complement.length > 0) content = [...content, ...complement];
+    }
+
     // search_properties s'exécute côté serveur (contrairement aux autres
     // outils, exécutés côté client) : on relance Claude avec le résultat
     // réel pour qu'il termine sa réponse en connaissance de cause, tout en
