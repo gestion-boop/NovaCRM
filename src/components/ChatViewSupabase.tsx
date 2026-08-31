@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { AGENCIES } from '@/types';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { NOVA_QUICK_REACTIONS, renderEmojiOrNova, isNovaReaction } from '@/lib/novaReactions';
 
 interface ChatProject {
@@ -1626,6 +1626,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // côte à côte) reste inchangée en tapant `w-72` en dur. Sans ça, sur un
   // écran étroit le canal actif se retrouvait écrasé/superposé à la liste.
   const isMobile = useIsMobile();
+  const isCoarsePointer = useIsCoarsePointer();
+  // Signalé (31/08/2026) : "Natacha ne peut pas modifier ni supprimer les
+  // messages qu'elle met dans le chat". Les boutons existaient bien, mais en
+  // `opacity-0 group-hover:opacity-100` : ils n'apparaissent qu'au SURVOL de
+  // la souris. Sur un écran tactile il n'y a pas de survol — ils restaient
+  // donc invisibles et inatteignables. On les laisse affichés en permanence
+  // dès qu'il n'y a pas de pointeur fin.
+  const actionsMessage = (isMobile || isCoarsePointer)
+    ? 'opacity-100'
+    : 'opacity-0 group-hover:opacity-100';
   const mobileShowingConversation = tab === 'conversations' ? !!activeConversationId : !!activeChannel;
   const goBackToList = () => {
     if (tab === 'conversations') setActiveConversationId(null);
@@ -2004,7 +2014,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             </div>
 
                             {!isEditing && (
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                              <div className={`${actionsMessage} transition-opacity flex items-center gap-0.5 shrink-0`}>
                                 <div className="relative">
                                   <button
                                     type="button"
@@ -2026,7 +2036,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                     const pickerItems = (
                                       <>
                                         {NOVA_QUICK_REACTIONS.map((e) => (
-                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className="text-4xl leading-none hover:scale-110 transition-transform p-2 rounded-xl hover:bg-white/10">
+                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-2xl p-1.5'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
                                             {/* Signalé : "grossis quand même les Novadji, ils
                                                 sont moins visibles que les émoticônes
                                                 classiques" — image à taille fixe (w-5 h-5 par
@@ -2034,14 +2044,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                                 visuellement plus petite malgré la même
                                                 hauteur nominale (glyphe emoji avec sa propre
                                                 marge). Agrandie pour un poids visuel comparable. */}
-                                            {renderEmojiOrNova(e, 'w-12 h-12')}
+                                            {renderEmojiOrNova(e, isMobile || isCoarsePointer ? 'w-12 h-12' : 'w-8 h-8')}
                                           </button>
                                         ))}
                                         {/* Suite #240 : séparation visuelle nette entre les
                                             mini-expressions Nova et "les vrais" emojis. */}
                                         <div className="col-span-10 h-px bg-[#153c3f] my-1" />
                                         {QUICK_EMOJIS.map((e) => (
-                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className="text-4xl leading-none hover:scale-110 transition-transform p-2 rounded-xl hover:bg-white/10">
+                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-2xl p-1.5'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
                                             {e}
                                           </button>
                                         ))}
@@ -2239,7 +2249,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                 key={e}
                                 type="button"
                                 onClick={() => setConvDraft((v) => v + e)}
-                                className="text-4xl leading-none hover:scale-110 transition-transform p-2 rounded-xl hover:bg-white/10"
+                                className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-2xl p-1.5'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}
                               >
                                 {e}
                               </button>
@@ -2373,7 +2383,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           ouvert à l'auteur ET à isAdmin (super_admin ou admin,
                           voir la définition en haut du composant). */}
                       {!isEditing && (mine || isAdmin) && (
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                        <div className={`${actionsMessage} transition-opacity flex items-center gap-0.5 shrink-0`}>
                           {mine && !isNova && (
                             <button
                               type="button"
@@ -2422,7 +2432,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           key={e}
                           type="button"
                           onClick={() => setDraft((v) => v + e)}
-                          className="text-4xl leading-none hover:scale-110 transition-transform p-2 rounded-xl hover:bg-white/10"
+                          className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-2xl p-1.5'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}
                         >
                           {e}
                         </button>
