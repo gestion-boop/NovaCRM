@@ -138,6 +138,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [membersModalProjectId, setMembersModalProjectId] = useState<string | null>(null);
   const [projectMembers, setProjectMembers] = useState<ChatProjectMember[]>([]);
   const [allProfiles, setAllProfiles] = useState<MemberProfile[]>([]);
+  // Agences réelles de chaque personne, lues dans `agency_members` — et non
+  // plus dans la liste figée `teamMembers.ts` (voir le correctif du
+  // 31/08/2026 plus bas).
+  const [agencyIdsByUid, setAgencyIdsByUid] = useState<Record<string, string[]>>({});
+  // Message d'échec de création de conversation. Sans lui, un refus de la base
+  // fermait simplement la fenêtre sans rien dire.
+  const [convCreateError, setConvCreateError] = useState<string | null>(null);
   const [memberPickerQuery, setMemberPickerQuery] = useState('');
   const [membersLoading, setMembersLoading] = useState(false);
 
@@ -258,7 +265,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const ensureProfilesLoaded = async () => {
     if (allProfiles.length > 0) return;
-    const { data } = await supabase.from('profiles').select('id, full_name, email');
+    const [{ data }, { data: memberRows }] = await Promise.all([
+      supabase.from('profiles').select('id, full_name, email'),
+      supabase.from('agency_members').select('user_id, agency_id'),
+    ]);
+    if (memberRows) {
+      const byUid: Record<string, string[]> = {};
+      (memberRows as { user_id: string; agency_id: string }[]).forEach((m) => {
+        (byUid[m.user_id] ||= []).push(m.agency_id);
+      });
+      setAgencyIdsByUid(byUid);
+    }
     if (data) {
       setAllProfiles(
         (data as { id: string; full_name: string | null; email: string | null }[]).map((p) => ({
@@ -1163,18 +1180,51 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // PLUS être restreinte à l'agence active (c'était le cas avant, à
   // l'inverse de ce qui est demandé). L'agence de chacun reste affichée
   // (voir la modale plus bas) pour qu'on sache toujours à qui on écrit.
+  // CORRECTIF (31/08/2026) — signalé : "je lui ai écrit, elle ne reçoit rien".
+  //
+  // Cette liste venait de `TEAM_MEMBERS`, un fichier figé dans le code. Or les
+  // identifiants qui y figurent ne correspondent plus aux comptes réels :
+  // Natacha y est enregistrée sous `4fdf3cf2-…` alors que son compte, créé le
+  // 31/08, porte `f5c70ff8-…`. Cliquer sur son nom créait donc une
+  // conversation avec un identifiant FANTÔME ; l'ajout du participant violait
+  // la clé étrangère vers `profiles` et échouait, sans que rien ne s'affiche.
+  // Constat en base : les trois dernières conversations directes ont ZÉRO
+  // participant — le chat direct était cassé pour tout le monde, pas
+  // seulement pour elle.
+  //
+  // La liste vient désormais de `profiles`, qui fait foi. `teamMembers.ts`
+  // n'est plus consulté que pour l'habillage (photo, intitulé de poste), et
+  // uniquement par correspondance d'ADRESSE E-MAIL — jamais par identifiant.
+  // Même principe que `useAssignableUsers`, écrit pour la même raison sur
+  // l'attribution des contacts.
   const colleaguesForNewConv = useMemo(() => {
     const existingDirectPartners = new Set<string>();
     conversations.forEach((c) => {
       if (c.type !== 'direct') return;
       (conversationMembers[c.id] || []).forEach((u) => { if (u !== currentUser?.uid) existingDirectPartners.add(u); });
     });
-    return TEAM_MEMBERS.filter(
-      (m) =>
-        m.id !== currentUser?.uid &&
-        (m.name.toLowerCase().includes(newConvQuery.toLowerCase()) || m.email.toLowerCase().includes(newConvQuery.toLowerCase()))
-    ).map((m) => ({ ...m, hasConversation: existingDirectPartners.has(m.id) }));
-  }, [conversations, conversationMembers, currentUser?.uid, newConvQuery]);
+    const query = newConvQuery.toLowerCase();
+    return allProfiles
+      .filter((p) => p.uid !== currentUser?.uid)
+      .filter((p) =>
+        p.displayName.toLowerCase().includes(query) || (p.email || '').toLowerCase().includes(query))
+      .map((p) => {
+        const habillage = TEAM_MEMBERS.find(
+          (m) => m.email.toLowerCase() === (p.email || '').toLowerCase());
+        const agences = agencyIdsByUid[p.uid] || [];
+        return {
+          id: p.uid,
+          name: p.displayName,
+          email: p.email || '',
+          role: habillage?.role || '',
+          agencyId: agences[0] || habillage?.agencyId || null,
+          avatar: habillage?.avatar || p.displayName.slice(0, 2).toUpperCase(),
+          avatarUrl: habillage?.avatarUrl,
+          hasConversation: existingDirectPartners.has(p.uid),
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [conversations, conversationMembers, currentUser?.uid, newConvQuery, allProfiles, agencyIdsByUid]);
 
   const agencyNameById = (id: string | null | undefined) => AGENCIES.find((a) => a.id === id)?.name || null;
 
@@ -1195,18 +1245,45 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // Entités" (chat_projects/chat_channels) — sinon, agence active comme
     // avant (comportement inchangé pour un échange au sein d'une même
     // agence).
-    const otherMember = TEAM_MEMBERS.find((m) => m.id === otherUserId);
-    const sameAgency = otherMember?.agencyId === activeAgency.id;
+    // `agency_id` ne doit JAMAIS rester nul : la règle de lecture des
+    // conversations exige `agency_id IS NOT NULL`, donc une conversation sans
+    // agence est invisible pour tout le monde, y compris son auteur. On prend
+    // l'agence active si les deux personnes en sont membres, sinon la
+    // première agence qu'elles ont en commun, sinon celle de l'autre.
+    const miennes = agencyIdsByUid[currentUser.uid] || [];
+    const siennes = agencyIdsByUid[otherUserId] || [];
+    const communes = miennes.filter((a) => siennes.includes(a));
+    const agencePartagee =
+      (communes.includes(activeAgency.id) ? activeAgency.id : null)
+      || communes[0]
+      || siennes[0]
+      || miennes[0]
+      || null;
+
     const { data: conv, error } = await supabase
       .from('conversations')
-      .insert({ type: 'direct', title: null, created_by: currentUser.uid, agency_id: sameAgency ? activeAgency.id : null } as any)
+      .insert({ type: 'direct', title: null, created_by: currentUser.uid, agency_id: agencePartagee } as any)
       .select()
       .single();
-    if (error || !conv) return;
-    await supabase.from('conversation_members').insert([
+    if (error || !conv) {
+      // Cet échec était avalé en silence : on cliquait sur un nom, la fenêtre
+      // se fermait, et rien ne se passait.
+      setConvCreateError(error?.message || "La conversation n'a pas pu être créée.");
+      return;
+    }
+    const { error: membersError } = await supabase.from('conversation_members').insert([
       { conversation_id: (conv as any).id, user_id: currentUser.uid },
       { conversation_id: (conv as any).id, user_id: otherUserId },
     ] as any);
+    if (membersError) {
+      // C'est ICI que tout se jouait : l'ajout des participants échouait
+      // (identifiant inexistant), la conversation restait vide, et le
+      // destinataire ne la voyait jamais. On ne laisse plus passer.
+      await supabase.from('conversations').delete().eq('id', (conv as any).id);
+      setConvCreateError(`Participants non enregistrés : ${membersError.message}`);
+      return;
+    }
+    setConvCreateError(null);
     setShowNewConvModal(false);
     setNewConvQuery('');
     await loadConversations();
@@ -1221,14 +1298,25 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setCreatingGroup(true);
     try {
       const memberIds = Array.from(selectedGroupMemberIds);
-      const allSameAgency = memberIds.every((id) => TEAM_MEMBERS.find((m) => m.id === id)?.agencyId === activeAgency.id);
+      // Même correctif que pour les conversations directes : les agences sont
+      // lues en base, et `agency_id` ne peut pas rester nul sans rendre le
+      // groupe invisible à tous.
+      const agencesDeChacun = memberIds.map((id) => agencyIdsByUid[id] || []);
+      const miennesG = agencyIdsByUid[currentUser.uid] || [];
+      const communesG = miennesG.filter((a) => agencesDeChacun.every((liste) => liste.includes(a)));
+      const agenceGroupe =
+        (communesG.includes(activeAgency.id) ? activeAgency.id : null)
+        || communesG[0]
+        || miennesG[0]
+        || agencesDeChacun.flat()[0]
+        || null;
       const { data: conv, error } = await supabase
         .from('conversations')
         .insert({
           type: 'group',
           title: groupTitle.trim(),
           created_by: currentUser.uid,
-          agency_id: allSameAgency ? activeAgency.id : null,
+          agency_id: agenceGroupe,
         } as any)
         .select()
         .single();
@@ -2513,6 +2601,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {convCreateError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs">
+                {convCreateError}
+              </div>
+            )}
 
             {/* Demande explicite : "chaque utilisateur peut créer des
                 groupes aussi avec des utilisateurs de plusieurs agences

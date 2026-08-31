@@ -54,7 +54,7 @@ import UpdateBanner from './components/UpdateBanner';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
 import MobileHome from './components/MobileHome';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Immosphera from './immosphera/Immosphera';
 import { SidebarProvider as ImmoSidebarProvider } from './contexts/SidebarContext';
@@ -65,6 +65,7 @@ export function App() {
   const { addContact } = useContacts();
   const { tasks = [] } = useTasks();
   const isMobile = useIsMobile();
+  const isCoarsePointer = useIsCoarsePointer();
 
   const unreadRemindersCount = countTodayAndOverdueTasks(tasks);
 
@@ -656,7 +657,11 @@ export function App() {
   }
 
   return (
-    <div className="h-screen bg-[#071015] text-gray-100 flex flex-col font-sans overflow-hidden select-none">
+    // `h-[100dvh]` et non `h-screen` (100vh) : sur Android, 100vh vaut la
+    // hauteur SANS la barre d'outils du navigateur, donc le bas de
+    // l'application passe hors écran alors que la racine est en
+    // overflow-hidden. `dvh` suit la hauteur réellement visible.
+    <div className="h-[100dvh] bg-[#071015] text-gray-100 flex flex-col font-sans overflow-hidden select-none">
       <Toaster />
       <UpdateBanner />
       <GoogleWorkspaceStatus />
@@ -745,8 +750,19 @@ export function App() {
             `z-[1]` donne à <main> son propre contexte d'empilement,
             au-dessus du z-0 du portail photo — son fond redevient enfin
             effectif, dans les deux thèmes. */}
+        {/* Signalé (31/08/2026) : sur un Honor Magic V3 déplié, plus rien ne
+            défilait dans la fiche client. Ce pliable mesure environ 800 px CSS
+            de large une fois ouvert : il dépasse le seuil de 768 px et
+            l'application le prend pour un ordinateur de bureau. Le verrou
+            ci-dessous — voulu pour que la molette ne fasse pas défiler la page
+            derrière le panneau Nova — s'appliquait donc à un écran tactile,
+            où il n'existe aucune molette et aucun moyen de s'en sortir. La
+            fiche client n'ayant pas de défilement propre (elle s'appuie sur
+            celui de <main>), elle devenait totalement figée.
+            On conditionne désormais au pointeur fin, la seule situation où ce
+            verrou a un sens. */}
         <main className={`flex-1 relative z-[1] custom-scrollbar ${
-          novaOpen && !isMobile ? 'overflow-hidden' : 'overflow-y-auto'
+          novaOpen && !isMobile && !isCoarsePointer ? 'overflow-hidden' : 'overflow-y-auto'
         } ${
           isMobile && currentNav === 'chat' ? 'pt-0' : 'pt-[env(safe-area-inset-top,0px)] md:pt-0'
         } ${
