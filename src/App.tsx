@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Clock, Maximize2, ChevronLeft } from 'lucide-react';
@@ -17,10 +17,10 @@ import ClientAuth from './components/ClientAuth';
 import Header from './components/Header';
 import Sidebar, { NAV_ITEMS } from './components/Sidebar';
 import AccueilGrid from './components/AccueilGrid';
-import Dashboard from './components/Dashboard';
-import Contacts from './components/Contacts';
-import Clients from './components/leads/Clients';
-import Pipeline from './components/Pipeline';
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const Contacts = lazy(() => import('./components/Contacts'));
+const Clients = lazy(() => import('./components/leads/Clients'));
+const Pipeline = lazy(() => import('./components/Pipeline'));
 import NouveauLeadModal from './components/NouveauLeadModal';
 import TutorialModal from './components/TutorialModal';
 import ProductTour, { TourStep } from './components/ProductTour';
@@ -29,23 +29,23 @@ import CameraReservationModal from './components/CameraReservationModal';
 import AnnouncementBanner from './components/AnnouncementBanner';
 
 // Subview components
-import ProjetsInternes from './components/ProjetsInternes';
+const ProjetsInternes = lazy(() => import('./components/ProjetsInternes'));
 import StagiaireShell from './components/StagiaireShell';
 import ClientGuestShell from './components/ClientGuestShell';
-import AgendaView from './components/AgendaView';
-import StatistiquesEtiquettesView from './components/StatistiquesEtiquettesView';
-import RappelsView from './components/RappelsView';
+const AgendaView = lazy(() => import('./components/AgendaView'));
+const StatistiquesEtiquettesView = lazy(() => import('./components/StatistiquesEtiquettesView'));
+const RappelsView = lazy(() => import('./components/RappelsView'));
 import ChatView from './components/ChatViewSupabase';
-import MailView from './components/MailView';
-import EquipeView from './components/EquipeView';
-import DocumentsView from './components/DocumentsView';
-import CarteProspectionView from './components/CarteProspectionView';
-import NotesView from './components/NotesView';
-import SupportView from './components/SupportView';
-import ParametresView from './components/ParametresView';
-import AssistantIAView from './components/AssistantIAView';
-import ReserverCameraView from './components/ReserverCameraView';
-import ClientProfileView from './components/ClientProfileView';
+const MailView = lazy(() => import('./components/MailView'));
+const EquipeView = lazy(() => import('./components/EquipeView'));
+const DocumentsView = lazy(() => import('./components/DocumentsView'));
+const CarteProspectionView = lazy(() => import('./components/CarteProspectionView'));
+const NotesView = lazy(() => import('./components/NotesView'));
+const SupportView = lazy(() => import('./components/SupportView'));
+const ParametresView = lazy(() => import('./components/ParametresView'));
+const AssistantIAView = lazy(() => import('./components/AssistantIAView'));
+const ReserverCameraView = lazy(() => import('./components/ReserverCameraView'));
+const ClientProfileView = lazy(() => import('./components/ClientProfileView'));
 import NotificationsView from './components/NotificationsView';
 import MobileBottomNav from './components/MobileBottomNav';
 import PublicQuestionnaire from './components/PublicQuestionnaire';
@@ -56,10 +56,18 @@ import AutoEnablePush from './components/AutoEnablePush';
 import MobileHome from './components/MobileHome';
 import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import Immosphera from './immosphera/Immosphera';
+const Immosphera = lazy(() => import('./immosphera/Immosphera'));
 import { SidebarProvider as ImmoSidebarProvider } from './contexts/SidebarContext';
 
-export function App() {
+export // Affiché le temps qu'un écran se télécharge. Volontairement discret : sur
+// une bonne connexion il n'apparaît qu'une fraction de seconde.
+const ChargementEcran = () => (
+  <div className="flex items-center justify-center py-24">
+    <div className="w-8 h-8 rounded-full border-2 border-[#F7BC5F] border-t-transparent animate-spin" />
+  </div>
+);
+
+function App() {
   const { currentUser, userProfile, activeAgency, setActiveAgency, authLoading, internGateMessage, logout } = useAuth();
   const { unreadNotificationsCount, unreadMobileNotificationsCount, unreadMessagesCount, unreadMailCount, openSupportTicketsCount, refreshUnreadNotifications, refreshUnreadMail } = useDashboardStats();
   const { addContact } = useContacts();
@@ -806,6 +814,16 @@ export function App() {
             />,
             document.body
           )}
+          {/* Frontière de chargement des écrans (31/08/2026).
+
+              Tous les écrans étaient importés au démarrage : le navigateur
+              téléchargeait Mail, Agenda, Immosphera360, Nova, la carte
+              Leaflet et les graphiques Recharts avant même d'afficher
+              l'accueil — 3,5 Mo d'un bloc, sur mobile en 4G. Ils sont
+              maintenant chargés à la demande (React.lazy), et cette unique
+              frontière couvre la zone de vues, le panneau Nova et
+              Immosphera360, qui vivent tous à l'intérieur de <main>. */}
+          <Suspense fallback={<ChargementEcran />}>
           {/* h-full : nécessaire pour que les vues qui remplissent tout
               l'espace disponible (ex. Mail) puissent résoudre leur propre
               h-full jusqu'à la hauteur réelle de <main>. Neutre pour les
@@ -1218,6 +1236,7 @@ export function App() {
               </motion.div>
             )}
           </AnimatePresence>
+          </Suspense>
         </main>
 
         {/* Signalé : "l'écran déborde", puis contour arc-en-ciel asymétrique
