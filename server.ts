@@ -16,7 +16,7 @@ const SUPABASE_SERVICE_ROLE_KEY =
 type SupabaseVerifiedUser = { id: string; email: string; displayName?: string | null };
 type SupabaseProfile = { id: string; email?: string | null; full_name?: string | null; phone?: string | null; job_title?: string | null; avatar_url?: string | null; push_daily_reminders?: boolean | null; [key: string]: unknown };
 
-type AppRole = 'super_admin' | 'commercial' | 'intern';
+type AppRole = 'super_admin' | 'admin' | 'commercial' | 'intern';
 
 function getBearerToken(req: express.Request): string | null {
   const auth = req.headers.authorization || '';
@@ -1239,12 +1239,24 @@ async function startServer() {
     try {
       const { profile, supabaseUser } = await currentProfile(req);
       const isSuperAdmin = supabaseUser.email.toLowerCase() === 's.grazia@conseilfinances.fr' || profile.email?.toLowerCase() === 's.grazia@conseilfinances.fr';
-      const [ui, templates, drives, role] = await Promise.all([
+      // Signalé (31/08/2026) : Natacha, rattachée à la seule agence Novavisio,
+      // n'y voyait aucun contact. Cause : cette réponse n'a JAMAIS renvoyé
+      // `agency_ids`, que le front lit pourtant pour choisir l'agence active
+      // (AuthContext : `bootstrapBody.agency_ids ?? []`). Il recevait donc
+      // toujours une liste vide, `primaryAgencyId` restait indéfini, et
+      // l'agence active retombait sur AGENCIES[0] — Conseils Finances. Tous
+      // les contacts d'une autre agence étaient alors filtrés côté client,
+      // quelles que soient les règles d'accès en base. Invisible jusqu'ici
+      // parce que les comptes existants sont soit super-admin (accès à tout),
+      // soit rattachés justement à Conseils Finances.
+      const [ui, templates, drives, role, memberOf] = await Promise.all([
         supabaseRequest<any[]>(`user_ui_settings?user_id=eq.${profile.id}&select=*&limit=1`).catch(() => []),
         supabaseRequest<any[]>(`user_event_templates?user_id=eq.${profile.id}&select=*&limit=1`).catch(() => []),
         supabaseRequest<any[]>('agency_drive_tokens?select=agency_id,google_email,updated_at').catch(() => []),
         getRole(profile.id).catch(() => (isSuperAdmin ? 'super_admin' : 'commercial') as AppRole),
+        supabaseRequest<any[]>(`agency_members?user_id=eq.${profile.id}&select=agency_id`).catch(() => []),
       ]);
+      const agencyIds: string[] = (memberOf || []).map((m: any) => m.agency_id).filter(Boolean);
       const activeRole = isSuperAdmin ? 'super_admin' : role;
       let users: any[] = [];
       if (activeRole === 'super_admin') {
@@ -1290,6 +1302,11 @@ async function startServer() {
         drives,
         users,
         role: activeRole,
+        // Un super-admin garde accès à toutes les agences, même s'il n'est
+        // pas déclaré membre de chacune dans `agency_members`.
+        agency_ids: activeRole === 'super_admin' && agencyIds.length === 0
+          ? undefined
+          : agencyIds,
         internStartsAt,
         internEndsAt,
         internResponsableId,
