@@ -1297,6 +1297,20 @@ function App() {
                   }}
                 />
                 <div className="absolute inset-[3px] bg-[#050d0f] overflow-hidden rounded-[22px]">
+                  {/* CORRECTIF (31/08/2026) — signalé : « Nova ne s'ouvre pas
+                      sur le téléphone », le bouton du bas ne faisait rien.
+
+                      Ce panneau vit dans un portail, DEHORS de <main> et donc
+                      hors de la frontière de chargement posée cet après-midi
+                      avec le découpage du paquet. Les deux montages de Nova
+                      côté ordinateur, eux, sont à l'intérieur. Depuis que
+                      l'écran est chargé à la demande, il se suspend le temps
+                      de son téléchargement — et un composant qui se suspend
+                      sans frontière pour l'accueillir ne rend RIEN. D'où le
+                      bouton sans effet, sur mobile uniquement.
+
+                      Sa propre frontière, donc. */}
+                  <Suspense fallback={<ChargementEcran />}>
                   <AssistantIAView
                     initialPrompt={novaAIPrompt}
                     onInitialPromptConsumed={() => setNovaAIPrompt(null)}
@@ -1326,6 +1340,7 @@ function App() {
                       setNovaExpandedFromPopup(false);
                     }}
                   />
+                  </Suspense>
                 </div>
               </motion.div>
             )}
