@@ -812,7 +812,18 @@ export function App() {
               autres onglets (page classique qui défile) : ce div n'impose
               aucun overflow, leur contenu continue de dépasser normalement
               et de faire défiler <main> comme avant. */}
-          <div key={selectedClientProfileId ? 'client-profile' : currentNav} className="relative z-10 h-full animate-page-in">
+          {/* Signalé (31/08/2026) : impossible de faire défiler la fiche client
+              sur un téléphone pliable. `h-full` cale ce conteneur sur la
+              hauteur exacte de <main>. C'est indispensable à l'écran Mail, qui
+              résout sa propre hauteur au travers ; la fiche client, elle, n'en
+              a aucun besoin — elle dépasse et laisse <main> défiler. Or selon
+              les navigateurs mobiles, une hauteur fixe combinée au défilement
+              du parent se comporte mal et fige le contenu. On retire donc la
+              contrainte là où elle ne sert à rien. */}
+          <div
+            key={selectedClientProfileId ? 'client-profile' : currentNav}
+            className={`relative z-10 animate-page-in ${selectedClientProfileId ? '' : 'h-full'}`}
+          >
           {selectedClientProfileId ? (
             <ClientProfileView
               clientId={selectedClientProfileId}
