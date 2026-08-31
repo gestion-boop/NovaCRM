@@ -160,7 +160,13 @@ function App() {
   // via `currentNav` — on reste toujours sur la même interface derrière,
   // que ce soit via le clic sur "Assistant IA" ou une commande tapée dans
   // la barre NovaAI de l'accueil.
-  const [novaOpen, setNovaOpen] = useState(false);
+  // Même raison que setCurrentNav : ouvrir Nova charge AssistantIAView à la
+  // demande, donc suspend. Sans startTransition, React lève #426 et remplace
+  // l'écran par le rond de chargement au lieu de patienter.
+  const [novaOpen, setNovaOpenImmediat] = useState(false);
+  const setNovaOpen = React.useCallback((valeur: React.SetStateAction<boolean>) => {
+    React.startTransition(() => setNovaOpenImmediat(valeur));
+  }, []);
   // Demande explicite : "mets Nova dans Pipeline" — pré-remplit le champ de
   // saisie de Nova (jamais envoyé automatiquement) avec le nom du dossier
   // cliqué, pour ne pas avoir à le retaper/redicter.
@@ -174,7 +180,11 @@ function App() {
   // composant AssistantIAView réutilisé tel quel (son historique est déjà
   // persisté en base, donc partagé entre popup et plein écran sans rien de
   // plus à faire), juste affiché dans un cadre plus petit.
-  const [novaPopupOpen, setNovaPopupOpen] = useState(false);
+  // Idem pour la mini-fenêtre Nova.
+  const [novaPopupOpen, setNovaPopupOpenImmediat] = useState(false);
+  const setNovaPopupOpen = React.useCallback((valeur: React.SetStateAction<boolean>) => {
+    React.startTransition(() => setNovaPopupOpenImmediat(valeur));
+  }, []);
   // Signalé : "quand on met la fenêtre en grand, on n'a pas la possibilité
   // de la remettre en petit... on doit avoir un bouton retour pour basculer
   // sur la fiche client" — mémorise qu'on vient d'agrandir DEPUIS la
