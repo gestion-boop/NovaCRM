@@ -432,6 +432,15 @@ const INITIAL_TILES: TileItemNode[] = [
   // explicite. Icônes/couleurs par défaut, à personnaliser ensuite via la
   // palette (logos propres à intégrer plus tard par l'utilisateur).
   {
+    id: 'conseils-aura',
+    title: 'Aura',
+    iconName: 'Sparkles',
+    gradient: 'from-[#7C5CFF] via-[#5B3FD6] to-[#3B268F]',
+    badgeCount: 0,
+    navTarget: '',
+    externalUrl: 'https://conseils-finances.aura-ai.fr/',
+  },
+  {
     id: 'immosphera-site',
     title: 'Site internet',
     iconName: 'Globe',
@@ -560,6 +569,18 @@ const NOVAVISIO_EXTRA_TILE_IDS = ['carte-novavisio'];
 // Ids des tuiles ci-dessus réservées à Immosphera + super admin — utilisé à
 // la fois pour l'auto-ajout aux grilles déjà personnalisées et pour le
 // filtre de visibilité (voir canSeeImmospheraExtras).
+// Tuile Aura — obligatoire pour tous les membres de Conseils Finances
+// (demande du 31/08/2026). Même mécanique que les tuiles Immosphera :
+// injectée dans toute grille qui ne l'a pas encore, puis filtrée à
+// l'affichage par canSeeConseilsFinances.
+//
+// `externalUrl` et non un cadre intégré : conseils-finances.aura-ai.fr répond
+// `x-frame-options: SAMEORIGIN`, ce qui interdit au navigateur de l'afficher
+// dans une fenêtre du CRM. Le jour où Aura autorisera
+// `frame-ancestors https://app.nova360.space`, il suffira de remplacer
+// `externalUrl` par `embedUrl` sur cette tuile — le reste est déjà en place.
+const CONSEILS_EXTRA_TILE_IDS = ['conseils-aura'];
+
 const IMMOSPHERA_EXTRA_TILE_IDS = [
   'immosphera-site',
   'immosphera-partenaires',
@@ -1181,6 +1202,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       const extraTiles = INITIAL_TILES.filter((t) => missingExtras.includes(t.id));
       base = [...base, ...extraTiles];
     }
+    // Tuile Aura (Conseils Finances) — visibilité filtrée plus loin par
+    // canSeeConseilsFinances ; ici on garantit seulement sa présence dans
+    // les grilles déjà personnalisées, sans quoi ajouter la tuile à
+    // INITIAL_TILES n'aurait aucun effet pour les comptes existants.
+    const missingConseils = CONSEILS_EXTRA_TILE_IDS.filter((id) => !existsRecursive(base, id));
+    if (missingConseils.length > 0) {
+      const extraTiles = INITIAL_TILES.filter((t) => missingConseils.includes(t.id));
+      base = [...base, ...extraTiles];
+    }
     // Même principe pour la tuile "Carte" (Novavisio) — visibilité réelle
     // filtrée plus loin par canSeeNovavisio.
     const missingNovavisio = NOVAVISIO_EXTRA_TILE_IDS.filter((id) => !existsRecursive(base, id));
@@ -1506,6 +1536,13 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Tuile "Carte" (prospection Novavisio) — même principe que
   // canSeeImmosphera ci-dessus : uniquement selon l'agence active, sans
   // exception de rôle.
+  // Conseils Finances — agence active uniquement, comme les deux autres.
+  const canSeeConseilsFinances = useMemo(
+    () => /conseil/i.test(activeAgency?.name ?? '') || /finance/i.test(activeAgency?.name ?? ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeAgency?.id],
+  );
+
   // Même correctif que canSeeImmosphera juste au-dessus : agence active
   // uniquement, jamais la liste complète des agences.
   const canSeeNovavisio = useMemo(
@@ -2190,6 +2227,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       .filter((t) => t.id !== 'immosphera360' || canSeeImmosphera)
       .filter((t) => !IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
       .filter((t) => !NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
+      .filter((t) => !CONSEILS_EXTRA_TILE_IDS.includes(t.id) || canSeeConseilsFinances)
       // Ticket #255 : tuile "Annonce" réservée aux administrateurs (+ liste
       // ponctuelle, voir canSeeAnnonceTile) — sa case invisible
       // "nova-lock-spacer" (qui n'a de sens que juste avant elle) suit la
