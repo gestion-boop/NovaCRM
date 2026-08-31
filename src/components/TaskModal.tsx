@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, CheckCircle2, User } from 'lucide-react';
 import { Contact, Task } from '@/types';
 import { useAuth } from '@/context/AuthContext';
-import { DEFAULT_TASK_TITLES, DEFAULT_APPOINTMENT_TITLES } from './ParametresView';
+import { DEFAULT_APPOINTMENT_TITLES, defaultTaskTitlesFor, taskTitlesKey, lireTitresAgence } from './ParametresView';
 
 // Mêmes clés de stockage que la page Paramètres ("Titres des tâches et
 // rendez-vous") — pour que la liste proposée ici soit toujours identique à
@@ -58,14 +58,22 @@ const TaskModal: React.FC<TaskModalProps> = ({
   onUpdateTask,
 }) => {
   const isEditing = !!initialTask;
-  const { currentUser } = useAuth();
+  const { currentUser, activeAgency } = useAuth();
 
   const [type, setType] = useState<Task['type']>(initialTask?.type || 'Tâche');
 
   // Les deux listes configurées dans Paramètres > "Titres des tâches et
   // rendez-vous" — on affiche celle qui correspond au Type sélectionné.
+  // Libellés cloisonnés par agence (31/08/2026). La liste historique était
+  // unique et purement courtage — retour banque, offre de prêt, ODP notaire —
+  // proposée telle quelle à Immosphera et NovaVisio, pour qui elle n'avait
+  // aucun sens. Chaque agence a maintenant sa clé et ses libellés de départ,
+  // que chacun complète depuis Paramètres.
   const [taskTitlesList, setTaskTitlesList] = useState<string[]>(() =>
-    readTitleList('novasphere:task-titles', DEFAULT_TASK_TITLES)
+    readTitleList(
+      taskTitlesKey(activeAgency?.id),
+      defaultTaskTitlesFor(activeAgency?.name),
+    )
   );
   const [appointmentTitlesList, setAppointmentTitlesList] = useState<string[]>(() =>
     readTitleList('novasphere:appointment-titles', DEFAULT_APPOINTMENT_TITLES)
@@ -82,9 +90,13 @@ const TaskModal: React.FC<TaskModalProps> = ({
         if (!res.ok) return;
         const data = await res.json();
         const tpl = data?.templates;
-        if (Array.isArray(tpl?.task_titles) && tpl.task_titles.length) {
-          setTaskTitlesList(tpl.task_titles);
-          localStorage.setItem('novasphere:task-titles', JSON.stringify(tpl.task_titles));
+        // `task_titles` est désormais un dictionnaire { agence: [...] }.
+        // `lireTitresAgence` accepte aussi l'ancien tableau nu, qu'il
+        // n'applique qu'à Conseils Finances — c'était du courtage.
+        const titres = lireTitresAgence(tpl?.task_titles, activeAgency?.id, activeAgency?.name);
+        if (titres) {
+          setTaskTitlesList(titres);
+          localStorage.setItem(taskTitlesKey(activeAgency?.id), JSON.stringify(titres));
         }
         if (Array.isArray(tpl?.rdv_titles) && tpl.rdv_titles.length) {
           setAppointmentTitlesList(tpl.rdv_titles);

@@ -65,7 +65,63 @@ const DEFAULT_SECTIONS: SectionConfig[] = [
 
 // Exportés pour que TaskModal (création/édition de tâche) utilise exactement
 // les mêmes valeurs par défaut et la même source que cette page Paramètres.
+// Libellés proposés à la création d'une tâche — CLOISONNÉS PAR AGENCE depuis
+// le 31/08/2026 (demande : « il faut que tu cloisonnes également tous les
+// intitulés des tâches ; dans Conseils Finances c'est tout ce qui est attente
+// de retour, documents, attente retour banque… pour les autres agences juste
+// quatre exemples, et les utilisateurs mettront ceux qu'ils veulent »).
+//
+// La liste historique est manifestement du courtage — retour banque, offre de
+// prêt, ODP notaire — et n'avait aucun sens pour une agence immobilière ou
+// pour NovaVisio. Elle reste donc celle de Conseils Finances ; les deux autres
+// démarrent sur quatre exemples, à compléter librement dans
+// Paramètres → « Titres des tâches et rendez-vous ».
+export const CONSEILS_FINANCES_AGENCY_ID = '30f96ea9-41da-41c2-a95e-f5e7898f8d8e';
+
 export const DEFAULT_TASK_TITLES = ['Appeler le client','A faire','Att retour caution','Att retour client','Att retour banque','Att documents client','Att retour Back-office','Att retour assurance','Att accord banque','Att offre de prêt','Att décompte','Att date de signature','Envoi ODP notaire'];
+
+export const DEFAULT_TASK_TITLES_IMMOSPHERA = ['Appeler le client','Att retour client','Att retour visite','Att offre d\'achat'];
+
+export const DEFAULT_TASK_TITLES_NOVAVISIO = ['Appeler le client','Att retour client','Att retour devis','Planifier la prise de vue'];
+
+/** Libellés de départ d'une agence, d'après son nom. */
+export function defaultTaskTitlesFor(agencyName?: string | null): string[] {
+  const n = (agencyName || '').toLowerCase();
+  if (n.includes('immosphera')) return DEFAULT_TASK_TITLES_IMMOSPHERA;
+  if (n.includes('novavisio')) return DEFAULT_TASK_TITLES_NOVAVISIO;
+  return DEFAULT_TASK_TITLES;
+}
+
+/** Clé de stockage local, cloisonnée par agence. */
+export function taskTitlesKey(agencyId?: string | null): string {
+  return `novasphere:task-titles:${agencyId || 'default'}`;
+}
+
+/**
+ * Lit la liste d'une agence dans la colonne `task_titles` (jsonb).
+ * Trois formats acceptés :
+ *   • `{ [agencyId]: [...] }` — format actuel ;
+ *   • un tableau nu — format d'origine, antérieur au cloisonnement. Il ne
+ *     contenait que du courtage : on ne l'applique donc qu'à Conseils
+ *     Finances, pour ne pas imposer « Att offre de prêt » à Immosphera ;
+ *   • rien — on retombe sur les libellés de départ de l'agence.
+ */
+export function lireTitresAgence(
+  stocke: unknown,
+  agencyId?: string | null,
+  agencyName?: string | null,
+): string[] | null {
+  if (Array.isArray(stocke)) {
+    const n = (agencyName || '').toLowerCase();
+    const estConseils = !n.includes('immosphera') && !n.includes('novavisio');
+    return estConseils && stocke.length ? (stocke as string[]) : null;
+  }
+  if (stocke && typeof stocke === 'object' && agencyId) {
+    const liste = (stocke as Record<string, unknown>)[agencyId];
+    if (Array.isArray(liste) && liste.length) return liste as string[];
+  }
+  return null;
+}
 export const DEFAULT_APPOINTMENT_TITLES = ['Rendez-vous client','Visite','Signature','Appel découverte','Réunion équipe'];
 const DEFAULT_CONTACT_TYPES = ['Particulier','Professionnel','Téléphone','Email','Rendez-vous','Salon / Événement','Recommandation','Site web','Autre'];
 const DEFAULT_TABS: Array<[string, string]> = [
@@ -289,7 +345,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
   const [mailSignatureImage, setMailSignatureImage] = useState('');
   const [theme, setTheme] = useState(() => localStorage.getItem('novasphere:theme') || 'dark');
 
-  const [taskTitles, setTaskTitles] = useState(DEFAULT_TASK_TITLES);
+  const [taskTitles, setTaskTitles] = useState<string[]>(DEFAULT_TASK_TITLES);
   const [appointmentTitles, setAppointmentTitles] = useState(DEFAULT_APPOINTMENT_TITLES);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newAppointmentTitle, setNewAppointmentTitle] = useState('');
@@ -585,7 +641,8 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
           supabase.from('user_event_templates').select('task_titles, rdv_titles').eq('user_id', currentUser.uid).maybeSingle(),
           supabase.from('user_ui_settings').select('sidebar_order, mail_signature_html, mail_signature_image_url').eq('user_id', currentUser.uid).maybeSingle(),
         ]);
-        if (Array.isArray(tpl?.task_titles) && tpl.task_titles.length) setTaskTitles(tpl.task_titles);
+        const titresAgence = lireTitresAgence(tpl?.task_titles, activeAgency?.id, activeAgency?.name);
+        setTaskTitles(titresAgence ?? defaultTaskTitlesFor(activeAgency?.name));
         if (Array.isArray(tpl?.rdv_titles) && tpl.rdv_titles.length) setAppointmentTitles(tpl.rdv_titles);
         if (ui?.mail_signature_html) setMailSignature(ui.mail_signature_html);
         if (ui?.mail_signature_image_url) setMailSignatureImage(ui.mail_signature_image_url);
@@ -676,7 +733,8 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
         }
       }
       if (tpl) {
-        if (Array.isArray(tpl.task_titles) && tpl.task_titles.length) setTaskTitles(tpl.task_titles);
+        const titresAgence2 = lireTitresAgence(tpl.task_titles, activeAgency?.id, activeAgency?.name);
+        setTaskTitles(titresAgence2 ?? defaultTaskTitlesFor(activeAgency?.name));
         if (Array.isArray(tpl.rdv_titles) && tpl.rdv_titles.length) setAppointmentTitles(tpl.rdv_titles);
       }
       if (profile) {
@@ -801,17 +859,35 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
     if (!currentUser) return;
     setBusy('templates');
     try {
+      // Cloisonnement par agence : on relit la colonne avant d'écrire, pour
+      // ajouter l'agence courante SANS effacer les listes des autres. Un
+      // ancien format (tableau nu) est converti en entrée Conseils Finances.
+      const agencyId = activeAgency?.id || 'default';
+      const { data: existant } = await supabase
+        .from('user_event_templates')
+        .select('task_titles')
+        .eq('user_id', currentUser.uid)
+        .maybeSingle();
+      const actuel = existant?.task_titles;
+      const parAgence: Record<string, string[]> =
+        actuel && !Array.isArray(actuel) && typeof actuel === 'object'
+          ? { ...(actuel as Record<string, string[]>) }
+          : Array.isArray(actuel) && actuel.length
+            ? { [CONSEILS_FINANCES_AGENCY_ID]: actuel as string[] }
+            : {};
+      parAgence[agencyId] = taskTitles;
+
       const { error } = await supabase.from('user_event_templates').upsert(
         {
           user_id: currentUser.uid,
-          task_titles: taskTitles,
+          task_titles: parAgence,
           rdv_titles: appointmentTitles,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id' }
       );
       if (error) throw error;
-      writeStorage('novasphere:task-titles', taskTitles);
+      writeStorage(taskTitlesKey(agencyId), taskTitles);
       writeStorage('novasphere:appointment-titles', appointmentTitles);
       window.dispatchEvent(new Event('novasphere:event-templates-changed'));
     } catch (error) {

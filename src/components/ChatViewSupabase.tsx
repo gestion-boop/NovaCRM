@@ -2037,14 +2037,19 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                       <>
                                         {NOVA_QUICK_REACTIONS.map((e) => (
                                           <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-2xl p-1.5'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
-                                            {/* Signalé : "grossis quand même les Novadji, ils
-                                                sont moins visibles que les émoticônes
-                                                classiques" — image à taille fixe (w-5 h-5 par
-                                                défaut) à côté d'un emoji Unicode en text-xl,
-                                                visuellement plus petite malgré la même
-                                                hauteur nominale (glyphe emoji avec sa propre
-                                                marge). Agrandie pour un poids visuel comparable. */}
-                                            {renderEmojiOrNova(e, isMobile || isCoarsePointer ? 'w-12 h-12' : 'w-8 h-8')}
+                                            {/* Équilibre Novadji / emojis (31/08/2026 :
+                                                "les Novadji ne sont pas de la même taille,
+                                                équilibre le tout sur ordinateur et téléphone
+                                                pour que cela soit visible").
+                                                Une image PNG et un glyphe emoji ne se
+                                                comparent pas à taille de boîte égale : le PNG
+                                                Nova comporte une marge transparente, donc son
+                                                dessin occupe environ 70 % du carré. Il faut
+                                                l'agrandir d'environ un tiers pour un poids
+                                                visuel identique.
+                                                  souris   : emoji 24px (text-2xl) → Nova 40px
+                                                  tactile  : emoji 36px (text-4xl) → Nova 56px */}
+                                            {renderEmojiOrNova(e, isMobile || isCoarsePointer ? 'w-14 h-14' : 'w-10 h-10')}
                                           </button>
                                         ))}
                                         {/* Suite #240 : séparation visuelle nette entre les
@@ -2146,7 +2151,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                   onClick={() => void handleToggleConvReaction(m.id, emoji)}
                                   className={`px-1.5 py-0.5 rounded-full text-xs flex items-center gap-1 border ${list.some((r) => r.userId === currentUser?.uid) ? 'border-[#F7BC5F]/50 bg-[#F7BC5F]/10' : 'border-[#153c3f] bg-[#0b1c1e]'}`}
                                 >
-                                  <span>{renderEmojiOrNova(emoji, 'w-5 h-5')}</span>
+                                  <span>{renderEmojiOrNova(emoji, 'w-[1.4em] h-[1.4em]')}</span>
                                   {list.length > 1 && <span className="text-[10px] text-slate-400">{list.length}</span>}
                                 </button>
                               ))}
