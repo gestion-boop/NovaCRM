@@ -111,7 +111,22 @@ function App() {
     } catch { /* noop */ }
     return null;
   })();
-  const [currentNav, setCurrentNav] = useState(initialHighlightMessageId ? 'chat' : initialNavFromUrl || 'accueil');
+  // CORRECTIF (31/08/2026) — « React error #426 : a component suspended while
+  // responding to synchronous input ».
+  //
+  // Depuis que les écrans sont chargés à la demande, changer d'onglet peut
+  // suspendre le rendu le temps que le fichier arrive. React refuse qu'une
+  // mise à jour SYNCHRONE (un clic) provoque une suspension : il remplace
+  // alors brutalement l'interface par le rond de chargement, et lève cette
+  // erreur. `startTransition` lui dit que cette mise à jour peut attendre —
+  // l'écran courant reste affiché pendant le téléchargement du suivant.
+  //
+  // Enveloppé ici, au niveau du setter, plutôt qu'aux 20 endroits qui
+  // l'appellent : impossible d'en oublier un.
+  const [currentNav, setCurrentNavImmediat] = useState(initialHighlightMessageId ? 'chat' : initialNavFromUrl || 'accueil');
+  const setCurrentNav = React.useCallback((valeur: React.SetStateAction<string>) => {
+    React.startTransition(() => setCurrentNavImmediat(valeur));
+  }, []);
   // Demande explicite (30/08/2026) : Chat reste monté en permanence une
   // fois ouvert (voir plus bas, `hasOpenedChat && <div className={... ?
   // '' : 'hidden'}><ChatView/></div>`) — mais on ne veut pas non plus payer
@@ -576,7 +591,12 @@ function App() {
   const [showCameraModal, setShowCameraModal] = useState(false);
   
   // Client Profile Full View state
-  const [selectedClientProfileId, setSelectedClientProfileId] = useState<string | null>(null);
+  // Même raison que setCurrentNav ci-dessus : ouvrir une fiche client charge
+  // ClientProfileView à la demande, donc suspend.
+  const [selectedClientProfileId, setSelectedClientProfileIdImmediat] = useState<string | null>(null);
+  const setSelectedClientProfileId = React.useCallback((valeur: React.SetStateAction<string | null>) => {
+    React.startTransition(() => setSelectedClientProfileIdImmediat(valeur));
+  }, []);
   // Signalé : "le clic sur la notif du message du client doit envoyer sur
   // le chat Espace Client de la fiche" — onglet à ouvrir en plus du client
   // lui-même (undefined = comportement par défaut, onglet RDV).
