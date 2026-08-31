@@ -95,7 +95,22 @@ export default function Contacts({
       setUsersLoading(true);
 
       try {
-        const { data } = await supabase.from('profiles').select('*');
+        // Signalé (31/08/2026) : "quand Natacha crée un contact, elle ne peut
+        // pas le partager". Cause : `agencyIds` était figé à [] pour CHAQUE
+        // utilisateur ci-dessous. Or le filtre du panneau de partage fait
+        // ensuite `targetAgencies.some(...)` sur cette liste — toujours vide,
+        // donc toujours faux. La liste des collègues avec qui partager était
+        // par conséquent VIDE pour tout le monde sauf les super_admin, qui
+        // sortent avant ce filtre. On charge donc les rattachements réels.
+        const [{ data }, { data: memberships }] = await Promise.all([
+          supabase.from('profiles').select('*'),
+          supabase.from('agency_members').select('user_id, agency_id'),
+        ]);
+
+        const agencesParUtilisateur: Record<string, string[]> = {};
+        ((memberships || []) as { user_id: string; agency_id: string }[]).forEach((m) => {
+          (agencesParUtilisateur[m.user_id] ||= []).push(m.agency_id);
+        });
 
         const loaded = (data || [])
           .map((item: any) => ({
@@ -104,7 +119,7 @@ export default function Contacts({
             displayName: item.full_name || item.email || 'Membre',
             photoURL: item.avatar_url || null,
             role: 'commercial',
-            agencyIds: [],
+            agencyIds: agencesParUtilisateur[item.id] || [],
             active: true,
             jobTitle: item.job_title || null,
           } as NovaSphereUserProfile))
