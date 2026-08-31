@@ -38,6 +38,18 @@ import {
 // l'origine — une vraie actualisation de page réinitialise normalement ce
 // module, ce qui reste voulu.
 const homeSyncLoadedAgencies = new Set<string>();
+// Agences dont la lecture serveur est TERMINÉE (succès ou échec).
+// `homeSyncLoadedAgencies` est rempli AVANT l'appel, pour ne pas le lancer
+// deux fois ; celui-ci l'est APRÈS, et sert de feu vert à l'écriture.
+//
+// Sans ce garde-fou, sur un appareil neuf : le composant monte avec la grille
+// par défaut, l'effet de sauvegarde part aussitôt et écrit CETTE grille par
+// défaut sur le serveur — écrasant la vraie disposition — puis la lecture
+// serveur revient et n'a plus rien d'utile à appliquer. C'est le scénario
+// exact d'un téléphone ou d'une tablette qui se connecte pour la première
+// fois : les dossiers créés sur l'ordinateur étaient effacés, pas seulement
+// absents.
+const homeSyncReadyAgencies = new Set<string>();
 
 interface AccueilGridProps {
   onNavigate: (navId: string) => void;
@@ -1079,6 +1091,65 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       })
       .map((t) => (t.children ? { ...t, children: dedupeRecursive(t.children, seen) } : t));
 
+  // ── Synchronisation multi-appareils, par agence ──────────────────────────
+  // Signalé (31/08/2026) : "les raccourcis dossiers qu'on crée ne sont pas
+  // synchro avec le téléphone et la tablette".
+  //
+  // La synchronisation existait, mais `user_ui_settings.home_tiles` est UNE
+  // SEULE colonne par utilisateur alors que l'accueil est cloisonné PAR
+  // AGENCE. On y rangeait `{ agencyId, items }` : seule la disposition de la
+  // DERNIÈRE agence enregistrée survivait côté serveur, et sur un autre
+  // appareil la version serveur était ignorée dès qu'on n'était pas sur cette
+  // agence-là — d'où la grille par défaut, sans les dossiers créés.
+  //
+  // On range maintenant un dictionnaire `{ [agencyId]: items }` : toutes les
+  // agences coexistent. Les deux anciens formats restent lus (voir
+  // `lireDispositionAgence`), donc rien n'est perdu à la mise à jour.
+  const lireDispositionAgence = (colonne: unknown, agencyId: string): unknown[] | null => {
+    if (!colonne) return null;
+    // Format actuel : { [agencyId]: [...] }
+    if (!Array.isArray(colonne) && typeof colonne === 'object') {
+      const obj = colonne as Record<string, unknown>;
+      // Ancien format : { agencyId, items }
+      if (typeof obj.agencyId === 'string' && Array.isArray(obj.items)) {
+        return obj.agencyId === agencyId ? (obj.items as unknown[]) : null;
+      }
+      const pour = obj[agencyId];
+      if (Array.isArray(pour)) return pour as unknown[];
+    }
+    // Format d'origine : un tableau brut, sans agence — trop ambigu pour être
+    // appliqué à une agence en particulier.
+    return null;
+  };
+
+  // Écriture : on relit la colonne juste avant, pour ajouter l'agence
+  // courante SANS effacer les autres.
+  const ecrireDispositionAgence = async (
+    colonne: 'home_tiles' | 'home_root_slots',
+    userId: string,
+    agencyId: string,
+    valeur: unknown,
+  ) => {
+    const { data } = await supabase
+      .from('user_ui_settings')
+      .select(colonne)
+      .eq('user_id', userId)
+      .maybeSingle();
+    const actuel = (data as Record<string, unknown> | null)?.[colonne];
+    const base: Record<string, unknown> =
+      actuel && !Array.isArray(actuel) && typeof actuel === 'object'
+        ? { ...(actuel as Record<string, unknown>) }
+        : {};
+    // Purge de l'ancien format au passage : ses deux clés parasiteraient le
+    // dictionnaire.
+    delete base.agencyId;
+    delete base.items;
+    base[agencyId] = valeur;
+    return supabase
+      .from('user_ui_settings')
+      .upsert({ user_id: userId, [colonne]: base } as any, { onConflict: 'user_id' });
+  };
+
   const loadTilesForKey = (key: string): TileItemNode[] => {
     const saved = localStorage.getItem(key);
     let base = INITIAL_TILES;
@@ -1314,10 +1385,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // Même cloisonnement par agence que home_tiles ci-dessous (voir
     // commentaire détaillé plus bas) — même colonne serveur unique par
     // compte, donc même risque d'écrasement inter-agences sans `agencyId`.
-    if (currentUser?.uid && activeAgency?.id) {
-      supabase
-        .from('user_ui_settings')
-        .upsert({ user_id: currentUser.uid, home_root_slots: { agencyId: activeAgency.id, items: rootSlots } } as any, { onConflict: 'user_id' })
+    if (currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
+      ecrireDispositionAgence('home_root_slots', currentUser.uid, activeAgency.id, rootSlots)
         // Signalé : "les tuiles déplacées ne se sauvegardent jamais à la
         // même place" — cette écriture serveur échouait en silence (erreur
         // avalée). Diagnostic temporaire : la journaliser au lieu de
@@ -1366,21 +1435,19 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           .select('home_tiles, home_root_slots')
           .eq('user_id', currentUser.uid)
           .maybeSingle();
-        const storedTiles = (data as any)?.home_tiles;
-        const matchesAgency =
-          storedTiles && !Array.isArray(storedTiles) && storedTiles.agencyId === agencyId && Array.isArray(storedTiles.items);
-        if (matchesAgency && storedTiles.items.length > 0) {
+        const tuilesServeur = lireDispositionAgence((data as any)?.home_tiles, agencyId);
+        if (tuilesServeur && tuilesServeur.length > 0) {
           skipNextTilesSaveRef.current = true;
-          setTiles((storedTiles.items as TileItemNode[]).map((t) => normalizeTile(t)));
+          setTiles((tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t)));
         }
-        const storedSlots = (data as any)?.home_root_slots;
-        const slotsMatchAgency =
-          storedSlots && !Array.isArray(storedSlots) && storedSlots.agencyId === agencyId && Array.isArray(storedSlots.items);
-        if (slotsMatchAgency) {
-          setRootSlots(storedSlots.items as (string | null)[]);
+        const slotsServeur = lireDispositionAgence((data as any)?.home_root_slots, agencyId);
+        if (slotsServeur) {
+          setRootSlots(slotsServeur as (string | null)[]);
         }
       } catch {
         /* best-effort — le navigateur reste la source si le serveur échoue */
+      } finally {
+        homeSyncReadyAgencies.add(agencyId);
       }
     })();
   }, [currentUser?.uid, activeAgency?.id]);
@@ -1786,10 +1853,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   useEffect(() => {
     if (skipNextTilesSaveRef.current) { skipNextTilesSaveRef.current = false; return; }
     localStorage.setItem(HOME_TILES_KEY, JSON.stringify(tiles));
-    if (currentUser?.uid && activeAgency?.id) {
-      supabase
-        .from('user_ui_settings')
-        .upsert({ user_id: currentUser.uid, home_tiles: { agencyId: activeAgency.id, items: tiles } } as any, { onConflict: 'user_id' })
+    if (currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
+      ecrireDispositionAgence('home_tiles', currentUser.uid, activeAgency.id, tiles)
         // Diagnostic temporaire (même raison que home_root_slots juste
         // au-dessus) : journaliser l'erreur réelle au lieu de l'avaler, et
         // la remonter en toast pour ne pas dépendre de la console navigateur.
