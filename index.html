@@ -53,5 +53,46 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Filet de sécurité « application déshabillée » (31/08/2026).
+
+         Constaté sur le téléphone d'une utilisatrice : le CRM s'affichait sans
+         AUCUNE feuille de style — texte en serif, menus en cadres nus, logo à
+         sa taille naturelle. Cause : son navigateur gardait un index.html
+         d'une version précédente, qui réclame des fichiers /assets/ aux noms
+         désormais inexistants. La réécriture SPA de Vercel répondait alors
+         index.html avec un statut 200 (corrigé dans vercel.json), et le
+         navigateur refusait ce HTML comme feuille de style — sans la moindre
+         erreur visible pour l'utilisateur.
+
+         Ce garde-fou vérifie qu'un jeton de `index.css` est bien appliqué. Si
+         ce n'est pas le cas, la page ne peut pas fonctionner : on purge les
+         caches, on désinscrit le service worker et on recharge une fois. Le
+         drapeau en sessionStorage interdit toute boucle. -->
+    <script>
+      window.addEventListener('load', function () {
+        try {
+          var jeton = getComputedStyle(document.documentElement)
+            .getPropertyValue('--nv-surface-app').trim();
+          if (jeton) return;                                  // styles présents
+          if (sessionStorage.getItem('nv-repare-styles')) return;  // déjà tenté
+          sessionStorage.setItem('nv-repare-styles', '1');
+          var fini = function () { location.reload(); };
+          var taches = [];
+          if (window.caches && caches.keys) {
+            taches.push(caches.keys().then(function (n) {
+              return Promise.all(n.map(function (c) { return caches.delete(c); }));
+            }));
+          }
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            taches.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+              return Promise.all(rs.map(function (r) { return r.unregister(); }));
+            }));
+          }
+          Promise.all(taches).then(fini, fini);
+          setTimeout(fini, 3000);
+        } catch (e) { /* jamais bloquer l'application pour ce garde-fou */ }
+      });
+    </script>
   </body>
 </html>
