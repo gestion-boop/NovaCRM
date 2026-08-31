@@ -13,6 +13,24 @@ export function toValidUuidOrNull(val?: string | null): string | null {
   return UUID_REGEX.test(trimmed) ? trimmed : null;
 }
 
+// ⚠️ IDENTIFIANTS SYNCHRONISÉS AVEC LES VRAIS COMPTES le 31/08/2026.
+//
+// Huit personnes portaient ici un identifiant qui ne correspondait à AUCUN
+// compte — vestige d'une base précédente. Les conséquences étaient partout :
+//   • le chat direct écrivait à des destinataires fantômes (143 rattachements
+//     sur 237 pointaient dans le vide, le message n'arrivait jamais) ;
+//   • les avatars et initiales ne se résolvaient plus (recherche par `id`) ;
+//   • l'attribution d'un contact échouait sur la clé étrangère vers profiles.
+//
+// Les identifiants ci-dessous sont désormais ceux de `public.profiles`,
+// retrouvés par adresse e-mail. Cinq personnes (Eric Escourrou, Lucie Perree,
+// Coralia Ortega, Muriel Goepfert, Adrien Wyrwal) n'ont toujours aucun compte :
+// leur identifiant reste fictif tant qu'elles ne sont pas activées.
+//
+// RÈGLE : ne jamais rechercher quelqu'un dans ce fichier par `id`. Toujours
+// par ADRESSE E-MAIL, et ne s'en servir que pour l'habillage (photo, intitulé
+// de poste). La source de vérité des personnes est la table `profiles`.
+
 export const TEAM_MEMBERS: TeamMember[] = [
   {
     id: '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29',
@@ -37,7 +55,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     status: 'Actif',
   },
   {
-    id: '878b36f3-1f8f-4206-af8b-3e4ade7a59fe',
+    id: '41d1f830-1605-4fc4-9362-a38c87b94574',
     name: 'Christophe Hirsch',
     email: 'christophe.hirsch@immosphera.fr',
     role: 'Conseiller Immobilier',
@@ -48,7 +66,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     status: 'Actif',
   },
   {
-    id: '77273e9e-17f2-4dd8-b3c6-40f2845d557c',
+    id: 'de2cb2d6-8280-4db3-b161-f6a58f57a9e5',
     name: 'Clémence Grandguillaume',
     email: 'clemence.grandguillaume@immosphera.fr',
     role: 'Conseillère Immobilier',
@@ -78,7 +96,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     status: 'Actif',
   },
   {
-    id: 'b6fc1112-3c61-44c1-ad45-20ba8e6cc070',
+    id: 'fd611b54-fced-4c6f-bc27-35dbe1d9cc89',
     name: 'Karine Brebion',
     email: 'karine.brebion@immosphera.fr',
     role: 'Conseillère Immobilier & Courtage',
@@ -89,7 +107,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     status: 'Actif',
   },
   {
-    id: '3c6797de-456a-4988-8358-7e3d813e9474',
+    id: '59362ce3-b580-44c8-bf92-b8dd3294e5ea',
     name: 'Laetitia Pioche',
     email: 'laetitia.pioche@immosphera.fr',
     role: 'Conseillère Immobilier',
@@ -100,7 +118,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     status: 'Actif',
   },
   {
-    id: 'a1cc619f-c73d-4359-998c-5dd5254f6348',
+    id: '448bf1fe-a459-4064-b631-72a3d85ad79e',
     name: 'Pauline Segura',
     email: 'pauline.s@immosphera.fr',
     role: 'Conseillère Immobilier',
@@ -111,7 +129,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     status: 'Actif',
   },
   {
-    id: '4fdf3cf2-da17-4ca7-9e3b-ebc8c44d8d0a',
+    id: 'f5c70ff8-66f9-418c-94f5-47c95b3b9cd1',
     name: 'Natacha Jaillet',
     email: 'natacha.jaillet@novavisio.fr',
     role: 'Commerciale NovaVisio',
@@ -155,7 +173,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     status: 'Actif',
   },
   {
-    id: 'bbd92360-bc40-4d41-9c16-fec3ac570dcb',
+    id: '1d7ae155-b4e6-43f2-91c5-8737598d1e5d',
     name: 'Philippe Serra',
     email: 'p.serra@conseilfinances.fr',
     role: 'Gérant & Associé',
@@ -177,7 +195,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     status: 'Actif',
   },
   {
-    id: '4e2a4ef6-6d50-44b3-8e8d-49bb72f0f6d5',
+    id: '3fd7bce8-cdd5-471c-96df-67c10a55d4b6',
     name: 'Sarah Combres',
     email: 'combressarah725@gmail.com',
     role: 'Community Manager Immosphera',
@@ -204,16 +222,16 @@ export const TEAM_MEMBERS: TeamMember[] = [
 const LEGACY_ID_MAP: Record<string, string> = {
   'tm-1': '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29',
   'tm-mg': '15bcec53-de3e-40b8-8b7e-bb6874836f29',
-  'tm-ch': '878b36f3-1f8f-4206-af8b-3e4ade7a59fe',
-  'tm-cg': '77273e9e-17f2-4dd8-b3c6-40f2845d557c',
+  'tm-ch': '41d1f830-1605-4fc4-9362-a38c87b94574',
+  'tm-cg': 'de2cb2d6-8280-4db3-b161-f6a58f57a9e5',
   'tm-ig': '37840474-e0d6-4ef8-938f-abe46da641c7',
-  'tm-kb': 'b6fc1112-3c61-44c1-ad45-20ba8e6cc070',
-  'tm-lp': '3c6797de-456a-4988-8358-7e3d813e9474',
-  'tm-ps': 'a1cc619f-c73d-4359-998c-5dd5254f6348',
-  'tm-2': '4fdf3cf2-da17-4ca7-9e3b-ebc8c44d8d0a',
+  'tm-kb': 'fd611b54-fced-4c6f-bc27-35dbe1d9cc89',
+  'tm-lp': '59362ce3-b580-44c8-bf92-b8dd3294e5ea',
+  'tm-ps': '448bf1fe-a459-4064-b631-72a3d85ad79e',
+  'tm-2': 'f5c70ff8-66f9-418c-94f5-47c95b3b9cd1',
   'tm-4': '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29',
   'tm-6': '8786eb04-9c69-42dd-b691-6c38fcca6899',
-  'tm-7': '4fdf3cf2-da17-4ca7-9e3b-ebc8c44d8d0a',
+  'tm-7': 'f5c70ff8-66f9-418c-94f5-47c95b3b9cd1',
 };
 
 export function getAssignedUser(assignedTo?: string): TeamMember {

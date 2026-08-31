@@ -1477,14 +1477,22 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // il ne la voit que quand son agence active est bien Immosphera, comme
   // n'importe quel autre utilisateur — uniquement basé sur l'agence, jamais
   // sur le rôle. (agencies/activeAgency/isSuperAdmin remontés plus haut)
-  const canSeeImmosphera = useMemo(() => {
-    const list: { name?: string | null; slug?: string | null }[] = Array.isArray(agencies)
-      ? agencies
-      : activeAgency
-        ? [activeAgency]
-        : [];
-    return list.some((a) => /immosphera/i.test(a?.name ?? '') || /immosphera/i.test(a?.slug ?? ''));
-  }, [agencies, activeAgency]);
+  // CORRECTIF (31/08/2026) — signalé : "il ne faut pas que les agences aient
+  // accès aux statistiques d'Immosphera ; Natacha y a accès et Conseils
+  // Finances aussi". La règle ci-dessous DEVAIT déjà se fonder sur la seule
+  // agence active — c'est ce qu'annonçait son commentaire — mais elle testait
+  // `Array.isArray(agencies) ? agencies : [activeAgency]`. Or `agencies` est
+  // TOUJOURS un tableau : le repli sur l'agence active n'était jamais atteint,
+  // et il suffisait qu'Immosphera figure quelque part dans la liste des
+  // agences connues pour que tout le monde voie ses tuiles.
+  const estImmosphera = (a: { name?: string | null; slug?: string | null } | null | undefined) =>
+    /immosphera/i.test(a?.name ?? '') || /immosphera/i.test(a?.slug ?? '');
+
+  const canSeeImmosphera = useMemo(
+    () => estImmosphera(activeAgency),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeAgency?.id],
+  );
 
   // Tuiles Immosphera "extra" (Site internet, Partenaires, Netty,
   // Passerelle, Amanda) — signalé : le super admin (Sylvain) les voyait
@@ -1498,14 +1506,13 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Tuile "Carte" (prospection Novavisio) — même principe que
   // canSeeImmosphera ci-dessus : uniquement selon l'agence active, sans
   // exception de rôle.
-  const canSeeNovavisio = useMemo(() => {
-    const list: { name?: string | null; slug?: string | null }[] = Array.isArray(agencies)
-      ? agencies
-      : activeAgency
-        ? [activeAgency]
-        : [];
-    return list.some((a) => /novavisio/i.test(a?.name ?? '') || /novavisio/i.test(a?.slug ?? ''));
-  }, [agencies, activeAgency]);
+  // Même correctif que canSeeImmosphera juste au-dessus : agence active
+  // uniquement, jamais la liste complète des agences.
+  const canSeeNovavisio = useMemo(
+    () => /novavisio/i.test(activeAgency?.name ?? '') || /novavisio/i.test((activeAgency as any)?.slug ?? ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeAgency?.id],
+  );
 
   // Tuile "Annonce" (30/08/2026) : "que pour les super admin... Philippe,
   // Mélanie et Sylvain qui resteront toujours super admin" — déjà couvert

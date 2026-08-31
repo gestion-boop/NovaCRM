@@ -171,7 +171,13 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   }, []);
 
   // ── Avatar & agence ───────────────────────────────────────────────────
-  const teamMember = TEAM_MEMBERS.find((m) => m.id === currentUser?.uid);
+  // Recherche par ADRESSE E-MAIL et non par `id` : les identifiants de
+  // teamMembers.ts ont été resynchronisés le 31/08/2026, mais l'e-mail reste
+  // le seul repère stable entre ce fichier d'habillage et les vrais comptes.
+  // C'est ce qui privait Natacha de sa photo de profil.
+  const teamMember = TEAM_MEMBERS.find(
+    (m) => m.email.toLowerCase() === (currentUser?.email || '').toLowerCase(),
+  ) || TEAM_MEMBERS.find((m) => m.id === currentUser?.uid);
   const avatarUrl = teamMember?.avatarUrl || currentUser?.photoURL || null;
   const initials = (firstName || 'U').charAt(0).toUpperCase();
   const normalizeAgencyName = (v?: string) => (v || '').trim().toLowerCase();
