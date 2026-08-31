@@ -80,9 +80,39 @@ export const CONSEILS_FINANCES_AGENCY_ID = '30f96ea9-41da-41c2-a95e-f5e7898f8d8e
 
 export const DEFAULT_TASK_TITLES = ['Appeler le client','A faire','Att retour caution','Att retour client','Att retour banque','Att documents client','Att retour Back-office','Att retour assurance','Att accord banque','Att offre de prêt','Att décompte','Att date de signature','Envoi ODP notaire'];
 
-export const DEFAULT_TASK_TITLES_IMMOSPHERA = ['Appeler le client','Att retour client','Att retour visite','Att offre d\'achat'];
+// Immosphera — parcours d'une transaction immobilière, du premier rendez-vous
+// à l'acte. Même style d'abréviation que Conseils Finances (« Att … »).
+export const DEFAULT_TASK_TITLES_IMMOSPHERA = [
+  'Appeler le client',
+  'A faire',
+  'Att RDV client',
+  'Att RDV R1',
+  'Att RDV R2',
+  'Att retour visite',
+  'Att offre d\'achat',
+  'Att réponse vendeur',
+  'Att confirmation financement',
+  'Att date de compromis',
+  'Date compromis',
+  'Att levée des conditions',
+  'Date acte authentique',
+];
 
-export const DEFAULT_TASK_TITLES_NOVAVISIO = ['Appeler le client','Att retour client','Att retour devis','Planifier la prise de vue'];
+// NovaVisio — production de visites virtuelles et de contenus : validation du
+// projet, tournage, livraison.
+export const DEFAULT_TASK_TITLES_NOVAVISIO = [
+  'Appeler le client',
+  'A faire',
+  'Att retour client',
+  'Att documents client',
+  'Att validation devis',
+  'Att confirmation projet',
+  'Planifier la prise de vue',
+  'Att retour prestataire',
+  'Projet à livrer',
+  'Att validation finale',
+  'Relancer le client',
+];
 
 /** Libellés de départ d'une agence, d'après son nom. */
 export function defaultTaskTitlesFor(agencyName?: string | null): string[] {
