@@ -714,11 +714,18 @@ export const AgendaView: React.FC = () => {
                         // personnalisable pour tout le calendrier désormais
                         // (variables déjà posées par ce réglage, jamais lues
                         // ici jusqu'à présent).
+                        //
+                        // Opacité portée de 0,2 à 0,7 le 31/08/2026, demande
+                        // explicite : "les couleurs de l'agenda sont fades, le
+                        // jaune ne ressort pas". Au passage la lisibilité y
+                        // gagne : --calendar-accent-text-color (#061719) est
+                        // calculée pour se lire SUR la couleur d'accent, pas
+                        // sur un fond délavé au cinquième.
                         className={`text-[9px] px-1.5 py-0.5 rounded truncate border ${ev.busy === false ? 'opacity-60 border-dashed' : ''}`}
                         style={{
-                          backgroundColor: 'rgba(var(--calendar-accent-color-rgb), 0.2)',
+                          backgroundColor: 'rgba(var(--calendar-accent-color-rgb), 0.7)',
                           color: 'var(--calendar-accent-text-color)',
-                          borderColor: 'rgba(var(--calendar-accent-color-rgb), 0.35)',
+                          borderColor: 'rgba(var(--calendar-accent-color-rgb), 0.95)',
                         }}
                         title={ev.busy === false ? 'Disponible' : 'Occupé'}
                       >
@@ -824,9 +831,9 @@ export const AgendaView: React.FC = () => {
                       style={{
                         top: `${top}px`,
                         height: `${heightPx}px`,
-                        backgroundColor: 'rgba(var(--calendar-accent-color-rgb), 0.2)',
+                        backgroundColor: 'rgba(var(--calendar-accent-color-rgb), 0.7)',
                         color: 'var(--calendar-accent-text-color)',
-                        borderColor: 'rgba(var(--calendar-accent-color-rgb), 0.4)',
+                        borderColor: 'rgba(var(--calendar-accent-color-rgb), 0.95)',
                       }}
                       className={`absolute left-1 right-1 rounded p-1.5 overflow-hidden shadow-md cursor-pointer z-10 border ${ev.busy === false ? 'opacity-60 border-dashed' : ''}`}
                       title={ev.busy === false ? 'Disponible' : 'Occupé'}
@@ -899,9 +906,9 @@ export const AgendaView: React.FC = () => {
                   style={{
                     top: `${top}px`,
                     height: '76px',
-                    backgroundColor: 'rgba(var(--calendar-accent-color-rgb), 0.2)',
+                    backgroundColor: 'rgba(var(--calendar-accent-color-rgb), 0.7)',
                     color: 'var(--calendar-accent-text-color)',
-                    borderColor: 'rgba(var(--calendar-accent-color-rgb), 0.4)',
+                    borderColor: 'rgba(var(--calendar-accent-color-rgb), 0.95)',
                   }}
                   className="absolute left-2 right-4 rounded-lg p-3 overflow-hidden shadow-lg cursor-pointer z-10 border"
                 >
