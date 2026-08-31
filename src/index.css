@@ -1078,9 +1078,21 @@ main[class*="bg-[#071015]/55" i] {
    utilitaires Tailwind `bg-…`/`border-…` (0,1,0) sans `!important`, ce qui
    laisse les règles plus spécifiques — le liseré doré au focus,
    `.focus:border-[#F7BC5F]:focus` (0,2,0) — continuer de l'emporter. */
-input[class]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
-select[class],
-textarea[class] {
+/* `:not([class~="bg-transparent"])` — signalé le 31/08/2026 : « c'est noir sur
+   le texte en bas ». La barre de saisie de Nova, sur l'écran d'accueil, est
+   volontairement CLAIRE dans les deux thèmes : elle se pose sur la zone
+   lumineuse du fond d'écran et porte un texte foncé. Sa zone de texte demande
+   explicitement `bg-transparent` pour laisser voir cette barre. La règle
+   ci-dessous la repeignait quand même en `--nv-field`, soit un fond très
+   sombre en mode nuit : texte foncé sur fond foncé, illisible. Un champ qui
+   déclare `bg-transparent` sait ce qu'il fait — on ne le touche plus.
+   `~=` et non `*=` : il faut une classe entière. `*=` attraperait aussi le
+   `file:bg-transparent` de `components/ui/input.tsx`, qui ne concerne que le
+   bouton interne de sélection de fichier — tous les champs shadcn auraient
+   alors perdu leur fond. */
+input[class]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([class~="bg-transparent"]),
+select[class]:not([class~="bg-transparent"]),
+textarea[class]:not([class~="bg-transparent"]) {
   background-color: var(--nv-field);
   border-color: var(--nv-field-border);
 }

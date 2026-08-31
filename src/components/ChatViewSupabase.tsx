@@ -181,6 +181,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // changement sur `message_reactions` concerne CETTE conversation avant de
   // déclencher un rechargement ciblé.
   const convMessageIdsRef = useRef<Set<string>>(new Set());
+  // Verrous d'envoi — un message à la fois par composeur. Un `useRef` et non
+  // un `useState` : la valeur doit être lue et écrite dans le même tic, avant
+  // tout nouveau rendu, sinon la garde arrive trop tard.
+  const sendingConvRef = useRef(false);
+  const sendingChannelRef = useRef(false);
   useEffect(() => {
     convMessageIdsRef.current = new Set(convMessages.map((m) => m.id));
   }, [convMessages]);
@@ -600,6 +605,27 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setConvMessages((prev) => {
       const byId = new Map(prev.map((m) => [m.id, m]));
       rows.forEach((m) => byId.set(m.id, m));
+
+      // Signalé (31/08/2026) : "le message dans chat part deux fois".
+      // Cette fusion par id a remplacé un remplacement pur de la liste ; or
+      // `sendConvMessage` affiche d'abord un écho optimiste portant un id
+      // provisoire (`optimistic-…`) qui ne correspondra JAMAIS à l'uuid de
+      // la ligne réelle. Il n'était donc plus jamais retiré, et le message
+      // restait affiché en double. Le correctif principal est dans
+      // `sendConvMessage` (l'id provisoire y devient l'id réel dès la
+      // réponse de la base) ; ce filet rattrape les cas où cette réponse
+      // n'est jamais arrivée — perte de réseau juste après l'écriture.
+      const reels = Array.from(byId.values()).filter((m) => !m.id.startsWith('optimistic-'));
+      Array.from(byId.keys())
+        .filter((id) => id.startsWith('optimistic-'))
+        .forEach((id) => {
+          const echo = byId.get(id)!;
+          const couvert = reels.some(
+            (r) => r.user_id === echo.user_id && r.kind === echo.kind && r.body === echo.body,
+          );
+          if (couvert) byId.delete(id);
+        });
+
       return Array.from(byId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
     });
     if (rows.length > 0) {
@@ -831,6 +857,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const sendConvMessage = async () => {
     const body = convDraft.trim();
     if (!body || !activeConversationId || !currentUser) return;
+    // Deux envois ne peuvent plus se chevaucher : `setConvDraft('')` ne prend
+    // effet qu'au rendu suivant, donc deux appels dans le même tic lisaient
+    // tous les deux le même brouillon et écrivaient deux fois en base
+    // (Entrée maintenue enfoncée, clavier mobile qui répète l'événement,
+    // double appui sur le bouton d'envoi...).
+    if (sendingConvRef.current) return;
+    sendingConvRef.current = true;
     setConvDraft('');
 
     // Signalé : le message met ~18s à apparaître, et le destinataire le
@@ -843,8 +876,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // notification push du destinataire suit un circuit indépendant et
     // souvent plus rapide. On affiche donc le message immédiatement côté
     // expéditeur ; le rechargement Realtime qui suit remplace ensuite cet
-    // état provisoire par la version réelle (id, accusés...) sans doublon
-    // puisque `loadConvMessages` remplace toute la liste.
+    // état provisoire par la version réelle (id, accusés...).
+    //
+    // ATTENTION (31/08/2026) : ce remplacement ne va PAS de soi. Il tenait à
+    // l'origine au fait que `loadConvMessages` réécrivait toute la liste ;
+    // cette fonction fusionne désormais par id, et l'écho ci-dessous a
+    // justement un id qui n'existe pas en base — d'où le message affiché en
+    // double, signalé. C'est la reprise de l'id réel, plus bas, qui rend le
+    // remplacement effectif. Ne pas la retirer.
     const optimisticId = `optimistic-${Date.now()}`;
     setConvMessages((prev) => [
       ...prev,
@@ -862,28 +901,52 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       },
     ]);
 
-    const { data: inserted, error } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: activeConversationId,
-        user_id: currentUser.uid,
-        kind: 'text',
-        body,
-      } as any)
-      .select('id')
-      .single();
+    let inserted: { id?: string } | null = null;
+    let error: unknown = null;
+    try {
+      const res = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: activeConversationId,
+          user_id: currentUser.uid,
+          kind: 'text',
+          body,
+        } as any)
+        .select('id')
+        .single();
+      inserted = res.data as { id?: string } | null;
+      error = res.error;
+    } catch (e) {
+      // Réseau coupé en plein envoi : sans ce filet, le verrou resterait
+      // fermé et plus AUCUN message ne pourrait partir jusqu'au rechargement
+      // de la page.
+      error = e;
+    }
 
     if (error) {
       // L'envoi a échoué : on retire l'écho optimiste et on restaure le
       // brouillon pour ne pas faire croire que le message est parti.
       setConvMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setConvDraft(body);
+      sendingConvRef.current = false;
       return;
     }
 
+    // L'écho provisoire prend immédiatement l'identifiant réel renvoyé par
+    // la base. La fusion de `loadConvMessages` le reconnaît alors et le
+    // remplace au lieu d'ajouter une seconde copie à côté — c'est ce qui
+    // faisait apparaître chaque message en double.
+    const realId = inserted?.id;
+    if (realId) {
+      setConvMessages((prev) => prev.map((m) => (m.id === optimisticId ? { ...m, id: realId } : m)));
+    } else {
+      setConvMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+    }
+    sendingConvRef.current = false;
+
     await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', activeConversationId);
     loadConversations(true);
-    void inserted; // le push est géré côté base (voir note ci-dessous)
+    // le push est géré côté base (voir note ci-dessous)
 
     // Ticket #12 (nouvelle base, correctif) : un déclencheur existe déjà
     // côté base pour envoyer le push à la réception d'un message — l'appel
@@ -1329,8 +1392,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const sendMessage = async () => {
     if (!draft.trim() || !activeChannel || !currentUser) return;
+    // Même garde que pour les conversations directes : voir sendConvMessage.
+    if (sendingChannelRef.current) return;
+    sendingChannelRef.current = true;
     const body = draft.trim();
     setDraft('');
+    try {
     await supabase.from('chat_messages').insert({
       // Signalé : "les Novadji dans les messages ne se mettent pas" — en
       // creusant, la colonne `id` de `chat_messages` n'a pas de valeur par
@@ -1350,6 +1417,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
     } as any);
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
+    } finally {
+      sendingChannelRef.current = false;
+    }
   };
 
   const sendNovaChannelMessage = async (novaSrc: string) => {
@@ -2041,7 +2111,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   <input
                     value={convDraft}
                     onChange={(e) => setConvDraft(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && sendConvMessage()}
+                    onKeyDown={(e) => {
+                      // `isComposing` : sur clavier mobile et en saisie
+                      // accentuée, Entrée peut arriver deux fois pour une
+                      // seule frappe. `repeat` : touche maintenue enfoncée.
+                      if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.repeat) return;
+                      e.preventDefault();
+                      void sendConvMessage();
+                    }}
                     placeholder="Écrire un message..."
                     disabled={isRecordingConv}
                     className="w-full bg-[#0b1c1e] border border-white/20 rounded-full px-5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] disabled:opacity-40"
@@ -2294,7 +2371,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 <input
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                  onKeyDown={(e) => {
+                    // Voir commentaire équivalent côté conversations directes.
+                    if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.repeat) return;
+                    e.preventDefault();
+                    void sendMessage();
+                  }}
                   placeholder="Écrire un message..."
                   className="flex-1 bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
                 />
