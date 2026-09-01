@@ -1270,11 +1270,23 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       || siennes[0]
       || null;
 
-    const { data: conv, error } = await supabase
+    // L'identifiant est généré ici plutôt que demandé à la base.
+    //
+    // Auparavant on faisait `.insert(...).select().single()`, ce qui demande à
+    // PostgreSQL de RELIRE la ligne juste créée. Or la règle de lecture des
+    // conversations, ouverte ce soir aux échanges inter-agences, exige d'être
+    // MEMBRE de la conversation — et à cet instant précis elle n'a encore
+    // aucun membre, ils sont ajoutés juste après. La relecture échouait donc,
+    // et l'échec remontait sous la forme trompeuse « new row violates
+    // row-level security policy », qui désigne d'ordinaire un refus
+    // d'écriture. On a cherché du mauvais côté un bon moment.
+    //
+    // En fournissant l'identifiant, plus besoin de relire quoi que ce soit.
+    const conversationId = crypto.randomUUID();
+    const { error } = await supabase
       .from('conversations')
-      .insert({ type: 'direct', title: null, created_by: currentUser.uid, agency_id: agencePartagee } as any)
-      .select()
-      .single();
+      .insert({ id: conversationId, type: 'direct', title: null, created_by: currentUser.uid, agency_id: agencePartagee } as any);
+    const conv = error ? null : { id: conversationId };
     if (error || !conv) {
       // Cet échec était avalé en silence : on cliquait sur un nom, la fenêtre
       // se fermait, et rien ne se passait.
@@ -1320,16 +1332,19 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         || miennesG[0]
         || agencesDeChacun.flat()[0]
         || null;
-      const { data: conv, error } = await supabase
+      // Même raison que pour les conversations directes : pas de relecture
+      // après insertion, elle échoue tant que le groupe n'a pas de membre.
+      const groupeId = crypto.randomUUID();
+      const { error } = await supabase
         .from('conversations')
         .insert({
+          id: groupeId,
           type: 'group',
           title: groupTitle.trim(),
           created_by: currentUser.uid,
           agency_id: agenceGroupe,
-        } as any)
-        .select()
-        .single();
+        } as any);
+      const conv = error ? null : { id: groupeId };
       // Signalé (31/08/2026) : « impossible de créer un groupe de discussion ».
       // Même défaut que pour les conversations directes, corrigé ce matin :
       // l'échec était avalé — la fenêtre se fermait sans rien dire, et l'erreur

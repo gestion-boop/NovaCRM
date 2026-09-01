@@ -74,6 +74,9 @@ function App() {
   const { tasks = [] } = useTasks();
   const isMobile = useIsMobile();
   const isCoarsePointer = useIsCoarsePointer();
+  // Agence active = Immosphera ? Sert au cloisonnement des écrans réservés à
+  // cette agence (voir la vue Statistiques plus bas).
+  const estAgenceImmosphera = /immosphera/i.test(activeAgency?.name ?? '');
 
   const unreadRemindersCount = countTodayAndOverdueTasks(tasks);
 
@@ -1000,7 +1003,25 @@ function App() {
 
           {currentNav === 'agenda' && <AgendaView />}
 
-          {currentNav === 'statistiques-etiquettes' && <StatistiquesEtiquettesView onSelectContact={setSelectedClientProfileId} />}
+          {/* Cloisonnement (31/08/2026) : « les statistiques ne doivent
+              apparaître que dans Immosphera ». La TUILE était déjà filtrée par
+              l'agence active, mais l'écran lui-même ne l'était pas : on y
+              arrivait encore par un lien, une navigation mémorisée ou un
+              onglet rouvert au même endroit. Le filtre d'une tuile est un
+              confort d'affichage, pas une barrière. */}
+          {currentNav === 'statistiques-etiquettes' && (
+            estAgenceImmosphera ? (
+              <StatistiquesEtiquettesView onSelectContact={setSelectedClientProfileId} />
+            ) : (
+              <div className="p-12 text-center text-gray-400 bg-white/5 border border-dashed border-white/10 rounded-2xl">
+                <p className="text-sm font-semibold text-white mb-1">Statistiques Immosphera</p>
+                <p className="text-xs">
+                  Cet écran n'est disponible que depuis l'agence Immosphera.
+                  Changez d'agence active pour y accéder.
+                </p>
+              </div>
+            )
+          )}
 
           {currentNav === 'rappels' && (
             <RappelsView
