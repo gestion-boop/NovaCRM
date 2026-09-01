@@ -803,11 +803,15 @@ export const ProjetsInternes: React.FC<
           </div>
         </div>
 
-        {pageTab === 'projet' && (
+        {/* Affiché sur les deux onglets depuis le 31/08/2026 : c'est le seul
+            moyen de créer un projet, le masquer sur l'onglet Liste n'apportait
+            rien et obligeait à revenir en arrière pour le retrouver. */}
+        {pageTab !== 'tableaux' && (
           <button
             onClick={() => {
               setError(null);
               setSuccess(null);
+              setPageTab('projet');
               setShowAddModal(true);
             }}
             className="bg-[#F7BC5F] hover:bg-[#d9ab38] text-black font-semibold text-xs px-4 py-2 rounded-xl flex items-center gap-2 shadow-md"
@@ -891,11 +895,29 @@ export const ProjetsInternes: React.FC<
           </div>
 
           {visibleProjects.length === 0 ? (
+            /* Signalé (31/08/2026) : impossible de créer un nouveau projet
+               indépendant dans une agence. Le bouton « + Projet » existait,
+               mais uniquement en haut de page — et cet écran vide n'offrait
+               aucune issue.
+               Le cas est devenu courant depuis le cloisonnement des projets
+               internes posé le même jour : on ne voit plus que les projets
+               auxquels on est invité, donc beaucoup d'agences affichent
+               désormais cette page vide. Elle devait proposer la sortie. */
             <div className="p-12 text-center text-gray-500 bg-white/5 border border-dashed border-white/10 rounded-2xl">
               <FolderKanban className="w-9 h-9 mx-auto mb-3 text-gray-600" />
               <p className="text-sm">
                 Aucun projet interne pour cette structure.
               </p>
+              <p className="text-xs text-gray-600 mt-1">
+                Créez-en un pour commencer à suivre vos objectifs d'agence.
+              </p>
+              <button
+                onClick={() => { setError(null); setSuccess(null); setShowAddModal(true); }}
+                className="mt-5 bg-[#F7BC5F] hover:bg-[#d9ab38] text-black font-semibold text-sm px-5 py-2.5 rounded-xl inline-flex items-center gap-2 shadow-md"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Créer un projet</span>
+              </button>
             </div>
           ) : projectsViewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
