@@ -6,7 +6,7 @@ import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Users, Coins, Briefcase, CheckCircle2, ArrowRight, Building, Sparkles, Pencil, TrendingUp, TrendingDown } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { useContacts } from '@/hooks/useContacts';
+import { useContacts, matchesAgency } from '@/hooks/useContacts';
 import { useDeals } from '@/hooks/useDeals';
 import { useTasks } from '@/hooks/useTasks';
 
@@ -146,9 +146,13 @@ export default function Dashboard({
     // part donc de `allDeals`, qui contient les affaires archivees, au lieu
     // de `deals`, d'ou elles sont retirees pour le pipeline. Le filtre par
     // agence, lui, reste — chaque agence a son chiffre.
-    const perimetre = allDeals.filter(
-      (d) => activeAgency.id === 'all' || d.agencyId === activeAgency.id
-    );
+    // `matchesAgency` et non un `===` : la colonne agency_id porte encore,
+    // sur beaucoup de fiches, un identifiant hérité (« immosphera »,
+    // « agency-2 »...) au lieu de l'UUID. Toute l'application passe par cette
+    // fonction ; ma comparaison brute écartait donc en silence les fiches
+    // ImmoSphera les plus anciennes — c'est ce qui a fait disparaître les
+    // 53 000 € signalés le 1er septembre.
+    const perimetre = allDeals.filter((d) => matchesAgency(d.agencyId, activeAgency.id));
 
     // Le pipeline d'une affaire se lit d'abord sur SON ÉTAPE, et seulement
     // ensuite sur la colonne pipeline_id du dossier.
