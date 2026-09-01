@@ -213,7 +213,42 @@ export const useDeals = () => {
         patch.pipeline_id = targetPipelineId;
       }
       if (updates.stage !== undefined) {
-        patch.stage_id = resolveStageId(updates.stage, targetPipelineId);
+        // INCIDENT DU 1er SEPTEMBRE — « deux fiches que j'ai mises dans
+        // À facturer ont disparu ».
+        //
+        // Le nom d'étape est converti en identifiant depuis la liste EN
+        // CACHE. Une étape créée à l'instant n'y figure pas encore : la
+        // conversion renvoyait alors `null`… et ce `null` était écrit tel
+        // quel. L'affaire perdait réellement son étape en base, et plus
+        // aucun rechargement ne pouvait la remettre à sa place.
+        //
+        // On relit donc les étapes avant d'abandonner, et si le nom reste
+        // introuvable on REFUSE le déplacement au lieu de détacher le
+        // dossier en silence.
+        let stageId = resolveStageId(updates.stage, targetPipelineId);
+
+        if (!stageId) {
+          const { data: fraiches } = await supabase
+            .from('pipeline_stages')
+            .select('id, name, pipeline_id')
+            .eq('pipeline_id', targetPipelineId || '');
+          const trouvee = ((fraiches as { id: string; name: string }[]) || []).find(
+            (row) => row.name.trim().toLowerCase() === updates.stage!.trim().toLowerCase()
+          );
+          stageId = trouvee?.id ?? null;
+          if (stageId) {
+            // La liste en mémoire était périmée : on la rafraîchit pour que
+            // le reste de l'écran retombe sur ses pieds.
+            void queryClient.invalidateQueries({ queryKey: ['pipeline-stages-all'] });
+          }
+        }
+
+        if (!stageId) {
+          throw new Error(
+            `L'étape « ${updates.stage} » est introuvable dans ce pipeline. Rechargez la page : le dossier n'a pas été déplacé.`
+          );
+        }
+        patch.stage_id = stageId;
       }
       // Signalé (ticket #219) : `agencyId` pouvait être modifié ici sans
       // aucune vérification — capacité non utilisée par le moindre
