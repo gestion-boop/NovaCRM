@@ -655,6 +655,8 @@ function App() {
   // bas retire alors son « + Écrire », l'écran de lecture ayant ses propres
   // boutons Répondre / Transférer.
   const [mailReading, setMailReading] = useState(false);
+  // Même mécanisme que la messagerie, pour le « + » de l'écran Agenda.
+  const [agendaCreateSignal, setAgendaCreateSignal] = useState(0);
   // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (14/16) : brouillon
   // pré-rempli par une automatisation de pipeline (jamais d'envoi silencieux).
   const [mailComposeSubject, setMailComposeSubject] = useState<string | null>(null);
@@ -1027,7 +1029,7 @@ function App() {
             <ProjetsInternes agencyId={activeAgency.id} />
           )}
 
-          {currentNav === 'agenda' && <AgendaView />}
+          {currentNav === 'agenda' && <AgendaView createSignal={agendaCreateSignal} />}
 
           {/* Cloisonnement (31/08/2026) : « les statistiques ne doivent
               apparaître que dans Immosphera ». La TUILE était déjà filtrée par
@@ -1543,7 +1545,14 @@ function App() {
           onOpenNova={() => openNovaMobile()}
           // Le « + » n'apparaît que sur l'écran Mail — ailleurs, la barre
           // garde ses trois boutons (Accueil / Nova / Menu).
-          onCompose={currentNav === 'mail' && !mailReading ? () => setMailComposeSignal((n) => n + 1) : undefined}
+          onCompose={
+            currentNav === 'mail' && !mailReading
+              ? () => setMailComposeSignal((n) => n + 1)
+              : currentNav === 'agenda'
+                ? () => setAgendaCreateSignal((n) => n + 1)
+                : undefined
+          }
+          composeLabel={currentNav === 'agenda' ? 'Ajouter' : 'Écrire'}
           unreadMessagesCount={unreadMessagesCount}
           unreadNotificationsCount={unreadMobileNotificationsCount}
           unreadRemindersCount={unreadRemindersCount}

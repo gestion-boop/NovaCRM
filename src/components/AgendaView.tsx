@@ -9,6 +9,7 @@ import {
   eachDayOfInterval, parseISO, isToday
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   fetchGoogleCalendarEvents,
   createGoogleCalendarEvent,
@@ -96,7 +97,20 @@ const INITIAL_EVENTS: EventItem[] = MAPPED_TRANSFERRED_EVENTS;
 
 type ViewMode = 'month' | 'week' | 'day' | 'list';
 
-export const AgendaView: React.FC = () => {
+interface AgendaViewProps {
+  // Compteur incrémenté par le « + » de la barre du bas (téléphone) : ouvre
+  // la fenêtre de création d'événement. Un compteur et non un booléen, et on
+  // mémorise la dernière valeur traitée — sinon revenir sur l'Agenda
+  // rouvrirait la fenêtre tout seul, comme c'était arrivé sur la messagerie.
+  createSignal?: number;
+}
+
+export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
+  // L'agenda n'avait aucune adaptation mobile : vue Semaine par défaut (sept
+  // colonnes sur un téléphone), hauteur figée à 90 % de l'écran, et un en-tête
+  // de trois lignes avant le premier rendez-vous. Voir plus bas.
+  const isMobile = useIsMobile();
+  const dernierCreateSignal = useRef(createSignal ?? 0);
   const { currentUser, userProfile, activeAgency } = useAuth();
 
   // Réservations caméra : visibles uniquement sur les agendas Immosphera et
@@ -113,7 +127,13 @@ export const AgendaView: React.FC = () => {
   const isCameraAgendaAdmin = !!currentUser && CAMERA_ADMIN_UIDS.includes(currentUser.uid);
   const [events, setEvents] = useState<EventItem[]>(INITIAL_EVENTS);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
+  // Sur téléphone, la vue Semaine est illisible (sept colonnes d'heures sur
+  // 390 px). On ouvre sur la Liste, calquée sur l'agenda d'iOS. Lu une seule
+  // fois, à la construction : pas de bascule sous les yeux de l'utilisateur,
+  // et son choix suivant n'est jamais écrasé.
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    () => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'list' : 'week')
+  );
   
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -383,6 +403,15 @@ export const AgendaView: React.FC = () => {
     setBusy(true);
     setShowModal(true);
   };
+
+  useEffect(() => {
+    const signal = createSignal ?? 0;
+    if (signal === dernierCreateSignal.current) return;
+    dernierCreateSignal.current = signal;
+    if (!signal) return;
+    handleOpenModal(currentDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createSignal]);
 
   // Ouvre le modal en mode édition, pré-rempli avec l'événement existant.
   // Toute modification enregistrée sera poussée vers Google Calendar si
@@ -752,7 +781,11 @@ export const AgendaView: React.FC = () => {
     const hours = Array.from({ length: 14 }, (_, i) => i + 7); // 7:00 to 20:00
 
     return (
-      <div className="flex flex-col h-full bg-[#0E1A20] rounded-xl border border-white/10 overflow-hidden relative">
+      // Sept colonnes d'heures sur 390 px sont illisibles : sur téléphone, la
+      // grille garde une largeur minimale et défile horizontalement, plutôt
+      // que d'écraser chaque jour sur 50 px.
+      <div className={`flex flex-col h-full bg-[#0E1A20] rounded-xl border border-white/10 relative ${isMobile ? 'overflow-x-auto' : 'overflow-hidden'}`}>
+        <div className={isMobile ? 'min-w-[680px] flex flex-col h-full' : 'contents'}>
         <div className="flex shrink-0">
           {/* Time column header */}
           <div className="w-16 border-r border-b border-white/10 bg-white/5 shrink-0"></div>
@@ -846,6 +879,7 @@ export const AgendaView: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
         </div>
       </div>
     );
@@ -1019,8 +1053,82 @@ export const AgendaView: React.FC = () => {
     </div>
   );
 
+  // Libellé de la période affichée, commun à l'en-tête d'ordinateur et à
+  // celui du téléphone.
+  const titrePeriode = viewMode === 'month' || viewMode === 'list'
+    ? format(currentDate, 'MMMM yyyy', { locale: fr })
+    : viewMode === 'week'
+      ? `${format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'd MMM', { locale: fr })} – ${format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'd MMM yyyy', { locale: fr })}`
+      : format(currentDate, 'd MMMM yyyy', { locale: fr });
+
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto h-[90vh] flex flex-col text-white">
+    // `h-[90vh]` dépassait la zone utile : la coquille réserve déjà de la place
+    // pour la barre de navigation, le bas de l'agenda passait donc dessous.
+    <div className={`${isMobile ? 'h-full px-2 pt-2' : 'p-4 sm:p-6 h-[90vh]'} max-w-7xl mx-auto flex flex-col text-white`}>
+      {/* EN-TÊTE TÉLÉPHONE — une ligne pour naviguer, une ligne d'onglets.
+          L'ancien bloc (titre « Mon Agenda », sous-titre, quatre onglets, Sync
+          et Ajouter) occupait trois lignes avant le premier rendez-vous, et
+          les onglets débordaient. Ici, tout tient en deux lignes ; « Ajouter »
+          rejoint le « + » de la barre du bas, comme sur la messagerie. */}
+      {isMobile && (
+        <div className="shrink-0 flex flex-col gap-2 mb-2">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={navigatePrevious}
+              aria-label="Période précédente"
+              className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-slate-300 active:bg-white/10"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <span className="flex-1 min-w-0 text-center text-base font-bold text-white capitalize truncate">
+              {titrePeriode}
+            </span>
+            <button
+              onClick={navigateNext}
+              aria-label="Période suivante"
+              className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-slate-300 active:bg-white/10"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setCurrentDate(new Date())}
+              className="px-3 h-9 shrink-0 rounded-full bg-white/5 border border-white/10 text-xs font-bold text-slate-200 active:bg-white/10"
+            >
+              Auj.
+            </button>
+            <button
+              onClick={handleConnectGoogle}
+              disabled={syncing}
+              aria-label={isGoogleConnected ? 'Synchroniser' : 'Connecter Google'}
+              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center border ${
+                isGoogleConnected
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-white/10 border-white/20 text-white'
+              }`}
+            >
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {/* Sélecteur de vue, à la manière d'iOS : quatre segments de largeur
+              égale, toujours entièrement visibles. */}
+          <div className="flex p-1 bg-white/5 border border-white/10 rounded-2xl">
+            {([['list', 'Liste'], ['day', 'Jour'], ['week', 'Semaine'], ['month', 'Mois']] as const).map(([mode, libelle]) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`flex-1 py-2 text-[13px] font-bold rounded-xl transition-colors ${
+                  viewMode === mode ? 'bg-white/15 text-white' : 'text-gray-400'
+                }`}
+              >
+                {libelle}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isMobile && (<>
       {/* Signalé (30/08/2026, capture à l'appui) : "on ne peut pas voir le
           haut, mets un fond comme les autres panneaux" — aucun fond du
           tout ici, la photo de fond de page passait entièrement à travers
@@ -1088,6 +1196,8 @@ export const AgendaView: React.FC = () => {
         </div>
       </div>
 
+      </>)}
+
       {statusMessage && (
         <div className="p-3 mb-4 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs flex items-center justify-between shrink-0">
           <span>{statusMessage}</span>
@@ -1095,7 +1205,9 @@ export const AgendaView: React.FC = () => {
         </div>
       )}
 
-      {/* Date Header / Navigation */}
+      {/* Date Header / Navigation — remplacée sur téléphone par l'en-tête
+          compact ci-dessus, qui porte déjà les flèches et « Aujourd'hui ». */}
+      {!isMobile && (<>
       {/* Signalé (mode jour) : "le texte en haut n'est pas lisible". Cette
           barre était en `bg-white/5`, un voile translucide sans fond réel :
           posée entre deux cartes blanches, elle laissait voir la photo de
@@ -1124,6 +1236,8 @@ export const AgendaView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      </>)}
 
       {/* Calendar Area */}
       <div className="flex-1 overflow-hidden">

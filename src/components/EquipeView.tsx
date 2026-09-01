@@ -1300,6 +1300,11 @@ const InviteCollaboratorModal: React.FC<{ onClose: () => void; onInvited: () => 
   // arrive connectée et peut ensuite utiliser son compte Google.
   const [sendInviteEmail, setSendInviteEmail] = useState(true);
   const [createdLink, setCreatedLink] = useState<string | null>(null);
+  // Le nom du collaborateur, retenu au moment de la création. `fullName`
+  // est une variable LOCALE à submit() : la réutiliser dans l'affichage
+  // ci-dessous levait une erreur et vidait l'écran « Compte activé »,
+  // celui qu'on voit justement quand aucun e-mail n'est envoyé.
+  const [createdName, setCreatedName] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   // Ticket #229 : "Inviter un stagiaire" ouvrait auparavant un formulaire
   // dédié (rubrique "Gestion des utilisateurs", supprimée) avec des champs
@@ -1365,6 +1370,7 @@ const InviteCollaboratorModal: React.FC<{ onClose: () => void; onInvited: () => 
         // On garde la fenêtre ouverte : le lien ne s'affiche qu'ici, il
         // serait perdu en fermant. `onInvited()` (qui ferme et recharge la
         // liste) est appelé à la fermeture volontaire.
+        setCreatedName(fullName);
         setCreatedLink(body.actionLink);
         toast.success('Compte activé. Transmettez le lien de connexion.');
         return;
@@ -1386,7 +1392,7 @@ const InviteCollaboratorModal: React.FC<{ onClose: () => void; onInvited: () => 
             <UserPlus className="w-5 h-5 text-emerald-400" /> Compte activé
           </h3>
           <p className="text-xs text-slate-300 leading-relaxed mb-4">
-            <b>{fullName || email}</b> est maintenant attribuable sur les contacts.
+            <b>{createdName || email}</b> est maintenant attribuable sur les contacts.
             Aucun e-mail n'a été envoyé. Transmettez-lui ce lien quand vous le
             souhaitez : il ouvre directement sa session, et il pourra ensuite se
             connecter avec son compte Google.
