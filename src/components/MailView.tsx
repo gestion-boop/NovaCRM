@@ -715,6 +715,12 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
         ? `Supprimer définitivement ces ${list.length} courriels ? Cette action est irréversible.`
         : 'Supprimer définitivement ce courriel ? Cette action est irréversible.';
       if (!window.confirm(question)) return false;
+    } else if (list.length > 1) {
+      // Signalé : « je coche des messages, j'appuie sur corbeille et ça part
+      // directement ». Un balayage ne vise qu'un message et reste facile à
+      // rattraper ; une sélection peut en emporter dix d'un seul geste, sans
+      // aucune annulation possible ensuite. Ce lot-là se confirme.
+      if (!window.confirm(`Mettre ces ${list.length} messages à la corbeille ?`)) return false;
     }
     setActionBusy(list[0].id);
     const done: string[] = [];
