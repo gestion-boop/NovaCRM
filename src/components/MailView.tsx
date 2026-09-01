@@ -972,7 +972,11 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
     // s'étendre avec la liste. L'ordinateur garde `h-full`, dont dépendent la
     // colonne latérale et le panneau de lecture.
     <div className={`${mobileList ? 'min-h-full' : mobileReader ? 'h-full' : 'p-4 sm:p-6 h-full'} max-w-[1600px] mx-auto flex flex-col gap-2 sm:gap-4 text-white`}>
-      {isMobile ? (
+      {/* `mobileList`, et non `isMobile` : sur téléphone, ce test était
+          toujours vrai, la branche de LECTURE juste en dessous n'était donc
+          jamais atteinte. Appuyer sur un message enregistrait la sélection
+          mais la liste restait affichée — le message ne s'ouvrait pas. */}
+      {mobileList ? (
         <>
           {/* Retours d'action : la liste mobile occupe tout l'écran, le
               message s'affiche donc en surimpression, juste au-dessus de la
