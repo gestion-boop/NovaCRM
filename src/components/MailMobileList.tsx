@@ -3,6 +3,7 @@ import {
   Loader2, Inbox, Menu, Search, X, Star, RefreshCw, Trash2, MailOpen, Mail,
   FolderOpen, Check,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { GmailMessageSummary, GmailUserLabel } from '@/lib/workspace';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 
@@ -34,6 +35,11 @@ interface MailMobileListProps {
   folders: MailMobileFolder[];
   activeFolderId: string;
   activeFolderLabel: string;
+  // Vraie corbeille (et non un dossier personnalisé ouvert depuis la
+  // corbeille) : c'est ce qui décide entre mise à la corbeille et
+  // suppression définitive. Calculé par MailView, jamais déduit de
+  // `activeFolderId` seul.
+  isTrash: boolean;
   customLabels: GmailUserLabel[];
   activeCustomLabelId: string | null;
   unreadCount: number;
@@ -43,8 +49,11 @@ interface MailMobileListProps {
   onSelectCustomLabel: (labelId: string) => void;
   onOpenMail: (mail: GmailMessageSummary) => void;
   onToggleStar: (mail: GmailMessageSummary, event?: React.MouseEvent) => void;
-  onSetRead: (mails: GmailMessageSummary[], read: boolean) => Promise<void> | void;
-  onDelete: (mails: GmailMessageSummary[]) => Promise<void> | void;
+  // Renvoient `true` si Gmail a bien pris l'action en compte — `false` si
+  // l'utilisateur a annulé la confirmation ou si l'appel a échoué. La
+  // sélection et la position des lignes en dépendent.
+  onSetRead: (mails: GmailMessageSummary[], read: boolean) => Promise<boolean>;
+  onDelete: (mails: GmailMessageSummary[]) => Promise<boolean>;
   onRefresh: () => void;
   userEmail?: string;
 }
@@ -96,7 +105,7 @@ interface MailRowProps {
   onLongPress: () => void;
   onToggleSelect: () => void;
   onSwipeRead: () => void;
-  onSwipeDelete: () => void;
+  onSwipeDelete: () => Promise<boolean>;
   onToggleStar: (event: React.MouseEvent) => void;
 }
 
@@ -193,9 +202,20 @@ const MailRow: React.FC<MailRowProps> = ({
       onSwipeRead();
     } else {
       /* Suppression : la carte finit sa course hors de l'écran, puis le
-         parent la retire réellement de la liste. */
+         parent retire la ligne de la liste — ce qui démonte cette rangée.
+         Mais il peut aussi ne RIEN retirer : confirmation refusée dans la
+         corbeille, ou appel Gmail en échec. Dans ce cas la rangée survit, et
+         sans ce retour à zéro elle resterait translatée hors de l'écran :
+         une bande rouge vide à la place d'un message toujours présent. */
       setDx(-window.innerWidth);
-      window.setTimeout(() => onSwipeDelete(), 180);
+      window.setTimeout(() => {
+        void onSwipeDelete().then((supprime) => {
+          if (!supprime) {
+            setGliding(true);
+            setDx(0);
+          }
+        });
+      }, 180);
     }
   };
 
@@ -294,6 +314,12 @@ const MailRow: React.FC<MailRowProps> = ({
 
         <button
           onClick={(e) => { e.stopPropagation(); onToggleStar(e); }}
+          /* Sans cette coupure, l'appui sur l'étoile remonte jusqu'à la
+             rangée et arme son minuteur d'appui long : rester une demi-
+             seconde sur l'étoile étoilait le message ET ouvrait le mode
+             sélection. */
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
           title={isStarred ? 'Retirer des favoris' : 'Ajouter aux favoris'}
           className="p-1.5 -mr-1.5 shrink-0 self-center"
         >
@@ -305,7 +331,7 @@ const MailRow: React.FC<MailRowProps> = ({
 };
 
 export const MailMobileList: React.FC<MailMobileListProps> = ({
-  mails, loading, folders, activeFolderId, activeFolderLabel, customLabels,
+  mails, loading, folders, activeFolderId, activeFolderLabel, isTrash, customLabels,
   activeCustomLabelId, unreadCount, searchQuery, onSearchChange, onSelectFolder,
   onSelectCustomLabel, onOpenMail, onToggleStar, onSetRead, onDelete, onRefresh,
   userEmail,
@@ -315,7 +341,6 @@ export const MailMobileList: React.FC<MailMobileListProps> = ({
   const [searchOpen, setSearchOpen] = useState(false);
 
   const selectionMode = selectedIds.length > 0;
-  const isTrash = activeFolderId === 'TRASH';
 
   /* Changer de dossier vide la sélection : les messages cochés ne sont plus
      à l'écran, agir dessus depuis le dossier suivant n'aurait aucun sens. */
@@ -342,19 +367,18 @@ export const MailMobileList: React.FC<MailMobileListProps> = ({
     (m) => m.email.toLowerCase() === (userEmail || '').toLowerCase()
   );
 
+  /* La sélection n'est vidée qu'une fois l'action réellement passée : sinon,
+     répondre « Annuler » à la confirmation de suppression faisait perdre tous
+     les messages cochés, sans rien supprimer et sans rien dire. */
   const runBulkRead = async () => {
     /* Comme Gmail : si au moins un message coché est encore non lu, le lot
        passe en « lu » ; sinon on repasse tout en « non lu ». */
     const targetRead = selectedMails.some((m) => !m.isRead);
-    const list = selectedMails;
-    setSelectedIds([]);
-    await onSetRead(list, targetRead);
+    if (await onSetRead(selectedMails, targetRead)) setSelectedIds([]);
   };
 
   const runBulkDelete = async () => {
-    const list = selectedMails;
-    setSelectedIds([]);
-    await onDelete(list);
+    if (await onDelete(selectedMails)) setSelectedIds([]);
   };
 
   return (
@@ -476,7 +500,7 @@ export const MailMobileList: React.FC<MailMobileListProps> = ({
               onLongPress={() => toggleSelect(mail.id)}
               onToggleSelect={() => toggleSelect(mail.id)}
               onSwipeRead={() => void onSetRead([mail], !mail.isRead)}
-              onSwipeDelete={() => void onDelete([mail])}
+              onSwipeDelete={() => onDelete([mail])}
               onToggleStar={(e) => onToggleStar(mail, e)}
             />
           ))}
@@ -490,90 +514,106 @@ export const MailMobileList: React.FC<MailMobileListProps> = ({
           Monté en permanence et simplement translaté hors de l'écran : le
           glissement d'ouverture/fermeture est alors une vraie transition CSS,
           sans keyframes ni bibliothèque. `pointer-events-none` quand il est
-          fermé pour qu'il ne capte aucun appui. */}
-      <div className={`fixed inset-0 z-[70] ${drawerOpen ? '' : 'pointer-events-none'}`}>
-        <div
-          onClick={() => setDrawerOpen(false)}
-          className={`absolute inset-0 bg-black/60 transition-opacity duration-200 ${
-            drawerOpen ? 'opacity-100' : 'opacity-0'
-          }`}
-        />
-        <aside
-          className={`absolute inset-y-0 left-0 w-[82%] max-w-[330px] bg-[#071f21] border-r border-[#1c4448] flex flex-col transition-transform duration-200 ease-out ${
-            drawerOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
-          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-        >
-          <div className="px-5 pt-5 pb-4 border-b border-white/5">
-            <p className="text-lg font-black text-white">Messagerie</p>
-            {userEmail && (
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">{userEmail}</p>
-            )}
-          </div>
+          fermé pour qu'il ne capte aucun appui.
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar py-3">
-            <nav className="pr-3 space-y-0.5">
-              {folders.map((folder) => {
-                const isActive = !activeCustomLabelId && activeFolderId === folder.id;
-                const IconComp = folder.icon;
-                return (
-                  <button
-                    key={folder.id}
-                    onClick={() => {
-                      onSelectFolder(folder.id);
-                      setDrawerOpen(false);
-                    }}
-                    className={`w-full text-left pl-5 pr-3 py-3 rounded-r-full text-[15px] flex items-center gap-4 ${
-                      isActive
-                        ? 'bg-[#F7BC5F]/15 text-[#F9C977] font-bold'
-                        : 'text-slate-300 font-medium active:bg-white/5'
-                    }`}
-                  >
-                    <IconComp className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#F9C977]' : 'text-slate-400'}`} />
-                    <span className="flex-1 truncate">{folder.label}</span>
-                    {folder.id === 'UNREAD' && unreadCount > 0 && (
-                      <span className={`text-[11px] font-black shrink-0 ${isActive ? 'text-[#F9C977]' : 'text-slate-400'}`}>
-                        {unreadCount}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
+          Posé dans <body> par un portail, et non là où il est écrit : l'écran
+          courant est enveloppé dans App.tsx par un conteneur `relative z-10`,
+          qui ouvre son propre contexte d'empilement. Un `z-[70]` écrit à
+          l'intérieur ne vaut alors QUE dans ce contexte — la barre de
+          navigation du bas (z-40, posée plus haut dans l'arbre) passait
+          par-dessus le tiroir et masquait ses derniers dossiers, qui
+          devenaient intouchables. Hors de ce conteneur, le z-index compte de
+          nouveau face à elle. Même procédé que la fiche client
+          (ClientProfileView) pour ses propres fenêtres. */}
+      {createPortal(
+        <div className={`fixed inset-0 z-[75] ${drawerOpen ? '' : 'pointer-events-none'}`}>
+          <div
+            onClick={() => setDrawerOpen(false)}
+            className={`absolute inset-0 bg-black/60 transition-opacity duration-200 ${
+              drawerOpen ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+          <aside
+            className={`absolute inset-y-0 left-0 w-[82%] max-w-[330px] bg-[#071f21] border-r border-[#1c4448] flex flex-col transition-transform duration-200 ease-out ${
+              drawerOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+            style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+          >
+            <div className="px-5 pt-5 pb-4 border-b border-white/5">
+              <p className="text-lg font-black text-white">Messagerie</p>
+              {userEmail && (
+                <p className="text-[11px] text-slate-500 truncate mt-0.5">{userEmail}</p>
+              )}
+            </div>
 
-            {customLabels.length > 0 && (
-              <>
-                <div className="mx-5 my-3 border-t border-white/5" />
-                <p className="px-5 mb-1.5 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                  Dossiers
-                </p>
-                <nav className="pr-3 space-y-0.5">
-                  {customLabels.map((label) => {
-                    const isActive = activeCustomLabelId === label.id;
-                    return (
-                      <button
-                        key={label.id}
-                        onClick={() => {
-                          onSelectCustomLabel(label.id);
-                          setDrawerOpen(false);
-                        }}
-                        className={`w-full text-left pl-5 pr-3 py-3 rounded-r-full text-[15px] flex items-center gap-4 ${
-                          isActive
-                            ? 'bg-[#F7BC5F]/15 text-[#F9C977] font-bold'
-                            : 'text-slate-300 font-medium active:bg-white/5'
-                        }`}
-                      >
-                        <FolderOpen className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#F9C977]' : 'text-slate-400'}`} />
-                        <span className="flex-1 truncate">{label.name}</span>
-                      </button>
-                    );
-                  })}
-                </nav>
-              </>
-            )}
-          </div>
-        </aside>
-      </div>
+            <div
+            className="flex-1 overflow-y-auto custom-scrollbar py-3"
+            style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+          >
+              <nav className="pr-3 space-y-0.5">
+                {folders.map((folder) => {
+                  const isActive = !activeCustomLabelId && activeFolderId === folder.id;
+                  const IconComp = folder.icon;
+                  return (
+                    <button
+                      key={folder.id}
+                      onClick={() => {
+                        onSelectFolder(folder.id);
+                        setDrawerOpen(false);
+                      }}
+                      className={`w-full text-left pl-5 pr-3 py-3 rounded-r-full text-[15px] flex items-center gap-4 ${
+                        isActive
+                          ? 'bg-[#F7BC5F]/15 text-[#F9C977] font-bold'
+                          : 'text-slate-300 font-medium active:bg-white/5'
+                      }`}
+                    >
+                      <IconComp className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#F9C977]' : 'text-slate-400'}`} />
+                      <span className="flex-1 truncate">{folder.label}</span>
+                      {folder.id === 'UNREAD' && unreadCount > 0 && (
+                        <span className={`text-[11px] font-black shrink-0 ${isActive ? 'text-[#F9C977]' : 'text-slate-400'}`}>
+                          {unreadCount}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {customLabels.length > 0 && (
+                <>
+                  <div className="mx-5 my-3 border-t border-white/5" />
+                  <p className="px-5 mb-1.5 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    Dossiers
+                  </p>
+                  <nav className="pr-3 space-y-0.5">
+                    {customLabels.map((label) => {
+                      const isActive = activeCustomLabelId === label.id;
+                      return (
+                        <button
+                          key={label.id}
+                          onClick={() => {
+                            onSelectCustomLabel(label.id);
+                            setDrawerOpen(false);
+                          }}
+                          className={`w-full text-left pl-5 pr-3 py-3 rounded-r-full text-[15px] flex items-center gap-4 ${
+                            isActive
+                              ? 'bg-[#F7BC5F]/15 text-[#F9C977] font-bold'
+                              : 'text-slate-300 font-medium active:bg-white/5'
+                          }`}
+                        >
+                          <FolderOpen className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#F9C977]' : 'text-slate-400'}`} />
+                          <span className="flex-1 truncate">{label.name}</span>
+                        </button>
+                      );
+                    })}
+                  </nav>
+                </>
+              )}
+            </div>
+          </aside>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
