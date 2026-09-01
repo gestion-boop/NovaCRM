@@ -95,6 +95,17 @@ interface ChatViewSupabaseProps {
   // pendant 5 secondes pour l'identifier visuellement.
   initialHighlightMessageId?: string | null;
   onHighlightConsumed?: () => void;
+  /**
+   * Conversation à ouvrir directement, sans message précis à mettre en avant.
+   *
+   * Signalé (01/09/2026) : « au clic sur la notification, elle ne va pas
+   * directement à la cible ». La notification d'un nouveau message porte
+   * l'URL `/messagerie?conversation=<id>` quand aucun identifiant de message
+   * n'est disponible — jusqu'ici personne ne lisait ce paramètre : on
+   * atterrissait sur la liste des conversations, jamais sur la bonne.
+   */
+  initialConversationId?: string | null;
+  onConversationTargetConsumed?: () => void;
   // Sur mobile, quitte le chat plein écran (revient à l'accueil, ce qui
   // fait réapparaître la barre de navigation du bas et les autres panneaux).
   onExitMobile?: () => void;
@@ -111,7 +122,7 @@ interface ChatViewSupabaseProps {
   isActive?: boolean;
 }
 
-export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
+export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, initialConversationId, onConversationTargetConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const isSuperAdmin = userProfile?.role === 'super_admin';
   // Les invitations / gestion des membres sont réservées aux admins (et super admin)
@@ -728,6 +739,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   // ── Rebond de 5s sur le message ciblé par une notification ──────────────
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  // Ouverture directe d'une conversation depuis une notification, quand
+  // celle-ci ne désigne pas un message précis (voir initialConversationId).
+  useEffect(() => {
+    if (!initialConversationId) return;
+    setTab('conversations');
+    openConversation(initialConversationId);
+    onConversationTargetConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialConversationId]);
+
   useEffect(() => {
     if (!initialHighlightMessageId) return;
     let cancelled = false;

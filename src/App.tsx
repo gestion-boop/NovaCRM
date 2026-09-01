@@ -137,6 +137,9 @@ function App() {
   // session : on ne le monte donc qu'à partir de la première fois où
   // currentNav vaut 'chat' (y compris dès le premier rendu si l'app
   // s'ouvre directement dessus, ex. clic sur une notification de message).
+  // Conversation à ouvrir au clic sur une notification (01/09/2026) — voir
+  // applyFromLocation et le message NOTIFICATION_NAVIGATE du service worker.
+  const [targetConversationId, setTargetConversationId] = useState<string | null>(null);
   const [hasOpenedChat, setHasOpenedChat] = useState(() => currentNav === 'chat');
   useEffect(() => {
     if (currentNav === 'chat') setHasOpenedChat(true);
@@ -384,6 +387,17 @@ function App() {
           setHighlightMessageId(highlight);
           setCurrentNav('chat');
         }
+        // Signalé : « au clic sur la notification, elle ne va pas directement
+        // à la cible ». Une notification de nouveau message porte l'URL
+        // `/messagerie?conversation=<id>` dès qu'aucun identifiant de message
+        // n'est disponible (voir send-push) — ce paramètre n'était lu nulle
+        // part : on atterrissait sur la liste, jamais sur la bonne
+        // conversation.
+        const conversation = params.get('conversation');
+        if (conversation) {
+          setTargetConversationId(conversation);
+          setCurrentNav('chat');
+        }
       } catch { /* noop */ }
     };
     // `client.navigate(url)` déclenché par le service worker (voir
@@ -397,12 +411,20 @@ function App() {
     // (notamment iOS/Safari en PWA installée) — on route alors ici en JS,
     // sans dépendre d'une vraie navigation document qui n'aura pas eu lieu.
     const onSwMessage = (event: MessageEvent) => {
-      const d = event.data as { type?: string; url?: string } | undefined;
+      const d = event.data as { type?: string; url?: string; conversationId?: string | null } | undefined;
       if (!d || d.type !== 'NOTIFICATION_NAVIGATE' || typeof d.url !== 'string') return;
       try {
         const u = new URL(d.url, window.location.origin);
         window.history.replaceState(null, '', u.pathname + u.search);
         applyFromLocation();
+        // Le service worker transmet AUSSI l'identifiant de la conversation à
+        // côté de l'URL. On s'en sert en dernier recours : si l'URL ne portait
+        // pas le paramètre attendu, ce chemin ouvre quand même la bonne
+        // conversation plutôt que la liste.
+        if (d.conversationId) {
+          setTargetConversationId(d.conversationId);
+          setCurrentNav('chat');
+        }
       } catch { /* noop */ }
     };
     navigator.serviceWorker?.addEventListener?.('message', onSwMessage);
@@ -1139,6 +1161,8 @@ function App() {
             <div className={currentNav === 'chat' ? 'absolute inset-0 z-10 h-full' : 'hidden'}>
               <ChatView
                 initialHighlightMessageId={highlightMessageId}
+                initialConversationId={targetConversationId}
+                onConversationTargetConsumed={() => setTargetConversationId(null)}
                 onHighlightConsumed={() => setHighlightMessageId(null)}
                 onExitMobile={() => setCurrentNav('accueil')}
                 isActive={currentNav === 'chat'}
