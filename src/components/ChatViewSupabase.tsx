@@ -137,6 +137,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // ── Gestion des membres par projet (table chat_project_members) ─────────
   const [membersModalProjectId, setMembersModalProjectId] = useState<string | null>(null);
   const [projectMembers, setProjectMembers] = useState<ChatProjectMember[]>([]);
+  // Création d'un dossier de projet (31/08/2026) — « chaque agence doit avoir
+  // sa propre vue des dossiers, et le + serait idéal pour créer des dossiers
+  // en rattachant les utilisateurs des agences concernées ».
+  const [showAddProject, setShowAddProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectMemberIds, setNewProjectMemberIds] = useState<Set<string>>(new Set());
+  const [newProjectQuery, setNewProjectQuery] = useState('');
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [projectError, setProjectError] = useState<string | null>(null);
   const [allProfiles, setAllProfiles] = useState<MemberProfile[]>([]);
   // Agences réelles de chaque personne, lues dans `agency_members` — et non
   // plus dans la liste figée `teamMembers.ts` (voir le correctif du
@@ -1631,6 +1640,63 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     }
   };
 
+  /**
+   * Crée un dossier de projet dans l'AGENCE ACTIVE, avec ses participants.
+   *
+   * L'agence est posée sur le dossier : `loadProjectsAndChannels` ne charge
+   * que `agency_id = agence active` (plus les dossiers marqués « toutes
+   * agences », comme « 3 Entités »). Chaque agence garde donc sa propre vue,
+   * sans que personne ait à filtrer quoi que ce soit à la main.
+   *
+   * Un canal « Général » est créé dans la foulée : un dossier sans canal
+   * n'affiche rien et n'a aucun usage.
+   */
+  const createProject = async () => {
+    const nom = newProjectName.trim();
+    if (!nom || !currentUser) return;
+    setCreatingProject(true);
+    setProjectError(null);
+    try {
+      const projectId = crypto.randomUUID();
+      const { error } = await supabase.from('chat_projects').insert({
+        id: projectId,
+        name: nom,
+        agency_id: activeAgency.id,
+        created_by: currentUser.uid,
+        position: projects.length,
+      } as any);
+      if (error) { setProjectError(error.message); return; }
+
+      const { error: canalError } = await supabase.from('chat_channels').insert({
+        project_id: projectId,
+        name: 'Général',
+        position: 0,
+        created_by: currentUser.uid,
+      } as any);
+      if (canalError) {
+        // Pas de dossier vide laissé derrière : sans canal il serait inerte.
+        await supabase.from('chat_projects').delete().eq('id', projectId);
+        setProjectError(`Canal non créé : ${canalError.message}`);
+        return;
+      }
+
+      const participants = Array.from(newProjectMemberIds);
+      if (participants.length > 0) {
+        await supabase.from('chat_project_members').insert(
+          participants.map((uid) => ({ project_id: projectId, user_id: uid, added_by: currentUser.uid })) as any,
+        );
+      }
+
+      setShowAddProject(false);
+      setNewProjectName('');
+      setNewProjectMemberIds(new Set());
+      setNewProjectQuery('');
+      await loadProjectsAndChannels();
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
   const addMember = async (projectId: string, userId: string) => {
     if (!isAdmin || !currentUser) return;
     const { data, error } = await supabase
@@ -1753,6 +1819,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-white/20 overflow-y-auto custom-scrollbar p-3 space-y-2`}>
             <div className="flex items-center justify-between px-1 mb-1">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Projets</span>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => { setProjectError(null); setShowAddProject(true); void ensureProfilesLoaded(); }}
+                  title="Créer un dossier de projet"
+                  className="w-7 h-7 rounded-lg bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 flex items-center justify-center shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              )}
             </div>
             {projects.map((project, pi) => {
               // Espace commun "3 Entités" : agency_id null → mis en évidence par un cadre jaune
@@ -2635,6 +2711,105 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       )}
 
       {/* Modal Nouvelle conversation */}
+      {/* Création d'un dossier de projet — cloisonné à l'agence active, avec
+          ses participants. Voir createProject pour le détail. */}
+      {showAddProject && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowAddProject(false)}
+        >
+          <div
+            className="bg-[#0E1A20] border border-white/10 rounded-2xl max-w-md w-full p-6 text-white space-y-4 max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FolderPlus className="w-4 h-4 text-[#F7BC5F]" />
+                <h3 className="text-base font-bold">Nouveau dossier de projet</h3>
+              </div>
+              <button onClick={() => setShowAddProject(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {projectError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs">
+                {projectError}
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-400">
+              Ce dossier appartiendra à <span className="text-[#F7BC5F] font-semibold">{activeAgency.name}</span> et
+              n'apparaîtra que pour cette agence. Un canal « Général » y est créé automatiquement.
+            </p>
+
+            <input
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              placeholder="Nom du dossier (ex. Marketing, Recrutement...)"
+              className="w-full bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
+            />
+
+            <div className="space-y-2 flex-1 min-h-0 flex flex-col">
+              <p className="text-[11px] text-slate-400">
+                Participants ({newProjectMemberIds.size} sélectionné{newProjectMemberIds.size > 1 ? 's' : ''})
+              </p>
+              <input
+                value={newProjectQuery}
+                onChange={(e) => setNewProjectQuery(e.target.value)}
+                placeholder="Rechercher par nom ou email..."
+                className="w-full bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
+              />
+              <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1">
+                {allProfiles
+                  .filter((p) => p.uid !== currentUser?.uid)
+                  .filter((p) =>
+                    p.displayName.toLowerCase().includes(newProjectQuery.toLowerCase())
+                    || (p.email || '').toLowerCase().includes(newProjectQuery.toLowerCase()))
+                  .map((p) => {
+                    const choisi = newProjectMemberIds.has(p.uid);
+                    const agences = (agencyIdsByUid[p.uid] || [])
+                      .map((id) => AGENCIES.find((a) => a.id === id)?.name)
+                      .filter(Boolean)
+                      .join(', ');
+                    return (
+                      <button
+                        key={p.uid}
+                        type="button"
+                        onClick={() => setNewProjectMemberIds((prev) => {
+                          const n = new Set(prev);
+                          if (n.has(p.uid)) n.delete(p.uid); else n.add(p.uid);
+                          return n;
+                        })}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-colors ${
+                          choisi ? 'bg-[#F7BC5F]/10 border-[#F7BC5F]/50' : 'bg-[#0b1c1e] border-white/10 hover:border-[#F7BC5F]/40'
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold truncate">{p.displayName}</span>
+                          <span className="block text-[10px] text-slate-500 truncate">
+                            {p.email}{agences ? ` · ${agences}` : ''}
+                          </span>
+                        </span>
+                        {choisi && <Check className="w-4 h-4 text-[#F7BC5F] shrink-0" strokeWidth={3} />}
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void createProject()}
+              disabled={!newProjectName.trim() || creatingProject}
+              className="w-full py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-sm disabled:opacity-40"
+            >
+              {creatingProject ? 'Création...' : 'Créer le dossier'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {showNewConvModal && (
         <div
           className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
