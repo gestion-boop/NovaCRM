@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import BuildStamp from './BuildStamp';
 import { 
   Home, LayoutDashboard, Users, GitFork, FolderKanban, Calendar, 
   Bell, MessageSquare, Mail, UserPlus, FileText, FileEdit, 
@@ -433,6 +434,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           style={{ transition: 'transform 900ms cubic-bezier(0.22, 1, 0.36, 1)' }}
         >
           {sidebarContent(true)}
+          {/* Identité du build, tout en bas du menu : la réponse immédiate à
+              « est-ce que ma mise à jour est bien arrivée ? ». */}
+          <BuildStamp />
         </div>
       </div>
     </>
