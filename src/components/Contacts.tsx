@@ -122,7 +122,7 @@ export default function Contacts({
             agencyIds: agencesParUtilisateur[item.id] || [],
             active: true,
             jobTitle: item.job_title || null,
-          } as NovaSphereUserProfile))
+          } as unknown as NovaSphereUserProfile))
           .sort((a, b) => a.displayName.localeCompare(b.displayName, 'fr'));
 
         setNovaUsers(loaded);

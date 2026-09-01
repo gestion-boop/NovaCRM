@@ -264,6 +264,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
         const date = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
         const time = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`;
 
+        // Fin de la réservation : elle n'était pas reprise du tout, si bien
+        // que ces événements retombaient sur la durée par défaut au lieu du
+        // créneau réellement réservé.
+        const endDateObj = row.end_at ? new Date(row.end_at as string) : startDate;
+        const endDate = `${endDateObj.getFullYear()}-${String(endDateObj.getMonth() + 1).padStart(2, '0')}-${String(endDateObj.getDate()).padStart(2, '0')}`;
+        const endTime = `${String(endDateObj.getHours()).padStart(2, '0')}:${String(endDateObj.getMinutes()).padStart(2, '0')}`;
+
         const member = TEAM_MEMBERS.find((m) => m.id === row.user_id);
         const projectName = (desc.projet as string) || '';
 
@@ -272,6 +279,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
           title: projectName ? `Caméra • ${projectName}` : `Réservation • ${equipmentName}`,
           date,
           time,
+          endDate,
+          endTime,
           location: (desc.lieu as string) || '',
           clientName: member?.name || '',
           type: 'Réservation Caméra' as const,

@@ -830,6 +830,7 @@ export default function ClientProfileView({
         await sendGmailMessage(token2, {
           to: email,
           subject: 'Consentement au démarchage téléphonique — merci de le signer',
+          body: `Bonjour,\n\nMerci de compléter et signer votre consentement au démarchage téléphonique :\n${link}\n\nCordialement,\n${currentUserName}`,
           bodyHtml: `<p>Bonjour,</p><p>Merci de compléter et signer votre consentement au démarchage téléphonique en cliquant sur le lien ci-dessous :</p><p><a href="${link}">${link}</a></p><p>Cordialement,<br/>${currentUserName}</p>`,
         }).catch((e) => {
           toast.error("La demande a été créée mais l'email n'a pas pu être envoyé : " + (e?.message || 'erreur'));
@@ -1034,6 +1035,7 @@ export default function ClientProfileView({
           await sendGmailMessage(token2, {
             to: email,
             subject: 'Questionnaire confidentiel — merci de le compléter',
+            body: `Bonjour,\n\nMerci de compléter votre questionnaire confidentiel :\n${link}\n\nCes informations resteront strictement confidentielles et sécurisées.\n\nCordialement,\n${currentUserName}`,
             bodyHtml: `<p>Bonjour,</p><p>Merci de compléter votre questionnaire confidentiel en cliquant sur le lien ci-dessous :</p><p><a href="${link}">${link}</a></p><p>Ces informations resteront strictement confidentielles et sécurisées.</p><p>Cordialement,<br/>${currentUserName}</p>`,
           });
           emailSent = true;

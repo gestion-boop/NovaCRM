@@ -104,7 +104,9 @@ interface StoredPipeline extends PipelineDef {
   agencyId: string;
   sortOrder: number;
   createdAt: string;
-  updatedAt: string;
+  // Jamais chargée depuis la base ni écrite à la création : optionnelle,
+  // plutôt que déclarée obligatoire et toujours absente.
+  updatedAt?: string;
 }
 
 interface PipelineProps {
@@ -798,7 +800,6 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
           return {
             id: p.id,
-            pipelineId: p.id,
             name: p.name,
             agencyId: p.agency_id,
             stages: pStages.length > 0 ? pStages : [...BASE_PIPELINES[0].stages],
@@ -982,7 +983,6 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
       const newPipeObj: StoredPipeline = {
         id: createdPipe.id,
-        pipelineId: createdPipe.id,
         agencyId: currentAgencyId,
         name,
         stages: initialStages,

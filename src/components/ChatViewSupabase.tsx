@@ -49,6 +49,12 @@ interface ChatMessageRow {
     sender_id?: string;
     sender_name?: string;
     created_at?: string;
+    // Photos et messages vocaux : `insertChannelMedia` écrit déjà ces
+    // champs, le type ne les déclarait simplement pas.
+    kind?: 'text' | 'image' | 'voice' | 'file';
+    attachmentUrl?: string;
+    attachmentMime?: string;
+    attachmentDuration?: number;
   };
   created_at: string;
   sender_id?: string | null;
@@ -2676,7 +2682,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           /* Images et vocaux dans les canaux (31/08/2026) : le
                              média est rangé dans le JSONB `data`, les canaux
                              n'ayant pas les colonnes dédiées des conversations. */
-                          <button type="button" onClick={() => setConvLightboxUrl(m.data.attachmentUrl)} className="block">
+                          <button type="button" onClick={() => setConvLightboxUrl(m.data.attachmentUrl ?? null)} className="block">
                             <img src={m.data.attachmentUrl} alt="Pièce jointe" className="max-w-[220px] max-h-[220px] rounded-xl object-cover" />
                           </button>
                         ) : m.data?.kind === 'voice' && m.data?.attachmentUrl ? (

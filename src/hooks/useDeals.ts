@@ -146,7 +146,12 @@ export const useDeals = () => {
         throw new Error(sbError.message);
       }
 
-      return supabaseLeadToDeal((data || leadPayload) as Record<string, unknown>);
+      // L'appel oubliait la table des noms d'étapes : sur une transaction
+      // portant un stage_id, `stageNameById[stageId]` plantait faute de
+      // second argument. La valeur renvoyée ici n'est que transitoire —
+      // onSuccess réinvalide la requête, qui recharge avec la vraie table —
+      // donc une table vide suffit, et l'étape retombe sur la température.
+      return supabaseLeadToDeal((data || leadPayload) as Record<string, unknown>, {});
     },
 
     onSuccess: async () => {

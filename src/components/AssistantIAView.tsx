@@ -1686,7 +1686,11 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           email,
           phone,
           clientType: clientType as 'buyer' | 'seller' | 'investor' | 'other',
-          status,
+          // L'outil de Nova parle en minuscules (chaud/tiede/froid) mais la
+          // fiche contact attend les libellés du CRM : sans conversion, le
+          // contact créé par Nova portait un statut qui ne correspondait à
+          // aucun filtre de l'écran Clients.
+          status: ({ chaud: 'Chaud', tiede: 'Tiède', froid: 'Froid' } as const)[status],
           notes,
           agencyId
         });

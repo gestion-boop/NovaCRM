@@ -39,12 +39,19 @@ interface ProjetsInternesProps {
 }
 
 interface StoredInternalProject
-  extends InternalProject {
+  // `deadline` et `assignedMember` viennent du modèle d'origine et ne sont
+  // pas portés par la table task_boards : déclarés optionnels ici plutôt
+  // qu'obligatoires et jamais renseignés.
+  extends Omit<InternalProject, 'deadline' | 'assignedMember'> {
+  deadline?: string;
+  assignedMember?: string;
   assignedUserId?: string;
 
   createdByUserId: string;
-  createdByEmail: string;
-  createdByName: string;
+  // Jamais renseignés par le chargement depuis la base : optionnels plutôt
+  // qu'obligatoires et toujours absents.
+  createdByEmail?: string;
+  createdByName?: string;
 
   createdAt: string;
   updatedAt: string;
