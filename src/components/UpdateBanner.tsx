@@ -10,12 +10,23 @@ import { useAuth } from '@/context/AuthContext';
 const POLL_INTERVAL_MS = 45 * 1000; // 45 secondes
 const SNOOZE_MS = 60 * 60 * 1000; // 1 heure ("Plus tard")
 
-async function fetchServerVersion(): Promise<string | null> {
+// Signalé (01/09/2026) : « le panneau, c'est ma preuve ». Il annonçait
+// qu'une version était disponible sans jamais dire LAQUELLE — impossible
+// donc de vérifier qu'on venait bien de recevoir le déploiement attendu.
+// version.json contient déjà la branche et le commit : on les affiche.
+interface ServerVersion {
+  version: string;
+  ref?: string;
+  sha?: string;
+}
+
+async function fetchServerVersion(): Promise<ServerVersion | null> {
   try {
     const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return null;
     const json = await res.json();
-    return json.version || null;
+    if (!json.version) return null;
+    return { version: json.version, ref: json.ref, sha: json.sha };
   } catch {
     return null;
   }
@@ -34,6 +45,7 @@ async function fetchServerVersion(): Promise<string | null> {
 export default function UpdateBanner() {
   const { currentUser } = useAuth();
   const [bootVersion, setBootVersion] = useState<string | null>(null);
+  const [nouvelle, setNouvelle] = useState<ServerVersion | null>(null);
   const [visible, setVisible] = useState(false);
   const snoozedUntilRef = useRef<number>(0);
 
@@ -42,7 +54,7 @@ export default function UpdateBanner() {
     let cancelled = false;
     (async () => {
       const v = await fetchServerVersion();
-      if (!cancelled) setBootVersion(v);
+      if (!cancelled) setBootVersion(v ? v.version : null);
     })();
     return () => {
       cancelled = true;
@@ -94,9 +106,10 @@ export default function UpdateBanner() {
     const checkForUpdate = async () => {
       if (Date.now() < snoozedUntilRef.current) return;
       const v = await fetchServerVersion();
-      if (v && v !== bootVersion) {
+      if (v && v.version !== bootVersion) {
+        setNouvelle(v);
         setVisible(true);
-        notifyBell(v);
+        notifyBell(v.version);
       }
     };
 
@@ -140,6 +153,11 @@ export default function UpdateBanner() {
           <p className="text-xs text-slate-400 mt-0.5">
             Une nouvelle version de Nova CRM a été déployée.
           </p>
+          {(nouvelle?.ref || nouvelle?.sha) && (
+            <p className="text-[10px] font-mono text-slate-500 mt-1 truncate">
+              {[nouvelle.ref, nouvelle.sha].filter(Boolean).join(' · ')}
+            </p>
+          )}
           <div className="flex items-center gap-2 mt-3">
             <button
               onClick={handleRefresh}
