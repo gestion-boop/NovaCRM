@@ -741,6 +741,40 @@ export default function ClientProfileView({
         return;
       }
 
+      // Demandé le 1er septembre : « peut-être rajouter "et facturé" si on
+      // archive, de façon que le chiffre rentre dans le tableau de bord ».
+      //
+      // Le chiffre d'affaires de l'agence se calcule sur les affaires dont
+      // l'ÉTAPE contient « factur ». Une affaire archivée avec signature est
+      // une affaire facturée : on la pose donc explicitement sur cette étape,
+      // au lieu de dépendre de la colonne où elle se trouvait. C'est ce qui
+      // manquait ce soir — un dossier archivé, signé, mais resté sur une
+      // étape que le calcul ne reconnaissait pas, ne comptait nulle part.
+      let etapeFacturee: string | null = null;
+      if (signed) {
+        const { data: ligne } = await supabase
+          .from('leads')
+          .select('pipeline_id')
+          .eq('id', clientId)
+          .maybeSingle();
+        const pipelineId = (ligne as { pipeline_id: string | null } | null)?.pipeline_id;
+        if (pipelineId) {
+          const { data: etapes } = await supabase
+            .from('pipeline_stages')
+            .select('id, name')
+            .eq('pipeline_id', pipelineId);
+          const sansAccents = (v: string) =>
+            v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+          const candidates = ((etapes as { id: string; name: string }[]) || []).filter((e) =>
+            sansAccents(e.name).includes('factur')
+          );
+          // « Facturé » plutôt que « À facturer » quand les deux existent :
+          // archivé et signé, le dossier est facturé, pas à facturer.
+          const exacte = candidates.find((e) => !sansAccents(e.name).startsWith('a factur'));
+          etapeFacturee = (exacte || candidates[0])?.id ?? null;
+        }
+      }
+
       const { error } = await supabase
         .from('leads')
         .update({
@@ -749,6 +783,9 @@ export default function ClientProfileView({
           // Champ laissé vide : on ne touche pas au montant déjà enregistré,
           // plutôt que de l'effacer par inadvertance.
           ...(montant === null ? {} : { estimated_value: montant }),
+          // Aucune étape « factur » dans ce pipeline : on ne touche à rien
+          // plutôt que de déplacer le dossier au hasard.
+          ...(etapeFacturee ? { stage_id: etapeFacturee } : {}),
         } as any)
         .eq('id', clientId);
       if (error) throw error;
@@ -4346,7 +4383,8 @@ export default function ClientProfileView({
               />
               <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
                 C'est ce montant qui comptera dans le chiffre d'affaires de l'agence. Corrige-le
-                si besoin — laissé vide, celui déjà enregistré est conservé.
+                si besoin — laissé vide, celui déjà enregistré est conservé. En répondant
+                « signature faite », le dossier passe aussi en <b className="text-slate-400">Facturé</b>.
               </p>
             </div>
 
