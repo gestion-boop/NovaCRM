@@ -386,9 +386,13 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
           globale est `hidden md:flex` (Header.tsx) : il DISPARAÎT entièrement
           sous 768 px. Sur téléphone, il n'existait donc plus aucun moyen de
           chercher un client depuis le 30/08.
-          `md:hidden` : elle ne revient que là où l'autre est absente, et
-          l'affichage sur ordinateur reste exactement tel que demandé. */}
-      <div className="md:hidden relative">
+          Revenue sur TOUS les écrans le 31/08/2026, demande explicite :
+          « mets une barre de recherche client quand on clique dans Client,
+          Natacha par exemple n'a pas de barre de recherche ». Elle n'était
+          jusqu'ici rendue que sous 768 px (`md:hidden`), or un téléphone
+          pliable déplié dépasse ce seuil : ni la barre mobile, ni le réflexe
+          d'aller chercher celle de l'en-tête. Elle est donc partout. */}
+      <div className="relative">
         <Search className="w-4 h-4 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input
           type="search"
