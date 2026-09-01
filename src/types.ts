@@ -50,6 +50,11 @@ export interface Deal {
   // Commission du conseiller, stockée en TTC ; affichée en HT dans les
   // colonnes du pipeline (voir htDepuisTtc).
   advisorCommissionTtc?: number;
+  // Ticket #35 : « c'est le conseiller qui va mettre son affaire sur le
+  // pipeline » — c'est donc lui qui porte le chiffre d'affaires personnel.
+  // Colonne `assigned_to` de la table leads, avec repli sur `created_by`
+  // pour les affaires anterieures a l'attribution.
+  advisorId?: string;
   stage: string;
   pipelineId?: string;
   agencyId: string;

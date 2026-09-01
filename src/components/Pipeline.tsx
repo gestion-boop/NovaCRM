@@ -295,6 +295,13 @@ const PipelineColumn: React.FC<{
   stage: string;
   stageDeals: Deal[];
   stageTotal: number;
+  // Ticket #35 : « le HT doit etre en haut de la colonne visible par Melanie
+  // et Sylvain », et « le hors taxe des conseillers pourra etre vu par
+  // seulement chaque conseiller personnellement ». D'ou deux lectures de la
+  // meme colonne : le total de l'agence pour les super admins, sa propre
+  // commission pour un conseiller.
+  estSuperAdmin: boolean;
+  stageMonHt: number;
   // Commission conseiller cumulée de la colonne, convertie en HT.
   stageAdvisorHt: number;
   accentColor: string;
@@ -309,7 +316,7 @@ const PipelineColumn: React.FC<{
   onRequestDelete: (stage: string) => void;
   justArrived: boolean;
 }> = ({
-  stage, stageDeals, stageTotal, stageAdvisorHt, accentColor, canManageStructure,
+  stage, stageDeals, stageTotal, stageAdvisorHt, estSuperAdmin, stageMonHt, accentColor, canManageStructure,
   contactsById, taskStatusByContactId, onSelectContact, onDeleteDeal, onOpenChecklist, onOpenNova, onRename, onRequestDelete, justArrived,
 }) => {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
@@ -369,19 +376,30 @@ const PipelineColumn: React.FC<{
             <h3 className="text-xs font-bold text-white">{stage}</h3>
             <div className="flex items-center gap-1.5">
               <p className="text-[10px] text-gray-500">{stageDeals.length} affaire(s)</p>
-              {stageTotal > 0 && (
-                <>
-                  <span className="text-[10px] text-gray-600">·</span>
-                  <p className="text-[10px] font-bold" style={{ color: accentColor }} title="Commission agence, hors taxes">{formatCurrency(stageTotal)}</p>
-                  {stageAdvisorHt > 0 && (
-                    <>
-                      <span className="text-[10px] text-gray-600">·</span>
-                      <p className="text-[10px] text-gray-400" title="Commission conseiller, saisie TTC et convertie hors taxes">
-                        dont conseiller {formatCurrency(stageAdvisorHt)} HT
-                      </p>
-                    </>
-                  )}
-                </>
+              {estSuperAdmin ? (
+                stageTotal > 0 && (
+                  <>
+                    <span className="text-[10px] text-gray-600">·</span>
+                    <p className="text-[10px] font-bold" style={{ color: accentColor }} title="Commission agence, hors taxes">{formatCurrency(stageTotal)}</p>
+                    {stageAdvisorHt > 0 && (
+                      <>
+                        <span className="text-[10px] text-gray-600">·</span>
+                        <p className="text-[10px] text-gray-400" title="Commission conseiller, saisie TTC et convertie hors taxes">
+                          dont conseiller {formatCurrency(stageAdvisorHt)} HT
+                        </p>
+                      </>
+                    )}
+                  </>
+                )
+              ) : (
+                stageMonHt > 0 && (
+                  <>
+                    <span className="text-[10px] text-gray-600">·</span>
+                    <p className="text-[10px] font-bold" style={{ color: accentColor }} title="Ta commission conseiller sur cette colonne, saisie TTC et convertie hors taxes. Personne d'autre ne la voit.">
+                      {formatCurrency(stageMonHt)} HT
+                    </p>
+                  </>
+                )
               )}
             </div>
           </div>
@@ -1684,6 +1702,17 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                   (sum, deal) => sum + htDepuisTtc(deal.advisorCommissionTtc),
                   0
                 );
+                // Sa propre commission, pour un conseiller : seules les
+                // affaires qui lui sont attribuees.
+                const stageMonHt = currentUser
+                  ? stageDeals.reduce(
+                      (sum, deal) =>
+                        deal.advisorId === currentUser.uid
+                          ? sum + htDepuisTtc(deal.advisorCommissionTtc)
+                          : sum,
+                      0
+                    )
+                  : 0;
                 const accentColor = STAGE_ACCENT_COLORS[stageIndex % STAGE_ACCENT_COLORS.length];
 
                 return (
@@ -1693,6 +1722,8 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                     stageDeals={stageDeals}
                     stageTotal={stageTotal}
                     stageAdvisorHt={stageAdvisorHt}
+                    estSuperAdmin={canManageStructure}
+                    stageMonHt={stageMonHt}
                     accentColor={accentColor}
                     canManageStructure={canManageStructure}
                     contactsById={contactsById}

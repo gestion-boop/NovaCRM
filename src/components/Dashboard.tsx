@@ -34,7 +34,7 @@ export default function Dashboard({
   const { currentUser, userProfile, activeAgency } = useAuth();
   const isSuperAdmin = userProfile?.role === 'super_admin';
   const { contacts = [] } = useContacts();
-  const { deals = [] } = useDeals();
+  const { deals = [], allDeals = [] } = useDeals();
   const { tasks = [] } = useTasks();
   // 1. Calculate general statistics
   const totalContacts = contacts.length;
@@ -127,16 +127,24 @@ export default function Dashboard({
       pipelinesData
         .filter((p) => {
           const nom = sansAccents(p.name);
-          return nom.includes('transaction') && nom.includes('b2');
+          return nom.includes('transaction') && nom.includes('v2');
         })
         .map((p) => p.id)
     );
     if (pipelinesVises.size === 0) return { total: 0, comptees: 0, sansMontant: 0, pipelineTrouve: false };
 
+    // « Si on archive, on garde les montants dans le tableau de bord » : on
+    // part donc de `allDeals`, qui contient les affaires archivees, au lieu
+    // de `deals`, d'ou elles sont retirees pour le pipeline. Le filtre par
+    // agence, lui, reste — chaque agence a son chiffre.
+    const perimetre = allDeals.filter(
+      (d) => activeAgency.id === 'all' || d.agencyId === activeAgency.id
+    );
+
     let total = 0;
     let comptees = 0;
     let sansMontant = 0;
-    deals.forEach((d) => {
+    perimetre.forEach((d) => {
       if (!d.pipelineId || !pipelinesVises.has(d.pipelineId)) return;
       if (!sansAccents(d.stage || '').includes('factur')) return;
       const montant = Number(d.amount) || 0;
@@ -145,7 +153,7 @@ export default function Dashboard({
       comptees += 1;
     });
     return { total, comptees, sansMontant, pipelineTrouve: true };
-  }, [deals, pipelinesData]);
+  }, [allDeals, activeAgency.id, pipelinesData]);
 
 
   // On ne considère que les agences réellement affichées (l'agence active,
@@ -432,7 +440,7 @@ export default function Dashboard({
               </div>
               <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
                 {!chiffreAffairesAgence.pipelineTrouve
-                  ? 'Aucun pipeline « Transaction B2 » trouvé'
+                  ? 'Aucun pipeline « Transaction V2 » trouvé'
                   : `${chiffreAffairesAgence.comptees} affaire${chiffreAffairesAgence.comptees > 1 ? 's' : ''} facturée${chiffreAffairesAgence.comptees > 1 ? 's' : ''}`}
                 {chiffreAffairesAgence.sansMontant > 0 && (
                   <span className="text-amber-400/90">
