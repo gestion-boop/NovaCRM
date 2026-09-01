@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Calendar as CalendarIcon, Plus, Clock, MapPin, User, ChevronLeft, ChevronRight, 
   Video, RefreshCw, Trash2, CheckCircle2, ExternalLink, CalendarDays, CalendarRange, List, Camera
@@ -94,7 +94,7 @@ const MAPPED_TRANSFERRED_EVENTS: EventItem[] = TRANSFERRED_CALENDAR_EVENTS.map((
 
 const INITIAL_EVENTS: EventItem[] = MAPPED_TRANSFERRED_EVENTS;
 
-type ViewMode = 'month' | 'week' | 'day';
+type ViewMode = 'month' | 'week' | 'day' | 'list';
 
 export const AgendaView: React.FC = () => {
   const { currentUser, userProfile, activeAgency } = useAuth();
@@ -641,13 +641,13 @@ export const AgendaView: React.FC = () => {
   };
 
   const navigatePrevious = () => {
-    if (viewMode === 'month') setCurrentDate(subMonths(currentDate, 1));
+    if (viewMode === 'month' || viewMode === 'list') setCurrentDate(subMonths(currentDate, 1));
     else if (viewMode === 'week') setCurrentDate(subWeeks(currentDate, 1));
     else setCurrentDate(subDays(currentDate, 1));
   };
 
   const navigateNext = () => {
-    if (viewMode === 'month') setCurrentDate(addMonths(currentDate, 1));
+    if (viewMode === 'month' || viewMode === 'list') setCurrentDate(addMonths(currentDate, 1));
     else if (viewMode === 'week') setCurrentDate(addWeeks(currentDate, 1));
     else setCurrentDate(addDays(currentDate, 1));
   };
@@ -691,12 +691,12 @@ export const AgendaView: React.FC = () => {
                   onClick={() => handleOpenModal(day)}
                   className={`min-h-[100px] border-b border-r border-white/10 p-1 transition-colors cursor-pointer hover:bg-white/5 ${
                     !isSameMnth ? 'bg-black/20 text-gray-600' : 'text-gray-300'
-                  } ${isTdy ? 'bg-blue-900/20' : ''}`}
+                  }`}
                 >
                   <div className="flex items-center justify-between px-1">
                     <span
-                      className={`w-5 h-5 flex items-center justify-center rounded-full text-xs font-bold ${
-                        isTdy ? 'border-2 border-[#0EA5A5] text-[#0EA5A5]' : ''
+                      className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
+                        isTdy ? 'bg-[#FF3B30] text-white' : ''
                       }`}
                     >
                       {format(day, dateFormat)}
@@ -940,6 +940,85 @@ export const AgendaView: React.FC = () => {
     );
   };
 
+
+  // Vue « Liste » — reprise de l'agenda d'iOS : un défilement continu, un
+  // en-tête par jour (y compris les jours vides, comme chez Apple), la date
+  // du jour en rouge, un liseré de couleur à gauche de chaque événement et
+  // les heures alignées à droite (début en clair, fin en gris).
+  const listDays = useMemo(
+    () => eachDayOfInterval({ start: startOfMonth(currentDate), end: endOfMonth(addMonths(currentDate, 2)) }),
+    [currentDate]
+  );
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const listTodayRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (viewMode !== 'list') return;
+    // Se caler sur aujourd'hui à l'ouverture, plutôt que sur le 1er du mois.
+    const t = window.setTimeout(() => {
+      listTodayRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [viewMode, currentDate]);
+
+  const renderListView = () => (
+    <div className="flex flex-col h-full bg-[#0E1A20] rounded-xl border border-white/10 overflow-hidden">
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-6 py-3">
+        {listDays.map((day) => {
+          const dayEvents = getDayEvents(day);
+          const isTdy = isToday(day);
+          return (
+            <div key={day.toISOString()} ref={isTdy ? listTodayRef : undefined} className="scroll-mt-3">
+              <div
+                onClick={() => handleOpenModal(day)}
+                className={`pt-5 pb-2 text-[15px] font-bold capitalize cursor-pointer ${
+                  isTdy ? 'text-[#FF3B30]' : 'text-white'
+                }`}
+              >
+                {format(day, 'EEEE - d MMM', { locale: fr })}
+              </div>
+              {dayEvents.length === 0 ? (
+                <div className="border-b border-white/5" />
+              ) : (
+                dayEvents.map((ev) => (
+                  <div
+                    key={ev.id}
+                    onClick={() => handleOpenEditModal(ev)}
+                    className="flex items-start gap-3 py-2.5 border-b border-white/5 cursor-pointer hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors"
+                  >
+                    <span
+                      className={`w-1 self-stretch rounded-full shrink-0 ${ev.busy === false ? 'opacity-50' : ''}`}
+                      style={{ backgroundColor: 'rgba(var(--calendar-accent-color-rgb), 0.9)' }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-semibold text-white truncate">{ev.title}</div>
+                      {ev.location && (
+                        <div className="flex items-center gap-1 text-xs text-gray-400 truncate">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          {ev.location}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0 leading-tight">
+                      {ev.allDay ? (
+                        <div className="text-sm text-gray-400">jour entier</div>
+                      ) : (
+                        <>
+                          <div className="text-sm font-semibold text-white tabular-nums">{ev.time}</div>
+                          <div className="text-sm text-gray-500 tabular-nums">{ev.endTime}</div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto h-[90vh] flex flex-col text-white">
       {/* Signalé (30/08/2026, capture à l'appui) : "on ne peut pas voir le
@@ -960,6 +1039,12 @@ export const AgendaView: React.FC = () => {
         <div className="flex items-center gap-2">
           {/* View Toggles */}
           <div className="flex p-1 bg-white/5 border border-white/10 rounded-xl mr-2">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${viewMode === 'list' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              Liste
+            </button>
             <button
               onClick={() => setViewMode('day')}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${viewMode === 'day' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white'}`}
@@ -1026,7 +1111,7 @@ export const AgendaView: React.FC = () => {
               <ChevronLeft className="w-4 h-4" />
             </button>
             <span className="font-bold text-white text-sm min-w-[140px] text-center capitalize">
-              {viewMode === 'month' 
+              {viewMode === 'month' || viewMode === 'list'
                 ? format(currentDate, 'MMMM yyyy', { locale: fr })
                 : viewMode === 'week'
                   ? `${format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'd MMM', { locale: fr })} - ${format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'd MMM yyyy', { locale: fr })}`
@@ -1045,6 +1130,7 @@ export const AgendaView: React.FC = () => {
         {viewMode === 'month' && renderMonthView()}
         {viewMode === 'week' && renderWeekView()}
         {viewMode === 'day' && renderDayView()}
+        {viewMode === 'list' && renderListView()}
       </div>
 
       {/* Delete Confirmation Modal */}
