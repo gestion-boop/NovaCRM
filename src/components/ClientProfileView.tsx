@@ -510,6 +510,11 @@ export default function ClientProfileView({
     if (error) return toast.error(error.message);
     qc.invalidateQueries({ queryKey: ['lead-stage', clientId] });
     qc.invalidateQueries({ queryKey: ['contacts_all'] });
+    // Changer l'étape depuis la fiche client change ce que compte le Tableau
+    // de bord (le chiffre d'affaires se lit sur l'étape du dossier) : sans
+    // cette ligne, le montant restait celui d'avant jusqu'au prochain
+    // rechargement complet. Même oubli que celui corrigé pour l'archivage.
+    qc.invalidateQueries({ queryKey: ['deals'] });
     toast.success('Étape mise à jour');
   };
 
@@ -532,6 +537,7 @@ export default function ClientProfileView({
     setActivePipelineId(pipelineId);
     qc.invalidateQueries({ queryKey: ['lead-stage', clientId] });
     qc.invalidateQueries({ queryKey: ['contacts_all'] });
+    qc.invalidateQueries({ queryKey: ['deals'] });
     toast.success('Pipeline mis à jour');
   };
 
