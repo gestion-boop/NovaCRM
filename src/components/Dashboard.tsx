@@ -131,7 +131,16 @@ export default function Dashboard({
         })
         .map((p) => p.id)
     );
-    if (pipelinesVises.size === 0) return { total: 0, comptees: 0, sansMontant: 0, pipelineTrouve: false };
+    if (pipelinesVises.size === 0) {
+      return {
+        total: 0, comptees: 0, sansMontant: 0, pipelineTrouve: false,
+        dansLePipeline: 0, horsEtape: 0,
+        // On montre les noms réellement trouvés : si la règle ne reconnaît
+        // pas le pipeline, autant voir tout de suite comment il s'appelle
+        // plutôt que de chercher à l'aveugle.
+        nomsConnus: pipelinesData.map((p) => p.name).slice(0, 6),
+      };
+    }
 
     // « Si on archive, on garde les montants dans le tableau de bord » : on
     // part donc de `allDeals`, qui contient les affaires archivees, au lieu
@@ -144,15 +153,18 @@ export default function Dashboard({
     let total = 0;
     let comptees = 0;
     let sansMontant = 0;
+    let dansLePipeline = 0;
+    let horsEtape = 0;
     perimetre.forEach((d) => {
       if (!d.pipelineId || !pipelinesVises.has(d.pipelineId)) return;
-      if (!sansAccents(d.stage || '').includes('factur')) return;
+      dansLePipeline += 1;
+      if (!sansAccents(d.stage || '').includes('factur')) { horsEtape += 1; return; }
       const montant = Number(d.amount) || 0;
       if (montant <= 0) { sansMontant += 1; return; }
       total += montant;
       comptees += 1;
     });
-    return { total, comptees, sansMontant, pipelineTrouve: true };
+    return { total, comptees, sansMontant, pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [] };
   }, [allDeals, activeAgency.id, pipelinesData]);
 
 
@@ -438,14 +450,35 @@ export default function Dashboard({
               <div className="text-2xl font-black text-[#F9C977] tracking-tight">
                 {formatCurrency(chiffreAffairesAgence.total)}
               </div>
+              {/* Une tuile qui affiche zéro sans dire pourquoi fait perdre une
+                  soirée. Elle explique donc ce qu'elle a trouvé, et où ça
+                  bloque : le pipeline, l'étape, ou le montant. */}
               <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
-                {!chiffreAffairesAgence.pipelineTrouve
-                  ? 'Aucun pipeline « Transaction V2 » trouvé'
-                  : `${chiffreAffairesAgence.comptees} affaire${chiffreAffairesAgence.comptees > 1 ? 's' : ''} facturée${chiffreAffairesAgence.comptees > 1 ? 's' : ''}`}
-                {chiffreAffairesAgence.sansMontant > 0 && (
+                {!chiffreAffairesAgence.pipelineTrouve ? (
                   <span className="text-amber-400/90">
-                    {' '}· {chiffreAffairesAgence.sansMontant} sans HT, non comptée{chiffreAffairesAgence.sansMontant > 1 ? 's' : ''}
+                    Aucun pipeline dont le nom contient « transaction » et « v2 »
+                    {chiffreAffairesAgence.nomsConnus.length > 0 && (
+                      <span className="text-slate-500 font-normal block mt-0.5">
+                        Trouvés : {chiffreAffairesAgence.nomsConnus.join(', ')}
+                      </span>
+                    )}
                   </span>
+                ) : (
+                  <>
+                    {chiffreAffairesAgence.comptees} affaire{chiffreAffairesAgence.comptees > 1 ? 's' : ''} facturée{chiffreAffairesAgence.comptees > 1 ? 's' : ''}
+                    {chiffreAffairesAgence.sansMontant > 0 && (
+                      <span className="text-amber-400/90">
+                        {' '}· {chiffreAffairesAgence.sansMontant} sans HT
+                      </span>
+                    )}
+                    {chiffreAffairesAgence.comptees === 0 && (
+                      <span className="text-slate-500 font-normal block mt-0.5">
+                        {chiffreAffairesAgence.dansLePipeline === 0
+                          ? 'Aucune affaire dans ce pipeline'
+                          : `${chiffreAffairesAgence.dansLePipeline} affaire${chiffreAffairesAgence.dansLePipeline > 1 ? 's' : ''} dans le pipeline, ${chiffreAffairesAgence.horsEtape} hors d'une étape « facturé »`}
+                      </span>
+                    )}
+                  </>
                 )}
               </span>
             </div>
