@@ -1634,26 +1634,14 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       return { ...withChildren, ...lock, locked: true };
     });
 
-  // Un dossier verrouillé doit EXISTER chez tout le monde. `applyLocks` ne
-  // savait que retoucher une tuile déjà présente : quelqu'un qui n'avait
-  // jamais eu le dossier — ou qui l'avait supprimé avant la pose du verrou —
-  // ne voyait donc rien du tout. On le pose ici à la fin de sa grille.
-  // Uniquement à la racine : à l'intérieur d'un dossier ouvert, cela y
-  // déverserait les tuiles verrouillées du haut niveau.
-  const applyLocksRacine = (items: TileItemNode[]): TileItemNode[] => {
-    const resultat = applyLocks(items);
-    const presentes = new Set<string>();
-    const recenser = (list: TileItemNode[]) =>
-      list.forEach((t) => {
-        presentes.add(t.id);
-        if (t.children) recenser(t.children);
-      });
-    recenser(resultat);
-    const manquantes = Object.entries(lockedTiles)
-      .filter(([id]) => !presentes.has(id))
-      .map(([id, lock]) => ({ ...(lock as TileItemNode), id, locked: true }));
-    return manquantes.length > 0 ? [...resultat, ...manquantes] : resultat;
-  };
+  // NOTE (1er septembre, au soir) : une version de ce correctif POSAIT sur
+  // la grille toute tuile verrouillée absente, pour qu'un dossier verrouillé
+  // existe chez tout le monde. Retiré le soir même : `lockedTiles` garde des
+  // entrées d'anciens verrous dont l'id ne correspond plus à aucune tuile
+  // vivante, et elles réapparaissaient toutes d'un coup — cinq « Immosphera »
+  // sur le même écran. À reprendre en nettoyant d'abord la liste des verrous
+  // (voir la recette). Le contenu imposé, lui, reste : il ne touche que les
+  // tuiles réellement présentes.
 
   // Pose/retire un verrou — écrit directement dans agency_ui_settings pour
   // que ça s'applique à toute l'agence, pas seulement à ce navigateur.
@@ -2292,9 +2280,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // niveaux, y compris au contenu des dossiers. Les filtres à plat qui se
   // trouvaient ici faisaient double emploi — et surtout ne voyaient jamais ce
   // qui était rangé dans un dossier.
-  const currentDisplayTiles = activeFolder
-    ? applyLocks(filtrerEnProfondeur(activeFolder.children || []))
-    : applyLocksRacine(filtrerEnProfondeur(tiles));
+  const currentDisplayTiles = applyLocks(
+    filtrerEnProfondeur(activeFolder ? (activeFolder.children || []) : tiles)
+  );
 
   // Cap à 24 tuiles réelles visibles sur l'accueil (ticket #256 : 6 colonnes
   // fixes × 4 lignes, au lieu de 7×3 quand la grille était responsive) — au-
