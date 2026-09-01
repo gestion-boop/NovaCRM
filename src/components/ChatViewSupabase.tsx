@@ -1886,9 +1886,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         <div className="shrink-0 flex items-center gap-2 px-3 py-2.5 border-b border-white/20 pt-[calc(env(safe-area-inset-top,0px)+1.1rem)]">
           <button
             onClick={onExitMobile}
-            className="p-1.5 -ml-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-1"
+            className="p-2.5 -ml-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-1.5"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-semibold">Retour</span>
           </button>
         </div>
@@ -1897,8 +1897,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       {/* Tabs — masqués sur mobile une fois une conversation ouverte, pour
           laisser toute la place au panneau de discussion. */}
       {(!isMobile || !mobileShowingConversation) && (
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-white/20 shrink-0">
-        <div className="flex items-center gap-2">
+      /* Bug nº 3 (consigne du 1er septembre) : sur téléphone, les trois
+         onglets plus le bouton « Nouveau » dépassaient la largeur de l'écran.
+         Marges resserrées sur mobile uniquement, et la rangée peut défiler
+         si elle reste trop large. Rien ne change sur ordinateur. */
+      <div className={`flex items-center justify-between gap-2 ${isMobile ? 'px-2' : 'px-4'} py-3 border-b border-white/20 shrink-0`}>
+        <div className={`flex items-center min-w-0 overflow-x-auto custom-scrollbar ${isMobile ? 'gap-1' : 'gap-2'}`}>
           {TABS.map((t) => {
             // Demandé : "un compteur sur conversation" — total des messages
             // non lus toutes conversations confondues, affiché directement
@@ -1911,7 +1915,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all ${
+                className={`shrink-0 ${isMobile ? 'px-2.5 gap-1.5' : 'px-4 gap-2'} py-2 rounded-xl text-sm font-semibold flex items-center transition-all ${
                   tab === t.id ? 'bg-[#F7BC5F] text-slate-950' : 'text-slate-300 hover:bg-white/5'
                 }`}
               >
@@ -1931,7 +1935,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         {tab === 'conversations' && (
           <button
             onClick={() => { setShowNewConvModal(true); ensureProfilesLoaded(); }}
-            className="px-4 py-2 rounded-xl text-sm font-bold bg-[#F7BC5F] text-slate-950 hover:bg-[#d4a83b] flex items-center gap-1.5"
+            className={`shrink-0 ${isMobile ? 'px-2.5' : 'px-4'} py-2 rounded-xl text-sm font-bold bg-[#F7BC5F] text-slate-950 hover:bg-[#d4a83b] flex items-center gap-1.5`}
           >
             <Plus className="w-4 h-4" /> Nouveau
           </button>
@@ -2143,8 +2147,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     sur mobile. */}
                 <div className={`px-5 py-3.5 border-b border-white/20 flex items-center gap-2 ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
                   {isMobile && (
-                    <button onClick={goBackToList} className="p-1 -ml-1 mr-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
-                      <ArrowLeft className="w-4 h-4" />
+                    <button onClick={goBackToList} aria-label="Revenir à la liste" className="p-3 -ml-2 mr-0.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
+                      <ArrowLeft className="w-5 h-5" />
                     </button>
                   )}
                   <MessageSquare className="w-4 h-4 text-[#F7BC5F]" />
@@ -2278,7 +2282,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                     const pickerItems = (
                                       <>
                                         {NOVA_QUICK_REACTIONS.map((e) => (
-                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-2xl p-1.5'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
+                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
                                             {/* Équilibre Novadji / emojis (31/08/2026 :
                                                 "les Novadji ne sont pas de la même taille,
                                                 équilibre le tout sur ordinateur et téléphone
@@ -2289,16 +2293,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                                 dessin occupe environ 70 % du carré. Il faut
                                                 l'agrandir d'environ un tiers pour un poids
                                                 visuel identique.
-                                                  souris   : emoji 24px (text-2xl) → Nova 40px
-                                                  tactile  : emoji 36px (text-4xl) → Nova 56px */}
-                                            {renderEmojiOrNova(e, isMobile || isCoarsePointer ? 'w-14 h-14' : 'w-10 h-10')}
+                                                  souris   : emoji 30px (text-3xl) → Nova 48px
+                                                  tactile  : emoji 36px (text-4xl) → Nova 56px
+                                                Bug nº 8 (consigne du 1er septembre) : à la souris
+                                                les emojis étaient trop petits pour être visés. */}
+                                            {renderEmojiOrNova(e, isMobile || isCoarsePointer ? 'w-14 h-14' : 'w-12 h-12')}
                                           </button>
                                         ))}
                                         {/* Suite #240 : séparation visuelle nette entre les
                                             mini-expressions Nova et "les vrais" emojis. */}
                                         <div className="col-span-10 h-px bg-[#153c3f] my-1" />
                                         {QUICK_EMOJIS.map((e) => (
-                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-2xl p-1.5'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
+                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
                                             {e}
                                           </button>
                                         ))}
@@ -2496,7 +2502,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                 key={e}
                                 type="button"
                                 onClick={() => setConvDraft((v) => v + e)}
-                                className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-2xl p-1.5'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}
+                                className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}
                               >
                                 {e}
                               </button>
@@ -2567,8 +2573,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             <>
               <div className={`px-5 py-3.5 border-b border-white/20 flex items-center gap-2 ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
                 {isMobile && (
-                  <button onClick={goBackToList} className="p-1 -ml-1 mr-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
-                    <ArrowLeft className="w-4 h-4" />
+                  <button onClick={goBackToList} aria-label="Revenir à la liste" className="p-3 -ml-2 mr-0.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
+                    <ArrowLeft className="w-5 h-5" />
                   </button>
                 )}
                 <Hash className="w-4 h-4 text-[#F7BC5F]" />
@@ -2693,7 +2699,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           key={e}
                           type="button"
                           onClick={() => setDraft((v) => v + e)}
-                          className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-2xl p-1.5'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}
+                          className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}
                         >
                           {e}
                         </button>

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Edit, Inbox, Loader2, Mail, RefreshCw, Reply, ReplyAll, Forward, Search, Send, X,
   Trash2, AlertTriangle, Star, CheckCircle2, ShieldAlert, Archive, Eye, EyeOff,
@@ -1549,8 +1550,13 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
       </>
       )}
 
-      {showComposer && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+      {/* Bug nº 2 (consigne du 1er septembre) : sur téléphone, le bas du
+          composeur — dont le bouton « Envoyer » — passait sous la barre de
+          navigation du bas. L'écran parent porte un `z-10` qui enferme le
+          `z-[100]` de la fenêtre dans son contexte d'empilement : on la sort
+          donc dans <body>, comme les autres fenêtres du CRM. */}
+      {showComposer && createPortal(
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
           {/* Ticket #16 (nouvelle base) : fenêtre sans hauteur limitée ni
               défilement propre — avec Cc, objet, message et signature, le
               contenu dépassait souvent la hauteur de l'écran et devenait
@@ -1687,7 +1693,8 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

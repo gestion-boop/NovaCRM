@@ -83,6 +83,58 @@ export const useTaskMessages = (taskId: string | null) => {
         attachment_duration: payload.attachmentDuration ?? null,
       } as any);
       if (error) throw new Error(error.message);
+
+      // Bug nº 6 (consigne du 1er septembre) : un message posté sur une tâche
+      // de projet interne ne prévenait personne. On passe par la notification
+      // déjà en place partout ailleurs (RPC `create_notification`, qui gère
+      // aussi le push) — pas de second système. Destinataires : le
+      // responsable de la tâche et ses collaborateurs, sauf l'auteur.
+      try {
+        const { data: tache } = await supabase
+          .from('internal_project_tasks')
+          .select('title, agency_id, created_by, collaborator_ids')
+          .eq('id', taskId)
+          .single();
+
+        if (tache) {
+          const t = tache as unknown as {
+            title: string;
+            agency_id: string;
+            created_by: string | null;
+            collaborator_ids: string[] | null;
+          };
+          const destinataires = Array.from(
+            new Set(
+              [t.created_by, ...(t.collaborator_ids || [])].filter(
+                (id): id is string => Boolean(id) && id !== payload.userId
+              )
+            )
+          );
+          const apercu =
+            payload.kind === 'voice' ? 'Message vocal'
+            : payload.kind === 'image' ? 'Photo'
+            : payload.kind === 'file' ? 'Fichier'
+            : (payload.body || '').slice(0, 120);
+
+          await Promise.all(
+            destinataires.map((userId) =>
+              supabase.rpc('create_notification', {
+                _user_id: userId,
+                _type: 'internal_task_message',
+                _title: '💬 Nouveau message sur une tâche',
+                _message: `${t.title} — ${apercu}`,
+                _entity_type: 'internal_task',
+                _entity_id: taskId,
+                _agency_id: t.agency_id,
+                _metadata: { url: '/projets-internes' },
+              })
+            )
+          );
+        }
+      } catch (e) {
+        // Une notification qui échoue ne doit jamais faire échouer l'envoi.
+        console.warn('Notification de message de tâche impossible :', e);
+      }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
