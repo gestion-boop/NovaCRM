@@ -702,19 +702,61 @@ export default function ClientProfileView({
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [archiving, setArchiving] = useState(false);
 
+  // Demandé le 1er septembre : « quand dans la fiche client on archive, c'est
+  // là que cela demande le montant ». L'archivage est le dernier moment où
+  // quelqu'un regarde l'affaire — c'est donc le bon endroit pour confirmer la
+  // commission agence, puisque c'est elle qui alimente le chiffre d'affaires
+  // du Tableau de bord (voir chiffreAffairesAgence dans Dashboard.tsx).
+  const [montantHt, setMontantHt] = useState('');
+  const [montantCharge, setMontantCharge] = useState(false);
+
+  useEffect(() => {
+    if (!showArchiveModal) return;
+    let vivant = true;
+    setMontantCharge(false);
+    (async () => {
+      const { data } = await supabase
+        .from('leads')
+        .select('estimated_value')
+        .eq('id', clientId)
+        .maybeSingle();
+      if (!vivant) return;
+      const valeur = (data as { estimated_value: number | null } | null)?.estimated_value;
+      setMontantHt(valeur === null || valeur === undefined ? '' : String(valeur));
+      setMontantCharge(true);
+    })();
+    return () => { vivant = false; };
+  }, [showArchiveModal, clientId]);
+
   const handleArchive = async (signed: boolean) => {
     setArchiving(true);
     try {
+      // Virgule ou point, au choix : personne ne tape un montant deux fois
+      // parce que le clavier a mis une virgule.
+      const saisi = montantHt.trim().replace(',', '.');
+      const montant = saisi === '' ? null : Number(saisi);
+      if (montant !== null && (!Number.isFinite(montant) || montant < 0)) {
+        toast.error('Le montant hors taxes n\'est pas un nombre valide.');
+        setArchiving(false);
+        return;
+      }
+
       const { error } = await supabase
         .from('leads')
         .update({
           archived_at: new Date().toISOString(),
           signed_at: signed ? new Date().toISOString() : null,
+          // Champ laissé vide : on ne touche pas au montant déjà enregistré,
+          // plutôt que de l'effacer par inadvertance.
+          ...(montant === null ? {} : { estimated_value: montant }),
         } as any)
         .eq('id', clientId);
       if (error) throw error;
       toast.success('Fiche archivée');
       qc.invalidateQueries({ queryKey: ['contacts_all'] });
+      // Sans ça, le Tableau de bord garderait l'ancien montant jusqu'au
+      // prochain rechargement complet.
+      qc.invalidateQueries({ queryKey: ['deals'] });
       setShowArchiveModal(false);
       onBack();
     } catch (e: any) {
@@ -4286,7 +4328,28 @@ export default function ClientProfileView({
               </div>
               <h3 className="text-base font-bold text-white">Archiver la fiche</h3>
             </div>
-            <p className="text-sm text-slate-300 mb-5">La signature du dossier a-t-elle été faite ? Cela permet de comptabiliser cette affaire dans les statistiques du mois.</p>
+            <p className="text-sm text-slate-300 mb-4">La signature du dossier a-t-elle été faite ? Cela permet de comptabiliser cette affaire dans les statistiques du mois.</p>
+
+            <div className="mb-5">
+              <label htmlFor="archive-montant-ht" className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Commission agence, hors taxes
+              </label>
+              <input
+                id="archive-montant-ht"
+                type="text"
+                inputMode="decimal"
+                value={montantCharge ? montantHt : ''}
+                onChange={(e) => setMontantHt(e.target.value)}
+                disabled={!montantCharge || archiving}
+                placeholder={montantCharge ? 'Non renseigné' : 'Chargement…'}
+                className="w-full px-3 py-2.5 rounded-xl bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60 disabled:opacity-60"
+              />
+              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                C'est ce montant qui comptera dans le chiffre d'affaires de l'agence. Corrige-le
+                si besoin — laissé vide, celui déjà enregistré est conservé.
+              </p>
+            </div>
+
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => void handleArchive(true)}

@@ -707,11 +707,21 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
   const dealsByStage = useMemo(() => {
     const map = new Map<string, typeof agencyDeals>();
     if (!activePipeline) return map;
+    // Filet de sécurité posé après l'incident du 1er septembre : une affaire
+    // dont le nom d'étape ne correspond à AUCUNE colonne du pipeline
+    // n'apparaissait nulle part — elle semblait supprimée alors qu'elle était
+    // bien en base. Elle est désormais rangée dans la première colonne, où on
+    // peut la voir et la remettre à sa place. Mieux vaut une carte au mauvais
+    // endroit qu'une carte introuvable.
+    const colonnes = new Set(activePipeline.stages);
+    const premiere = activePipeline.stages[0];
     agencyDeals.forEach((deal) => {
       if ((deal.pipelineId || activePipeline.id) !== activePipeline.id) return;
-      const existing = map.get(deal.stage);
+      const colonne = colonnes.has(deal.stage) ? deal.stage : premiere;
+      if (!colonne) return;
+      const existing = map.get(colonne);
       if (existing) existing.push(deal);
-      else map.set(deal.stage, [deal]);
+      else map.set(colonne, [deal]);
     });
     return map;
   }, [agencyDeals, activePipeline]);
@@ -955,6 +965,25 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
         if (delErr) throw delErr;
       }
     }
+
+    // INCIDENT DU 1er SEPTEMBRE — « il y a deux fiches clients que j'ai mises
+    // dans À facturer et elles ont disparu ».
+    //
+    // Rien n'était supprimé : les affaires devenaient INVISIBLES. Le
+    // dictionnaire « identifiant d'étape -> nom » vit dans useDeals sous la
+    // clé ['pipeline-stages-all'], et RIEN ne l'invalidait quand une étape
+    // était créée. Une affaire déplacée dans l'étape neuve portait donc un
+    // stage_id que ce dictionnaire ne connaissait pas : son nom d'étape
+    // retombait sur la température (« chaud »...) ou sur « Nouveau », et
+    // comme aucune colonne ne porte ce nom, elle n'était affichée nulle part.
+    // Un rechargement complet de la page la faisait réapparaître — ce qui
+    // désignait le cache, pas la base.
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['pipeline-stages-all'] }),
+      queryClient.invalidateQueries({ queryKey: ['pipeline-stages-positions'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pipelines'] }),
+      queryClient.invalidateQueries({ queryKey: ['deals'] }),
+    ]);
   };
 
   const handleCreatePipeline = async (event: React.FormEvent) => {
