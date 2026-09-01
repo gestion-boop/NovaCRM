@@ -1292,6 +1292,20 @@ const InviteCollaboratorModal: React.FC<{ onClose: () => void; onInvited: () => 
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Demandé : pouvoir créer/activer le compte MAINTENANT sans prévenir
+  // l'intéressé, et récupérer le lien de connexion pour le transmettre
+  // soi-même. Sans compte, la personne n'existe pas dans `profiles` et ne
+  // peut donc pas se voir attribuer un contact (contrainte
+  // `leads_assigned_to_fkey`). Le lien ouvre une session : la personne
+  // arrive connectée et peut ensuite utiliser son compte Google.
+  const [sendInviteEmail, setSendInviteEmail] = useState(true);
+  const [createdLink, setCreatedLink] = useState<string | null>(null);
+  // Le nom du collaborateur, retenu au moment de la création. `fullName`
+  // est une variable LOCALE à submit() : la réutiliser dans l'affichage
+  // ci-dessous levait une erreur et vidait l'écran « Compte activé »,
+  // celui qu'on voit justement quand aucun e-mail n'est envoyé.
+  const [createdName, setCreatedName] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
   // Ticket #229 : "Inviter un stagiaire" ouvrait auparavant un formulaire
   // dédié (rubrique "Gestion des utilisateurs", supprimée) avec des champs
   // spécifiques au stage — repris ici, affichés seulement pour le rôle
@@ -1335,6 +1349,7 @@ const InviteCollaboratorModal: React.FC<{ onClose: () => void; onInvited: () => 
           email: email.trim().toLowerCase(),
           fullName,
           role,
+          sendInviteEmail,
           agencyIds: agencyId ? [agencyId] : [],
           phone: phone.trim() || undefined,
           businessCardEmail: businessCardEmail.trim() || undefined,
@@ -1351,6 +1366,15 @@ const InviteCollaboratorModal: React.FC<{ onClose: () => void; onInvited: () => 
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || `Erreur serveur (${res.status})`);
+      if (body.emailSkipped && body.actionLink) {
+        // On garde la fenêtre ouverte : le lien ne s'affiche qu'ici, il
+        // serait perdu en fermant. `onInvited()` (qui ferme et recharge la
+        // liste) est appelé à la fermeture volontaire.
+        setCreatedName(fullName);
+        setCreatedLink(body.actionLink);
+        toast.success('Compte activé. Transmettez le lien de connexion.');
+        return;
+      }
       toast.success(body.emailSent ? 'Invitation envoyée par e-mail.' : "Collaborateur créé, mais l'e-mail n'a pas pu être envoyé.");
       onInvited();
     } catch (err: any) {
@@ -1358,6 +1382,43 @@ const InviteCollaboratorModal: React.FC<{ onClose: () => void; onInvited: () => 
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (createdLink) {
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div className="bg-[#07191b] border border-[#1b4e52] rounded-2xl max-w-md w-full p-6 text-white shadow-2xl">
+          <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
+            <UserPlus className="w-5 h-5 text-emerald-400" /> Compte activé
+          </h3>
+          <p className="text-xs text-slate-300 leading-relaxed mb-4">
+            <b>{createdName || email}</b> est maintenant attribuable sur les contacts.
+            Aucun e-mail n'a été envoyé. Transmettez-lui ce lien quand vous le
+            souhaitez : il ouvre directement sa session, et il pourra ensuite se
+            connecter avec son compte Google.
+          </p>
+          <div className="p-2.5 rounded-xl nv-panel border border-[#144447]/60 text-[11px] text-slate-300 break-all select-all mb-3">
+            {createdLink}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                void navigator.clipboard.writeText(createdLink).then(() => {
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 2500);
+                });
+              }}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-sm"
+            >
+              {linkCopied ? 'Lien copié ✓' : 'Copier le lien'}
+            </button>
+            <button onClick={onInvited} className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold text-sm">
+              Terminé
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1437,10 +1498,26 @@ const InviteCollaboratorModal: React.FC<{ onClose: () => void; onInvited: () => 
           )}
         </div>
 
+        <label className="mt-4 flex items-start gap-2.5 p-3 rounded-xl nv-panel border border-[#144447]/60 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={sendInviteEmail}
+            onChange={(e) => setSendInviteEmail(e.target.checked)}
+            className="mt-0.5 w-4 h-4 accent-[#F7BC5F] shrink-0"
+          />
+          <span className="text-xs text-slate-300 leading-relaxed">
+            <span className="font-bold text-white">Envoyer l'invitation par e-mail maintenant</span>
+            <br />
+            Décochez pour <b>activer le compte sans prévenir la personne</b> : elle devient
+            immédiatement attribuable sur les contacts, et le lien de connexion s'affiche
+            ici pour que vous le transmettiez quand vous le souhaitez.
+          </span>
+        </label>
+
         <div className="flex gap-2 pt-5">
           <button onClick={onClose} disabled={submitting} className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold text-sm">Annuler</button>
           <button onClick={() => void submit()} disabled={submitting} className="flex-1 px-4 py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-sm flex items-center justify-center gap-2 disabled:opacity-50">
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />} Envoyer l'invitation
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />} {sendInviteEmail ? "Envoyer l'invitation" : 'Activer le compte'}
           </button>
         </div>
       </div>

@@ -15,6 +15,8 @@ interface MobileBottomNavProps {
   // la barre pour l'accueil tout à gauche, nova et peut être un + pour créer
   // un mail »). Absente ailleurs : la barre reprend alors ses trois boutons.
   onCompose?: () => void;
+  // Libellé du « + » : « Écrire » sur la messagerie, « Ajouter » sur l'agenda.
+  composeLabel?: string;
   unreadMessagesCount?: number;
   unreadNotificationsCount?: number;
   unreadRemindersCount?: number;
@@ -31,6 +33,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onOpenMobileMenu,
   onOpenNova,
   onCompose,
+  composeLabel = 'Écrire',
 }) => {
   return (
     // Logo Nova redimensionné pour tenir dans la hauteur de la barre,
@@ -50,13 +53,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {onCompose && (
         <button
           onClick={onCompose}
-          title="Nouveau message"
+          title={composeLabel}
           className="flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all cursor-pointer text-[#F7BC5F] active:scale-95"
         >
           <span className="w-8 h-8 rounded-full bg-[#F7BC5F] text-[#061719] flex items-center justify-center">
             <Plus className="w-6 h-6" strokeWidth={3} />
           </span>
-          <span className="text-sm font-semibold mt-1">Écrire</span>
+          <span className="text-sm font-semibold mt-1">{composeLabel}</span>
         </button>
       )}
 

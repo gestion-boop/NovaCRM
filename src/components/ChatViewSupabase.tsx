@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { AGENCIES } from '@/types';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { NOVA_QUICK_REACTIONS, renderEmojiOrNova, isNovaReaction } from '@/lib/novaReactions';
 
 interface ChatProject {
@@ -49,6 +49,12 @@ interface ChatMessageRow {
     sender_id?: string;
     sender_name?: string;
     created_at?: string;
+    // Photos et messages vocaux : `insertChannelMedia` écrit déjà ces
+    // champs, le type ne les déclarait simplement pas.
+    kind?: 'text' | 'image' | 'voice' | 'file';
+    attachmentUrl?: string;
+    attachmentMime?: string;
+    attachmentDuration?: number;
   };
   created_at: string;
   sender_id?: string | null;
@@ -95,6 +101,17 @@ interface ChatViewSupabaseProps {
   // pendant 5 secondes pour l'identifier visuellement.
   initialHighlightMessageId?: string | null;
   onHighlightConsumed?: () => void;
+  /**
+   * Conversation à ouvrir directement, sans message précis à mettre en avant.
+   *
+   * Signalé (01/09/2026) : « au clic sur la notification, elle ne va pas
+   * directement à la cible ». La notification d'un nouveau message porte
+   * l'URL `/messagerie?conversation=<id>` quand aucun identifiant de message
+   * n'est disponible — jusqu'ici personne ne lisait ce paramètre : on
+   * atterrissait sur la liste des conversations, jamais sur la bonne.
+   */
+  initialConversationId?: string | null;
+  onConversationTargetConsumed?: () => void;
   // Sur mobile, quitte le chat plein écran (revient à l'accueil, ce qui
   // fait réapparaître la barre de navigation du bas et les autres panneaux).
   onExitMobile?: () => void;
@@ -111,7 +128,7 @@ interface ChatViewSupabaseProps {
   isActive?: boolean;
 }
 
-export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
+export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, initialConversationId, onConversationTargetConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const isSuperAdmin = userProfile?.role === 'super_admin';
   // Les invitations / gestion des membres sont réservées aux admins (et super admin)
@@ -130,6 +147,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // celui des conversations directes, sans le bouton Nova ajouté au ticket
   // #260 — ajouté ici aussi.
   const [showChannelNovaPicker, setShowChannelNovaPicker] = useState(false);
+  // Images et vocaux dans les canaux de projet (31/08/2026) — « pour tous les
+  // messages du chat, dans tous les dossiers et conversations, je veux qu'on
+  // puisse mettre des images, vocaux, emojis et Novadji ». Les conversations
+  // directes avaient les quatre ; les canaux n'avaient que les deux derniers.
+  const channelImageInputRef = useRef<HTMLInputElement>(null);
+  const channelMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const channelAudioChunksRef = useRef<Blob[]>([]);
+  const channelRecordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [isRecordingChannel, setIsRecordingChannel] = useState(false);
+  const [recordingChannelSeconds, setRecordingChannelSeconds] = useState(0);
+  const [uploadingChannelMedia, setUploadingChannelMedia] = useState(false);
   const [newChannelFor, setNewChannelFor] = useState<string | null>(null);
   const [newChannelName, setNewChannelName] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -137,7 +165,23 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // ── Gestion des membres par projet (table chat_project_members) ─────────
   const [membersModalProjectId, setMembersModalProjectId] = useState<string | null>(null);
   const [projectMembers, setProjectMembers] = useState<ChatProjectMember[]>([]);
+  // Création d'un dossier de projet (31/08/2026) — « chaque agence doit avoir
+  // sa propre vue des dossiers, et le + serait idéal pour créer des dossiers
+  // en rattachant les utilisateurs des agences concernées ».
+  const [showAddProject, setShowAddProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectMemberIds, setNewProjectMemberIds] = useState<Set<string>>(new Set());
+  const [newProjectQuery, setNewProjectQuery] = useState('');
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [projectError, setProjectError] = useState<string | null>(null);
   const [allProfiles, setAllProfiles] = useState<MemberProfile[]>([]);
+  // Agences réelles de chaque personne, lues dans `agency_members` — et non
+  // plus dans la liste figée `teamMembers.ts` (voir le correctif du
+  // 31/08/2026 plus bas).
+  const [agencyIdsByUid, setAgencyIdsByUid] = useState<Record<string, string[]>>({});
+  // Message d'échec de création de conversation. Sans lui, un refus de la base
+  // fermait simplement la fenêtre sans rien dire.
+  const [convCreateError, setConvCreateError] = useState<string | null>(null);
   const [memberPickerQuery, setMemberPickerQuery] = useState('');
   const [membersLoading, setMembersLoading] = useState(false);
 
@@ -181,6 +225,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // changement sur `message_reactions` concerne CETTE conversation avant de
   // déclencher un rechargement ciblé.
   const convMessageIdsRef = useRef<Set<string>>(new Set());
+  // Verrous d'envoi — un message à la fois par composeur. Un `useRef` et non
+  // un `useState` : la valeur doit être lue et écrite dans le même tic, avant
+  // tout nouveau rendu, sinon la garde arrive trop tard.
+  const sendingConvRef = useRef(false);
+  const sendingChannelRef = useRef(false);
   useEffect(() => {
     convMessageIdsRef.current = new Set(convMessages.map((m) => m.id));
   }, [convMessages]);
@@ -253,7 +302,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const ensureProfilesLoaded = async () => {
     if (allProfiles.length > 0) return;
-    const { data } = await supabase.from('profiles').select('id, full_name, email');
+    const [{ data }, { data: memberRows }] = await Promise.all([
+      supabase.from('profiles').select('id, full_name, email'),
+      supabase.from('agency_members').select('user_id, agency_id'),
+    ]);
+    if (memberRows) {
+      const byUid: Record<string, string[]> = {};
+      (memberRows as { user_id: string; agency_id: string }[]).forEach((m) => {
+        (byUid[m.user_id] ||= []).push(m.agency_id);
+      });
+      setAgencyIdsByUid(byUid);
+    }
     if (data) {
       setAllProfiles(
         (data as { id: string; full_name: string | null; email: string | null }[]).map((p) => ({
@@ -600,6 +659,27 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setConvMessages((prev) => {
       const byId = new Map(prev.map((m) => [m.id, m]));
       rows.forEach((m) => byId.set(m.id, m));
+
+      // Signalé (31/08/2026) : "le message dans chat part deux fois".
+      // Cette fusion par id a remplacé un remplacement pur de la liste ; or
+      // `sendConvMessage` affiche d'abord un écho optimiste portant un id
+      // provisoire (`optimistic-…`) qui ne correspondra JAMAIS à l'uuid de
+      // la ligne réelle. Il n'était donc plus jamais retiré, et le message
+      // restait affiché en double. Le correctif principal est dans
+      // `sendConvMessage` (l'id provisoire y devient l'id réel dès la
+      // réponse de la base) ; ce filet rattrape les cas où cette réponse
+      // n'est jamais arrivée — perte de réseau juste après l'écriture.
+      const reels = Array.from(byId.values()).filter((m) => !m.id.startsWith('optimistic-'));
+      Array.from(byId.keys())
+        .filter((id) => id.startsWith('optimistic-'))
+        .forEach((id) => {
+          const echo = byId.get(id)!;
+          const couvert = reels.some(
+            (r) => r.user_id === echo.user_id && r.kind === echo.kind && r.body === echo.body,
+          );
+          if (couvert) byId.delete(id);
+        });
+
       return Array.from(byId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
     });
     if (rows.length > 0) {
@@ -665,6 +745,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   // ── Rebond de 5s sur le message ciblé par une notification ──────────────
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  // Ouverture directe d'une conversation depuis une notification, quand
+  // celle-ci ne désigne pas un message précis (voir initialConversationId).
+  useEffect(() => {
+    if (!initialConversationId) return;
+    setTab('conversations');
+    openConversation(initialConversationId);
+    onConversationTargetConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialConversationId]);
+
   useEffect(() => {
     if (!initialHighlightMessageId) return;
     let cancelled = false;
@@ -831,6 +921,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const sendConvMessage = async () => {
     const body = convDraft.trim();
     if (!body || !activeConversationId || !currentUser) return;
+    // Deux envois ne peuvent plus se chevaucher : `setConvDraft('')` ne prend
+    // effet qu'au rendu suivant, donc deux appels dans le même tic lisaient
+    // tous les deux le même brouillon et écrivaient deux fois en base
+    // (Entrée maintenue enfoncée, clavier mobile qui répète l'événement,
+    // double appui sur le bouton d'envoi...).
+    if (sendingConvRef.current) return;
+    sendingConvRef.current = true;
     setConvDraft('');
 
     // Signalé : le message met ~18s à apparaître, et le destinataire le
@@ -843,8 +940,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // notification push du destinataire suit un circuit indépendant et
     // souvent plus rapide. On affiche donc le message immédiatement côté
     // expéditeur ; le rechargement Realtime qui suit remplace ensuite cet
-    // état provisoire par la version réelle (id, accusés...) sans doublon
-    // puisque `loadConvMessages` remplace toute la liste.
+    // état provisoire par la version réelle (id, accusés...).
+    //
+    // ATTENTION (31/08/2026) : ce remplacement ne va PAS de soi. Il tenait à
+    // l'origine au fait que `loadConvMessages` réécrivait toute la liste ;
+    // cette fonction fusionne désormais par id, et l'écho ci-dessous a
+    // justement un id qui n'existe pas en base — d'où le message affiché en
+    // double, signalé. C'est la reprise de l'id réel, plus bas, qui rend le
+    // remplacement effectif. Ne pas la retirer.
     const optimisticId = `optimistic-${Date.now()}`;
     setConvMessages((prev) => [
       ...prev,
@@ -862,28 +965,52 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       },
     ]);
 
-    const { data: inserted, error } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: activeConversationId,
-        user_id: currentUser.uid,
-        kind: 'text',
-        body,
-      } as any)
-      .select('id')
-      .single();
+    let inserted: { id?: string } | null = null;
+    let error: unknown = null;
+    try {
+      const res = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: activeConversationId,
+          user_id: currentUser.uid,
+          kind: 'text',
+          body,
+        } as any)
+        .select('id')
+        .single();
+      inserted = res.data as { id?: string } | null;
+      error = res.error;
+    } catch (e) {
+      // Réseau coupé en plein envoi : sans ce filet, le verrou resterait
+      // fermé et plus AUCUN message ne pourrait partir jusqu'au rechargement
+      // de la page.
+      error = e;
+    }
 
     if (error) {
       // L'envoi a échoué : on retire l'écho optimiste et on restaure le
       // brouillon pour ne pas faire croire que le message est parti.
       setConvMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setConvDraft(body);
+      sendingConvRef.current = false;
       return;
     }
 
+    // L'écho provisoire prend immédiatement l'identifiant réel renvoyé par
+    // la base. La fusion de `loadConvMessages` le reconnaît alors et le
+    // remplace au lieu d'ajouter une seconde copie à côté — c'est ce qui
+    // faisait apparaître chaque message en double.
+    const realId = inserted?.id;
+    if (realId) {
+      setConvMessages((prev) => prev.map((m) => (m.id === optimisticId ? { ...m, id: realId } : m)));
+    } else {
+      setConvMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+    }
+    sendingConvRef.current = false;
+
     await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', activeConversationId);
     loadConversations(true);
-    void inserted; // le push est géré côté base (voir note ci-dessous)
+    // le push est géré côté base (voir note ci-dessous)
 
     // Ticket #12 (nouvelle base, correctif) : un déclencheur existe déjà
     // côté base pour envoyer le push à la réception d'un message — l'appel
@@ -1044,6 +1171,100 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     reader.readAsDataURL(file);
   };
 
+  /**
+   * Envoie une image ou un vocal dans le canal de projet actif.
+   *
+   * Les messages de canal vivent dans `chat_messages`, dont le contenu est un
+   * JSONB libre — contrairement aux conversations directes qui ont des
+   * colonnes dédiées. On range donc le média dans ce même objet `data`, à
+   * côté du corps du message, sans migration de schéma.
+   */
+  const insertChannelMedia = async (kind: 'image' | 'voice', attachmentUrl: string, attachmentDuration?: number) => {
+    if (!activeChannel || !currentUser) return;
+    await supabase.from('chat_messages').insert({
+      id: crypto.randomUUID(),
+      channel: activeChannel.id,
+      sender_id: currentUser.uid,
+      is_deleted: false,
+      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
+      data: {
+        body: '',
+        kind,
+        attachmentUrl,
+        attachmentDuration: attachmentDuration ?? null,
+        sender_id: currentUser.uid,
+        sender_name: displayName,
+        created_at: new Date().toISOString(),
+      },
+    } as any);
+    await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
+  };
+
+  const handleChannelImagePick = async (file: File | null) => {
+    if (!file) return;
+    setUploadingChannelMedia(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      await insertChannelMedia('image', dataUrl);
+    } finally {
+      setUploadingChannelMedia(false);
+      if (channelImageInputRef.current) channelImageInputRef.current.value = '';
+    }
+  };
+
+  const handleStartRecordingChannel = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let mimeType = 'audio/webm';
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      channelMediaRecorderRef.current = recorder;
+      channelAudioChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) channelAudioChunksRef.current.push(e.data); };
+      recorder.start(100);
+      setIsRecordingChannel(true);
+      setRecordingChannelSeconds(0);
+      channelRecordingTimerRef.current = setInterval(() => setRecordingChannelSeconds((x) => x + 1), 1000);
+    } catch {
+      // micro refusé ou indisponible
+    }
+  };
+
+  const handleStopRecordingChannel = async (cancel = false) => {
+    const recorder = channelMediaRecorderRef.current;
+    if (channelRecordingTimerRef.current) { clearInterval(channelRecordingTimerRef.current); channelRecordingTimerRef.current = null; }
+    const duration = recordingChannelSeconds;
+    setIsRecordingChannel(false);
+    setRecordingChannelSeconds(0);
+    if (!recorder || recorder.state === 'inactive') return;
+    if (cancel) {
+      recorder.stop();
+      recorder.stream.getTracks().forEach((t) => t.stop());
+      channelAudioChunksRef.current = [];
+      return;
+    }
+    recorder.onstop = async () => {
+      recorder.stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(channelAudioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        setUploadingChannelMedia(true);
+        try {
+          await insertChannelMedia('voice', reader.result as string, duration);
+        } finally {
+          setUploadingChannelMedia(false);
+        }
+      };
+      reader.readAsDataURL(blob);
+    };
+    recorder.stop();
+  };
+
   const handleStartRecordingConv = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1100,18 +1321,51 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // PLUS être restreinte à l'agence active (c'était le cas avant, à
   // l'inverse de ce qui est demandé). L'agence de chacun reste affichée
   // (voir la modale plus bas) pour qu'on sache toujours à qui on écrit.
+  // CORRECTIF (31/08/2026) — signalé : "je lui ai écrit, elle ne reçoit rien".
+  //
+  // Cette liste venait de `TEAM_MEMBERS`, un fichier figé dans le code. Or les
+  // identifiants qui y figurent ne correspondent plus aux comptes réels :
+  // Natacha y est enregistrée sous `4fdf3cf2-…` alors que son compte, créé le
+  // 31/08, porte `f5c70ff8-…`. Cliquer sur son nom créait donc une
+  // conversation avec un identifiant FANTÔME ; l'ajout du participant violait
+  // la clé étrangère vers `profiles` et échouait, sans que rien ne s'affiche.
+  // Constat en base : les trois dernières conversations directes ont ZÉRO
+  // participant — le chat direct était cassé pour tout le monde, pas
+  // seulement pour elle.
+  //
+  // La liste vient désormais de `profiles`, qui fait foi. `teamMembers.ts`
+  // n'est plus consulté que pour l'habillage (photo, intitulé de poste), et
+  // uniquement par correspondance d'ADRESSE E-MAIL — jamais par identifiant.
+  // Même principe que `useAssignableUsers`, écrit pour la même raison sur
+  // l'attribution des contacts.
   const colleaguesForNewConv = useMemo(() => {
     const existingDirectPartners = new Set<string>();
     conversations.forEach((c) => {
       if (c.type !== 'direct') return;
       (conversationMembers[c.id] || []).forEach((u) => { if (u !== currentUser?.uid) existingDirectPartners.add(u); });
     });
-    return TEAM_MEMBERS.filter(
-      (m) =>
-        m.id !== currentUser?.uid &&
-        (m.name.toLowerCase().includes(newConvQuery.toLowerCase()) || m.email.toLowerCase().includes(newConvQuery.toLowerCase()))
-    ).map((m) => ({ ...m, hasConversation: existingDirectPartners.has(m.id) }));
-  }, [conversations, conversationMembers, currentUser?.uid, newConvQuery]);
+    const query = newConvQuery.toLowerCase();
+    return allProfiles
+      .filter((p) => p.uid !== currentUser?.uid)
+      .filter((p) =>
+        p.displayName.toLowerCase().includes(query) || (p.email || '').toLowerCase().includes(query))
+      .map((p) => {
+        const habillage = TEAM_MEMBERS.find(
+          (m) => m.email.toLowerCase() === (p.email || '').toLowerCase());
+        const agences = agencyIdsByUid[p.uid] || [];
+        return {
+          id: p.uid,
+          name: p.displayName,
+          email: p.email || '',
+          role: habillage?.role || '',
+          agencyId: agences[0] || habillage?.agencyId || null,
+          avatar: habillage?.avatar || p.displayName.slice(0, 2).toUpperCase(),
+          avatarUrl: habillage?.avatarUrl,
+          hasConversation: existingDirectPartners.has(p.uid),
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [conversations, conversationMembers, currentUser?.uid, newConvQuery, allProfiles, agencyIdsByUid]);
 
   const agencyNameById = (id: string | null | undefined) => AGENCIES.find((a) => a.id === id)?.name || null;
 
@@ -1132,18 +1386,67 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // Entités" (chat_projects/chat_channels) — sinon, agence active comme
     // avant (comportement inchangé pour un échange au sein d'une même
     // agence).
-    const otherMember = TEAM_MEMBERS.find((m) => m.id === otherUserId);
-    const sameAgency = otherMember?.agencyId === activeAgency.id;
-    const { data: conv, error } = await supabase
+    // `agency_id` ne doit JAMAIS rester nul : la règle de lecture des
+    // conversations exige `agency_id IS NOT NULL`, donc une conversation sans
+    // agence est invisible pour tout le monde, y compris son auteur. On prend
+    // l'agence active si les deux personnes en sont membres, sinon la
+    // première agence qu'elles ont en commun, sinon celle de l'autre.
+    const miennes = agencyIdsByUid[currentUser.uid] || [];
+    const siennes = agencyIdsByUid[otherUserId] || [];
+    const communes = miennes.filter((a) => siennes.includes(a));
+    // Ordre corrigé le 31/08/2026, signalé : « Sarah est activée dans
+    // Immosphera mais ne peut pas créer de conversation ».
+    //
+    // L'agence retenue était celle de l'AUTRE personne quand il n'y en avait
+    // aucune en commun — or c'est la règle d'écriture de l'auteur qui est
+    // évaluée à la création. Sarah, absente de l'agence du destinataire,
+    // voyait son insertion refusée. On retombe désormais sur SA propre
+    // agence : elle peut créer, et la lecture inter-agences est ouverte par
+    // la règle correspondante (voir CHAT_inter_agences.sql).
+    const agencePartagee =
+      (communes.includes(activeAgency.id) ? activeAgency.id : null)
+      || communes[0]
+      || (miennes.includes(activeAgency.id) ? activeAgency.id : null)
+      || miennes[0]
+      || siennes[0]
+      || null;
+
+    // L'identifiant est généré ici plutôt que demandé à la base.
+    //
+    // Auparavant on faisait `.insert(...).select().single()`, ce qui demande à
+    // PostgreSQL de RELIRE la ligne juste créée. Or la règle de lecture des
+    // conversations, ouverte ce soir aux échanges inter-agences, exige d'être
+    // MEMBRE de la conversation — et à cet instant précis elle n'a encore
+    // aucun membre, ils sont ajoutés juste après. La relecture échouait donc,
+    // et l'échec remontait sous la forme trompeuse « new row violates
+    // row-level security policy », qui désigne d'ordinaire un refus
+    // d'écriture. On a cherché du mauvais côté un bon moment.
+    //
+    // En fournissant l'identifiant, plus besoin de relire quoi que ce soit.
+    const conversationId = crypto.randomUUID();
+    const { error } = await supabase
       .from('conversations')
-      .insert({ type: 'direct', title: null, created_by: currentUser.uid, agency_id: sameAgency ? activeAgency.id : null } as any)
-      .select()
-      .single();
-    if (error || !conv) return;
-    await supabase.from('conversation_members').insert([
+      .insert({ id: conversationId, type: 'direct', title: null, created_by: currentUser.uid, agency_id: agencePartagee } as any);
+    const conv = error ? null : { id: conversationId };
+    if (error || !conv) {
+      // Cet échec était avalé en silence : on cliquait sur un nom, la fenêtre
+      // se fermait, et rien ne se passait.
+      setConvCreateError(error?.message || "La conversation n'a pas pu être créée.");
+      return;
+    }
+    const { error: membersError } = await supabase.from('conversation_members').insert([
       { conversation_id: (conv as any).id, user_id: currentUser.uid },
       { conversation_id: (conv as any).id, user_id: otherUserId },
     ] as any);
+    if (membersError) {
+      // C'est ICI que tout se jouait : l'ajout des participants échouait
+      // (identifiant inexistant), la conversation restait vide, et le
+      // destinataire ne la voyait jamais. On ne laisse plus passer.
+      await supabase.from('conversations').delete().eq('id', (conv as any).id);
+      setConvCreateError(`Participants non enregistrés : ${membersError.message}`);
+      return;
+    }
+    setConvCreateError(null);
     setShowNewConvModal(false);
     setNewConvQuery('');
     await loadConversations();
@@ -1158,22 +1461,51 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setCreatingGroup(true);
     try {
       const memberIds = Array.from(selectedGroupMemberIds);
-      const allSameAgency = memberIds.every((id) => TEAM_MEMBERS.find((m) => m.id === id)?.agencyId === activeAgency.id);
-      const { data: conv, error } = await supabase
+      // Même correctif que pour les conversations directes : les agences sont
+      // lues en base, et `agency_id` ne peut pas rester nul sans rendre le
+      // groupe invisible à tous.
+      const agencesDeChacun = memberIds.map((id) => agencyIdsByUid[id] || []);
+      const miennesG = agencyIdsByUid[currentUser.uid] || [];
+      const communesG = miennesG.filter((a) => agencesDeChacun.every((liste) => liste.includes(a)));
+      const agenceGroupe =
+        (communesG.includes(activeAgency.id) ? activeAgency.id : null)
+        || communesG[0]
+        || miennesG[0]
+        || agencesDeChacun.flat()[0]
+        || null;
+      // Même raison que pour les conversations directes : pas de relecture
+      // après insertion, elle échoue tant que le groupe n'a pas de membre.
+      const groupeId = crypto.randomUUID();
+      const { error } = await supabase
         .from('conversations')
         .insert({
+          id: groupeId,
           type: 'group',
           title: groupTitle.trim(),
           created_by: currentUser.uid,
-          agency_id: allSameAgency ? activeAgency.id : null,
-        } as any)
-        .select()
-        .single();
-      if (error || !conv) return;
-      await supabase.from('conversation_members').insert([
+          agency_id: agenceGroupe,
+        } as any);
+      const conv = error ? null : { id: groupeId };
+      // Signalé (31/08/2026) : « impossible de créer un groupe de discussion ».
+      // Même défaut que pour les conversations directes, corrigé ce matin :
+      // l'échec était avalé — la fenêtre se fermait sans rien dire, et l'erreur
+      // d'ajout des participants n'était même pas regardée.
+      if (error || !conv) {
+        setConvCreateError(error?.message || "Le groupe n'a pas pu être créé.");
+        return;
+      }
+      const { error: membresError } = await supabase.from('conversation_members').insert([
         { conversation_id: (conv as any).id, user_id: currentUser.uid },
         ...memberIds.map((id) => ({ conversation_id: (conv as any).id, user_id: id })),
       ] as any);
+      if (membresError) {
+        // On ne laisse pas de groupe vide derrière soi : sans participants,
+        // il serait invisible pour tout le monde, y compris son auteur.
+        await supabase.from('conversations').delete().eq('id', (conv as any).id);
+        setConvCreateError(`Participants non enregistrés : ${membresError.message}`);
+        return;
+      }
+      setConvCreateError(null);
       setShowNewConvModal(false);
       setNewConvMode('direct');
       setSelectedGroupMemberIds(new Set());
@@ -1327,10 +1659,60 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     };
   }, [messages.length, activeChannel?.id]);
 
+  // Bug nº 6 (consigne du 1er septembre), deuxieme partie. Signale a la
+  // recette : « quand je mets un chat dans le dossier, elle ne recoit rien ».
+  // Le chat d'un DOSSIER passe par `chat_messages` (colonne `channel`), un
+  // chemin distinct du chat d'une TACHE (table `messages`, deja corrige dans
+  // useTaskMessages.ts) : personne n'etait donc prevenu. On reutilise la RPC
+  // `create_notification` deja en place partout ailleurs — pas de second
+  // systeme, et aucun declencheur base n'existe sur `chat_messages` (celui
+  // documente plus haut ne porte que sur `messages`, cf. sendConvMessage).
+  const notifierMembresDuDossier = async (canal: ChatChannel, apercu: string) => {
+    if (!currentUser) return;
+    try {
+      const { data: membres } = await supabase
+        .from('chat_project_members')
+        .select('user_id')
+        .eq('project_id', canal.project_id);
+
+      const destinataires = Array.from(
+        new Set(
+          ((membres as { user_id: string }[]) || [])
+            .map((m) => m.user_id)
+            .filter((uid) => uid && uid !== currentUser.uid)
+        )
+      );
+      if (destinataires.length === 0) return;
+
+      const projet = projects.find((p) => p.id === canal.project_id);
+      await Promise.all(
+        destinataires.map((uid) =>
+          supabase.rpc('create_notification', {
+            _user_id: uid,
+            _type: 'message',
+            _title: `💬 ${projet ? projet.name : 'Projet interne'} · ${canal.name}`,
+            _message: `${displayName} : ${apercu}`.slice(0, 180),
+            _entity_type: 'chat_channel',
+            _entity_id: canal.id,
+            _agency_id: /^[0-9a-f-]{36}$/i.test(activeAgency.id) ? activeAgency.id : null,
+            _metadata: { url: '/messagerie' },
+          } as any)
+        )
+      );
+    } catch (e) {
+      // Une notification qui echoue ne doit jamais faire echouer l'envoi.
+      console.warn('Notification de message de dossier impossible :', e);
+    }
+  };
+
   const sendMessage = async () => {
     if (!draft.trim() || !activeChannel || !currentUser) return;
+    // Même garde que pour les conversations directes : voir sendConvMessage.
+    if (sendingChannelRef.current) return;
+    sendingChannelRef.current = true;
     const body = draft.trim();
     setDraft('');
+    try {
     await supabase.from('chat_messages').insert({
       // Signalé : "les Novadji dans les messages ne se mettent pas" — en
       // creusant, la colonne `id` de `chat_messages` n'a pas de valeur par
@@ -1350,6 +1732,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
     } as any);
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
+    await notifierMembresDuDossier(activeChannel, body);
+    } finally {
+      sendingChannelRef.current = false;
+    }
   };
 
   const sendNovaChannelMessage = async (novaSrc: string) => {
@@ -1364,6 +1750,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
     } as any);
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
+    await notifierMembresDuDossier(activeChannel, 'a envoye une mini-expression');
   };
 
   // ── Gestion des canaux (admin uniquement) ─────────────────────────────
@@ -1433,6 +1820,106 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     }
   };
 
+  // Bug nº 6 (consigne du 1er septembre), troisieme partie. Signale a la
+  // recette : « quand je cree le dossier, elle ne recoit aucune notification ».
+  // La creation ecrivait le dossier, son canal et ses participants, puis
+  // s'arretait. Meme RPC que partout ailleurs — pas de second systeme. Le
+  // risque de doublon a ete leve par le test lui-meme : aucune notification
+  // n'arrivait, donc aucun declencheur base ne couvre ce cas.
+  const notifierAjoutAuDossier = async (
+    projectId: string,
+    nomDuDossier: string,
+    destinataires: string[],
+  ) => {
+    if (!currentUser) return;
+    const cibles = Array.from(new Set(destinataires.filter((uid) => uid && uid !== currentUser.uid)));
+    if (cibles.length === 0) return;
+    try {
+      await Promise.all(
+        cibles.map((uid) =>
+          supabase.rpc('create_notification', {
+            _user_id: uid,
+            _type: 'message',
+            _title: '📁 Ajouté à un dossier de projet',
+            _message: `${displayName} t'a ajouté au dossier « ${nomDuDossier} ».`,
+            _entity_type: 'chat_project',
+            _entity_id: projectId,
+            _agency_id: /^[0-9a-f-]{36}$/i.test(activeAgency.id) ? activeAgency.id : null,
+            _metadata: { url: '/messagerie' },
+          } as any)
+        )
+      );
+    } catch (e) {
+      // Une notification qui echoue ne doit jamais faire echouer la creation.
+      console.warn('Notification d\'ajout au dossier impossible :', e);
+    }
+  };
+
+  /**
+   * Crée un dossier de projet dans l'AGENCE ACTIVE, avec ses participants.
+   *
+   * L'agence est posée sur le dossier : `loadProjectsAndChannels` ne charge
+   * que `agency_id = agence active` (plus les dossiers marqués « toutes
+   * agences », comme « 3 Entités »). Chaque agence garde donc sa propre vue,
+   * sans que personne ait à filtrer quoi que ce soit à la main.
+   *
+   * Un canal « Général » est créé dans la foulée : un dossier sans canal
+   * n'affiche rien et n'a aucun usage.
+   */
+  const createProject = async () => {
+    const nom = newProjectName.trim();
+    if (!nom || !currentUser) return;
+    setCreatingProject(true);
+    setProjectError(null);
+    try {
+      const projectId = crypto.randomUUID();
+      const { error } = await supabase.from('chat_projects').insert({
+        id: projectId,
+        name: nom,
+        agency_id: activeAgency.id,
+        created_by: currentUser.uid,
+        position: projects.length,
+      } as any);
+      if (error) { setProjectError(error.message); return; }
+
+      const { error: canalError } = await supabase.from('chat_channels').insert({
+        project_id: projectId,
+        name: 'Général',
+        position: 0,
+        created_by: currentUser.uid,
+      } as any);
+      if (canalError) {
+        // Pas de dossier vide laissé derrière : sans canal il serait inerte.
+        await supabase.from('chat_projects').delete().eq('id', projectId);
+        setProjectError(`Canal non créé : ${canalError.message}`);
+        return;
+      }
+
+      const participants = Array.from(newProjectMemberIds);
+      if (participants.length > 0) {
+        // L'echec de cet ajout etait avale en silence : la fenetre se fermait
+        // comme si tout allait bien, et le dossier se retrouvait sans aucun
+        // participant. On le dit maintenant, comme pour le canal juste avant.
+        const { error: membresError } = await supabase.from('chat_project_members').insert(
+          participants.map((uid) => ({ project_id: projectId, user_id: uid, added_by: currentUser.uid })) as any,
+        );
+        if (membresError) {
+          setProjectError(`Participants non ajoutés : ${membresError.message}`);
+          return;
+        }
+        await notifierAjoutAuDossier(projectId, nom, participants);
+      }
+
+      setShowAddProject(false);
+      setNewProjectName('');
+      setNewProjectMemberIds(new Set());
+      setNewProjectQuery('');
+      await loadProjectsAndChannels();
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
   const addMember = async (projectId: string, userId: string) => {
     if (!isAdmin || !currentUser) return;
     const { data, error } = await supabase
@@ -1442,6 +1929,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       .single();
     if (!error && data) {
       setProjectMembers((prev) => [...prev, data as ChatProjectMember]);
+      // Même règle qu'à la création : on prévient la personne qu'on vient de
+      // l'ajouter, sinon elle découvre le dossier par hasard.
+      const dossier = projects.find((p) => p.id === projectId);
+      await notifierAjoutAuDossier(projectId, dossier ? dossier.name : 'un dossier', [userId]);
     }
   };
 
@@ -1468,6 +1959,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // côte à côte) reste inchangée en tapant `w-72` en dur. Sans ça, sur un
   // écran étroit le canal actif se retrouvait écrasé/superposé à la liste.
   const isMobile = useIsMobile();
+  const isCoarsePointer = useIsCoarsePointer();
+  // Signalé (31/08/2026) : "Natacha ne peut pas modifier ni supprimer les
+  // messages qu'elle met dans le chat". Les boutons existaient bien, mais en
+  // `opacity-0 group-hover:opacity-100` : ils n'apparaissent qu'au SURVOL de
+  // la souris. Sur un écran tactile il n'y a pas de survol — ils restaient
+  // donc invisibles et inatteignables. On les laisse affichés en permanence
+  // dès qu'il n'y a pas de pointeur fin.
+  const actionsMessage = (isMobile || isCoarsePointer)
+    ? 'opacity-100'
+    : 'opacity-0 group-hover:opacity-100';
   const mobileShowingConversation = tab === 'conversations' ? !!activeConversationId : !!activeChannel;
   const goBackToList = () => {
     if (tab === 'conversations') setActiveConversationId(null);
@@ -1486,9 +1987,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         <div className="shrink-0 flex items-center gap-2 px-3 py-2.5 border-b border-white/20 pt-[calc(env(safe-area-inset-top,0px)+1.1rem)]">
           <button
             onClick={onExitMobile}
-            className="p-1.5 -ml-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-1"
+            className="p-2.5 -ml-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-1.5"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-semibold">Retour</span>
           </button>
         </div>
@@ -1497,8 +1998,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       {/* Tabs — masqués sur mobile une fois une conversation ouverte, pour
           laisser toute la place au panneau de discussion. */}
       {(!isMobile || !mobileShowingConversation) && (
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-white/20 shrink-0">
-        <div className="flex items-center gap-2">
+      /* Bug nº 3 (consigne du 1er septembre) : sur téléphone, les trois
+         onglets plus le bouton « Nouveau » dépassaient la largeur de l'écran.
+         Marges resserrées sur mobile uniquement, et la rangée peut défiler
+         si elle reste trop large. Rien ne change sur ordinateur. */
+      <div className={`flex items-center justify-between gap-2 ${isMobile ? 'px-2' : 'px-4'} py-3 border-b border-white/20 shrink-0`}>
+        <div className={`flex items-center min-w-0 overflow-x-auto custom-scrollbar ${isMobile ? 'gap-1' : 'gap-2'}`}>
           {TABS.map((t) => {
             // Demandé : "un compteur sur conversation" — total des messages
             // non lus toutes conversations confondues, affiché directement
@@ -1511,7 +2016,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all ${
+                className={`shrink-0 ${isMobile ? 'px-2.5 gap-1.5' : 'px-4 gap-2'} py-2 rounded-xl text-sm font-semibold flex items-center transition-all ${
                   tab === t.id ? 'bg-[#F7BC5F] text-slate-950' : 'text-slate-300 hover:bg-white/5'
                 }`}
               >
@@ -1531,7 +2036,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         {tab === 'conversations' && (
           <button
             onClick={() => { setShowNewConvModal(true); ensureProfilesLoaded(); }}
-            className="px-4 py-2 rounded-xl text-sm font-bold bg-[#F7BC5F] text-slate-950 hover:bg-[#d4a83b] flex items-center gap-1.5"
+            className={`shrink-0 ${isMobile ? 'px-2.5' : 'px-4'} py-2 rounded-xl text-sm font-bold bg-[#F7BC5F] text-slate-950 hover:bg-[#d4a83b] flex items-center gap-1.5`}
           >
             <Plus className="w-4 h-4" /> Nouveau
           </button>
@@ -1545,6 +2050,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-white/20 overflow-y-auto custom-scrollbar p-3 space-y-2`}>
             <div className="flex items-center justify-between px-1 mb-1">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Projets</span>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => { setProjectError(null); setShowAddProject(true); void ensureProfilesLoaded(); }}
+                  title="Créer un dossier de projet"
+                  className="w-7 h-7 rounded-lg bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 flex items-center justify-center shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              )}
             </div>
             {projects.map((project, pi) => {
               // Espace commun "3 Entités" : agency_id null → mis en évidence par un cadre jaune
@@ -1733,8 +2248,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     sur mobile. */}
                 <div className={`px-5 py-3.5 border-b border-white/20 flex items-center gap-2 ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
                   {isMobile && (
-                    <button onClick={goBackToList} className="p-1 -ml-1 mr-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
-                      <ArrowLeft className="w-4 h-4" />
+                    <button onClick={goBackToList} aria-label="Revenir à la liste" className="p-3 -ml-2 mr-0.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
+                      <ArrowLeft className="w-5 h-5" />
                     </button>
                   )}
                   <MessageSquare className="w-4 h-4 text-[#F7BC5F]" />
@@ -1846,7 +2361,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             </div>
 
                             {!isEditing && (
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                              <div className={`${actionsMessage} transition-opacity flex items-center gap-0.5 shrink-0`}>
                                 <div className="relative">
                                   <button
                                     type="button"
@@ -1868,22 +2383,29 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                     const pickerItems = (
                                       <>
                                         {NOVA_QUICK_REACTIONS.map((e) => (
-                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className="text-xl leading-none hover:scale-125 transition-transform p-1.5 rounded-lg hover:bg-white/10">
-                                            {/* Signalé : "grossis quand même les Novadji, ils
-                                                sont moins visibles que les émoticônes
-                                                classiques" — image à taille fixe (w-5 h-5 par
-                                                défaut) à côté d'un emoji Unicode en text-xl,
-                                                visuellement plus petite malgré la même
-                                                hauteur nominale (glyphe emoji avec sa propre
-                                                marge). Agrandie pour un poids visuel comparable. */}
-                                            {renderEmojiOrNova(e, 'w-7 h-7')}
+                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
+                                            {/* Équilibre Novadji / emojis (31/08/2026 :
+                                                "les Novadji ne sont pas de la même taille,
+                                                équilibre le tout sur ordinateur et téléphone
+                                                pour que cela soit visible").
+                                                Une image PNG et un glyphe emoji ne se
+                                                comparent pas à taille de boîte égale : le PNG
+                                                Nova comporte une marge transparente, donc son
+                                                dessin occupe environ 70 % du carré. Il faut
+                                                l'agrandir d'environ un tiers pour un poids
+                                                visuel identique.
+                                                  souris   : emoji 30px (text-3xl) → Nova 48px
+                                                  tactile  : emoji 36px (text-4xl) → Nova 56px
+                                                Bug nº 8 (consigne du 1er septembre) : à la souris
+                                                les emojis étaient trop petits pour être visés. */}
+                                            {renderEmojiOrNova(e, isMobile || isCoarsePointer ? 'w-14 h-14' : 'w-12 h-12')}
                                           </button>
                                         ))}
                                         {/* Suite #240 : séparation visuelle nette entre les
                                             mini-expressions Nova et "les vrais" emojis. */}
-                                        <div className="col-span-10 h-px bg-[#153c3f] my-1" />
+                                        <div className={`${isMobile || isCoarsePointer ? 'col-span-5' : 'col-span-6'} h-px bg-[#153c3f] my-1`} />
                                         {QUICK_EMOJIS.map((e) => (
-                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className="text-xl leading-none hover:scale-125 transition-transform p-1.5 rounded-lg hover:bg-white/10">
+                                          <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
                                             {e}
                                           </button>
                                         ))}
@@ -1912,13 +2434,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                           <div className="fixed inset-0 z-20 flex items-center justify-center p-6">
                                             <div
                                               ref={reactionPickerRef}
-                                              className="grid grid-cols-8 gap-1.5 bg-[#0b1c1e] border border-[#153c3f] rounded-2xl p-4 shadow-xl w-full max-w-[340px] max-h-[70vh] overflow-y-auto custom-scrollbar"
+                                              className="grid grid-cols-5 gap-2.5 bg-[#0b1c1e] border border-[#153c3f] rounded-2xl p-4 shadow-xl w-full max-w-[440px] max-h-[70vh] overflow-y-auto custom-scrollbar"
                                             >
                                               {pickerItems}
                                             </div>
                                           </div>
                                         ) : (
-                                          <div ref={reactionPickerRef} className={`absolute z-20 ${convReactionPickerUp ? 'bottom-full mb-1' : 'top-full mt-1'} grid grid-cols-10 gap-1 bg-[#0b1c1e] border border-[#153c3f] rounded-xl p-3 shadow-xl w-max max-w-[360px] max-h-[220px] overflow-y-auto custom-scrollbar ${mine ? 'right-0' : 'left-0'}`}>
+                                          <div ref={reactionPickerRef} className={`absolute z-20 ${convReactionPickerUp ? 'bottom-full mb-1' : 'top-full mt-1'} grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-[#153c3f] rounded-xl p-3 shadow-xl w-max max-w-[440px] max-h-[340px] overflow-y-auto custom-scrollbar ${mine ? 'right-0' : 'left-0'}`}>
                                             {pickerItems}
                                           </div>
                                         )}
@@ -1978,7 +2500,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                   onClick={() => void handleToggleConvReaction(m.id, emoji)}
                                   className={`px-1.5 py-0.5 rounded-full text-xs flex items-center gap-1 border ${list.some((r) => r.userId === currentUser?.uid) ? 'border-[#F7BC5F]/50 bg-[#F7BC5F]/10' : 'border-[#153c3f] bg-[#0b1c1e]'}`}
                                 >
-                                  <span>{renderEmojiOrNova(emoji, 'w-4 h-4')}</span>
+                                  <span>{renderEmojiOrNova(emoji, 'w-[1.4em] h-[1.4em]')}</span>
                                   {list.length > 1 && <span className="text-[10px] text-slate-400">{list.length}</span>}
                                 </button>
                               ))}
@@ -2041,7 +2563,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   <input
                     value={convDraft}
                     onChange={(e) => setConvDraft(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && sendConvMessage()}
+                    onKeyDown={(e) => {
+                      // `isComposing` : sur clavier mobile et en saisie
+                      // accentuée, Entrée peut arriver deux fois pour une
+                      // seule frappe. `repeat` : touche maintenue enfoncée.
+                      if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.repeat) return;
+                      e.preventDefault();
+                      void sendConvMessage();
+                    }}
                     placeholder="Écrire un message..."
                     disabled={isRecordingConv}
                     className="w-full bg-[#0b1c1e] border border-white/20 rounded-full px-5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] disabled:opacity-40"
@@ -2068,13 +2597,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <Smile className="w-5 h-5" />
                         </button>
                         {showConvEmoji && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-10 gap-1 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[360px] max-h-[220px] overflow-y-auto custom-scrollbar">
+                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[440px] max-h-[340px] overflow-y-auto custom-scrollbar">
                             {QUICK_EMOJIS.map((e) => (
                               <button
                                 key={e}
                                 type="button"
                                 onClick={() => setConvDraft((v) => v + e)}
-                                className="text-xl leading-none hover:scale-125 transition-transform p-1.5 rounded-lg hover:bg-white/10"
+                                className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}
                               >
                                 {e}
                               </button>
@@ -2092,13 +2621,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-6 h-6 object-contain" />
                         </button>
                         {showConvNovaPicker && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-1.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max">
+                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max">
                             {NOVA_QUICK_REACTIONS.map((src) => (
                               <button
                                 key={src}
                                 type="button"
                                 onClick={() => { setShowConvNovaPicker(false); void insertConvMessage('image', src); }}
-                                className="w-12 h-12 hover:scale-110 transition-transform rounded-lg hover:bg-white/10 p-1"
+                                className="w-20 h-20 hover:scale-110 transition-transform rounded-xl hover:bg-white/10 p-1.5"
                               >
                                 <img src={src} alt="Nova" className="w-full h-full object-contain" />
                               </button>
@@ -2145,8 +2674,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             <>
               <div className={`px-5 py-3.5 border-b border-white/20 flex items-center gap-2 ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
                 {isMobile && (
-                  <button onClick={goBackToList} className="p-1 -ml-1 mr-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
-                    <ArrowLeft className="w-4 h-4" />
+                  <button onClick={goBackToList} aria-label="Revenir à la liste" className="p-3 -ml-2 mr-0.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
+                    <ArrowLeft className="w-5 h-5" />
                   </button>
                 )}
                 <Hash className="w-4 h-4 text-[#F7BC5F]" />
@@ -2196,6 +2725,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           </div>
                         ) : isNova ? (
                           <img src={m.data?.body} alt="Nova" className="w-14 h-14 object-contain" />
+                        ) : m.data?.kind === 'image' && m.data?.attachmentUrl ? (
+                          /* Images et vocaux dans les canaux (31/08/2026) : le
+                             média est rangé dans le JSONB `data`, les canaux
+                             n'ayant pas les colonnes dédiées des conversations. */
+                          <button type="button" onClick={() => setConvLightboxUrl(m.data.attachmentUrl ?? null)} className="block">
+                            <img src={m.data.attachmentUrl} alt="Pièce jointe" className="max-w-[220px] max-h-[220px] rounded-xl object-cover" />
+                          </button>
+                        ) : m.data?.kind === 'voice' && m.data?.attachmentUrl ? (
+                          <div className="flex items-center gap-2">
+                            <audio controls preload="none" src={m.data.attachmentUrl} className="h-9 max-w-[220px]" />
+                            {Boolean(m.data.attachmentDuration) && (
+                              <span className="text-[10px] opacity-70">{m.data.attachmentDuration}s</span>
+                            )}
+                          </div>
                         ) : (
                           <p className="whitespace-pre-line">{linkifyText(m.data?.body || '')}</p>
                         )}
@@ -2208,7 +2751,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           ouvert à l'auteur ET à isAdmin (super_admin ou admin,
                           voir la définition en haut du composant). */}
                       {!isEditing && (mine || isAdmin) && (
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                        <div className={`${actionsMessage} transition-opacity flex items-center gap-0.5 shrink-0`}>
                           {mine && !isNova && (
                             <button
                               type="button"
@@ -2251,13 +2794,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <Smile className="w-5 h-5" />
                   </button>
                   {showChannelEmoji && (
-                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-10 gap-1 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[360px] max-h-[220px] overflow-y-auto custom-scrollbar">
+                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[440px] max-h-[340px] overflow-y-auto custom-scrollbar">
                       {QUICK_EMOJIS.map((e) => (
                         <button
                           key={e}
                           type="button"
                           onClick={() => setDraft((v) => v + e)}
-                          className="text-xl leading-none hover:scale-125 transition-transform p-1.5 rounded-lg hover:bg-white/10"
+                          className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}
                         >
                           {e}
                         </button>
@@ -2275,13 +2818,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-6 h-6 object-contain" />
                   </button>
                   {showChannelNovaPicker && (
-                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-1.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max">
+                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max">
                       {NOVA_QUICK_REACTIONS.map((src) => (
                         <button
                           key={src}
                           type="button"
                           onClick={() => void sendNovaChannelMessage(src)}
-                          className="w-12 h-12 hover:scale-110 transition-transform rounded-lg hover:bg-white/10 p-1"
+                          className="w-20 h-20 hover:scale-110 transition-transform rounded-xl hover:bg-white/10 p-1.5"
                         >
                           <img src={src} alt="Nova" className="w-full h-full object-contain" />
                         </button>
@@ -2294,10 +2837,64 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 <input
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                  onKeyDown={(e) => {
+                    // Voir commentaire équivalent côté conversations directes.
+                    if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.repeat) return;
+                    e.preventDefault();
+                    void sendMessage();
+                  }}
                   placeholder="Écrire un message..."
                   className="flex-1 bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
                 />
+                {/* Image et vocal dans les canaux (31/08/2026) — les
+                    conversations directes les avaient depuis toujours, les
+                    canaux de projet non. Même comportement, même rendu. */}
+                <input
+                  ref={channelImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => void handleChannelImagePick(e.target.files?.[0] || null)}
+                />
+                <button
+                  type="button"
+                  onClick={() => channelImageInputRef.current?.click()}
+                  disabled={uploadingChannelMedia || isRecordingChannel}
+                  title="Envoyer une image"
+                  className="p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                </button>
+                {isRecordingChannel ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleStopRecordingChannel(true)}
+                      title="Annuler"
+                      className="p-2.5 rounded-xl text-slate-300 hover:bg-white/10"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleStopRecordingChannel(false)}
+                      title={`Envoyer (${recordingChannelSeconds}s)`}
+                      className="p-2.5 rounded-xl bg-rose-500 text-white"
+                    >
+                      <Square className="w-4 h-4 fill-current" />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleStartRecordingChannel()}
+                    disabled={uploadingChannelMedia}
+                    title="Message vocal"
+                    className="p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   onClick={sendMessage}
                   className="p-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950"
@@ -2410,6 +3007,105 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       )}
 
       {/* Modal Nouvelle conversation */}
+      {/* Création d'un dossier de projet — cloisonné à l'agence active, avec
+          ses participants. Voir createProject pour le détail. */}
+      {showAddProject && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowAddProject(false)}
+        >
+          <div
+            className="bg-[#0E1A20] border border-white/10 rounded-2xl max-w-md w-full p-6 text-white space-y-4 max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FolderPlus className="w-4 h-4 text-[#F7BC5F]" />
+                <h3 className="text-base font-bold">Nouveau dossier de projet</h3>
+              </div>
+              <button onClick={() => setShowAddProject(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {projectError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs">
+                {projectError}
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-400">
+              Ce dossier appartiendra à <span className="text-[#F7BC5F] font-semibold">{activeAgency.name}</span> et
+              n'apparaîtra que pour cette agence. Un canal « Général » y est créé automatiquement.
+            </p>
+
+            <input
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              placeholder="Nom du dossier (ex. Marketing, Recrutement...)"
+              className="w-full bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
+            />
+
+            <div className="space-y-2 flex-1 min-h-0 flex flex-col">
+              <p className="text-[11px] text-slate-400">
+                Participants ({newProjectMemberIds.size} sélectionné{newProjectMemberIds.size > 1 ? 's' : ''})
+              </p>
+              <input
+                value={newProjectQuery}
+                onChange={(e) => setNewProjectQuery(e.target.value)}
+                placeholder="Rechercher par nom ou email..."
+                className="w-full bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
+              />
+              <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1">
+                {allProfiles
+                  .filter((p) => p.uid !== currentUser?.uid)
+                  .filter((p) =>
+                    p.displayName.toLowerCase().includes(newProjectQuery.toLowerCase())
+                    || (p.email || '').toLowerCase().includes(newProjectQuery.toLowerCase()))
+                  .map((p) => {
+                    const choisi = newProjectMemberIds.has(p.uid);
+                    const agences = (agencyIdsByUid[p.uid] || [])
+                      .map((id) => AGENCIES.find((a) => a.id === id)?.name)
+                      .filter(Boolean)
+                      .join(', ');
+                    return (
+                      <button
+                        key={p.uid}
+                        type="button"
+                        onClick={() => setNewProjectMemberIds((prev) => {
+                          const n = new Set(prev);
+                          if (n.has(p.uid)) n.delete(p.uid); else n.add(p.uid);
+                          return n;
+                        })}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-colors ${
+                          choisi ? 'bg-[#F7BC5F]/10 border-[#F7BC5F]/50' : 'bg-[#0b1c1e] border-white/10 hover:border-[#F7BC5F]/40'
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold truncate">{p.displayName}</span>
+                          <span className="block text-[10px] text-slate-500 truncate">
+                            {p.email}{agences ? ` · ${agences}` : ''}
+                          </span>
+                        </span>
+                        {choisi && <Check className="w-4 h-4 text-[#F7BC5F] shrink-0" strokeWidth={3} />}
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void createProject()}
+              disabled={!newProjectName.trim() || creatingProject}
+              className="w-full py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-sm disabled:opacity-40"
+            >
+              {creatingProject ? 'Création...' : 'Créer le dossier'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {showNewConvModal && (
         <div
           className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -2431,6 +3127,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {convCreateError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs">
+                {convCreateError}
+              </div>
+            )}
 
             {/* Demande explicite : "chaque utilisateur peut créer des
                 groupes aussi avec des utilisateurs de plusieurs agences

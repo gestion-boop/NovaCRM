@@ -376,6 +376,8 @@ body {
   --nv-wash: rgba(255, 255, 255, 0.12);    /* bg-white/x  : éclaircissement   */
   --nv-hairline: rgba(255, 255, 255, 0.22); /* border-white/x                 */
   --nv-sunken: rgba(0, 0, 0, 0.25);        /* bg-black/x  : creux discret     */
+  --nv-field: #0b2427;                     /* fond des champs de saisie       */
+  --nv-field-border: #24595e;              /* liseré des champs               */
 
   /* Encres. --ink-1/2/3 = hiérarchie du texte ; les autres = teintes de
      statut. En mode nuit ce sont exactement les couleurs Tailwind d'origine
@@ -430,6 +432,8 @@ body {
   --nv-wash: rgba(15, 30, 45, 0.045);
   --nv-hairline: rgba(15, 30, 45, 0.1);
   --nv-sunken: rgba(15, 30, 45, 0.05);
+  --nv-field: #f7f9fb;
+  --nv-field-border: #cbd5e0;
 
   /* Encres. Teintes 700 de la palette Tailwind, pas 500/600 : sur fond
      blanc, seules les 700 tiennent le ratio de contraste 4.5:1 exigé pour
@@ -556,7 +560,7 @@ main[class*="bg-[#071015]/55" i] {
    dire s'il est périmé — à lancer après avoir ajouté un écran. */
 /* @generated:theme-surfaces:start — ne pas éditer à la main, voir scripts/theme-surfaces.mjs */
 /* ── Fonds sombres écrits en dur dans les composants → jeton de surface ──
-   50 teintes recensées automatiquement dans src/ (voir
+   51 teintes recensées automatiquement dans src/ (voir
    scripts/theme-surfaces.mjs). Le sélecteur ne cite PAS la valeur finale :
    il pose un jeton, redéfini une seule fois par thème plus haut dans ce
    fichier. Une même liste sert donc au mode nuit et au mode jour. */
@@ -606,7 +610,8 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#28133b" i],
 [class*="bg-[#282112" i],
 [class*="bg-[#2a133d" i],
-[class*="bg-[#2a2211" i] {
+[class*="bg-[#2a2211" i],
+[class*="bg-[#6b5220" i] {
   background-color: var(--nv-surface-1) !important;
 }
 /* Barre du haut, barre latérale, navigation mobile. */
@@ -679,6 +684,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#2a133d" i],
 [class*="bg-[#2a2211" i],
 [class*="bg-[#2b2b2b" i],
+[class*="bg-[#6b5220" i],
 .dash-card,
 .pipeline-column-bg
 ) :is(
@@ -731,7 +737,8 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#282112" i],
 [class*="bg-[#2a133d" i],
 [class*="bg-[#2a2211" i],
-[class*="bg-[#2b2b2b" i]
+[class*="bg-[#2b2b2b" i],
+[class*="bg-[#6b5220" i]
 ) {
   background-color: var(--nv-surface-2) !important;
 }
@@ -832,6 +839,7 @@ main[class*="bg-[#071015]/55" i] {
 [class~="bg-[#B8923F]"],
 [class~="bg-[#BE185D]"],
 [class~="bg-[#C2410C]"],
+[class~="bg-[#FF3B30]"],
 [class~="bg-[#b88f2d]"],
 [class~="bg-[#c084fc]"],
 [class~="bg-amber-500"],
@@ -1062,6 +1070,36 @@ main[class*="bg-[#071015]/55" i] {
 .light-mode ::-webkit-scrollbar-track { background: var(--nv-surface-app); }
 .light-mode ::-webkit-scrollbar-thumb { background: #c3ccd6; }
 .light-mode ::-webkit-scrollbar-thumb:hover { background: #a9b4c0; }
+
+/* ── 8 ter. Champs de saisie ─────────────────────────────────────────────── */
+/* Signalé : « on ne voit rien » dans les fenêtres de modification. Les fonds
+   codés en dur étant tous ramenés à la teinte de carte unique, un champ
+   (`bg-[#030d0f]`), son liseré (`border-[#153c3f]`) et le panneau qui le
+   contient (`bg-[#07191b]`) finissaient exactement de la même couleur : le
+   champ disparaissait dans son panneau. On lui rend ici un fond en retrait et
+   un liseré net.
+   `input[class]` plutôt que `input` : la spécificité (0,1,1) passe devant les
+   utilitaires Tailwind `bg-…`/`border-…` (0,1,0) sans `!important`, ce qui
+   laisse les règles plus spécifiques — le liseré doré au focus,
+   `.focus:border-[#F7BC5F]:focus` (0,2,0) — continuer de l'emporter. */
+/* `:not([class~="bg-transparent"])` — signalé le 31/08/2026 : « c'est noir sur
+   le texte en bas ». La barre de saisie de Nova, sur l'écran d'accueil, est
+   volontairement CLAIRE dans les deux thèmes : elle se pose sur la zone
+   lumineuse du fond d'écran et porte un texte foncé. Sa zone de texte demande
+   explicitement `bg-transparent` pour laisser voir cette barre. La règle
+   ci-dessous la repeignait quand même en `--nv-field`, soit un fond très
+   sombre en mode nuit : texte foncé sur fond foncé, illisible. Un champ qui
+   déclare `bg-transparent` sait ce qu'il fait — on ne le touche plus.
+   `~=` et non `*=` : il faut une classe entière. `*=` attraperait aussi le
+   `file:bg-transparent` de `components/ui/input.tsx`, qui ne concerne que le
+   bouton interne de sélection de fichier — tous les champs shadcn auraient
+   alors perdu leur fond. */
+input[class]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([class~="bg-transparent"]),
+select[class]:not([class~="bg-transparent"]),
+textarea[class]:not([class~="bg-transparent"]) {
+  background-color: var(--nv-field);
+  border-color: var(--nv-field-border);
+}
 
 /* ── 8 bis. Panneau de contenu ───────────────────────────────────────────── */
 /* À poser sur tout bloc qui affiche du texte directement au-dessus du fond

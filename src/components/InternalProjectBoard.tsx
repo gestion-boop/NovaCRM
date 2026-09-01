@@ -8,14 +8,16 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
-  useDraggable,
   useDroppable,
   pointerWithin,
   rectIntersection,
   type CollisionDetection,
 } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { toast } from 'sonner';
-import { ChevronLeft, Plus, Trash2, Calendar, X, Loader2, User, CheckSquare, Image as ImageIcon, Mic, Square, Send, Paperclip, MessageCircle, Eye, Users as UsersIcon, Check } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { ChevronLeft, Plus, Trash2, Calendar, X, Loader2, User, CheckSquare, Image as ImageIcon, Mic, Square, Send, Paperclip, MessageCircle, Eye, Users as UsersIcon, Check, Pencil } from 'lucide-react';
 import { InternalTask, InternalTaskStatus } from '@/types';
 import { NovaSphereUserProfile, useAuth } from '@/context/AuthContext';
 import { useInternalProjectTasks, InternalTasksScope } from '@/hooks/useInternalProjectTasks';
@@ -69,10 +71,11 @@ function describeActivity(entry: { action: string; fromValue: string | null; toV
   }
 }
 
-const TaskCardContent: React.FC<{ task: InternalTask; users: NovaSphereUserProfile[]; onDelete?: (id: string) => void; checklistCount?: { done: number; total: number }; messageCount?: number }> = ({
+const TaskCardContent: React.FC<{ task: InternalTask; users: NovaSphereUserProfile[]; onDelete?: (id: string) => void; onMove?: (id: string, status: InternalTaskStatus) => void; checklistCount?: { done: number; total: number }; messageCount?: number }> = ({
   task,
   users,
   onDelete,
+  onMove,
   checklistCount,
   messageCount,
 }) => {
@@ -85,11 +88,34 @@ const TaskCardContent: React.FC<{ task: InternalTask; users: NovaSphereUserProfi
     <>
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-xs font-bold text-white leading-snug">{task.title}</h4>
-        {onDelete && (
-          <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} className="text-gray-600 hover:text-rose-300 shrink-0 p-0.5 -m-0.5">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Signalé deux fois (31/08/2026) : « quand on met les cartes dans
+              Terminé, on doit pouvoir les déplacer vers les colonnes que l'on
+              souhaite pour retravailler sur le projet en cours ».
+              Le glisser-déposer fonctionne à nouveau depuis le rétablissement
+              du défilement automatique, mais tirer une carte sur trois
+              colonnes reste pénible — impraticable au doigt. Ce menu déplace
+              la carte en deux touches, depuis n'importe quelle colonne vers
+              n'importe quelle autre. */}
+          {onMove && (
+            <select
+              value={task.status}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => { e.stopPropagation(); onMove(task.id, e.target.value as InternalTaskStatus); }}
+              title="Déplacer vers une autre colonne"
+              className="bg-transparent border border-white/15 rounded-md text-[9px] text-gray-400 hover:text-white hover:border-[#F7BC5F]/50 px-1 py-0.5 cursor-pointer focus:outline-none"
+            >
+              {COLUMNS.map((c) => (
+                <option key={c.id} value={c.id} className="bg-[#0E1A20] text-white">{c.label}</option>
+              ))}
+            </select>
+          )}
+          {onDelete && (
+            <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} className="text-gray-600 hover:text-rose-300 shrink-0 p-0.5 -m-0.5">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
       {task.description && <p className="text-[11px] text-gray-400 mt-1.5 line-clamp-2">{task.description}</p>}
       <div className="flex items-center flex-wrap gap-1.5 mt-2.5">
@@ -161,6 +187,7 @@ const TaskCard = React.memo<{
   users: NovaSphereUserProfile[];
   onOpen: (task: InternalTask) => void;
   onDelete: (id: string) => void;
+  onMove?: (id: string, status: InternalTaskStatus) => void;
   checklistCount?: { done: number; total: number };
   messageCount?: number;
   selectable?: boolean;
@@ -171,16 +198,26 @@ const TaskCard = React.memo<{
   users,
   onOpen,
   onDelete,
+  onMove,
   checklistCount,
   messageCount,
   selectable,
   selected,
   onToggleSelect,
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id, data: { type: 'task' as const } });
+  // Demandé : « on ne peut pas faire un drop dans le vertical, il faudrait
+  // qu'on ait la possibilité de mettre l'ordre qu'on a envie ». Les cartes
+  // étaient de simples `useDraggable` : on pouvait changer de colonne, mais
+  // pas se placer à un rang précis. `useSortable` donne le rang, la colonne
+  // `position` (déjà présente en base et déjà relue triée) enregistre l'ordre.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    data: { type: 'task' as const, status: task.status },
+  });
   return (
     <div
       ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       {...(selectable ? {} : attributes)}
       {...(selectable ? {} : listeners)}
       onClick={() => (selectable ? onToggleSelect?.(task.id) : onOpen(task))}
@@ -197,7 +234,7 @@ const TaskCard = React.memo<{
           {selected && <Check className="w-3 h-3 text-black" strokeWidth={3} />}
         </div>
       )}
-      <TaskCardContent task={task} users={users} onDelete={selectable ? undefined : onDelete} checklistCount={checklistCount} messageCount={messageCount} />
+      <TaskCardContent task={task} users={users} onDelete={selectable ? undefined : onDelete} onMove={selectable ? undefined : onMove} checklistCount={checklistCount} messageCount={messageCount} />
     </div>
   );
 });
@@ -209,12 +246,13 @@ const BoardColumn: React.FC<{
   onAddTask?: () => void;
   onOpenTask: (task: InternalTask) => void;
   onDeleteTask: (id: string) => void;
+  onMoveTask?: (id: string, status: InternalTaskStatus) => void;
   checklistCounts: Record<string, { done: number; total: number }>;
   messageCounts: Record<string, number>;
   selectionMode?: boolean;
   selectedTaskIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
-}> = ({ column, tasks, users, onAddTask, onOpenTask, onDeleteTask, checklistCounts, messageCounts, selectionMode, selectedTaskIds, onToggleSelect }) => {
+}> = ({ column, tasks, users, onAddTask, onOpenTask, onDeleteTask, onMoveTask, checklistCounts, messageCounts, selectionMode, selectedTaskIds, onToggleSelect }) => {
   const { setNodeRef, isOver } = useDroppable({ id: `column-${column.id}`, data: { type: 'column', status: column.id } });
   return (
     // Demande explicite : même opacité que les colonnes du pipeline
@@ -237,6 +275,7 @@ const BoardColumn: React.FC<{
         style={{ boxShadow: isOver ? `inset 0 0 0 2px ${column.accent}88` : undefined, backgroundColor: isOver ? `${column.accent}0d` : undefined }}
         className="p-2.5 min-h-[140px] space-y-2 transition-shadow duration-150"
       >
+        <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         {tasks.map((task) => (
           <TaskCard
             key={task.id}
@@ -244,6 +283,7 @@ const BoardColumn: React.FC<{
             users={users}
             onOpen={onOpenTask}
             onDelete={onDeleteTask}
+            onMove={onMoveTask}
             checklistCount={checklistCounts[task.id]}
             messageCount={messageCounts[task.id]}
             selectable={selectionMode}
@@ -251,6 +291,7 @@ const BoardColumn: React.FC<{
             onToggleSelect={onToggleSelect}
           />
         ))}
+        </SortableContext>
       </div>
     </div>
   );
@@ -266,13 +307,74 @@ interface InternalProjectBoardProps {
   agencyId?: string;
   users: NovaSphereUserProfile[];
   onBack?: () => void;
+  // Demandé : pouvoir renommer LE PROJET une fois ouvert (et non les
+  // tableaux qu'il contient). Le renommage n'existait que dans la liste.
+  onRenamed?: (title: string) => void;
   // En mode "mine", créer/supprimer une tâche n'a pas de sens pour le
   // stagiaire (RLS l'interdit déjà, mais on évite aussi de montrer un
   // bouton qui échouerait systématiquement).
   canCreateTasks?: boolean;
 }
 
-export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scope, boardTitle, agencyId, users, onBack, canCreateTasks = true }) => {
+export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scope, boardTitle, agencyId, users, onBack, onRenamed, canCreateTasks = true }) => {
+  const [title, setTitle] = useState(boardTitle);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(boardTitle);
+  useEffect(() => { setTitle(boardTitle); setRenameValue(boardTitle); }, [boardTitle]);
+
+  // Demandé : « tous les tableaux créés à l'intérieur du projet Sarah
+  // doivent être affiliés automatiquement à Sarah et Mélanie ». Plutôt que
+  // d'inscrire deux noms dans le code — c'est exactement ce qui a rendu
+  // l'attribution des contacts inutilisable — chaque projet porte sa propre
+  // équipe par défaut, réglable depuis son en-tête. Toute tâche créée dans
+  // le projet part avec ces personnes déjà assignées.
+  const [defaultCollaborators, setDefaultCollaborators] = useState<string[]>([]);
+  const [showDefaultTeam, setShowDefaultTeam] = useState(false);
+
+  useEffect(() => {
+    if (scope.type !== 'board') return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('task_boards')
+        .select('default_collaborator_ids')
+        .eq('id', scope.boardId)
+        .maybeSingle();
+      if (cancelled) return;
+      setDefaultCollaborators(((data?.default_collaborator_ids as string[]) || []).filter(Boolean));
+    })().catch(() => { /* colonne absente : on reste sans équipe par défaut */ });
+    return () => { cancelled = true; };
+  }, [scope]);
+
+  const saveDefaultCollaborators = async (next: string[]) => {
+    if (scope.type !== 'board') return;
+    const previous = defaultCollaborators;
+    setDefaultCollaborators(next);
+    const { error } = await supabase
+      .from('task_boards')
+      .update({ default_collaborator_ids: next })
+      .eq('id', scope.boardId);
+    if (error) {
+      setDefaultCollaborators(previous);
+      toast.error("Impossible d'enregistrer l'équipe par défaut : " + error.message);
+    }
+  };
+
+  const saveTitle = async () => {
+    const next = renameValue.trim();
+    setRenaming(false);
+    if (!next || next === title || scope.type !== 'board') { setRenameValue(title); return; }
+    const previous = title;
+    setTitle(next);
+    const { error } = await supabase.from('task_boards').update({ name: next }).eq('id', scope.boardId);
+    if (error) {
+      setTitle(previous);
+      setRenameValue(previous);
+      toast.error("Impossible de renommer ce projet : " + error.message);
+      return;
+    }
+    onRenamed?.(next);
+  };
   const { tasks, isLoading, addTask, updateTask, deleteTask, setTaskStatusOptimistic } = useInternalProjectTasks(scope);
   const checklistCounts = useChecklistCounts(tasks.map((t) => t.id));
   const messageCounts = useTaskMessageCounts(tasks.map((t) => t.id));
@@ -345,18 +447,55 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
     return rectIntersection(args);
   };
 
-  const tasksByStatus = (status: InternalTaskStatus) => tasks.filter((t) => t.status === status);
+  const tasksByStatus = (status: InternalTaskStatus) =>
+    tasks.filter((t) => t.status === status).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
   const handleDragStart = (event: DragStartEvent) => {
     const task = tasks.find((t) => t.id === String(event.active.id));
     setActiveDragTask(task || null);
   };
 
+  // Enregistre l'ordre d'une colonne : un rang par carte, dans l'ordre reçu.
+  const persistOrder = (orderedIds: string[]) => {
+    void Promise.all(
+      orderedIds.map((id, index) => updateTask.mutateAsync({ id, updates: { position: index } }))
+    ).catch((err: any) => {
+      toast.error(err?.message || "Impossible d'enregistrer le nouvel ordre.");
+    });
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     const overId = over ? String(over.id) : '';
-    const destinationStatus = overId.startsWith('column-') ? (overId.slice('column-'.length) as InternalTaskStatus) : null;
     const task = tasks.find((t) => t.id === String(active.id));
+
+    // Lâcher sur une AUTRE CARTE = choisir son rang, éventuellement dans une
+    // autre colonne. Lâcher sur le fond d'une colonne = y placer la carte en
+    // dernier, comme avant.
+    const overTask = tasks.find((t) => t.id === overId);
+    if (task && overTask) {
+      const targetStatus = overTask.status;
+      const column = tasksByStatus(targetStatus).map((t) => t.id);
+      const from = column.indexOf(task.id);
+      const to = column.indexOf(overTask.id);
+
+      setActiveDragTask(null);
+      if (task.status !== targetStatus) {
+        setTaskStatusOptimistic(task.id, targetStatus);
+        const next = [...column];
+        next.splice(to, 0, task.id);
+        void updateTask
+          .mutateAsync({ id: task.id, updates: { status: targetStatus } })
+          .then(() => persistOrder(next))
+          .catch((err: any) => toast.error(err?.message || "Impossible de déplacer cette tâche."));
+        return;
+      }
+      if (from === -1 || to === -1 || from === to) return;
+      persistOrder(arrayMove(column, from, to));
+      return;
+    }
+
+    const destinationStatus = overId.startsWith('column-') ? (overId.slice('column-'.length) as InternalTaskStatus) : null;
 
     // Signalé : "léger flash quand je déplace la carte" — la carte doit
     // basculer dans sa nouvelle colonne EXACTEMENT au moment où la vignette
@@ -385,9 +524,44 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
           </button>
         )}
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-bold text-white">{boardTitle}</h2>
+          {renaming ? (
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={() => void saveTitle()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveTitle();
+                if (e.key === 'Escape') { setRenameValue(title); setRenaming(false); }
+              }}
+              className="w-full max-w-md bg-white/5 border border-[#F7BC5F]/50 rounded-lg px-2 py-1 text-lg font-bold text-white focus:outline-none focus:border-[#F7BC5F]"
+            />
+          ) : (
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-lg font-bold text-white truncate">{title}</h2>
+              {scope.type === 'board' && (
+                <button
+                  onClick={() => { setRenameValue(title); setRenaming(true); }}
+                  className="shrink-0 p-1 rounded-lg text-gray-400 hover:text-[#F7BC5F] hover:bg-[#F7BC5F]/10 transition-colors"
+                  title="Renommer le projet"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
           <p className="text-xs text-gray-400">{tasks.length} tâche(s) au total</p>
         </div>
+        {scope.type === 'board' && canCreateTasks && (
+          <button
+            onClick={() => setShowDefaultTeam(true)}
+            className="shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors bg-white/5 border-white/10 text-gray-300 hover:text-white hover:bg-white/10"
+            title="Personnes assignées d'office à chaque nouvelle tâche de ce projet"
+          >
+            <UsersIcon className="w-3.5 h-3.5" />
+            Équipe par défaut{defaultCollaborators.length > 0 ? ` (${defaultCollaborators.length})` : ''}
+          </button>
+        )}
         {canCreateTasks && tasks.length > 0 && (
           <button
             onClick={toggleSelectionMode}
@@ -437,7 +611,20 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
           <span className="text-xs">Chargement des tâches...</span>
         </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={collisionDetectionStrategy} onDragStart={handleDragStart} onDragEnd={(e) => void handleDragEnd(e)} autoScroll={false}>
+        <DndContext
+          // Signalé (31/08/2026) : "quand on met les cartes dans Terminé, on
+          // ne peut pas les rebasculer sur les colonnes de gauche". Cause :
+          // autoScroll etait desactive. Les quatre colonnes defilent
+          // horizontalement et "Termine" est la derniere, tout a droite : pour
+          // ramener une carte vers "A faire", il faut que le tableau defile
+          // PENDANT le glissement, sans quoi la colonne de destination reste
+          // hors ecran et physiquement inatteignable. Le defilement
+          // automatique est donc retabli.
+          sensors={sensors}
+          collisionDetection={collisionDetectionStrategy}
+          onDragStart={handleDragStart}
+          onDragEnd={(e) => void handleDragEnd(e)}
+        >
           <div className="flex gap-3 overflow-x-auto pb-4 -webkit-overflow-scrolling-touch touch-pan-x">
             {COLUMNS.map((column) => (
               <BoardColumn
@@ -450,6 +637,14 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
                 onDeleteTask={(id) => {
                   deleteTask.mutateAsync(id).catch((err: any) => {
                     toast.error(err?.message || "Impossible de supprimer cette tâche.");
+                  });
+                }}
+                onMoveTask={(id, status) => {
+                  // Même bascule optimiste que le glisser-déposer : la carte
+                  // change de colonne immédiatement, la base suit derrière.
+                  setTaskStatusOptimistic(id, status);
+                  updateTask.mutateAsync({ id, updates: { status } }).catch((err: any) => {
+                    toast.error(err?.message || "Impossible de déplacer cette tâche.");
                   });
                 }}
                 checklistCounts={checklistCounts}
@@ -465,9 +660,8 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
               la souris et suivre le déplacement" — cause réelle : sans
               `dropAnimation` explicite, dnd-kit essaie par défaut d'animer
               le retour de la vignette flottante vers la position finale
-              d'un élément "sortable", mécanisme qui n'existe pas ici (les
-              cartes sont de simples `useDraggable`, pas `useSortable`) —
-              il retombait alors visiblement vers son point de départ avant
+              d'un élément "sortable" — il retombait visiblement vers son
+              point de départ avant
               de disparaître, provoquant ce rebond parasite. Le désactiver
               entièrement fait disparaître la vignette instantanément au
               lâcher, exactement là où la souris l'a lâchée. */}
@@ -485,12 +679,65 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
         <AddTaskModal
           status={showAddFor}
           users={users}
+          initialCollaboratorIds={defaultCollaborators}
           onClose={() => setShowAddFor(null)}
           onCreate={async (payload) => {
             await addTask.mutateAsync({ boardId: scope.boardId, agencyId: agencyId || '', ...payload });
             setShowAddFor(null);
           }}
         />
+      )}
+
+      {showDefaultTeam && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowDefaultTeam(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-[#07191b] border border-[#1b4e52] rounded-2xl w-full max-w-sm max-h-[80vh] flex flex-col shadow-2xl">
+            <div className="p-4 border-b border-white/10">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <UsersIcon className="w-4 h-4 text-[#F9C977]" /> Équipe par défaut
+              </h3>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Ces personnes sont assignées d'office à chaque nouvelle tâche de ce projet. Elles
+                restent modifiables tâche par tâche.
+              </p>
+            </div>
+            <div className="overflow-y-auto custom-scrollbar p-3 space-y-1.5">
+              {users.length === 0 ? (
+                <p className="py-6 text-center text-xs text-gray-500">Aucun collaborateur disponible.</p>
+              ) : (
+                users.map((u) => {
+                  const selected = defaultCollaborators.includes(u.uid);
+                  return (
+                    <button
+                      key={u.uid}
+                      type="button"
+                      onClick={() =>
+                        void saveDefaultCollaborators(
+                          selected
+                            ? defaultCollaborators.filter((id) => id !== u.uid)
+                            : [...defaultCollaborators, u.uid]
+                        )
+                      }
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                        selected ? 'border-[#F7BC5F] bg-[#F7BC5F]/10' : 'border-white/10 bg-white/5 hover:border-white/25'
+                      }`}
+                    >
+                      <span className="text-sm text-white truncate">{u.displayName}</span>
+                      {selected && <Check className="w-4 h-4 text-[#F7BC5F] shrink-0" strokeWidth={3} />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <div className="p-3 border-t border-white/10">
+              <button
+                onClick={() => setShowDefaultTeam(false)}
+                className="w-full px-4 py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-bold text-sm"
+              >
+                Terminé
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {openTask && (
@@ -515,14 +762,16 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
 const AddTaskModal: React.FC<{
   status: InternalTaskStatus;
   users: NovaSphereUserProfile[];
+  // Équipe par défaut du projet : pré-cochée, et modifiable tâche par tâche.
+  initialCollaboratorIds?: string[];
   onClose: () => void;
   onCreate: (payload: { title: string; description?: string; priority?: InternalTask['priority']; dueDate?: string | null; collaboratorIds?: string[] }) => Promise<void>;
-}> = ({ status, users, onClose, onCreate }) => {
+}> = ({ status, users, initialCollaboratorIds = [], onClose, onCreate }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<InternalTask['priority']>('normale');
   const [dueDate, setDueDate] = useState('');
-  const [collaboratorIds, setCollaboratorIds] = useState<string[]>([]);
+  const [collaboratorIds, setCollaboratorIds] = useState<string[]>(initialCollaboratorIds);
   const [saving, setSaving] = useState(false);
   const columnLabel = COLUMNS.find((c) => c.id === status)?.label || status;
 

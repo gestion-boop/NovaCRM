@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, UserPlus, Building, Building2, ChevronDown, ChevronUp, User, Briefcase, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Contact, AGENCIES } from '@/types';
-import { TEAM_MEMBERS } from '@/data/teamMembers';
+import { supabase } from '@/lib/supabase';
+import { formatVille } from '@/lib/utils';
 
 interface NouveauLeadModalProps {
   isOpen: boolean;
@@ -43,11 +44,85 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   const [typeBien, setTypeBien] = useState('');
 
   // Pipeline & Status
-  const [pipeline, setPipeline] = useState('Aucun (libre)');
+  // Signalé : « en agence ImmoSphera, la création de client propose les
+  // pipelines de Conseils Finances ». La liste était codée en dur avec quatre
+  // ÉTAPES de Conseils Finances, sans aucun lien avec l'agence. Pire : la
+  // valeur part dans `pipeline_id` après `toValidUuidOrNull()` (voir
+  // useContacts) — un nom n'étant pas un UUID, le choix était silencieusement
+  // remplacé par null et aucun pipeline n'était jamais enregistré.
+  // La liste vient maintenant de la table `pipelines`, filtrée sur l'agence
+  // du lead, et les valeurs sont les vrais identifiants.
+  const [pipeline, setPipeline] = useState('');
+  const [agencyPipelines, setAgencyPipelines] = useState<{ id: string; name: string }[]>([]);
   const [statutLead, setStatutLead] = useState('froid');
+  // Renommé « Commission agence » (demande ImmoSphera). S'y ajoutent la
+  // commission du conseiller, saisie TTC, et le numéro de mandat.
   const [honoraires, setHonoraires] = useState<number | ''>('');
+  const [advisorCommission, setAdvisorCommission] = useState<number | ''>('');
+  const [mandateNumber, setMandateNumber] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
   const [comments, setComments] = useState('');
+
+  // Signalé : « insert or update on table "leads" violates foreign key
+  // constraint "leads_assigned_to_fkey" » à la création d'un contact
+  // ImmoSphera. La liste « Attribuer à » venait d'un fichier codé en dur
+  // (src/data/teamMembers.ts) dont les identifiants ne correspondaient plus à
+  // la base : sur 16 personnes proposées, 11 n'avaient aucun compte et 2
+  // existaient sous un autre identifiant. Choisir l'une de ces 13 faisait
+  // échouer l'enregistrement. La liste est désormais lue dans `profiles`,
+  // la table qui fait foi et que référence la contrainte — un identifiant
+  // proposé est donc toujours valide.
+  const [assignableUsers, setAssignableUsers] = useState<{ id: string; name: string; jobTitle?: string }[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    (async () => {
+      setUsersLoading(true);
+      try {
+        // Le rattachement aux agences vit dans `agency_members` ; quand il est
+        // renseigné, on ne propose que les collaborateurs de la société du
+        // lead. Sinon (table vide, collaborateur multi-agences), on propose
+        // tout le monde plutôt que de bloquer l'attribution.
+        const [{ data: profiles }, { data: members }, { data: pipelines }] = await Promise.all([
+          supabase.from('profiles').select('id, full_name, email, job_title'),
+          supabase.from('agency_members').select('user_id, agency_id'),
+          supabase.from('pipelines').select('id, name, agency_id').order('name'),
+        ]);
+        if (cancelled) return;
+
+        const scopedPipelines = (pipelines || [])
+          .filter((pl: { agency_id: string }) => selectedAgencyId === 'all' || pl.agency_id === selectedAgencyId)
+          .map((pl: { id: string; name: string }) => ({ id: pl.id, name: pl.name }));
+        setAgencyPipelines(scopedPipelines);
+        setPipeline((current) => (current && !scopedPipelines.some((pl) => pl.id === current) ? '' : current));
+        const idsForAgency = new Set(
+          (members || []).filter((m: { agency_id: string }) => m.agency_id === selectedAgencyId)
+            .map((m: { user_id: string }) => m.user_id)
+        );
+        const rows = (profiles || [])
+          .filter((p: { id: string }) => idsForAgency.size === 0 || idsForAgency.has(p.id))
+          .map((p: { id: string; full_name: string | null; email: string | null; job_title: string | null }) => ({
+            id: p.id,
+            name: p.full_name || p.email || 'Membre',
+            jobTitle: p.job_title || undefined,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+        setAssignableUsers(rows);
+        // Une valeur choisie puis devenue invalide (changement de société)
+        // est effacée : mieux vaut « non attribué » qu'un enregistrement
+        // refusé par la base.
+        setAssignedTo((current) => (current && !rows.some((r) => r.id === current) ? '' : current));
+      } catch (error) {
+        console.error('Impossible de charger les collaborateurs :', error);
+        if (!cancelled) setAssignableUsers([]);
+      } finally {
+        if (!cancelled) setUsersLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, selectedAgencyId]);
 
   // Collapsible sections
   const [showCoContact, setShowCoContact] = useState(false);
@@ -114,11 +189,14 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         contactType,
         clientType,
         budgetMax: budgetMax === '' ? 0 : Number(budgetMax),
-        secteur: secteur.trim(),
+        secteur: formatVille(secteur.trim()),
         typeBien: typeBien.trim(),
         pipeline,
         statutLead,
-        honoraires: honoraires === '' ? 0 : Number(honoraires),
+        // Saisi en TTC, stocké en HT — voir EditClientModal et lib/utils.
+        honoraires: honoraires === '' ? 0 : Math.round((Number(honoraires) / 1.2) * 100) / 100,
+        advisorCommissionTtc: advisorCommission === '' ? undefined : Number(advisorCommission),
+        mandateNumber: mandateNumber.trim() || undefined,
         comments: (comments.trim() + companyComments).trim(),
         coBorrower: coBorrowerInfo || undefined,
         assignedTo: assignedTo || undefined,
@@ -255,6 +333,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     >
                       <option value="Acheteur">Acheteur</option>
                       <option value="Vendeur">Vendeur</option>
+                      <option value="Location">Location</option>
                       <option value="Locataire">Locataire</option>
                       <option value="Investisseur">Investisseur</option>
                     </select>
@@ -287,10 +366,10 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                       onChange={(e) => setPipeline(e.target.value)}
                       className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 pr-7 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none"
                     >
-                      <option value="Aucun (libre)">Aucun (libre)</option>
-                      <option value="Prise de contact">Prise de contact</option>
-                      <option value="Montage bancaire">Montage bancaire</option>
-                      <option value="En Banque">En Banque</option>
+                      <option value="">Aucun (libre)</option>
+                      {agencyPipelines.map((pl) => (
+                        <option key={pl.id} value={pl.id}>{pl.name}</option>
+                      ))}
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                   </div>
@@ -365,15 +444,40 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                   />
                 </div>
 
-                {/* Honoraires */}
+                {/* Commission agence — anciennement « Honoraires ». C'est le
+                    chiffre d'affaires de l'agence, celui qui alimente les
+                    statistiques ; saisi en HT. */}
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-200">Honoraires (€)</label>
+                  <label className="block text-xs font-bold text-slate-200">Commission agence (€ TTC)</label>
                   <input
                     type="number"
                     placeholder="ex: 5000"
                     value={honoraires}
                     onChange={(e) => setHonoraires(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
+                  />
+                </div>
+
+                {/* Commission du conseiller — saisie TTC, affichée HT ailleurs. */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-200">Commission conseiller (€ TTC)</label>
+                  <input
+                    type="number"
+                    placeholder="ex: 3000"
+                    value={advisorCommission}
+                    onChange={(e) => setAdvisorCommission(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
+                  />
+                </div>
+
+                {/* Numéro de mandat */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-200">Numéro de mandat</label>
+                  <input
+                    placeholder="ex: 2026-0142"
+                    value={mandateNumber}
+                    onChange={(e) => setMandateNumber(e.target.value)}
+                    className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
                   />
                 </div>
               </div>
@@ -404,9 +508,9 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                       onChange={(e) => setAssignedTo(e.target.value)}
                       className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 pr-7 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none"
                     >
-                      <option value="">— Non attribué —</option>
-                      {TEAM_MEMBERS.map(m => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.role.split('&')[0]})</option>
+                      <option value="">{usersLoading ? 'Chargement…' : '— Non attribué —'}</option>
+                      {assignableUsers.map(m => (
+                        <option key={m.id} value={m.id}>{m.jobTitle ? `${m.name} (${m.jobTitle})` : m.name}</option>
                       ))}
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />

@@ -99,6 +99,10 @@ export function supabaseLeadToContact(item: Record<string, unknown>): Contact {
     comments: (item.comments as string) || (item.notes as string) || '',
     notes: (item.notes as string) || '',
     assignedTo: (item.assigned_to as string) || undefined,
+    advisorCommissionTtc: item.advisor_commission_ttc === null || item.advisor_commission_ttc === undefined
+      ? undefined
+      : Number(item.advisor_commission_ttc),
+    mandateNumber: (item.mandate_number as string) || undefined,
     contactType: (item.contact_type as string) || undefined,
     clientType: (item.lead_type as string) || undefined,
     type: (item.lead_type as string) || (item.contact_type as string) || undefined,
@@ -208,6 +212,8 @@ export const useContacts = () => {
         sector: newContact.secteur?.trim() || null,
         property_type: newContact.typeBien?.trim() || newContact.projectType?.trim() || null,
         pipeline_id: pipelineUuid,
+        advisor_commission_ttc: newContact.advisorCommissionTtc ?? null,
+        mandate_number: newContact.mandateNumber?.trim() || null,
         secondary_contact: newContact.coBorrower?.trim() || null,
       };
 
@@ -322,6 +328,14 @@ export const useContacts = () => {
 
       if (updates.honoraires !== undefined) {
         patch.estimated_value = updates.honoraires;
+      }
+
+      if (updates.advisorCommissionTtc !== undefined) {
+        patch.advisor_commission_ttc = updates.advisorCommissionTtc;
+      }
+
+      if (updates.mandateNumber !== undefined) {
+        patch.mandate_number = updates.mandateNumber?.trim() || null;
       }
 
       if (updates.secteur !== undefined) {

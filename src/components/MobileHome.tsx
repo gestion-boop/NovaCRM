@@ -171,7 +171,13 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   }, []);
 
   // ── Avatar & agence ───────────────────────────────────────────────────
-  const teamMember = TEAM_MEMBERS.find((m) => m.id === currentUser?.uid);
+  // Recherche par ADRESSE E-MAIL et non par `id` : les identifiants de
+  // teamMembers.ts ont été resynchronisés le 31/08/2026, mais l'e-mail reste
+  // le seul repère stable entre ce fichier d'habillage et les vrais comptes.
+  // C'est ce qui privait Natacha de sa photo de profil.
+  const teamMember = TEAM_MEMBERS.find(
+    (m) => m.email.toLowerCase() === (currentUser?.email || '').toLowerCase(),
+  ) || TEAM_MEMBERS.find((m) => m.id === currentUser?.uid);
   const avatarUrl = teamMember?.avatarUrl || currentUser?.photoURL || null;
   const initials = (firstName || 'U').charAt(0).toUpperCase();
   const normalizeAgencyName = (v?: string) => (v || '').trim().toLowerCase();
@@ -191,7 +197,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     { id: 'agenda', label: 'Agenda', icon: Calendar, nav: 'agenda', gradient: 'from-[#0f766e] to-[#134e4a]' },
     { id: 'notes', label: 'Notes', icon: FileEdit, nav: 'notes', gradient: 'from-[#7c3aed] to-[#4c1d95]' },
     { id: 'equipe', label: 'Équipe', icon: UserPlus, nav: 'equipe', gradient: 'from-[#334155] to-[#1e293b]' },
-    { id: 'projets-internes', label: 'Pipeline interne', icon: Folder, nav: 'projets-internes', gradient: 'from-[#92400e] to-[#451a03]' },
+    { id: 'projets-internes', label: 'Projets internes', icon: Folder, nav: 'projets-internes', gradient: 'from-[#92400e] to-[#451a03]' },
     { id: 'chat', label: 'Chat', icon: MessageSquare, nav: 'chat', gradient: 'from-[#0891b2] to-[#155e75]', badge: unreadMessagesCount },
     { id: 'rappels', label: 'Rappels', icon: Bell, nav: 'rappels', gradient: 'from-[#9f1239] to-[#4c0519]', badge: unreadRemindersCount },
     // Ticket #255 : accès rapide à la création d'annonce, réservé aux

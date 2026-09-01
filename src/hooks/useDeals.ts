@@ -25,6 +25,10 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
       [(item.first_name as string), (item.last_name as string)].filter(Boolean).join(' ') ||
       'Opportunité sans nom',
     amount: (item.estimated_value as number) || (item.budget as number) || 0,
+    advisorCommissionTtc:
+      item.advisor_commission_ttc === null || item.advisor_commission_ttc === undefined
+        ? undefined
+        : Number(item.advisor_commission_ttc),
     stage: (stageId && stageNameById[stageId]) || (item.temperature as string) || 'Nouveau',
     pipelineId: (item.pipeline_id as string) || undefined,
     agencyId: (item.agency_id as string) || '',
@@ -142,7 +146,12 @@ export const useDeals = () => {
         throw new Error(sbError.message);
       }
 
-      return supabaseLeadToDeal((data || leadPayload) as Record<string, unknown>);
+      // L'appel oubliait la table des noms d'étapes : sur une transaction
+      // portant un stage_id, `stageNameById[stageId]` plantait faute de
+      // second argument. La valeur renvoyée ici n'est que transitoire —
+      // onSuccess réinvalide la requête, qui recharge avec la vraie table —
+      // donc une table vide suffit, et l'étape retombe sur la température.
+      return supabaseLeadToDeal((data || leadPayload) as Record<string, unknown>, {});
     },
 
     onSuccess: async () => {

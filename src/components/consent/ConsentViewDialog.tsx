@@ -1,8 +1,6 @@
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Download, FileX, Loader2, Lock, ShieldCheck, X } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { supabase } from '@/lib/supabase';
 import ConsentDocument from './ConsentDocument';
 import ConsentStatusBadge from './ConsentStatusBadge';
@@ -63,6 +61,15 @@ export function useConsentSenders(ids: string[]) {
 }
 
 export async function downloadConsentPdf(node: HTMLElement, fileName: string) {
+  // html2canvas et jsPDF pèsent à eux deux près de 600 ko une fois
+  // compressés, pour une fonctionnalité utilisée une fois de temps en temps :
+  // télécharger un consentement en PDF. Importés statiquement, ils partaient
+  // dans le paquet de la fiche client, donc chargés par tout le monde à la
+  // première ouverture d'un client. Chargés désormais au moment du clic.
+  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ]);
   const canvas = await html2canvas(node, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
   const imgData = canvas.toDataURL('image/png');
   const pdf = new jsPDF('p', 'mm', 'a4');

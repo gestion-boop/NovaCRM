@@ -12,6 +12,7 @@ import { useContacts, matchesAgency } from '@/hooks/useContacts';
 import { NovaSphereUserProfile, useAuth } from '@/context/AuthContext';
 
 import { TEAM_MEMBERS, getAssignedUser } from '@/data/teamMembers';
+import { useAssignableUsers } from '@/hooks/useAssignableUsers';
 
 interface ContactsProps {
   onAddDeal: (deal: Omit<Deal, 'id' | 'createdAt'>) => Promise<void>;
@@ -63,7 +64,11 @@ export default function Contacts({
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newAgencyId, setNewAgencyId] = useState(AGENCIES[0].id);
-  const [newAssignedTo, setNewAssignedTo] = useState(TEAM_MEMBERS[0].id);
+  // Voir useAssignableUsers : la liste vient de la base, pas du fichier figé.
+  // Valeur initiale vide plutôt que le premier membre codé en dur, qui
+  // pouvait ne correspondre à aucun compte existant.
+  const [newAssignedTo, setNewAssignedTo] = useState('');
+  const assignableUsers = useAssignableUsers(selectedStructure);
   const [newStatus, setNewStatus] = useState<Contact['status']>('Nouveau');
   const [creatingContact, setCreatingContact] = useState(false);
 
@@ -90,7 +95,22 @@ export default function Contacts({
       setUsersLoading(true);
 
       try {
-        const { data } = await supabase.from('profiles').select('*');
+        // Signalé (31/08/2026) : "quand Natacha crée un contact, elle ne peut
+        // pas le partager". Cause : `agencyIds` était figé à [] pour CHAQUE
+        // utilisateur ci-dessous. Or le filtre du panneau de partage fait
+        // ensuite `targetAgencies.some(...)` sur cette liste — toujours vide,
+        // donc toujours faux. La liste des collègues avec qui partager était
+        // par conséquent VIDE pour tout le monde sauf les super_admin, qui
+        // sortent avant ce filtre. On charge donc les rattachements réels.
+        const [{ data }, { data: memberships }] = await Promise.all([
+          supabase.from('profiles').select('*'),
+          supabase.from('agency_members').select('user_id, agency_id'),
+        ]);
+
+        const agencesParUtilisateur: Record<string, string[]> = {};
+        ((memberships || []) as { user_id: string; agency_id: string }[]).forEach((m) => {
+          (agencesParUtilisateur[m.user_id] ||= []).push(m.agency_id);
+        });
 
         const loaded = (data || [])
           .map((item: any) => ({
@@ -99,10 +119,10 @@ export default function Contacts({
             displayName: item.full_name || item.email || 'Membre',
             photoURL: item.avatar_url || null,
             role: 'commercial',
-            agencyIds: [],
+            agencyIds: agencesParUtilisateur[item.id] || [],
             active: true,
             jobTitle: item.job_title || null,
-          } as NovaSphereUserProfile))
+          } as unknown as NovaSphereUserProfile))
           .sort((a, b) => a.displayName.localeCompare(b.displayName, 'fr'));
 
         setNovaUsers(loaded);
@@ -388,7 +408,7 @@ export default function Contacts({
               className="bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-[#F7BC5F]"
             >
               <option value="all">Tous les Utilisateurs / Agents</option>
-              {TEAM_MEMBERS.map(m => (
+              {assignableUsers.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
@@ -469,7 +489,8 @@ export default function Contacts({
                   onChange={(e) => setNewAssignedTo(e.target.value)}
                   className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
                 >
-                  {TEAM_MEMBERS.map(m => (
+                  <option value="">— Non attribué —</option>
+                  {assignableUsers.map(m => (
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
                 </select>
@@ -771,7 +792,15 @@ export default function Contacts({
                 <div>
                   <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Utilisateur Lié (Agent)</label>
                   <select
-                    value={getAssignedUser(selectedContact.assignedTo).id}
+                    // Signalé : « cela reste au premier qui est mis ». La
+                    // valeur affichée passait par getAssignedUser(), qui
+                    // retombe sur TEAM_MEMBERS[0] (Sylvain Grazia) dès que
+                    // l'identifiant n'est pas dans la liste figée — donc
+                    // pour tout collaborateur réel. Le champ ne reflétait
+                    // jamais l'attribution enregistrée et revenait au
+                    // premier nom après chaque changement. On lit
+                    // directement la valeur stockée.
+                    value={selectedContact.assignedTo || ''}
                     onChange={async (e) => {
                       const newUserId = e.target.value;
                       await updateContact.mutateAsync({ id: selectedContact.id, updates: { assignedTo: newUserId } });
@@ -779,7 +808,7 @@ export default function Contacts({
                     }}
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
                   >
-                    {TEAM_MEMBERS.map(m => (
+                    {assignableUsers.map(m => (
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
                   </select>

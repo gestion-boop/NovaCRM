@@ -38,6 +38,18 @@ import {
 // l'origine — une vraie actualisation de page réinitialise normalement ce
 // module, ce qui reste voulu.
 const homeSyncLoadedAgencies = new Set<string>();
+// Agences dont la lecture serveur est TERMINÉE (succès ou échec).
+// `homeSyncLoadedAgencies` est rempli AVANT l'appel, pour ne pas le lancer
+// deux fois ; celui-ci l'est APRÈS, et sert de feu vert à l'écriture.
+//
+// Sans ce garde-fou, sur un appareil neuf : le composant monte avec la grille
+// par défaut, l'effet de sauvegarde part aussitôt et écrit CETTE grille par
+// défaut sur le serveur — écrasant la vraie disposition — puis la lecture
+// serveur revient et n'a plus rien d'utile à appliquer. C'est le scénario
+// exact d'un téléphone ou d'une tablette qui se connecte pour la première
+// fois : les dossiers créés sur l'ordinateur étaient effacés, pas seulement
+// absents.
+const homeSyncReadyAgencies = new Set<string>();
 
 interface AccueilGridProps {
   onNavigate: (navId: string) => void;
@@ -299,7 +311,7 @@ const INITIAL_TILES: TileItemNode[] = [
   },
   {
     id: 'projets-internes',
-    title: 'Pipeline interne',
+    title: 'Projets internes',
     iconName: 'CheckSquare',
     gradient: 'from-[#7C3AED] via-[#5B21B6] to-[#2E1065]',
     badgeCount: 0,
@@ -419,6 +431,15 @@ const INITIAL_TILES: TileItemNode[] = [
   // IMMOSPHERA_EXTRA_TILE_IDS / canSeeImmospheraExtras plus bas) — demande
   // explicite. Icônes/couleurs par défaut, à personnaliser ensuite via la
   // palette (logos propres à intégrer plus tard par l'utilisateur).
+  {
+    id: 'conseils-aura',
+    title: 'Aura',
+    iconName: 'Sparkles',
+    gradient: 'from-[#7C5CFF] via-[#5B3FD6] to-[#3B268F]',
+    badgeCount: 0,
+    navTarget: '',
+    externalUrl: 'https://conseils-finances.aura-ai.fr/',
+  },
   {
     id: 'immosphera-site',
     title: 'Site internet',
@@ -548,6 +569,18 @@ const NOVAVISIO_EXTRA_TILE_IDS = ['carte-novavisio'];
 // Ids des tuiles ci-dessus réservées à Immosphera + super admin — utilisé à
 // la fois pour l'auto-ajout aux grilles déjà personnalisées et pour le
 // filtre de visibilité (voir canSeeImmospheraExtras).
+// Tuile Aura — obligatoire pour tous les membres de Conseils Finances
+// (demande du 31/08/2026). Même mécanique que les tuiles Immosphera :
+// injectée dans toute grille qui ne l'a pas encore, puis filtrée à
+// l'affichage par canSeeConseilsFinances.
+//
+// `externalUrl` et non un cadre intégré : conseils-finances.aura-ai.fr répond
+// `x-frame-options: SAMEORIGIN`, ce qui interdit au navigateur de l'afficher
+// dans une fenêtre du CRM. Le jour où Aura autorisera
+// `frame-ancestors https://app.nova360.space`, il suffira de remplacer
+// `externalUrl` par `embedUrl` sur cette tuile — le reste est déjà en place.
+const CONSEILS_EXTRA_TILE_IDS = ['conseils-aura'];
+
 const IMMOSPHERA_EXTRA_TILE_IDS = [
   'immosphera-site',
   'immosphera-partenaires',
@@ -1079,6 +1112,65 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       })
       .map((t) => (t.children ? { ...t, children: dedupeRecursive(t.children, seen) } : t));
 
+  // ── Synchronisation multi-appareils, par agence ──────────────────────────
+  // Signalé (31/08/2026) : "les raccourcis dossiers qu'on crée ne sont pas
+  // synchro avec le téléphone et la tablette".
+  //
+  // La synchronisation existait, mais `user_ui_settings.home_tiles` est UNE
+  // SEULE colonne par utilisateur alors que l'accueil est cloisonné PAR
+  // AGENCE. On y rangeait `{ agencyId, items }` : seule la disposition de la
+  // DERNIÈRE agence enregistrée survivait côté serveur, et sur un autre
+  // appareil la version serveur était ignorée dès qu'on n'était pas sur cette
+  // agence-là — d'où la grille par défaut, sans les dossiers créés.
+  //
+  // On range maintenant un dictionnaire `{ [agencyId]: items }` : toutes les
+  // agences coexistent. Les deux anciens formats restent lus (voir
+  // `lireDispositionAgence`), donc rien n'est perdu à la mise à jour.
+  const lireDispositionAgence = (colonne: unknown, agencyId: string): unknown[] | null => {
+    if (!colonne) return null;
+    // Format actuel : { [agencyId]: [...] }
+    if (!Array.isArray(colonne) && typeof colonne === 'object') {
+      const obj = colonne as Record<string, unknown>;
+      // Ancien format : { agencyId, items }
+      if (typeof obj.agencyId === 'string' && Array.isArray(obj.items)) {
+        return obj.agencyId === agencyId ? (obj.items as unknown[]) : null;
+      }
+      const pour = obj[agencyId];
+      if (Array.isArray(pour)) return pour as unknown[];
+    }
+    // Format d'origine : un tableau brut, sans agence — trop ambigu pour être
+    // appliqué à une agence en particulier.
+    return null;
+  };
+
+  // Écriture : on relit la colonne juste avant, pour ajouter l'agence
+  // courante SANS effacer les autres.
+  const ecrireDispositionAgence = async (
+    colonne: 'home_tiles' | 'home_root_slots',
+    userId: string,
+    agencyId: string,
+    valeur: unknown,
+  ) => {
+    const { data } = await supabase
+      .from('user_ui_settings')
+      .select(colonne)
+      .eq('user_id', userId)
+      .maybeSingle();
+    const actuel = (data as Record<string, unknown> | null)?.[colonne];
+    const base: Record<string, unknown> =
+      actuel && !Array.isArray(actuel) && typeof actuel === 'object'
+        ? { ...(actuel as Record<string, unknown>) }
+        : {};
+    // Purge de l'ancien format au passage : ses deux clés parasiteraient le
+    // dictionnaire.
+    delete base.agencyId;
+    delete base.items;
+    base[agencyId] = valeur;
+    return supabase
+      .from('user_ui_settings')
+      .upsert({ user_id: userId, [colonne]: base } as any, { onConflict: 'user_id' });
+  };
+
   const loadTilesForKey = (key: string): TileItemNode[] => {
     const saved = localStorage.getItem(key);
     let base = INITIAL_TILES;
@@ -1108,6 +1200,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     const missingExtras = IMMOSPHERA_EXTRA_TILE_IDS.filter((id) => !existsRecursive(base, id));
     if (missingExtras.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingExtras.includes(t.id));
+      base = [...base, ...extraTiles];
+    }
+    // Tuile Aura (Conseils Finances) — visibilité filtrée plus loin par
+    // canSeeConseilsFinances ; ici on garantit seulement sa présence dans
+    // les grilles déjà personnalisées, sans quoi ajouter la tuile à
+    // INITIAL_TILES n'aurait aucun effet pour les comptes existants.
+    const missingConseils = CONSEILS_EXTRA_TILE_IDS.filter((id) => !existsRecursive(base, id));
+    if (missingConseils.length > 0) {
+      const extraTiles = INITIAL_TILES.filter((t) => missingConseils.includes(t.id));
       base = [...base, ...extraTiles];
     }
     // Même principe pour la tuile "Carte" (Novavisio) — visibilité réelle
@@ -1314,10 +1415,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // Même cloisonnement par agence que home_tiles ci-dessous (voir
     // commentaire détaillé plus bas) — même colonne serveur unique par
     // compte, donc même risque d'écrasement inter-agences sans `agencyId`.
-    if (currentUser?.uid && activeAgency?.id) {
-      supabase
-        .from('user_ui_settings')
-        .upsert({ user_id: currentUser.uid, home_root_slots: { agencyId: activeAgency.id, items: rootSlots } } as any, { onConflict: 'user_id' })
+    if (currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
+      ecrireDispositionAgence('home_root_slots', currentUser.uid, activeAgency.id, rootSlots)
         // Signalé : "les tuiles déplacées ne se sauvegardent jamais à la
         // même place" — cette écriture serveur échouait en silence (erreur
         // avalée). Diagnostic temporaire : la journaliser au lieu de
@@ -1366,21 +1465,19 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           .select('home_tiles, home_root_slots')
           .eq('user_id', currentUser.uid)
           .maybeSingle();
-        const storedTiles = (data as any)?.home_tiles;
-        const matchesAgency =
-          storedTiles && !Array.isArray(storedTiles) && storedTiles.agencyId === agencyId && Array.isArray(storedTiles.items);
-        if (matchesAgency && storedTiles.items.length > 0) {
+        const tuilesServeur = lireDispositionAgence((data as any)?.home_tiles, agencyId);
+        if (tuilesServeur && tuilesServeur.length > 0) {
           skipNextTilesSaveRef.current = true;
-          setTiles((storedTiles.items as TileItemNode[]).map((t) => normalizeTile(t)));
+          setTiles((tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t)));
         }
-        const storedSlots = (data as any)?.home_root_slots;
-        const slotsMatchAgency =
-          storedSlots && !Array.isArray(storedSlots) && storedSlots.agencyId === agencyId && Array.isArray(storedSlots.items);
-        if (slotsMatchAgency) {
-          setRootSlots(storedSlots.items as (string | null)[]);
+        const slotsServeur = lireDispositionAgence((data as any)?.home_root_slots, agencyId);
+        if (slotsServeur) {
+          setRootSlots(slotsServeur as (string | null)[]);
         }
       } catch {
         /* best-effort — le navigateur reste la source si le serveur échoue */
+      } finally {
+        homeSyncReadyAgencies.add(agencyId);
       }
     })();
   }, [currentUser?.uid, activeAgency?.id]);
@@ -1410,14 +1507,22 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // il ne la voit que quand son agence active est bien Immosphera, comme
   // n'importe quel autre utilisateur — uniquement basé sur l'agence, jamais
   // sur le rôle. (agencies/activeAgency/isSuperAdmin remontés plus haut)
-  const canSeeImmosphera = useMemo(() => {
-    const list: { name?: string | null; slug?: string | null }[] = Array.isArray(agencies)
-      ? agencies
-      : activeAgency
-        ? [activeAgency]
-        : [];
-    return list.some((a) => /immosphera/i.test(a?.name ?? '') || /immosphera/i.test(a?.slug ?? ''));
-  }, [agencies, activeAgency]);
+  // CORRECTIF (31/08/2026) — signalé : "il ne faut pas que les agences aient
+  // accès aux statistiques d'Immosphera ; Natacha y a accès et Conseils
+  // Finances aussi". La règle ci-dessous DEVAIT déjà se fonder sur la seule
+  // agence active — c'est ce qu'annonçait son commentaire — mais elle testait
+  // `Array.isArray(agencies) ? agencies : [activeAgency]`. Or `agencies` est
+  // TOUJOURS un tableau : le repli sur l'agence active n'était jamais atteint,
+  // et il suffisait qu'Immosphera figure quelque part dans la liste des
+  // agences connues pour que tout le monde voie ses tuiles.
+  const estImmosphera = (a: { name?: string | null; slug?: string | null } | null | undefined) =>
+    /immosphera/i.test(a?.name ?? '') || /immosphera/i.test(a?.slug ?? '');
+
+  const canSeeImmosphera = useMemo(
+    () => estImmosphera(activeAgency),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeAgency?.id],
+  );
 
   // Tuiles Immosphera "extra" (Site internet, Partenaires, Netty,
   // Passerelle, Amanda) — signalé : le super admin (Sylvain) les voyait
@@ -1431,14 +1536,20 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Tuile "Carte" (prospection Novavisio) — même principe que
   // canSeeImmosphera ci-dessus : uniquement selon l'agence active, sans
   // exception de rôle.
-  const canSeeNovavisio = useMemo(() => {
-    const list: { name?: string | null; slug?: string | null }[] = Array.isArray(agencies)
-      ? agencies
-      : activeAgency
-        ? [activeAgency]
-        : [];
-    return list.some((a) => /novavisio/i.test(a?.name ?? '') || /novavisio/i.test(a?.slug ?? ''));
-  }, [agencies, activeAgency]);
+  // Conseils Finances — agence active uniquement, comme les deux autres.
+  const canSeeConseilsFinances = useMemo(
+    () => /conseil/i.test(activeAgency?.name ?? '') || /finance/i.test(activeAgency?.name ?? ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeAgency?.id],
+  );
+
+  // Même correctif que canSeeImmosphera juste au-dessus : agence active
+  // uniquement, jamais la liste complète des agences.
+  const canSeeNovavisio = useMemo(
+    () => /novavisio/i.test(activeAgency?.name ?? '') || /novavisio/i.test((activeAgency as any)?.slug ?? ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeAgency?.id],
+  );
 
   // Tuile "Annonce" (30/08/2026) : "que pour les super admin... Philippe,
   // Mélanie et Sylvain qui resteront toujours super admin" — déjà couvert
@@ -1501,8 +1612,36 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       const lock = lockedTiles[item.id];
       const withChildren = item.children ? { ...item, children: applyLocks(item.children) } : item;
       if (!lock) return { ...withChildren, locked: false };
+
+      // Le contenu d'un dossier verrouillé est imposé lui aussi : les cartes
+      // posées par le super admin reviennent chez tout le monde, même chez
+      // quelqu'un qui les avait sorties. Chacun garde en revanche SON ordre
+      // (demande explicite : « ils pourront changer l'ordre des dossiers à
+      // l'intérieur »), et les cartes qu'il a ajoutées à côté sont laissées
+      // en place — les retirer effacerait son travail sans prévenir.
+      const enfantsImposes = (lock as TileItemNode).children;
+      if (enfantsImposes && enfantsImposes.length > 0) {
+        const idsImposes = new Set(enfantsImposes.map((c) => c.id));
+        const rangDeLUtilisateur = new Map(
+          (withChildren.children || []).map((c, i) => [c.id, i] as [string, number])
+        );
+        const imposes = [...enfantsImposes].sort(
+          (a, b) => (rangDeLUtilisateur.get(a.id) ?? 9999) - (rangDeLUtilisateur.get(b.id) ?? 9999)
+        );
+        const ajoutsPersonnels = (withChildren.children || []).filter((c) => !idsImposes.has(c.id));
+        return { ...withChildren, ...lock, children: [...imposes, ...ajoutsPersonnels], locked: true };
+      }
       return { ...withChildren, ...lock, locked: true };
     });
+
+  // NOTE (1er septembre, au soir) : une version de ce correctif POSAIT sur
+  // la grille toute tuile verrouillée absente, pour qu'un dossier verrouillé
+  // existe chez tout le monde. Retiré le soir même : `lockedTiles` garde des
+  // entrées d'anciens verrous dont l'id ne correspond plus à aucune tuile
+  // vivante, et elles réapparaissaient toutes d'un coup — cinq « Immosphera »
+  // sur le même écran. À reprendre en nettoyant d'abord la liste des verrous
+  // (voir la recette). Le contenu imposé, lui, reste : il ne touche que les
+  // tuiles réellement présentes.
 
   // Pose/retire un verrou — écrit directement dans agency_ui_settings pour
   // que ça s'applique à toute l'agence, pas seulement à ce navigateur.
@@ -1519,6 +1658,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         imageUrl: tile.imageUrl,
         externalUrl: tile.externalUrl,
         navTarget: tile.navTarget,
+        // Demandé le 1er septembre : « du moment qu'un super admin verrouille
+        // des dossiers, il faut que ce soit la même configuration pour tous
+        // les autres utilisateurs ». Le verrou retient donc aussi le CONTENU
+        // du dossier, pas seulement son apparence — sans quoi chacun gardait
+        // le sien.
+        children: tile.children,
       };
     }
     setLockedTiles(next);
@@ -1786,10 +1931,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   useEffect(() => {
     if (skipNextTilesSaveRef.current) { skipNextTilesSaveRef.current = false; return; }
     localStorage.setItem(HOME_TILES_KEY, JSON.stringify(tiles));
-    if (currentUser?.uid && activeAgency?.id) {
-      supabase
-        .from('user_ui_settings')
-        .upsert({ user_id: currentUser.uid, home_tiles: { agencyId: activeAgency.id, items: tiles } } as any, { onConflict: 'user_id' })
+    if (currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
+      ecrireDispositionAgence('home_tiles', currentUser.uid, activeAgency.id, tiles)
         // Diagnostic temporaire (même raison que home_root_slots juste
         // au-dessus) : journaliser l'erreur réelle au lieu de l'avaler, et
         // la remonter en toast pour ne pas dépendre de la console navigateur.
@@ -2113,16 +2256,32 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     setOpenFolderStack(prev => prev.filter(f => f.id !== folderId));
   };
 
+  // Visibilité d'une tuile selon l'agence active — appliquée RÉCURSIVEMENT
+  // (voir filtrerEnProfondeur juste après).
+  //
+  // Signalé (31/08/2026) : « supprime la tuile Statistiques pour les autres
+  // agences sauf Immosphera ». Elle était bien filtrée… mais uniquement au
+  // niveau affiché. Or elle vit DANS UN DOSSIER : l'aperçu 2×2 du dossier
+  // rendait `tile.children` sans le moindre filtre, et l'icône Statistiques y
+  // restait visible pour toutes les agences.
+  const tuileVisible = (t: TileItemNode) =>
+    (t.id !== 'immosphera360' || canSeeImmosphera)
+    && (!IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
+    && (!NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
+    && (!CONSEILS_EXTRA_TILE_IDS.includes(t.id) || canSeeConseilsFinances)
+    && ((t.id !== 'annonce' && t.id !== 'nova-lock-spacer') || canSeeAnnonceTile);
+
+  const filtrerEnProfondeur = (items: TileItemNode[]): TileItemNode[] =>
+    items
+      .filter(tuileVisible)
+      .map((t) => (t.children ? { ...t, children: filtrerEnProfondeur(t.children) } : t));
+
+  // Un seul passage : `filtrerEnProfondeur` applique `tuileVisible` à tous les
+  // niveaux, y compris au contenu des dossiers. Les filtres à plat qui se
+  // trouvaient ici faisaient double emploi — et surtout ne voyaient jamais ce
+  // qui était rangé dans un dossier.
   const currentDisplayTiles = applyLocks(
-    (activeFolder ? (activeFolder.children || []) : tiles)
-      .filter((t) => t.id !== 'immosphera360' || canSeeImmosphera)
-      .filter((t) => !IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
-      .filter((t) => !NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
-      // Ticket #255 : tuile "Annonce" réservée aux administrateurs (+ liste
-      // ponctuelle, voir canSeeAnnonceTile) — sa case invisible
-      // "nova-lock-spacer" (qui n'a de sens que juste avant elle) suit la
-      // même règle.
-      .filter((t) => (t.id !== 'annonce' && t.id !== 'nova-lock-spacer') || canSeeAnnonceTile)
+    filtrerEnProfondeur(activeFolder ? (activeFolder.children || []) : tiles)
   );
 
   // Cap à 24 tuiles réelles visibles sur l'accueil (ticket #256 : 6 colonnes

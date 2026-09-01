@@ -1,8 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { DndContext, DragEndEvent, PointerSensor, TouchSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Loader2, Palette } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID, IMMOSPHERA_AGENCY_ID } from './TransactionChecklistModal';
 
@@ -27,8 +24,6 @@ import { IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID, IMMOSPHERA_AGENCY_ID } from './
 // recentré au milieu du panneau plutôt qu'en pleine largeur comme les
 // rangées agent.
 
-const ORDER_KEY = 'novasphere:stats-etiquettes-order';
-const COLOR_KEY = 'novasphere:stats-etiquettes-colors';
 
 const LABEL_COLORS = [
   { name: 'Ivoire (défaut)', value: '#F3EAD3' },
@@ -39,14 +34,37 @@ const LABEL_COLORS = [
   { name: 'Or pâle', value: '#F3EAC0' },
 ];
 
+// « Location » vient en tête : l'ordre demandé est location, offre d'achat,
+// compromis, acte authentique.
+type StageKey = 'location' | 'offre' | 'compromis' | 'signature';
+
+interface StageLead {
+  id: string;
+  name: string;
+  agentId: string;
+  stage: StageKey;
+  honoraires: number;
+  ville: string;
+  mandat: string;
+}
+
 interface AgentRow {
   agentId: string;
   agentDisplay: string;
   agentFullName: string;
+  location: number;
   offre: number;
   compromis: number;
   signature: number;
   total: number;
+  // Demandé : le chiffre d'affaires de chaque conseiller sur chacune des
+  // trois étapes. Source : le champ « Honoraires (€) » de la fiche client
+  // (colonne `estimated_value`), c'est-à-dire ce que l'agence encaisse —
+  // et non le budget, qui est le prix du bien.
+  caLocation: number;
+  caOffre: number;
+  caCompromis: number;
+  caSignature: number;
 }
 
 // Demande explicite : "mets le prénom par exemple Isabelle G, c'est comme ça
@@ -67,29 +85,20 @@ const firstNamePlusInitial = (fullName: string): string => {
 // d'un coup d'œil sans remonter à l'en-tête. `count` de 0 s'affiche grisée
 // (agent sans dossier sur cette étape, mais on ne le masque pas — il reste
 // visible dans le tableau).
-const BrassLabel: React.FC<{ count: number; color: string; caption: string }> = ({ count, color, caption }) => (
-  <div className="relative w-20 sm:w-24 shrink-0" style={{ opacity: count === 0 ? 0.35 : 1 }}>
-    <div
-      className="rounded-lg border-[3px] px-2 pt-2 pb-1.5 text-center shadow-[0_2px_4px_rgba(0,0,0,0.35)]"
-      style={{ borderColor: '#9C7A2E', background: `linear-gradient(180deg, ${color} 0%, ${color} 100%)` }}
-    >
-      <span className="block text-lg sm:text-xl font-bold text-[#3A2E12] tabular-nums leading-none">{count}</span>
-      <span className="block text-[8px] sm:text-[9px] font-semibold uppercase tracking-wider text-[#6B5220] mt-1 whitespace-nowrap">{caption}</span>
-    </div>
-    {/* petits rivets, coin haut-gauche/droit, comme sur le casier photographié */}
-    <div className="absolute -top-1 -left-1 w-2 h-2 rounded-full bg-[#B8923F] border border-[#6B5220]" />
-    <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#B8923F] border border-[#6B5220]" />
-    {/* languette arrondie en bas, effet étiquette suspendue */}
-    <div
-      className="mx-auto -mt-1 w-6 h-2 rounded-b-full border-x-[3px] border-b-[3px]"
-      style={{ borderColor: '#9C7A2E', background: color }}
-    />
-  </div>
+const BrassLabel: React.FC<{ count: number; color: string; caption: string; onClick?: () => void }> = ({ count, color, caption, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={!onClick || count === 0}
+    title={count > 0 ? 'Voir les dossiers concernés' : undefined}
+    className="rounded-xl border-2 px-3 sm:px-4 py-1.5 text-center min-w-[4.5rem] disabled:cursor-default enabled:hover:brightness-110 transition"
+    style={{ borderColor: '#9C7A2E', background: count > 0 ? color : '#4d5f5a' }}
+  >
+    <div className="text-lg sm:text-xl font-bold text-[#3A2E12] tabular-nums leading-none">{count}</div>
+    <div className="text-[9px] uppercase tracking-widest text-[#3A2E12]/70 mt-1">{caption}</div>
+  </button>
 );
 
-// Plaquette ovale façon porte-nom, avec "Prénom N." (demande explicite :
-// "Isabelle G", pas juste l'initiale) — remplace le cachet à une seule
-// lettre.
 const AgentSeal: React.FC<{ display: string; fullName: string; color: string }> = ({ display, fullName, color }) => (
   <div
     className="relative shrink-0 rounded-full border-[3px] flex items-center justify-center px-3 py-1.5 min-w-[6rem] sm:min-w-[7rem] shadow-[0_2px_5px_rgba(0,0,0,0.45)]"
@@ -101,89 +110,37 @@ const AgentSeal: React.FC<{ display: string; fullName: string; color: string }> 
   </div>
 );
 
-const SortableAgentRow: React.FC<{
-  row: AgentRow;
-  color: string;
-  onPickColor: () => void;
-}> = ({ row, color, onPickColor }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.agentId });
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-  };
+// Demandé : « ne fais pas un drag and drop, cela sera soumis uniquement aux
+// résultats des conseillers » — le classement se calcule, il ne se range plus
+// à la main. Le sélecteur de couleur d'étiquette est retiré de même.
+const AgentRow: React.FC<{ row: AgentRow; color: string; onOpen?: (stage: StageKey) => void }> = ({ row, color, onOpen }) => (
+  <div className="relative flex items-center gap-3 sm:gap-5 rounded-xl border border-[#3a2f1a] bg-[#1b1712]/80 px-3 sm:px-4 py-3">
+    <AgentSeal display={row.agentDisplay} fullName={row.agentFullName} color={color} />
 
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="relative flex items-center gap-3 sm:gap-5 rounded-xl border border-[#3a2f1a] bg-[#1b1712]/80 px-3 sm:px-4 py-3"
-    >
-      <button
-        {...attributes}
-        {...listeners}
-        className="shrink-0 text-[#9C7A2E] hover:text-[#D4AF37] cursor-grab active:cursor-grabbing touch-none"
-        title="Glisser pour réordonner"
-      >
-        <GripVertical size={18} />
-      </button>
+    <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 sm:gap-4">
+      <BrassLabel count={row.location} color={color} caption="Location" onClick={onOpen && (() => onOpen('location'))} />
+      <BrassLabel count={row.offre} color={color} caption="Offre" onClick={onOpen && (() => onOpen('offre'))} />
+      <BrassLabel count={row.compromis} color={color} caption="Compromis" onClick={onOpen && (() => onOpen('compromis'))} />
+      <BrassLabel count={row.signature} color={color} caption="Signature" onClick={onOpen && (() => onOpen('signature'))} />
+    </div>
 
-      <AgentSeal display={row.agentDisplay} fullName={row.agentFullName} color={color} />
-
-      {/* Demande explicite : "centre-les par rapport au rectangle en
-          dessous" — centrer par rapport à l'ESPACE RESTANT (entre le cachet
-          agent et le total) ne donnait pas le même centre que le médaillon
-          "Total agence" plus bas (lui centré sur toute la largeur du
-          panneau), car le bloc agent et le bloc total/couleur n'ont pas la
-          même largeur. Position absolue au centre EXACT de la rangée — donc
-          de la même largeur que le panneau — pour que les deux s'alignent
-          verticalement, quelle que soit la longueur du nom de l'agent. */}
-      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 sm:gap-4">
-        <BrassLabel count={row.offre} color={color} caption="Offre" />
-        <BrassLabel count={row.compromis} color={color} caption="Compromis" />
-        <BrassLabel count={row.signature} color={color} caption="Signature" />
-      </div>
-
-      <div className="ml-auto flex items-center gap-3 sm:gap-4 shrink-0">
-        <div className="rounded-lg border-2 border-[#D4AF37] bg-[#2A2211] px-3 py-1.5 text-center min-w-[2.5rem]">
-          <span className="text-base sm:text-lg font-bold text-[#D4AF37] tabular-nums">{row.total}</span>
-        </div>
-        <button
-          onClick={onPickColor}
-          className="shrink-0 w-7 h-7 rounded-full border border-[#6B5220] flex items-center justify-center hover:brightness-110"
-          style={{ background: color }}
-          title="Couleur des étiquettes de cet agent"
-        >
-          <Palette size={12} className="text-[#3A2E12]" />
-        </button>
+    <div className="ml-auto flex items-center gap-3 sm:gap-4 shrink-0">
+      <div className="rounded-lg border-2 border-[#D4AF37] bg-[#2A2211] px-3 py-1.5 text-center min-w-[2.5rem]">
+        <span className="text-base sm:text-lg font-bold text-[#D4AF37] tabular-nums">{row.total}</span>
       </div>
     </div>
-  );
-};
+  </div>
+);
 
-const StatistiquesEtiquettesView: React.FC = () => {
+const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: string) => void }> = ({ onSelectContact }) => {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<AgentRow[]>([]);
-  const [order, setOrder] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(ORDER_KEY) || '[]');
-    } catch {
-      return [];
-    }
-  });
-  const [colors, setColors] = useState<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(COLOR_KEY) || '{}');
-    } catch {
-      return {};
-    }
-  });
-  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
+  // Demandé : « savoir qui est présent dans cette case ». On garde le détail
+  // des dossiers (nom + conseiller + étape) pour pouvoir les lister au clic
+  // sur un chiffre, et ouvrir la fiche depuis la liste.
+  const [details, setDetails] = useState<StageLead[]>([]);
+  const [detailFor, setDetailFor] = useState<{ stage: StageKey; agentId: string | null; title: string } | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } })
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -195,13 +152,16 @@ const StatistiquesEtiquettesView: React.FC = () => {
         .select('id, name')
         .eq('pipeline_id', IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID);
 
+      // Nom repéré par motif plutôt qu'à l'identique : l'étape a été créée
+      // « Locations validées », et rien ne garantit la casse ni le pluriel.
+      const locationStageId = (stages || []).find((s: any) => /location/i.test(s.name))?.id;
       const offreStageId = (stages || []).find((s: any) => s.name === "Offre d'achat")?.id;
       const compromisStageId = (stages || []).find((s: any) => s.name === 'Signature compromis')?.id;
       const signatureStageId = (stages || []).find((s: any) => s.name === 'signature acte authentique')?.id;
 
       const { data: leads } = await supabase
         .from('leads')
-        .select('id, stage_id, assigned_to, created_by, archived_at')
+        .select('id, stage_id, assigned_to, created_by, archived_at, estimated_value, full_name, first_name, last_name, sector, mandate_number')
         .eq('pipeline_id', IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID)
         .eq('agency_id', IMMOSPHERA_AGENCY_ID);
 
@@ -216,7 +176,10 @@ const StatistiquesEtiquettesView: React.FC = () => {
         (l: any) =>
           !l.archived_at &&
           (l.assigned_to || l.created_by) &&
-          (l.stage_id === offreStageId || l.stage_id === compromisStageId || l.stage_id === signatureStageId)
+          (l.stage_id === locationStageId ||
+            l.stage_id === offreStageId ||
+            l.stage_id === compromisStageId ||
+            l.stage_id === signatureStageId)
       );
 
       const assignedIds = Array.from(new Set(relevant.map((l: any) => l.assigned_to || l.created_by)));
@@ -235,58 +198,131 @@ const StatistiquesEtiquettesView: React.FC = () => {
             agentId: id,
             agentFullName: fullName,
             agentDisplay: firstNamePlusInitial(fullName),
+            location: 0,
             offre: 0,
             compromis: 0,
             signature: 0,
             total: 0,
+            caLocation: 0,
+            caOffre: 0,
+            caCompromis: 0,
+            caSignature: 0,
           };
         }
-        if (l.stage_id === offreStageId) byAgent[id].offre += 1;
-        if (l.stage_id === compromisStageId) byAgent[id].compromis += 1;
-        if (l.stage_id === signatureStageId) byAgent[id].signature += 1;
+        const honoraires = Number(l.estimated_value) || 0;
+        if (l.stage_id === locationStageId) { byAgent[id].location += 1; byAgent[id].caLocation += honoraires; }
+        if (l.stage_id === offreStageId) { byAgent[id].offre += 1; byAgent[id].caOffre += honoraires; }
+        if (l.stage_id === compromisStageId) { byAgent[id].compromis += 1; byAgent[id].caCompromis += honoraires; }
+        if (l.stage_id === signatureStageId) { byAgent[id].signature += 1; byAgent[id].caSignature += honoraires; }
         byAgent[id].total += 1;
       });
 
+      const stageOf = (stageId: string): StageKey | null =>
+        stageId === locationStageId ? 'location'
+        : stageId === offreStageId ? 'offre' : stageId === compromisStageId ? 'compromis' : stageId === signatureStageId ? 'signature' : null;
+
+      const detailRows: StageLead[] = relevant.map((l: any) => ({
+        id: l.id,
+        name: (l.full_name || [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Sans nom').trim(),
+        agentId: (l.assigned_to || l.created_by) as string,
+        stage: stageOf(l.stage_id) as StageKey,
+        honoraires: Number(l.estimated_value) || 0,
+        ville: (l.sector || '').trim(),
+        mandat: (l.mandate_number || '').trim(),
+      })).filter((d) => d.stage);
+
       if (!cancelled) {
         setRows(Object.values(byAgent));
+        setDetails(detailRows);
         setLoading(false);
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  const orderedRows = useMemo(() => {
-    const byId = new Map(rows.map((r) => [r.agentId, r]));
-    const known = order.map((id) => byId.get(id)).filter(Boolean) as AgentRow[];
-    const rest = rows.filter((r) => !order.includes(r.agentId)).sort((a, b) => b.total - a.total);
-    return [...known, ...rest];
-  }, [rows, order]);
+  // Classement par résultats : le conseiller le plus performant en tête.
+  const orderedRows = useMemo(
+    () => [...rows].sort((a, b) => b.total - a.total || a.agentFullName.localeCompare(b.agentFullName, 'fr')),
+    [rows]
+  );
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const ids = orderedRows.map((r) => r.agentId);
-    const oldIndex = ids.indexOf(String(active.id));
-    const newIndex = ids.indexOf(String(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
-    const next = arrayMove(ids, oldIndex, newIndex);
-    setOrder(next);
-    localStorage.setItem(ORDER_KEY, JSON.stringify(next));
-  };
+
+  // Trois onglets séparés, un par étape, plus la vue d'ensemble existante
+  // (conservée telle quelle : elle avait été réglée avec vous).
+  const [tab, setTab] = useState<'apercu' | StageKey>('apercu');
+  // Demandé : deux classements — un sur le nombre de ventes, un sur le
+  // chiffre d'affaires rentré dans l'agence. Le podium suit le critère choisi.
+  const [rankBy, setRankBy] = useState<'ca' | 'ventes'>('ca');
+
+  const TABS = [
+    { key: 'apercu' as const, label: "Vue d'ensemble" },
+    { key: 'location' as const, label: 'Locations' },
+    { key: 'offre' as const, label: "Offres d'achat" },
+    { key: 'compromis' as const, label: 'Compromis' },
+    { key: 'signature' as const, label: 'Actes authentiques' },
+  ];
+
+  const formatEuros = (value: number) =>
+    value.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+
+  // Classement du conseiller le plus au moins performant sur l'étape choisie.
+  const stageRows = useMemo(() => {
+    if (tab === 'apercu') return [];
+    const pick = (r: AgentRow) =>
+      tab === 'location'
+        ? { count: r.location, ca: r.caLocation }
+        : tab === 'offre'
+          ? { count: r.offre, ca: r.caOffre }
+          : tab === 'compromis'
+            ? { count: r.compromis, ca: r.caCompromis }
+            : { count: r.signature, ca: r.caSignature };
+    return orderedRows
+      .map((r) => ({ ...r, ...pick(r) }))
+      .filter((r) => r.count > 0 || r.ca > 0)
+      .sort((a, b) => (rankBy === 'ca' ? b.ca - a.ca || b.count - a.count : b.count - a.count || b.ca - a.ca));
+  }, [orderedRows, tab, rankBy]);
+
+  const stageTotal = useMemo(
+    () => stageRows.reduce((acc, r) => ({ count: acc.count + r.count, ca: acc.ca + r.ca }), { count: 0, ca: 0 }),
+    [stageRows]
+  );
 
   const totals = useMemo(
     () =>
       orderedRows.reduce(
         (acc, r) => ({
+          location: acc.location + r.location,
           offre: acc.offre + r.offre,
           compromis: acc.compromis + r.compromis,
           signature: acc.signature + r.signature,
           total: acc.total + r.total,
         }),
-        { offre: 0, compromis: 0, signature: 0, total: 0 }
+        { location: 0, offre: 0, compromis: 0, signature: 0, total: 0 }
       ),
     [orderedRows]
   );
+
+  const detailLeads = useMemo(() => {
+    if (!detailFor) return [];
+    return details
+      .filter((d) => d.stage === detailFor.stage && (!detailFor.agentId || d.agentId === detailFor.agentId))
+      .sort((a, b) => b.honoraires - a.honoraires || a.name.localeCompare(b.name, 'fr'));
+  }, [details, detailFor]);
+
+  // Demandé : podium sur le classement — or, argent, bronze, médaille à côté
+  // du nom. Au-delà du 3e, présentation neutre.
+  const PODIUM = [
+    { medal: '🥇', border: '#D4AF37', bg: '#2A2211', name: '#F7BC5F' },
+    { medal: '🥈', border: '#B0BEC9', bg: '#242628', name: '#DDE3E8' },
+    { medal: '🥉', border: '#B8863F', bg: '#2A2018', name: '#E0A66B' },
+  ];
+
+  const STAGE_LABEL: Record<StageKey, string> = {
+    location: 'Locations',
+    offre: "Offres d'achat",
+    compromis: 'Compromis',
+    signature: 'Actes authentiques',
+  };
 
   return (
     <div className="p-3 sm:p-6">
@@ -306,35 +342,131 @@ const StatistiquesEtiquettesView: React.FC = () => {
         ))}
 
         <div className="mb-4 sm:mb-5">
-          <h2 className="text-lg sm:text-2xl font-bold text-[#F3EAD3] tracking-wide">Statistiques — Offres, Compromis &amp; Signatures</h2>
+          <h2 className="text-lg sm:text-2xl font-bold text-[#F3EAD3] tracking-wide">Statistiques — Locations, Offres, Compromis &amp; Signatures</h2>
           <p className="text-xs sm:text-sm text-[#C9B67B] mt-1">
             Répartition en direct par agent ImmoSphera sur le pipeline Transactions V2.
           </p>
         </div>
 
+        <div className="flex flex-wrap gap-1.5 mb-4 sm:mb-5">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold tracking-wide transition-colors border ${
+                tab === t.key
+                  ? 'bg-[#D4AF37] text-[#1b1712] border-[#D4AF37]'
+                  : 'bg-[#2A2211] text-[#C9B67B] border-[#6B5220] hover:text-[#F3EAD3]'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab !== 'apercu' && (
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-[10px] uppercase tracking-widest text-[#C9B67B]">Classer par</span>
+            {([
+              { key: 'ca' as const, label: "Chiffre d'affaires" },
+              { key: 'ventes' as const, label: 'Nombre de ventes' },
+            ]).map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setRankBy(opt.key)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                  rankBy === opt.key
+                    ? 'bg-[#6B5220] text-[#F3EAD3] border-[#D4AF37]'
+                    : 'bg-transparent text-[#C9B67B] border-[#3a2f1a] hover:text-[#F3EAD3]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center py-16 text-[#C9B67B]">
             <Loader2 className="animate-spin mr-2" size={18} /> Chargement des statistiques…
           </div>
+        ) : tab !== 'apercu' ? (
+          stageRows.length === 0 ? (
+            <div className="py-16 text-center text-sm text-[#C9B67B]">
+              Aucun dossier à cette étape pour le moment.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center px-4 py-2 text-[9px] uppercase tracking-widest text-[#C9B67B]">
+                <span className="w-7 shrink-0" />
+                <span className="flex-1">Conseiller</span>
+                <span className="w-20 text-center">Dossiers</span>
+                <span className="w-32 text-right">Chiffre d'affaires</span>
+              </div>
+              {stageRows.map((r, rank) => {
+                const podium = PODIUM[rank];
+                return (
+                <div
+                  key={r.agentId}
+                  className="flex items-center rounded-xl px-4 py-3"
+                  style={{
+                    border: `${podium ? '2px' : '1px'} solid ${podium ? podium.border : '#6B5220'}`,
+                    background: podium ? podium.bg : '#2A2211',
+                  }}
+                >
+                  <span className="w-7 shrink-0 text-base leading-none" aria-hidden="true">{podium ? podium.medal : ''}</span>
+                  <span
+                    className="flex-1 text-sm font-bold truncate"
+                    style={{ color: podium ? podium.name : '#F3EAD3' }}
+                  >
+                    {r.agentFullName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDetailFor({ stage: tab as StageKey, agentId: r.agentId, title: r.agentFullName })}
+                    className="w-20 text-center text-sm text-[#C9B67B] tabular-nums hover:text-[#F3EAD3] underline decoration-dotted underline-offset-4"
+                    title="Voir les clients concernés"
+                  >
+                    {r.count}
+                  </button>
+                  <span className="w-32 text-right text-sm font-bold text-[#D4AF37] tabular-nums">{formatEuros(r.ca)}</span>
+                </div>
+                );
+              })}
+              <div className="flex items-center rounded-xl border-2 border-[#D4AF37] bg-[#1b1712] px-4 py-3 mt-3">
+                <span className="w-7 shrink-0" />
+                <span className="flex-1 text-xs font-bold uppercase tracking-widest text-[#D4AF37]">Total agence</span>
+                <button
+                  type="button"
+                  onClick={() => setDetailFor({ stage: tab as StageKey, agentId: null, title: 'Toute l\'agence' })}
+                  className="w-20 text-center text-sm font-bold text-[#F3EAD3] tabular-nums hover:text-[#D4AF37] underline decoration-dotted underline-offset-4"
+                  title="Voir tous les clients de cette étape"
+                >
+                  {stageTotal.count}
+                </button>
+                <span className="w-32 text-right text-base font-bold text-[#D4AF37] tabular-nums">{formatEuros(stageTotal.ca)}</span>
+              </div>
+              <p className="pt-2 text-[10px] text-[#C9B67B]">
+                Chiffre d'affaires = champ « Honoraires (€) » de la fiche client. Un dossier sans
+                honoraires renseignés compte pour 0 €.
+              </p>
+            </div>
+          )
         ) : orderedRows.length === 0 ? (
           <div className="py-16 text-center text-sm text-[#C9B67B]">
-            Aucun dossier en Offre, Compromis ou Signature pour le moment.
+            Aucun dossier en Location, Offre, Compromis ou Signature pour le moment.
           </div>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={orderedRows.map((r) => r.agentId)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-2">
-                {orderedRows.map((row) => (
-                  <SortableAgentRow
-                    key={row.agentId}
-                    row={row}
-                    color={colors[row.agentId] || LABEL_COLORS[0].value}
-                    onPickColor={() => setColorPickerFor(row.agentId)}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+          <div className="space-y-2">
+            {orderedRows.map((row) => (
+              <AgentRow
+                key={row.agentId}
+                row={row}
+                color={LABEL_COLORS[0].value}
+                onOpen={(stage) => setDetailFor({ stage, agentId: row.agentId, title: row.agentFullName })}
+              />
+            ))}
+          </div>
         )}
 
         {/* Total agence — recentré au milieu du panneau, en médaillon, plutôt
@@ -344,6 +476,10 @@ const StatistiquesEtiquettesView: React.FC = () => {
             <div className="flex items-center gap-4 sm:gap-6 rounded-2xl border-2 border-[#D4AF37] bg-[#2A2211] px-5 sm:px-7 py-3 sm:py-4 shadow-[0_4px_14px_rgba(0,0,0,0.4)]">
               <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-[#D4AF37]">Total agence</span>
               <div className="flex items-center gap-3 sm:gap-4">
+                <div className="text-center">
+                  <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.location}</div>
+                  <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Location</div>
+                </div>
                 <div className="text-center">
                   <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.offre}</div>
                   <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Offre</div>
@@ -367,36 +503,54 @@ const StatistiquesEtiquettesView: React.FC = () => {
         )}
       </div>
 
-      {colorPickerFor && (
+      {/* Demandé : au clic sur un chiffre, savoir QUI est dans cette case —
+          et pouvoir ouvrir la fiche directement depuis la liste. */}
+      {detailFor && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-          onClick={() => setColorPickerFor(null)}
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setDetailFor(null)}
         >
           <div
-            className="bg-[#1b1712] border border-[#3a2f1a] rounded-2xl p-4 sm:p-5 w-full max-w-xs"
+            className="bg-[#1b1712] border-2 border-[#6B5220] rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-sm font-semibold text-[#F3EAD3] mb-3">Couleur des étiquettes</h3>
-            <div className="grid grid-cols-3 gap-3">
-              {LABEL_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  onClick={() => {
-                    const next = { ...colors, [colorPickerFor]: c.value };
-                    setColors(next);
-                    localStorage.setItem(COLOR_KEY, JSON.stringify(next));
-                    setColorPickerFor(null);
-                  }}
-                  className="flex flex-col items-center gap-1.5 group"
-                  title={c.name}
-                >
-                  <span
-                    className="w-10 h-10 rounded-lg border-2 border-[#9C7A2E] group-hover:scale-105 transition-transform"
-                    style={{ background: c.value }}
-                  />
-                  <span className="text-[10px] text-[#C9B67B] text-center leading-tight">{c.name}</span>
-                </button>
-              ))}
+            <div className="flex items-start justify-between gap-3 p-4 border-b border-[#3a2f1a]">
+              <div>
+                <h3 className="text-sm font-bold text-[#F3EAD3]">{STAGE_LABEL[detailFor.stage]}</h3>
+                <p className="text-[11px] text-[#C9B67B] mt-0.5">
+                  {detailFor.title} — {detailLeads.length} dossier{detailLeads.length > 1 ? 's' : ''}
+                </p>
+              </div>
+              <button onClick={() => setDetailFor(null)} className="text-[#C9B67B] hover:text-[#F3EAD3] text-lg leading-none px-1">×</button>
+            </div>
+
+            <div className="overflow-y-auto custom-scrollbar p-3 space-y-1.5">
+              {detailLeads.length === 0 ? (
+                <p className="py-8 text-center text-xs text-[#C9B67B]">Aucun dossier.</p>
+              ) : (
+                detailLeads.map((lead) => (
+                  <button
+                    key={lead.id}
+                    type="button"
+                    onClick={() => {
+                      if (!onSelectContact) return;
+                      setDetailFor(null);
+                      onSelectContact(lead.id);
+                    }}
+                    disabled={!onSelectContact}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-[#3a2f1a] bg-[#2A2211] text-left hover:border-[#D4AF37] transition-colors disabled:cursor-default"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm text-[#F3EAD3] truncate">{lead.name}</span>
+                      <span className="block text-[11px] text-[#C9B67B] truncate">
+                        Mandat : {lead.mandat || '—'}
+                        {lead.ville ? ` · ${lead.ville}` : ''}
+                      </span>
+                    </span>
+                    <span className="text-xs font-bold text-[#D4AF37] tabular-nums shrink-0">{formatEuros(lead.honoraires)}</span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>

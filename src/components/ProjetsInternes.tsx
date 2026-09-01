@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Clock,
   FolderKanban,
+  GripVertical,
   LayoutGrid,
   List as ListIcon,
   Loader2,
@@ -38,12 +39,19 @@ interface ProjetsInternesProps {
 }
 
 interface StoredInternalProject
-  extends InternalProject {
+  // `deadline` et `assignedMember` viennent du modèle d'origine et ne sont
+  // pas portés par la table task_boards : déclarés optionnels ici plutôt
+  // qu'obligatoires et jamais renseignés.
+  extends Omit<InternalProject, 'deadline' | 'assignedMember'> {
+  deadline?: string;
+  assignedMember?: string;
   assignedUserId?: string;
 
   createdByUserId: string;
-  createdByEmail: string;
-  createdByName: string;
+  // Jamais renseignés par le chargement depuis la base : optionnels plutôt
+  // qu'obligatoires et toujours absents.
+  createdByEmail?: string;
+  createdByName?: string;
 
   createdAt: string;
   updatedAt: string;
@@ -603,6 +611,35 @@ export const ProjetsInternes: React.FC<
   // Glisser-déposer horizontal (changer de colonne) ET vertical (réordonner
   // dans la même colonne) — même principe que "Projet", mais totalement
   // indépendant (autre table, aucune interaction avec task_boards).
+  // Demandé : en vue liste, pouvoir ranger les dossiers dans l'ordre voulu
+  // par glisser-déposer. L'ordre est déjà stocké en base (`task_boards.
+  // sort_order`, lu au chargement) — il n'était simplement modifiable
+  // nulle part. Les rangs sont réattribués sur les dossiers VISIBLES
+  // (la liste est filtrée par agence) ; ceux des autres agences gardent
+  // le leur, le tri restant départagé par la date de mise à jour.
+  function handleProjectsDragEnd(result: DropResult) {
+    const { destination, source, draggableId } = result;
+    if (!destination || destination.index === source.index) return;
+
+    const orderedIds = visibleProjects.map((p) => p.id);
+    orderedIds.splice(source.index, 1);
+    orderedIds.splice(destination.index, 0, draggableId);
+
+    const rank = new Map(orderedIds.map((id, index) => [id, index]));
+    setProjects((prev) =>
+      [...prev]
+        .map((p) => (rank.has(p.id) ? { ...p, sortOrder: rank.get(p.id) as number } : p))
+        .sort((a, b) => a.sortOrder - b.sortOrder || b.updatedAt.localeCompare(a.updatedAt))
+    );
+
+    void Promise.all(
+      orderedIds.map((id, index) => supabase.from('task_boards').update({ sort_order: index }).eq('id', id))
+    ).catch((err) => {
+      console.error('Erreur réorganisation des dossiers :', err);
+      setError("Impossible d'enregistrer le nouvel ordre des dossiers.");
+    });
+  }
+
   function handleTodoDragEnd(result: DropResult) {
     const { destination, source, draggableId } = result;
     if (!destination) return;
@@ -742,6 +779,12 @@ export const ProjetsInternes: React.FC<
           agencyId={openBoard.agencyId}
           users={users}
           onBack={() => setOpenBoard(null)}
+          onRenamed={(title) => {
+            // Le titre renommé depuis l'intérieur du projet doit se refléter
+            // aussitôt dans la liste, sans rechargement.
+            setOpenBoard((b) => (b ? { ...b, title } : b));
+            setProjects((prev) => prev.map((p) => (p.id === openBoard.id ? { ...p, title } : p)));
+          }}
         />
       </div>
     );
@@ -767,11 +810,15 @@ export const ProjetsInternes: React.FC<
           </div>
         </div>
 
-        {pageTab === 'projet' && (
+        {/* Affiché sur les deux onglets depuis le 31/08/2026 : c'est le seul
+            moyen de créer un projet, le masquer sur l'onglet Liste n'apportait
+            rien et obligeait à revenir en arrière pour le retrouver. */}
+        {pageTab !== 'tableaux' && (
           <button
             onClick={() => {
               setError(null);
               setSuccess(null);
+              setPageTab('projet');
               setShowAddModal(true);
             }}
             className="bg-[#F7BC5F] hover:bg-[#d9ab38] text-black font-semibold text-xs px-4 py-2 rounded-xl flex items-center gap-2 shadow-md"
@@ -855,11 +902,29 @@ export const ProjetsInternes: React.FC<
           </div>
 
           {visibleProjects.length === 0 ? (
+            /* Signalé (31/08/2026) : impossible de créer un nouveau projet
+               indépendant dans une agence. Le bouton « + Projet » existait,
+               mais uniquement en haut de page — et cet écran vide n'offrait
+               aucune issue.
+               Le cas est devenu courant depuis le cloisonnement des projets
+               internes posé le même jour : on ne voit plus que les projets
+               auxquels on est invité, donc beaucoup d'agences affichent
+               désormais cette page vide. Elle devait proposer la sortie. */
             <div className="p-12 text-center text-gray-500 bg-white/5 border border-dashed border-white/10 rounded-2xl">
               <FolderKanban className="w-9 h-9 mx-auto mb-3 text-gray-600" />
               <p className="text-sm">
                 Aucun projet interne pour cette structure.
               </p>
+              <p className="text-xs text-gray-600 mt-1">
+                Créez-en un pour commencer à suivre vos objectifs d'agence.
+              </p>
+              <button
+                onClick={() => { setError(null); setSuccess(null); setShowAddModal(true); }}
+                className="mt-5 bg-[#F7BC5F] hover:bg-[#d9ab38] text-black font-semibold text-sm px-5 py-2.5 rounded-xl inline-flex items-center gap-2 shadow-md"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Créer un projet</span>
+              </button>
             </div>
           ) : projectsViewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -970,11 +1035,32 @@ export const ProjetsInternes: React.FC<
               })}
             </div>
           ) : (
-            <div className="divide-y divide-white/10 bg-[#0a1e20] border border-white/10 rounded-2xl overflow-hidden">
-              {visibleProjects.map((project) => {
+            <DragDropContext onDragEnd={handleProjectsDragEnd}>
+              <Droppable droppableId="projets-internes-liste">
+                {(dropProvided) => (
+            <div
+              ref={dropProvided.innerRef}
+              {...dropProvided.droppableProps}
+              className="divide-y divide-white/10 bg-[#0a1e20] border border-white/10 rounded-2xl overflow-hidden"
+            >
+              {visibleProjects.map((project, projectIndex) => {
                 const accent = STATUS_ACCENT[project.status];
                 return (
-                  <div key={project.id} className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors group border-l-4" style={{ borderLeftColor: accent }}>
+                  <Draggable draggableId={project.id} index={projectIndex} key={project.id}>
+                    {(dragProvided, dragSnapshot) => (
+                  <div
+                    ref={dragProvided.innerRef}
+                    {...dragProvided.draggableProps}
+                    className={`flex items-center gap-3 px-4 py-3 transition-colors group border-l-4 ${dragSnapshot.isDragging ? 'shadow-2xl ring-1 ring-[#F7BC5F]/50' : 'hover:bg-white/5'}`}
+                    style={{ borderLeftColor: accent, ...dragProvided.draggableProps.style }}
+                  >
+                    <span
+                      {...dragProvided.dragHandleProps}
+                      title="Glisser pour changer l'ordre"
+                      className="shrink-0 -ml-1.5 p-1 rounded-md text-gray-500 hover:text-[#F7BC5F] cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <GripVertical className="w-4 h-4" />
+                    </span>
                     {renamingProjectId === project.id ? (
                       <input
                         autoFocus
@@ -1023,9 +1109,15 @@ export const ProjetsInternes: React.FC<
                       </button>
                     )}
                   </div>
+                    )}
+                  </Draggable>
                 );
               })}
+              {dropProvided.placeholder}
             </div>
+                )}
+              </Droppable>
+            </DragDropContext>
           )}
         </div>
       ))}

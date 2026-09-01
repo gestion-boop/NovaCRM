@@ -46,6 +46,7 @@ import { getCachedAccessToken, requestWorkspaceAccessToken, hydrateAccessTokenFr
 import { uploadDocumentToDrive } from '@/lib/documentDrive';
 import { getTaskDateStatus } from '@/lib/taskUtils';
 import { TEAM_MEMBERS, getAssignedUser } from '@/data/teamMembers';
+import { useAssignableUsers } from '@/hooks/useAssignableUsers';
 import ParcoursCreditModal from './ParcoursCreditModal';
 import EditClientModal from './EditClientModal';
 
@@ -589,6 +590,7 @@ export default function ClientProfileView({
   const [shareTargetId, setShareTargetId] = useState('');
   const [shareSaving, setShareSaving] = useState(false);
 
+  const assignableUsers = useAssignableUsers(client?.agencyId);
   const colleagues = TEAM_MEMBERS.filter(
     (m) => m.agencyId === client?.agencyId && m.id !== currentUserId
   );
@@ -828,6 +830,7 @@ export default function ClientProfileView({
         await sendGmailMessage(token2, {
           to: email,
           subject: 'Consentement au démarchage téléphonique — merci de le signer',
+          body: `Bonjour,\n\nMerci de compléter et signer votre consentement au démarchage téléphonique :\n${link}\n\nCordialement,\n${currentUserName}`,
           bodyHtml: `<p>Bonjour,</p><p>Merci de compléter et signer votre consentement au démarchage téléphonique en cliquant sur le lien ci-dessous :</p><p><a href="${link}">${link}</a></p><p>Cordialement,<br/>${currentUserName}</p>`,
         }).catch((e) => {
           toast.error("La demande a été créée mais l'email n'a pas pu être envoyé : " + (e?.message || 'erreur'));
@@ -1032,6 +1035,7 @@ export default function ClientProfileView({
           await sendGmailMessage(token2, {
             to: email,
             subject: 'Questionnaire confidentiel — merci de le compléter',
+            body: `Bonjour,\n\nMerci de compléter votre questionnaire confidentiel :\n${link}\n\nCes informations resteront strictement confidentielles et sécurisées.\n\nCordialement,\n${currentUserName}`,
             bodyHtml: `<p>Bonjour,</p><p>Merci de compléter votre questionnaire confidentiel en cliquant sur le lien ci-dessous :</p><p><a href="${link}">${link}</a></p><p>Ces informations resteront strictement confidentielles et sécurisées.</p><p>Cordialement,<br/>${currentUserName}</p>`,
           });
           emailSent = true;
@@ -1837,19 +1841,36 @@ export default function ClientProfileView({
       recognition.continuous = true;
       recognition.interimResults = true;
 
+      // CORRECTIF (31/08/2026) — signalé : « quand Natacha veut rédiger une
+      // note en vocal, cela ne marche pas ». Deux defauts cumules :
+      //
+      // 1. ACCUMULATION. `setNoteContent(prev => prev + currentTranscript)`
+      //    ajoutait a chaque evenement. Or Android Chrome renvoie tres souvent
+      //    TOUT l'historique des resultats a chaque fois, avec resultIndex a
+      //    0 : chaque passage reecrivait ce qui etait deja la, et la note
+      //    gonflait en repetitions — le meme defaut que la dictee de Nova.
+      //
+      // 2. PERTE DU DERNIER SEGMENT. Seuls les segments marques `isFinal`
+      //    etaient retenus. Si l'on arrete de parler avant que le navigateur
+      //    ne valide le dernier, il n'etait jamais ecrit — et sur une phrase
+      //    courte, souvent AUCUN segment n'atteint cet etat : la note restait
+      //    vide, d'ou « ca ne marche pas ».
+      //
+      // On capture le texte deja saisi, puis on reconstruit la phrase entiere
+      // a chaque evenement — segments definitifs ET en cours. L'operation
+      // devient idempotente et ne perd plus rien.
+      const texteDeBase = noteContent.trim();
+
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let currentTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            currentTranscript += event.results[i][0].transcript + ' ';
-          }
+        let definitif = '';
+        let enCours = '';
+        for (let i = 0; i < event.results.length; i++) {
+          const chunk = event.results[i][0].transcript;
+          if (event.results[i].isFinal) definitif += `${chunk} `;
+          else enCours += chunk;
         }
-        if (currentTranscript) {
-          setNoteContent(prev => {
-            const trimmed = prev.trim();
-            return trimmed ? `${trimmed} ${currentTranscript.trim()}` : currentTranscript.trim();
-          });
-        }
+        const complet = `${texteDeBase} ${definitif} ${enCours}`.replace(/\s+/g, ' ').trim();
+        setNoteContent(complet);
       };
 
       recognition.onerror = (event: any) => {
@@ -2370,11 +2391,20 @@ export default function ClientProfileView({
                 <div>
                   <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Utilisateur / Agent Lié</label>
                   <select
-                    value={getAssignedUser(client.assignedTo).id}
+                    // Signalé : « cela reste au premier qui est mis ». La
+                    // valeur affichée passait par getAssignedUser(), qui
+                    // retombe sur TEAM_MEMBERS[0] (Sylvain Grazia) dès que
+                    // l'identifiant n'est pas dans la liste figée — donc
+                    // pour tout collaborateur réel. Le champ ne reflétait
+                    // jamais l'attribution enregistrée et revenait au
+                    // premier nom après chaque changement. On lit
+                    // directement la valeur stockée.
+                    value={client.assignedTo || ''}
                     onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { assignedTo: e.target.value } })}
                     className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
                   >
-                    {TEAM_MEMBERS.map(m => (
+                    <option value="">— Non attribué —</option>
+                    {assignableUsers.map(m => (
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
                   </select>
@@ -3627,7 +3657,7 @@ export default function ClientProfileView({
                       className="bg-black/30 border border-amber-500/40 rounded-lg px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-amber-400 shrink-0"
                     >
                       <option value="" disabled>Assigner un conseiller...</option>
-                      {TEAM_MEMBERS.map((m) => (
+                      {assignableUsers.map((m) => (
                         <option key={m.id} value={m.id}>{m.name}</option>
                       ))}
                     </select>

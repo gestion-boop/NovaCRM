@@ -53,5 +53,69 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Filet de sécurité « application déshabillée » (31/08/2026).
+
+         Constaté sur le téléphone d'une utilisatrice : le CRM s'affichait sans
+         AUCUNE feuille de style — texte en serif, menus en cadres nus, logo à
+         sa taille naturelle. Cause : son navigateur gardait un index.html
+         d'une version précédente, qui réclame des fichiers /assets/ aux noms
+         désormais inexistants. La réécriture SPA de Vercel répondait alors
+         index.html avec un statut 200 (corrigé dans vercel.json), et le
+         navigateur refusait ce HTML comme feuille de style — sans la moindre
+         erreur visible pour l'utilisateur.
+
+         Ce garde-fou vérifie qu'un jeton de `index.css` est bien appliqué. Si
+         ce n'est pas le cas, la page ne peut pas fonctionner : on purge les
+         caches, on désinscrit le service worker et on recharge une fois. Le
+         drapeau en sessionStorage interdit toute boucle. Un second controle
+         rattrape le cas inverse : styles presents mais page vide. -->
+    <script>
+      (function () {
+        // Purge complète puis rechargement, une seule fois par session.
+        function reparer(motif) {
+          try {
+            if (sessionStorage.getItem('nv-repare')) return;
+            sessionStorage.setItem('nv-repare', motif);
+          } catch (e) { return; }
+          var fini = function () { location.reload(); };
+          var taches = [];
+          if (window.caches && caches.keys) {
+            taches.push(caches.keys().then(function (n) {
+              return Promise.all(n.map(function (c) { return caches.delete(c); }));
+            }));
+          }
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            taches.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+              return Promise.all(rs.map(function (r) { return r.unregister(); }));
+            }));
+          }
+          Promise.all(taches).then(fini, fini);
+          setTimeout(fini, 3000);
+        }
+
+        window.addEventListener('load', function () {
+          try {
+            // 1. Styles absents — l'application s'affiche « déshabillée ».
+            var jeton = getComputedStyle(document.documentElement)
+              .getPropertyValue('--nv-surface-app').trim();
+            if (!jeton) { reparer('styles'); return; }
+
+            // 2. Styles présents mais RIEN d'affiché — signalé le 31/08/2026 :
+            //    un écran entièrement turquoise (la couleur de fond de
+            //    l'application) et vide. Le JavaScript n'a pas démarré : soit
+            //    son fichier n'est pas arrivé, soit un service worker en a
+            //    servi une version périmée. Sans ce second contrôle, rien ne
+            //    rattrapait ce cas — le premier ne voit que les styles.
+            //    5 secondes : largement au-delà du temps de montage de React,
+            //    même sur un téléphone lent en 4G.
+            setTimeout(function () {
+              var racine = document.getElementById('root');
+              if (racine && racine.children.length === 0) reparer('vide');
+            }, 5000);
+          } catch (e) { /* jamais bloquer l'application pour ce garde-fou */ }
+        });
+      })();
+    </script>
   </body>
 </html>

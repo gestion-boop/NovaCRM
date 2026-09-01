@@ -50,26 +50,43 @@ async function applyBadge(count) {
 }
 
 self.addEventListener("install", (e) => {
-  // Ne PAS skipWaiting automatiquement : sinon, dès qu'une nouvelle
-  // version du SW est détectée (par ex. au retour sur l'onglet), elle
-  // prend immédiatement le contrôle et la page peut se recharger,
-  // ce qui fait perdre la saisie en cours. On attend que l'utilisateur
-  // clique explicitement sur "Mettre à jour" (message SKIP_WAITING).
+  // DÉCISION INVERSÉE le 31/08/2026, après un blocage définitif constaté sur
+  // le téléphone d'une utilisatrice : depuis son raccourci installé, l'appli
+  // n'affichait qu'un écran turquoise vide, alors que la même adresse
+  // fonctionnait dans Chrome.
+  //
+  // L'ancienne consigne — ne pas prendre le contrôle avant que l'utilisateur
+  // clique "Mettre à jour" — reposait sur un bouton qui N'EXISTE PAS : rien
+  // dans src/ n'écoute `controllerchange` ni n'envoie SKIP_WAITING (vérifié).
+  // Une nouvelle version s'installait donc, restait en attente… et n'était
+  // jamais activée. Or c'est l'activation qui purge les caches d'assets
+  // périmés (voir plus bas). Un service worker ayant mis en cache une réponse
+  // erronée gardait donc cette réponse INDÉFINIMENT, sans aucun moyen d'en
+  // sortir autre que désinstaller l'application.
+  //
+  // Prendre le contrôle immédiatement ne provoque aucun rechargement ici :
+  // personne n'écoute `controllerchange`, et index.html n'est de toute façon
+  // jamais servi depuis le cache. Le seul effet est que le ménage a lieu.
+  self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {
-  // Idem : on ne réclame le contrôle des clients existants qu'au
-  // prochain chargement naturel de la page, pour éviter tout reload
-  // intempestif au retour sur l'onglet.
   // Ménage : purge les anciens caches d'assets (versions précédentes du
   // bundle) pour ne pas accumuler indéfiniment des fichiers hashés qui ne
-  // sont plus référencés par aucun index.html actuel.
+  // sont plus référencés par aucun index.html actuel — et surtout pour
+  // évacuer toute entrée erronée d'une version antérieure.
+  //
+  // `clients.claim()` : sans lui, les pages déjà ouvertes restent pilotées par
+  // l'ancien service worker jusqu'à leur prochain démarrage complet. Sur une
+  // application installée, cela peut durer des jours. Voir le commentaire de
+  // l'installation ci-dessus.
   e.waitUntil(
     (async () => {
       const keys = await caches.keys();
       await Promise.all(
         keys.filter((k) => k.startsWith("novasphere-assets-") && k !== ASSETS_CACHE).map((k) => caches.delete(k))
       );
+      await self.clients.claim();
     })(),
   );
 });
@@ -105,7 +122,7 @@ self.addEventListener("activate", (e) => {
 // entrée déjà piégée par ce bug chez les utilisateurs déjà passés par là
 // (purgée par le "Ménage" de l'activate ci-dessus, qui supprime déjà tout
 // cache "novasphere-assets-*" différent du nom courant).
-const ASSETS_CACHE = "novasphere-assets-v2";
+const ASSETS_CACHE = "novasphere-assets-v3";
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;

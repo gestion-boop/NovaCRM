@@ -27,7 +27,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, htDepuisTtc } from '@/lib/utils';
 // Ticket #277 (suite) : même détection de mode jour que l'accueil, pour que
 // les colonnes du pipeline suivent la même bascule vers de vraies couleurs
 // claires (au lieu du filtre global qui pâlit juste le bleu canard).
@@ -104,7 +104,9 @@ interface StoredPipeline extends PipelineDef {
   agencyId: string;
   sortOrder: number;
   createdAt: string;
-  updatedAt: string;
+  // Jamais chargée depuis la base ni écrite à la création : optionnelle,
+  // plutôt que déclarée obligatoire et toujours absente.
+  updatedAt?: string;
 }
 
 interface PipelineProps {
@@ -293,6 +295,8 @@ const PipelineColumn: React.FC<{
   stage: string;
   stageDeals: Deal[];
   stageTotal: number;
+  // Commission conseiller cumulée de la colonne, convertie en HT.
+  stageAdvisorHt: number;
   accentColor: string;
   canManageStructure: boolean;
   contactsById: Map<string, Contact>;
@@ -305,7 +309,7 @@ const PipelineColumn: React.FC<{
   onRequestDelete: (stage: string) => void;
   justArrived: boolean;
 }> = ({
-  stage, stageDeals, stageTotal, accentColor, canManageStructure,
+  stage, stageDeals, stageTotal, stageAdvisorHt, accentColor, canManageStructure,
   contactsById, taskStatusByContactId, onSelectContact, onDeleteDeal, onOpenChecklist, onOpenNova, onRename, onRequestDelete, justArrived,
 }) => {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
@@ -368,7 +372,15 @@ const PipelineColumn: React.FC<{
               {stageTotal > 0 && (
                 <>
                   <span className="text-[10px] text-gray-600">·</span>
-                  <p className="text-[10px] font-bold" style={{ color: accentColor }}>{formatCurrency(stageTotal)}</p>
+                  <p className="text-[10px] font-bold" style={{ color: accentColor }} title="Commission agence, hors taxes">{formatCurrency(stageTotal)}</p>
+                  {stageAdvisorHt > 0 && (
+                    <>
+                      <span className="text-[10px] text-gray-600">·</span>
+                      <p className="text-[10px] text-gray-400" title="Commission conseiller, saisie TTC et convertie hors taxes">
+                        dont conseiller {formatCurrency(stageAdvisorHt)} HT
+                      </p>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -788,7 +800,6 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
           return {
             id: p.id,
-            pipelineId: p.id,
             name: p.name,
             agencyId: p.agency_id,
             stages: pStages.length > 0 ? pStages : [...BASE_PIPELINES[0].stages],
@@ -846,15 +857,85 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     }
 
     if (updates.stages) {
-      await supabase.from('pipeline_stages').delete().eq('pipeline_id', pipelineId);
-      const stageInserts = updates.stages.map((stageName, idx) => ({
-        agency_id: currentAgencyId,
-        pipeline_id: pipelineId,
-        name: stageName,
-        position: idx,
-      }));
-      const { error: stageErr } = await supabase.from('pipeline_stages').insert(stageInserts);
-      if (stageErr) throw stageErr;
+      // INCIDENT DU 30/08/2026 — « j'ai créé une colonne Location validée et
+      // cela m'a effacé tout ce qu'il y avait dans les autres colonnes ».
+      //
+      // Ce bloc faisait un DELETE de toutes les étapes du pipeline suivi d'un
+      // INSERT complet. Les étapes étaient donc recréées avec de NOUVEAUX
+      // identifiants, et les dossiers, qui pointent sur `stage_id`, perdaient
+      // leur position — 21 dossiers détachés d'un coup ce soir-là, sur la
+      // simple AJOUT d'une colonne. Le même code s'exécutait à chaque
+      // renommage ou réorganisation d'étape, sur tous les pipelines.
+      //
+      // On ne détruit plus rien : les étapes conservées gardent leur ligne
+      // (donc leur identifiant, donc les dossiers qui s'y trouvent), seules
+      // les étapes réellement retirées sont supprimées, et seules les
+      // nouvelles sont créées.
+      const { data: existing } = await supabase
+        .from('pipeline_stages')
+        .select('id, name, position')
+        .eq('pipeline_id', pipelineId);
+
+      const normalize = (value: string) => value.trim().toLowerCase();
+      const remaining = [...(existing || [])];
+      const wanted = updates.stages;
+
+      // Rapprochement par nom : c'est le seul lien stable entre la liste
+      // affichée (des chaînes) et les lignes en base.
+      const matched = new Map<number, { id: string; name: string }>();
+      wanted.forEach((stageName, idx) => {
+        const hit = remaining.findIndex((row) => normalize(row.name) === normalize(stageName));
+        if (hit !== -1) {
+          matched.set(idx, remaining[hit] as { id: string; name: string });
+          remaining.splice(hit, 1);
+        }
+      });
+
+      // Une étape non retrouvée par son nom, alors qu'il reste des lignes
+      // orphelines, est très probablement un RENOMMAGE : on réutilise la
+      // ligne plutôt que d'en créer une neuve, ce qui garderait les dossiers
+      // sur l'ancien nom.
+      wanted.forEach((stageName, idx) => {
+        if (matched.has(idx) || remaining.length === 0) return;
+        const reused = remaining.shift() as { id: string; name: string };
+        matched.set(idx, reused);
+      });
+
+      const toUpdate = wanted
+        .map((stageName, idx) => ({ stageName, idx, row: matched.get(idx) }))
+        .filter((entry) => entry.row);
+      const toInsert = wanted
+        .map((stageName, idx) => ({ stageName, idx }))
+        .filter((entry) => !matched.has(entry.idx));
+
+      for (const entry of toUpdate) {
+        const { error: upErr } = await supabase
+          .from('pipeline_stages')
+          .update({ name: entry.stageName, position: entry.idx })
+          .eq('id', (entry.row as { id: string }).id);
+        if (upErr) throw upErr;
+      }
+
+      if (toInsert.length > 0) {
+        const { error: insErr } = await supabase.from('pipeline_stages').insert(
+          toInsert.map((entry) => ({
+            agency_id: currentAgencyId,
+            pipeline_id: pipelineId,
+            name: entry.stageName,
+            position: entry.idx,
+          }))
+        );
+        if (insErr) throw insErr;
+      }
+
+      // Ce qui reste après appariement a réellement été retiré de la liste.
+      for (const leftover of remaining) {
+        const { error: delErr } = await supabase
+          .from('pipeline_stages')
+          .delete()
+          .eq('id', (leftover as { id: string }).id);
+        if (delErr) throw delErr;
+      }
     }
   };
 
@@ -902,7 +983,6 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
       const newPipeObj: StoredPipeline = {
         id: createdPipe.id,
-        pipelineId: createdPipe.id,
         agencyId: currentAgencyId,
         name,
         stages: initialStages,
@@ -1598,6 +1678,12 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
               {activePipeline.stages.map((stage, stageIndex) => {
                 const stageDeals = dealsByStage.get(stage) || EMPTY_DEALS;
                 const stageTotal = stageDeals.reduce((sum, deal) => sum + (deal.amount || 0), 0);
+                // Demandé : la commission conseiller est saisie TTC et doit
+                // remonter en HT sur la colonne.
+                const stageAdvisorHt = stageDeals.reduce(
+                  (sum, deal) => sum + htDepuisTtc(deal.advisorCommissionTtc),
+                  0
+                );
                 const accentColor = STAGE_ACCENT_COLORS[stageIndex % STAGE_ACCENT_COLORS.length];
 
                 return (
@@ -1606,6 +1692,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                     stage={stage}
                     stageDeals={stageDeals}
                     stageTotal={stageTotal}
+                    stageAdvisorHt={stageAdvisorHt}
                     accentColor={accentColor}
                     canManageStructure={canManageStructure}
                     contactsById={contactsById}

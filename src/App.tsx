@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Clock, Maximize2, ChevronLeft } from 'lucide-react';
@@ -17,10 +17,10 @@ import ClientAuth from './components/ClientAuth';
 import Header from './components/Header';
 import Sidebar, { NAV_ITEMS } from './components/Sidebar';
 import AccueilGrid from './components/AccueilGrid';
-import Dashboard from './components/Dashboard';
-import Contacts from './components/Contacts';
-import Clients from './components/leads/Clients';
-import Pipeline from './components/Pipeline';
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const Contacts = lazy(() => import('./components/Contacts'));
+const Clients = lazy(() => import('./components/leads/Clients'));
+const Pipeline = lazy(() => import('./components/Pipeline'));
 import NouveauLeadModal from './components/NouveauLeadModal';
 import TutorialModal from './components/TutorialModal';
 import ProductTour, { TourStep } from './components/ProductTour';
@@ -29,23 +29,23 @@ import CameraReservationModal from './components/CameraReservationModal';
 import AnnouncementBanner from './components/AnnouncementBanner';
 
 // Subview components
-import ProjetsInternes from './components/ProjetsInternes';
+const ProjetsInternes = lazy(() => import('./components/ProjetsInternes'));
 import StagiaireShell from './components/StagiaireShell';
 import ClientGuestShell from './components/ClientGuestShell';
-import AgendaView from './components/AgendaView';
-import StatistiquesEtiquettesView from './components/StatistiquesEtiquettesView';
-import RappelsView from './components/RappelsView';
+const AgendaView = lazy(() => import('./components/AgendaView'));
+const StatistiquesEtiquettesView = lazy(() => import('./components/StatistiquesEtiquettesView'));
+const RappelsView = lazy(() => import('./components/RappelsView'));
 import ChatView from './components/ChatViewSupabase';
-import MailView from './components/MailView';
-import EquipeView from './components/EquipeView';
-import DocumentsView from './components/DocumentsView';
-import CarteProspectionView from './components/CarteProspectionView';
-import NotesView from './components/NotesView';
-import SupportView from './components/SupportView';
-import ParametresView from './components/ParametresView';
-import AssistantIAView from './components/AssistantIAView';
-import ReserverCameraView from './components/ReserverCameraView';
-import ClientProfileView from './components/ClientProfileView';
+const MailView = lazy(() => import('./components/MailView'));
+const EquipeView = lazy(() => import('./components/EquipeView'));
+const DocumentsView = lazy(() => import('./components/DocumentsView'));
+const CarteProspectionView = lazy(() => import('./components/CarteProspectionView'));
+const NotesView = lazy(() => import('./components/NotesView'));
+const SupportView = lazy(() => import('./components/SupportView'));
+const ParametresView = lazy(() => import('./components/ParametresView'));
+const AssistantIAView = lazy(() => import('./components/AssistantIAView'));
+const ReserverCameraView = lazy(() => import('./components/ReserverCameraView'));
+const ClientProfileView = lazy(() => import('./components/ClientProfileView'));
 import NotificationsView from './components/NotificationsView';
 import MobileBottomNav from './components/MobileBottomNav';
 import PublicQuestionnaire from './components/PublicQuestionnaire';
@@ -54,17 +54,29 @@ import UpdateBanner from './components/UpdateBanner';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
 import MobileHome from './components/MobileHome';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import Immosphera from './immosphera/Immosphera';
+const Immosphera = lazy(() => import('./immosphera/Immosphera'));
 import { SidebarProvider as ImmoSidebarProvider } from './contexts/SidebarContext';
 
-export function App() {
+export // Affiché le temps qu'un écran se télécharge. Volontairement discret : sur
+// une bonne connexion il n'apparaît qu'une fraction de seconde.
+const ChargementEcran = () => (
+  <div className="flex items-center justify-center py-24">
+    <div className="w-8 h-8 rounded-full border-2 border-[#F7BC5F] border-t-transparent animate-spin" />
+  </div>
+);
+
+function App() {
   const { currentUser, userProfile, activeAgency, setActiveAgency, authLoading, internGateMessage, logout } = useAuth();
   const { unreadNotificationsCount, unreadMobileNotificationsCount, unreadMessagesCount, unreadMailCount, openSupportTicketsCount, refreshUnreadNotifications, refreshUnreadMail } = useDashboardStats();
   const { addContact } = useContacts();
   const { tasks = [] } = useTasks();
   const isMobile = useIsMobile();
+  const isCoarsePointer = useIsCoarsePointer();
+  // Agence active = Immosphera ? Sert au cloisonnement des écrans réservés à
+  // cette agence (voir la vue Statistiques plus bas).
+  const estAgenceImmosphera = /immosphera/i.test(activeAgency?.name ?? '');
 
   const unreadRemindersCount = countTodayAndOverdueTasks(tasks);
 
@@ -102,7 +114,22 @@ export function App() {
     } catch { /* noop */ }
     return null;
   })();
-  const [currentNav, setCurrentNav] = useState(initialHighlightMessageId ? 'chat' : initialNavFromUrl || 'accueil');
+  // CORRECTIF (31/08/2026) — « React error #426 : a component suspended while
+  // responding to synchronous input ».
+  //
+  // Depuis que les écrans sont chargés à la demande, changer d'onglet peut
+  // suspendre le rendu le temps que le fichier arrive. React refuse qu'une
+  // mise à jour SYNCHRONE (un clic) provoque une suspension : il remplace
+  // alors brutalement l'interface par le rond de chargement, et lève cette
+  // erreur. `startTransition` lui dit que cette mise à jour peut attendre —
+  // l'écran courant reste affiché pendant le téléchargement du suivant.
+  //
+  // Enveloppé ici, au niveau du setter, plutôt qu'aux 20 endroits qui
+  // l'appellent : impossible d'en oublier un.
+  const [currentNav, setCurrentNavImmediat] = useState(initialHighlightMessageId ? 'chat' : initialNavFromUrl || 'accueil');
+  const setCurrentNav = React.useCallback((valeur: React.SetStateAction<string>) => {
+    React.startTransition(() => setCurrentNavImmediat(valeur));
+  }, []);
   // Demande explicite (30/08/2026) : Chat reste monté en permanence une
   // fois ouvert (voir plus bas, `hasOpenedChat && <div className={... ?
   // '' : 'hidden'}><ChatView/></div>`) — mais on ne veut pas non plus payer
@@ -110,6 +137,9 @@ export function App() {
   // session : on ne le monte donc qu'à partir de la première fois où
   // currentNav vaut 'chat' (y compris dès le premier rendu si l'app
   // s'ouvre directement dessus, ex. clic sur une notification de message).
+  // Conversation à ouvrir au clic sur une notification (01/09/2026) — voir
+  // applyFromLocation et le message NOTIFICATION_NAVIGATE du service worker.
+  const [targetConversationId, setTargetConversationId] = useState<string | null>(null);
   const [hasOpenedChat, setHasOpenedChat] = useState(() => currentNav === 'chat');
   useEffect(() => {
     if (currentNav === 'chat') setHasOpenedChat(true);
@@ -136,7 +166,13 @@ export function App() {
   // via `currentNav` — on reste toujours sur la même interface derrière,
   // que ce soit via le clic sur "Assistant IA" ou une commande tapée dans
   // la barre NovaAI de l'accueil.
-  const [novaOpen, setNovaOpen] = useState(false);
+  // Même raison que setCurrentNav : ouvrir Nova charge AssistantIAView à la
+  // demande, donc suspend. Sans startTransition, React lève #426 et remplace
+  // l'écran par le rond de chargement au lieu de patienter.
+  const [novaOpen, setNovaOpenImmediat] = useState(false);
+  const setNovaOpen = React.useCallback((valeur: React.SetStateAction<boolean>) => {
+    React.startTransition(() => setNovaOpenImmediat(valeur));
+  }, []);
   // Demande explicite : "mets Nova dans Pipeline" — pré-remplit le champ de
   // saisie de Nova (jamais envoyé automatiquement) avec le nom du dossier
   // cliqué, pour ne pas avoir à le retaper/redicter.
@@ -150,7 +186,11 @@ export function App() {
   // composant AssistantIAView réutilisé tel quel (son historique est déjà
   // persisté en base, donc partagé entre popup et plein écran sans rien de
   // plus à faire), juste affiché dans un cadre plus petit.
-  const [novaPopupOpen, setNovaPopupOpen] = useState(false);
+  // Idem pour la mini-fenêtre Nova.
+  const [novaPopupOpen, setNovaPopupOpenImmediat] = useState(false);
+  const setNovaPopupOpen = React.useCallback((valeur: React.SetStateAction<boolean>) => {
+    React.startTransition(() => setNovaPopupOpenImmediat(valeur));
+  }, []);
   // Signalé : "quand on met la fenêtre en grand, on n'a pas la possibilité
   // de la remettre en petit... on doit avoir un bouton retour pour basculer
   // sur la fiche client" — mémorise qu'on vient d'agrandir DEPUIS la
@@ -347,6 +387,17 @@ export function App() {
           setHighlightMessageId(highlight);
           setCurrentNav('chat');
         }
+        // Signalé : « au clic sur la notification, elle ne va pas directement
+        // à la cible ». Une notification de nouveau message porte l'URL
+        // `/messagerie?conversation=<id>` dès qu'aucun identifiant de message
+        // n'est disponible (voir send-push) — ce paramètre n'était lu nulle
+        // part : on atterrissait sur la liste, jamais sur la bonne
+        // conversation.
+        const conversation = params.get('conversation');
+        if (conversation) {
+          setTargetConversationId(conversation);
+          setCurrentNav('chat');
+        }
       } catch { /* noop */ }
     };
     // `client.navigate(url)` déclenché par le service worker (voir
@@ -360,12 +411,20 @@ export function App() {
     // (notamment iOS/Safari en PWA installée) — on route alors ici en JS,
     // sans dépendre d'une vraie navigation document qui n'aura pas eu lieu.
     const onSwMessage = (event: MessageEvent) => {
-      const d = event.data as { type?: string; url?: string } | undefined;
+      const d = event.data as { type?: string; url?: string; conversationId?: string | null } | undefined;
       if (!d || d.type !== 'NOTIFICATION_NAVIGATE' || typeof d.url !== 'string') return;
       try {
         const u = new URL(d.url, window.location.origin);
         window.history.replaceState(null, '', u.pathname + u.search);
         applyFromLocation();
+        // Le service worker transmet AUSSI l'identifiant de la conversation à
+        // côté de l'URL. On s'en sert en dernier recours : si l'URL ne portait
+        // pas le paramètre attendu, ce chemin ouvre quand même la bonne
+        // conversation plutôt que la liste.
+        if (d.conversationId) {
+          setTargetConversationId(d.conversationId);
+          setCurrentNav('chat');
+        }
       } catch { /* noop */ }
     };
     navigator.serviceWorker?.addEventListener?.('message', onSwMessage);
@@ -567,7 +626,12 @@ export function App() {
   const [showCameraModal, setShowCameraModal] = useState(false);
   
   // Client Profile Full View state
-  const [selectedClientProfileId, setSelectedClientProfileId] = useState<string | null>(null);
+  // Même raison que setCurrentNav ci-dessus : ouvrir une fiche client charge
+  // ClientProfileView à la demande, donc suspend.
+  const [selectedClientProfileId, setSelectedClientProfileIdImmediat] = useState<string | null>(null);
+  const setSelectedClientProfileId = React.useCallback((valeur: React.SetStateAction<string | null>) => {
+    React.startTransition(() => setSelectedClientProfileIdImmediat(valeur));
+  }, []);
   // Signalé : "le clic sur la notif du message du client doit envoyer sur
   // le chat Espace Client de la fiche" — onglet à ouvrir en plus du client
   // lui-même (undefined = comportement par défaut, onglet RDV).
@@ -591,6 +655,8 @@ export function App() {
   // bas retire alors son « + Écrire », l'écran de lecture ayant ses propres
   // boutons Répondre / Transférer.
   const [mailReading, setMailReading] = useState(false);
+  // Même mécanisme que la messagerie, pour le « + » de l'écran Agenda.
+  const [agendaCreateSignal, setAgendaCreateSignal] = useState(0);
   // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (14/16) : brouillon
   // pré-rempli par une automatisation de pipeline (jamais d'envoi silencieux).
   const [mailComposeSubject, setMailComposeSubject] = useState<string | null>(null);
@@ -664,7 +730,11 @@ export function App() {
   }
 
   return (
-    <div className="h-screen bg-[#071015] text-gray-100 flex flex-col font-sans overflow-hidden select-none">
+    // `h-[100dvh]` et non `h-screen` (100vh) : sur Android, 100vh vaut la
+    // hauteur SANS la barre d'outils du navigateur, donc le bas de
+    // l'application passe hors écran alors que la racine est en
+    // overflow-hidden. `dvh` suit la hauteur réellement visible.
+    <div className="h-[100dvh] bg-[#071015] text-gray-100 flex flex-col font-sans overflow-hidden select-none">
       <Toaster />
       <UpdateBanner />
       <GoogleWorkspaceStatus />
@@ -753,8 +823,19 @@ export function App() {
             `z-[1]` donne à <main> son propre contexte d'empilement,
             au-dessus du z-0 du portail photo — son fond redevient enfin
             effectif, dans les deux thèmes. */}
+        {/* Signalé (31/08/2026) : sur un Honor Magic V3 déplié, plus rien ne
+            défilait dans la fiche client. Ce pliable mesure environ 800 px CSS
+            de large une fois ouvert : il dépasse le seuil de 768 px et
+            l'application le prend pour un ordinateur de bureau. Le verrou
+            ci-dessous — voulu pour que la molette ne fasse pas défiler la page
+            derrière le panneau Nova — s'appliquait donc à un écran tactile,
+            où il n'existe aucune molette et aucun moyen de s'en sortir. La
+            fiche client n'ayant pas de défilement propre (elle s'appuie sur
+            celui de <main>), elle devenait totalement figée.
+            On conditionne désormais au pointeur fin, la seule situation où ce
+            verrou a un sens. */}
         <main className={`flex-1 relative z-[1] custom-scrollbar ${
-          novaOpen && !isMobile ? 'overflow-hidden' : 'overflow-y-auto'
+          novaOpen && !isMobile && !isCoarsePointer ? 'overflow-hidden' : 'overflow-y-auto'
         } ${
           isMobile && currentNav === 'chat' ? 'pt-0' : 'pt-[env(safe-area-inset-top,0px)] md:pt-0'
         } ${
@@ -798,13 +879,34 @@ export function App() {
             />,
             document.body
           )}
+          {/* Frontière de chargement des écrans (31/08/2026).
+
+              Tous les écrans étaient importés au démarrage : le navigateur
+              téléchargeait Mail, Agenda, Immosphera360, Nova, la carte
+              Leaflet et les graphiques Recharts avant même d'afficher
+              l'accueil — 3,5 Mo d'un bloc, sur mobile en 4G. Ils sont
+              maintenant chargés à la demande (React.lazy), et cette unique
+              frontière couvre la zone de vues, le panneau Nova et
+              Immosphera360, qui vivent tous à l'intérieur de <main>. */}
+          <Suspense fallback={<ChargementEcran />}>
           {/* h-full : nécessaire pour que les vues qui remplissent tout
               l'espace disponible (ex. Mail) puissent résoudre leur propre
               h-full jusqu'à la hauteur réelle de <main>. Neutre pour les
               autres onglets (page classique qui défile) : ce div n'impose
               aucun overflow, leur contenu continue de dépasser normalement
               et de faire défiler <main> comme avant. */}
-          <div key={selectedClientProfileId ? 'client-profile' : currentNav} className="relative z-10 h-full animate-page-in">
+          {/* Signalé (31/08/2026) : impossible de faire défiler la fiche client
+              sur un téléphone pliable. `h-full` cale ce conteneur sur la
+              hauteur exacte de <main>. C'est indispensable à l'écran Mail, qui
+              résout sa propre hauteur au travers ; la fiche client, elle, n'en
+              a aucun besoin — elle dépasse et laisse <main> défiler. Or selon
+              les navigateurs mobiles, une hauteur fixe combinée au défilement
+              du parent se comporte mal et fige le contenu. On retire donc la
+              contrainte là où elle ne sert à rien. */}
+          <div
+            key={selectedClientProfileId ? 'client-profile' : currentNav}
+            className={`relative z-10 animate-page-in ${selectedClientProfileId ? '' : 'h-full'}`}
+          >
           {selectedClientProfileId ? (
             <ClientProfileView
               clientId={selectedClientProfileId}
@@ -927,9 +1029,27 @@ export function App() {
             <ProjetsInternes agencyId={activeAgency.id} />
           )}
 
-          {currentNav === 'agenda' && <AgendaView />}
+          {currentNav === 'agenda' && <AgendaView createSignal={agendaCreateSignal} />}
 
-          {currentNav === 'statistiques-etiquettes' && <StatistiquesEtiquettesView />}
+          {/* Cloisonnement (31/08/2026) : « les statistiques ne doivent
+              apparaître que dans Immosphera ». La TUILE était déjà filtrée par
+              l'agence active, mais l'écran lui-même ne l'était pas : on y
+              arrivait encore par un lien, une navigation mémorisée ou un
+              onglet rouvert au même endroit. Le filtre d'une tuile est un
+              confort d'affichage, pas une barrière. */}
+          {currentNav === 'statistiques-etiquettes' && (
+            estAgenceImmosphera ? (
+              <StatistiquesEtiquettesView onSelectContact={setSelectedClientProfileId} />
+            ) : (
+              <div className="p-12 text-center text-gray-400 bg-white/5 border border-dashed border-white/10 rounded-2xl">
+                <p className="text-sm font-semibold text-white mb-1">Statistiques Immosphera</p>
+                <p className="text-xs">
+                  Cet écran n'est disponible que depuis l'agence Immosphera.
+                  Changez d'agence active pour y accéder.
+                </p>
+              </div>
+            )
+          )}
 
           {currentNav === 'rappels' && (
             <RappelsView
@@ -1048,6 +1168,8 @@ export function App() {
             <div className={currentNav === 'chat' ? 'absolute inset-0 z-10 h-full' : 'hidden'}>
               <ChatView
                 initialHighlightMessageId={highlightMessageId}
+                initialConversationId={targetConversationId}
+                onConversationTargetConsumed={() => setTargetConversationId(null)}
                 onHighlightConsumed={() => setHighlightMessageId(null)}
                 onExitMobile={() => setCurrentNav('accueil')}
                 isActive={currentNav === 'chat'}
@@ -1201,6 +1323,7 @@ export function App() {
               </motion.div>
             )}
           </AnimatePresence>
+          </Suspense>
         </main>
 
         {/* Signalé : "l'écran déborde", puis contour arc-en-ciel asymétrique
@@ -1241,6 +1364,20 @@ export function App() {
                   }}
                 />
                 <div className="absolute inset-[3px] bg-[#050d0f] overflow-hidden rounded-[22px]">
+                  {/* CORRECTIF (31/08/2026) — signalé : « Nova ne s'ouvre pas
+                      sur le téléphone », le bouton du bas ne faisait rien.
+
+                      Ce panneau vit dans un portail, DEHORS de <main> et donc
+                      hors de la frontière de chargement posée cet après-midi
+                      avec le découpage du paquet. Les deux montages de Nova
+                      côté ordinateur, eux, sont à l'intérieur. Depuis que
+                      l'écran est chargé à la demande, il se suspend le temps
+                      de son téléchargement — et un composant qui se suspend
+                      sans frontière pour l'accueillir ne rend RIEN. D'où le
+                      bouton sans effet, sur mobile uniquement.
+
+                      Sa propre frontière, donc. */}
+                  <Suspense fallback={<ChargementEcran />}>
                   <AssistantIAView
                     initialPrompt={novaAIPrompt}
                     onInitialPromptConsumed={() => setNovaAIPrompt(null)}
@@ -1270,6 +1407,7 @@ export function App() {
                       setNovaExpandedFromPopup(false);
                     }}
                   />
+                  </Suspense>
                 </div>
               </motion.div>
             )}
@@ -1407,7 +1545,14 @@ export function App() {
           onOpenNova={() => openNovaMobile()}
           // Le « + » n'apparaît que sur l'écran Mail — ailleurs, la barre
           // garde ses trois boutons (Accueil / Nova / Menu).
-          onCompose={currentNav === 'mail' && !mailReading ? () => setMailComposeSignal((n) => n + 1) : undefined}
+          onCompose={
+            currentNav === 'mail' && !mailReading
+              ? () => setMailComposeSignal((n) => n + 1)
+              : currentNav === 'agenda'
+                ? () => setAgendaCreateSignal((n) => n + 1)
+                : undefined
+          }
+          composeLabel={currentNav === 'agenda' ? 'Ajouter' : 'Écrire'}
           unreadMessagesCount={unreadMessagesCount}
           unreadNotificationsCount={unreadMobileNotificationsCount}
           unreadRemindersCount={unreadRemindersCount}

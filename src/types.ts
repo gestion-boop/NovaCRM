@@ -25,7 +25,13 @@ export interface Contact {
   typeBien?: string;
   pipeline?: string;
   statutLead?: string;
+  // Renommé « Commission agence » dans l'interface ImmoSphera : c'est le
+  // chiffre d'affaires que l'agence encaisse. Montants déjà saisis = HT.
   honoraires?: number;
+  // Commission du conseiller immobilier, saisie TTC ; le HT est calculé à
+  // l'affichage (voir htDepuisTtc dans lib/utils).
+  advisorCommissionTtc?: number;
+  mandateNumber?: string;
   notes?: string;
   archivedAt?: string | null;
 }
@@ -39,7 +45,11 @@ export interface PipelineDef {
 export interface Deal {
   id: string;
   title: string;
+  // Commission de l'agence, stockée en HT (colonne `estimated_value`).
   amount: number;
+  // Commission du conseiller, stockée en TTC ; affichée en HT dans les
+  // colonnes du pipeline (voir htDepuisTtc).
+  advisorCommissionTtc?: number;
   stage: string;
   pipelineId?: string;
   agencyId: string;
