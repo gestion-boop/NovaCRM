@@ -1253,11 +1253,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     const miennes = agencyIdsByUid[currentUser.uid] || [];
     const siennes = agencyIdsByUid[otherUserId] || [];
     const communes = miennes.filter((a) => siennes.includes(a));
+    // Ordre corrigé le 31/08/2026, signalé : « Sarah est activée dans
+    // Immosphera mais ne peut pas créer de conversation ».
+    //
+    // L'agence retenue était celle de l'AUTRE personne quand il n'y en avait
+    // aucune en commun — or c'est la règle d'écriture de l'auteur qui est
+    // évaluée à la création. Sarah, absente de l'agence du destinataire,
+    // voyait son insertion refusée. On retombe désormais sur SA propre
+    // agence : elle peut créer, et la lecture inter-agences est ouverte par
+    // la règle correspondante (voir CHAT_inter_agences.sql).
     const agencePartagee =
       (communes.includes(activeAgency.id) ? activeAgency.id : null)
       || communes[0]
-      || siennes[0]
+      || (miennes.includes(activeAgency.id) ? activeAgency.id : null)
       || miennes[0]
+      || siennes[0]
       || null;
 
     const { data: conv, error } = await supabase
