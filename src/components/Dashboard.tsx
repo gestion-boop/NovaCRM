@@ -135,6 +135,8 @@ export default function Dashboard({
       return {
         total: 0, comptees: 0, aVenir: 0, comptessAVenir: 0, sansMontant: 0,
         pipelineTrouve: false, dansLePipeline: 0, horsEtape: 0,
+        repartitionAVenir: [] as { name: string; value: number }[],
+        horsPipelineMontant: 0, horsPipelineNb: 0,
         // On montre les noms réellement trouvés : si la règle ne reconnaît
         // pas le pipeline, autant voir tout de suite comment il s'appelle
         // plutôt que de chercher à l'aveugle.
@@ -152,7 +154,15 @@ export default function Dashboard({
     // fonction ; ma comparaison brute écartait donc en silence les fiches
     // ImmoSphera les plus anciennes — c'est ce qui a fait disparaître les
     // 53 000 € signalés le 1er septembre.
-    const perimetre = allDeals.filter((d) => matchesAgency(d.agencyId, activeAgency.id));
+    const perimetreAgence = allDeals.filter((d) => matchesAgency(d.agencyId, activeAgency.id));
+    // « Le HT doit être en haut de la colonne, visible par Mélanie et Sylvain.
+    // Le hors taxe des conseillers pourra être vu par seulement chaque
+    // conseiller personnellement. » Le cercle « CA à venir » est visible par
+    // tout le monde : un conseiller n'y voit donc que ses propres affaires.
+    // (La tuile dorée, elle, n'est affichée qu'aux super admins.)
+    const perimetre = isSuperAdmin
+      ? perimetreAgence
+      : perimetreAgence.filter((d) => d.advisorId && d.advisorId === currentUser?.uid);
 
     // Le pipeline d'une affaire se lit d'abord sur SON ÉTAPE, et seulement
     // ensuite sur la colonne pipeline_id du dossier.
@@ -181,29 +191,45 @@ export default function Dashboard({
     let sansMontant = 0;
     let dansLePipeline = 0;
     let horsEtape = 0;
+    // Répartition du « CA à venir » par colonne du pipeline, pour le cercle.
+    const parEtapeAVenir = new Map<string, number>();
+    // Diagnostic : un dossier archivé, avec un montant confirmé, mais qui
+    // n'est rattaché à aucune étape de Transaction V2 (ni à ce pipeline)
+    // ne peut pas entrer dans le chiffre d'affaires. Plutôt que de le perdre
+    // en silence — ce qui a coûté plusieurs allers-retours — on l'affiche.
+    let horsPipelineMontant = 0;
+    let horsPipelineNb = 0;
     perimetre.forEach((d) => {
-      const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
-      if (!pipelineReel || !pipelinesVises.has(pipelineReel)) return;
-      dansLePipeline += 1;
-
-      const etape = sansAccents(d.stage || '');
-      const aFacturer = etape.startsWith('a factur');
-      const facture = etape.includes('factur') && !aFacturer;
-      const archiveAvecPrix = Boolean(d.archivedAt) && (Number(d.amount) || 0) > 0;
-
-      if (!facture && !aFacturer && !archiveAvecPrix) { horsEtape += 1; return; }
-
       const montant = Number(d.amount) || 0;
+      const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
+      if (!pipelineReel || !pipelinesVises.has(pipelineReel)) {
+        if (d.archivedAt && montant > 0) { horsPipelineMontant += montant; horsPipelineNb += 1; }
+        return;
+      }
+      dansLePipeline += 1;
       if (montant <= 0) { sansMontant += 1; return; }
 
-      if (facture) { total += montant; comptees += 1; }
-      else { aVenir += montant; comptessAVenir += 1; }
+      // « Quand c'est archivé et confirmé sur la somme, cela ira dans le
+      // chiffre d'affaires de l'agence » : l'archivage est donc le seul
+      // passage entre les deux. Tant que le dossier vit dans le pipeline,
+      // avec sa commission agence en HT, il est en « CA à venir ».
+      if (d.archivedAt) { total += montant; comptees += 1; }
+      else {
+        aVenir += montant;
+        comptessAVenir += 1;
+        const etape = d.stage || 'Sans étape';
+        parEtapeAVenir.set(etape, (parEtapeAVenir.get(etape) || 0) + montant);
+      }
     });
+    const repartitionAVenir = Array.from(parEtapeAVenir.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
     return {
       total, comptees, aVenir, comptessAVenir, sansMontant,
       pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [],
+      repartitionAVenir, horsPipelineMontant, horsPipelineNb,
     };
-  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition]);
+  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, isSuperAdmin, currentUser?.uid]);
 
 
   // On ne considère que les agences réellement affichées (l'agence active,
@@ -272,16 +298,6 @@ export default function Dashboard({
 
     return visibleStages.map((s) => ({ name: s.name, value: amountByName.get(s.name) || 0 }));
   }, [deals, stagesWithPosition, defaultPipelineIdByAgency]);
-
-  // 3. Prepare chart data: Agency Distribution
-  const agencyDistribution = AGENCIES.map(agency => {
-    const agencyDeals = deals.filter(d => d.agencyId === agency.id);
-    const amount = agencyDeals.reduce((sum, d) => sum + d.amount, 0);
-    return {
-      name: agency.name,
-      value: amount,
-    };
-  }).filter(item => item.value > 0);
 
   // 30/08/2026, "tout en bas c'est vert aussi, il faudrait tourner entre
   // gris, jaune noir et blanc" : l'ancienne palette (vert/orange/bleu/
@@ -480,7 +496,10 @@ export default function Dashboard({
         </div>
 
         {/* Ticket #34 — Chiffre d'affaires de l'agence, super admins seulement.
-            Colonne « Facturé » du pipeline « Transaction B2 », montants HT. */}
+            Pipeline « Transaction V2 », montants HT (commission agence).
+            Y entrent les dossiers ARCHIVÉS dont le montant a été confirmé au
+            moment de l'archivage : « quand c'est archivé et confirmé sur la
+            somme, cela ira dans le chiffre d'affaires de l'agence ». */}
         {isSuperAdmin && (
           <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
             <div className="space-y-1">
@@ -503,12 +522,7 @@ export default function Dashboard({
                   </span>
                 ) : (
                   <>
-                    {chiffreAffairesAgence.comptees} affaire{chiffreAffairesAgence.comptees > 1 ? 's' : ''} facturée{chiffreAffairesAgence.comptees > 1 ? 's' : ''}
-                    {chiffreAffairesAgence.aVenir > 0 && (
-                      <span className="text-emerald-400/90">
-                        {' '}· à venir {formatCurrency(chiffreAffairesAgence.aVenir)} ({chiffreAffairesAgence.comptessAVenir})
-                      </span>
-                    )}
+                    {chiffreAffairesAgence.comptees} affaire{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivée{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et confirmée{chiffreAffairesAgence.comptees > 1 ? 's' : ''}
                     {chiffreAffairesAgence.sansMontant > 0 && (
                       <span className="text-amber-400/90">
                         {' '}· {chiffreAffairesAgence.sansMontant} sans HT
@@ -523,9 +537,18 @@ export default function Dashboard({
                     <span className="text-slate-500 font-normal block mt-0.5">
                       {chiffreAffairesAgence.dansLePipeline === 0
                         ? 'Aucune affaire dans ce pipeline'
-                        : `sur ${chiffreAffairesAgence.dansLePipeline} dans le pipeline · ${chiffreAffairesAgence.horsEtape} hors d'une étape « factur »`}
-                      {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans montant`}
+                        : `sur ${chiffreAffairesAgence.dansLePipeline} dans Transaction V2`}
+                      {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans montant HT`}
                     </span>
+                    {/* Dossier archivé, montant confirmé, mais rattaché à
+                        aucune étape de Transaction V2 : il ne peut pas entrer
+                        dans le chiffre d'affaires. On le dit, au lieu de le
+                        perdre en silence. */}
+                    {chiffreAffairesAgence.horsPipelineNb > 0 && (
+                      <span className="text-amber-400/90 font-normal block mt-0.5">
+                        {chiffreAffairesAgence.horsPipelineNb} archivée{chiffreAffairesAgence.horsPipelineNb > 1 ? 's' : ''} hors Transaction V2 : {formatCurrency(chiffreAffairesAgence.horsPipelineMontant)}
+                      </span>
+                    )}
                   </>
                 )}
               </span>
@@ -601,20 +624,27 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* Agency Chart */}
+        {/* Demandé le 1er septembre : « le cercle doit être CA à venir — tout
+            ce qui est en HT commission agence doit être là, avant le à
+            facturer ; quand c'est archivé et confirmé sur la somme, cela ira
+            dans le chiffre d'affaires de l'agence ». Le cercle montre donc
+            l'argent encore dans Transaction V2 (non archivé), réparti par
+            colonne ; la tuile dorée, elle, montre le réalisé. */}
         <div className="dash-card p-6 rounded-2xl border border-[#144447]/60 hover:border-[#1e5d61] shadow-xl hover:shadow-teal-500/5 transition-all duration-300 flex flex-col justify-between">
           <div>
-            <h3 className="font-bold text-sm text-white">Part de Marché par Agence</h3>
-            <p className="text-xs text-slate-400">Répartition des investissements par pôle géographique.</p>
+            <h3 className="font-bold text-sm text-white">CA à venir</h3>
+            <p className="text-xs text-slate-400">Commission agence HT encore dans Transaction V2, par colonne.</p>
           </div>
           <div className="h-48 w-full flex items-center justify-center relative">
-            {agencyDistribution.length === 0 ? (
-              <span className="text-xs text-slate-500">Aucune donnée disponible</span>
+            {chiffreAffairesAgence.repartitionAVenir.length === 0 ? (
+              <span className="text-xs text-slate-500 text-center px-4">
+                Aucun montant HT en attente dans Transaction V2
+              </span>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={agencyDistribution}
+                    data={chiffreAffairesAgence.repartitionAVenir}
                     cx="50%"
                     cy="50%"
                     innerRadius={55}
@@ -622,7 +652,7 @@ export default function Dashboard({
                     paddingAngle={3}
                     dataKey="value"
                   >
-                    {agencyDistribution.map((entry, index) => (
+                    {chiffreAffairesAgence.repartitionAVenir.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="rgba(127,127,127,0.4)" strokeWidth={1} />
                     ))}
                   </Pie>
@@ -635,15 +665,18 @@ export default function Dashboard({
                 </PieChart>
               </ResponsiveContainer>
             )}
-            {agencyDistribution.length > 0 && (
-              <div className="absolute flex flex-col items-center justify-center">
-                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total</span>
-                <span className="text-sm font-black text-white">{formatCurrency(totalDealValue)}</span>
+            {chiffreAffairesAgence.repartitionAVenir.length > 0 && (
+              <div className="absolute flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">À venir</span>
+                <span className="text-sm font-black text-white">{formatCurrency(chiffreAffairesAgence.aVenir)}</span>
+                <span className="text-[10px] text-slate-500">
+                  {chiffreAffairesAgence.comptessAVenir} affaire{chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''}
+                </span>
               </div>
             )}
           </div>
           <div className="space-y-1 text-[11px]">
-            {agencyDistribution.map((entry, idx) => (
+            {chiffreAffairesAgence.repartitionAVenir.map((entry, idx) => (
               <div key={entry.name} className="flex items-center justify-between text-slate-300">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />

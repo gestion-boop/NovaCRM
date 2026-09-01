@@ -751,14 +751,30 @@ export default function ClientProfileView({
       // manquait ce soir — un dossier archivé, signé, mais resté sur une
       // étape que le calcul ne reconnaissait pas, ne comptait nulle part.
       let etapeFacturee: string | null = null;
-      if (signed) {
+      // Beaucoup de fiches n'ont pas de pipeline_id en base : le Pipeline les
+      // affiche dans le pipeline ouvert, mais la colonne reste vide. Le
+      // Tableau de bord, lui, ne peut pas deviner. On la renseigne donc au
+      // moment de l'archivage, à partir de l'étape où se trouve la fiche —
+      // sinon le montant confirmé n'entre jamais dans le chiffre d'affaires.
+      let pipelineARenseigner: string | null = null;
+      {
         const { data: ligne } = await supabase
           .from('leads')
-          .select('pipeline_id')
+          .select('pipeline_id, stage_id')
           .eq('id', clientId)
           .maybeSingle();
-        const pipelineId = (ligne as { pipeline_id: string | null } | null)?.pipeline_id;
-        if (pipelineId) {
+        const brut = ligne as { pipeline_id: string | null; stage_id: string | null } | null;
+        let pipelineId = brut?.pipeline_id ?? null;
+        if (!pipelineId && brut?.stage_id) {
+          const { data: etape } = await supabase
+            .from('pipeline_stages')
+            .select('pipeline_id')
+            .eq('id', brut.stage_id)
+            .maybeSingle();
+          pipelineId = (etape as { pipeline_id: string | null } | null)?.pipeline_id ?? null;
+          if (pipelineId) pipelineARenseigner = pipelineId;
+        }
+        if (signed && pipelineId) {
           const { data: etapes } = await supabase
             .from('pipeline_stages')
             .select('id, name')
@@ -786,6 +802,7 @@ export default function ClientProfileView({
           // Aucune étape « factur » dans ce pipeline : on ne touche à rien
           // plutôt que de déplacer le dossier au hasard.
           ...(etapeFacturee ? { stage_id: etapeFacturee } : {}),
+          ...(pipelineARenseigner ? { pipeline_id: pipelineARenseigner } : {}),
         } as any)
         .eq('id', clientId);
       if (error) throw error;
