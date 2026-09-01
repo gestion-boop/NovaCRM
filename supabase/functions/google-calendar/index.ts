@@ -1,3 +1,21 @@
+// ⚠️ CLÉ DE SERVICE — lire NOVA_SERVICE_KEY en priorité (31/08/2026).
+//
+// Ces fonctions lisaient `SUPABASE_SERVICE_ROLE_KEY`, la variable injectée
+// automatiquement par Supabase, qui porte l'ANCIENNE clé JWT. En désactivant
+// les clés héritées après la rotation, les sept fonctions se sont arrêtées
+// d'un coup — notifications, e-mails, automatisations, agenda Google, jetons
+// Workspace, synchronisation caméra et dépôt de documents. Le symptôme visible
+// a été « Diane ne reçoit plus les notifications » ; en réalité plus personne
+// n'en recevait.
+//
+// Supabase interdit de définir un secret dont le nom commence par `SUPABASE_` :
+// impossible donc d'y placer la nouvelle clé. D'où cette variable au nom libre.
+//
+// Le repli sur l'ancienne variable est VOLONTAIRE : il permet de déployer ces
+// fonctions sans rien casser tant que NOVA_SERVICE_KEY n'est pas renseignée.
+// Une fois le secret posé et les fonctions redéployées, les clés héritées
+// peuvent être désactivées pour de bon.
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { resolveUserOAuthClientsForRefresh } from "../_shared/google-user-oauth-clients.ts";
 
@@ -83,7 +101,7 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
-    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const SERVICE_ROLE = Deno.env.get("NOVA_SERVICE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "not_connected" }, 200);
