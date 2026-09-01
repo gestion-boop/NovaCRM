@@ -197,7 +197,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     { id: 'agenda', label: 'Agenda', icon: Calendar, nav: 'agenda', gradient: 'from-[#0f766e] to-[#134e4a]' },
     { id: 'notes', label: 'Notes', icon: FileEdit, nav: 'notes', gradient: 'from-[#7c3aed] to-[#4c1d95]' },
     { id: 'equipe', label: 'Équipe', icon: UserPlus, nav: 'equipe', gradient: 'from-[#334155] to-[#1e293b]' },
-    { id: 'projets-internes', label: 'Pipeline interne', icon: Folder, nav: 'projets-internes', gradient: 'from-[#92400e] to-[#451a03]' },
+    { id: 'projets-internes', label: 'Projets internes', icon: Folder, nav: 'projets-internes', gradient: 'from-[#92400e] to-[#451a03]' },
     { id: 'chat', label: 'Chat', icon: MessageSquare, nav: 'chat', gradient: 'from-[#0891b2] to-[#155e75]', badge: unreadMessagesCount },
     { id: 'rappels', label: 'Rappels', icon: Bell, nav: 'rappels', gradient: 'from-[#9f1239] to-[#4c0519]', badge: unreadRemindersCount },
     // Ticket #255 : accès rapide à la création d'annonce, réservé aux

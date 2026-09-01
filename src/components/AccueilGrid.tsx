@@ -311,7 +311,7 @@ const INITIAL_TILES: TileItemNode[] = [
   },
   {
     id: 'projets-internes',
-    title: 'Pipeline interne',
+    title: 'Projets internes',
     iconName: 'CheckSquare',
     gradient: 'from-[#7C3AED] via-[#5B21B6] to-[#2E1065]',
     badgeCount: 0,

@@ -583,7 +583,20 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
           <span className="text-xs">Chargement des tâches...</span>
         </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={collisionDetectionStrategy} onDragStart={handleDragStart} onDragEnd={(e) => void handleDragEnd(e)} autoScroll={false}>
+        <DndContext
+          // Signalé (31/08/2026) : "quand on met les cartes dans Terminé, on
+          // ne peut pas les rebasculer sur les colonnes de gauche". Cause :
+          // autoScroll etait desactive. Les quatre colonnes defilent
+          // horizontalement et "Termine" est la derniere, tout a droite : pour
+          // ramener une carte vers "A faire", il faut que le tableau defile
+          // PENDANT le glissement, sans quoi la colonne de destination reste
+          // hors ecran et physiquement inatteignable. Le defilement
+          // automatique est donc retabli.
+          sensors={sensors}
+          collisionDetection={collisionDetectionStrategy}
+          onDragStart={handleDragStart}
+          onDragEnd={(e) => void handleDragEnd(e)}
+        >
           <div className="flex gap-3 overflow-x-auto pb-4 -webkit-overflow-scrolling-touch touch-pan-x">
             {COLUMNS.map((column) => (
               <BoardColumn
