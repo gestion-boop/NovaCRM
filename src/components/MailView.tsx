@@ -666,8 +666,8 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
   // de non-lus qu'à la fin, et ne retirer de la liste que ce qui est
   // réellement passé côté Gmail (si le lot casse en cours de route, les
   // messages restants restent affichés plutôt que de disparaître à tort).
-  const setMailsRead = async (list: GmailMessageSummary[], read: boolean) => {
-    if (list.length === 0) return;
+  const setMailsRead = async (list: GmailMessageSummary[], read: boolean): Promise<boolean> => {
+    if (list.length === 0) return false;
     setActionBusy(list[0].id);
     const done: string[] = [];
     try {
@@ -692,18 +692,24 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
       }
       setActionBusy(null);
     }
+    return done.length > 0;
   };
 
-  const deleteMails = async (list: GmailMessageSummary[]) => {
-    if (list.length === 0) return;
+  const deleteMails = async (list: GmailMessageSummary[]): Promise<boolean> => {
+    if (list.length === 0) return false;
     // Dans la corbeille, il n'y a plus de filet : la suppression est
     // définitive, donc confirmée — une fois pour tout le lot.
-    const permanent = activeFolder === 'TRASH';
+    //
+    // Relecture : `activeFolder` ne se remet PAS à zéro quand on ouvre un
+    // dossier personnalisé (seul `activeCustomLabelId` change). Sans le
+    // premier test, passer par la Corbeille puis ouvrir un dossier Gmail
+    // personnalisé faisait supprimer DÉFINITIVEMENT les messages balayés.
+    const permanent = !activeCustomLabelId && activeFolder === 'TRASH';
     if (permanent) {
       const question = list.length > 1
         ? `Supprimer définitivement ces ${list.length} courriels ? Cette action est irréversible.`
         : 'Supprimer définitivement ce courriel ? Cette action est irréversible.';
-      if (!window.confirm(question)) return;
+      if (!window.confirm(question)) return false;
     }
     setActionBusy(list[0].id);
     const done: string[] = [];
@@ -730,6 +736,7 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
       }
       setActionBusy(null);
     }
+    return done.length > 0;
   };
 
   // Composer Actions
@@ -787,14 +794,27 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
   }, [initialComposeTo, initialComposeSubject, initialComposeBody]);
 
   // Bouton « + » de la barre du bas, sur téléphone : ouvre un brouillon vide.
-  // Le compteur ne vaut 0 qu'au tout premier rendu, jamais après un clic —
-  // on ignore donc cette seule valeur pour ne pas ouvrir le composeur à
-  // l'arrivée sur l'écran.
+  //
+  // Relecture : comparer le compteur à 0 ne suffisait pas. MailView est
+  // démonté quand on quitte l'écran Mail ; en y revenant, l'effet se
+  // rejouait avec un compteur toujours supérieur à 0 et rouvrait le
+  // composeur tout seul — en écrasant au passage un brouillon pré-rempli
+  // venu de la fiche client. On mémorise donc la dernière valeur TRAITÉE,
+  // initialisée à la valeur reçue au montage : un remontage ne déclenche
+  // plus rien, seul un nouvel appui sur « + » le fait.
+  const lastComposeSignal = useRef(composeSignal ?? 0);
   useEffect(() => {
-    if (!composeSignal) return;
+    const signal = composeSignal ?? 0;
+    if (signal === lastComposeSignal.current) return;
+    lastComposeSignal.current = signal;
+    if (!signal) return;
+    // Un composeur déjà ouvert n'est jamais réinitialisé sous les doigts de
+    // l'utilisateur : le « + » reste visible au-dessus du composeur sur
+    // certains téléphones, un appui malheureux effacerait le brouillon.
+    if (showComposer) return;
     openNewMessage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [composeSignal]);
+  }, [composeSignal, showComposer]);
 
   const openReply = (mail: GmailMessageSummary) => {
     resetComposer();
@@ -903,6 +923,18 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
   // qu'aucun message n'est ouvert ; dès qu'on en lit un, on retombe sur le
   // panneau de lecture, commun aux deux formats.
   const mobileList = isMobile && !selectedMail;
+  // Le bandeau mobile est un calque posé au-dessus de la liste : laissé
+  // affiché, il masque une ligne de messages, et une vieille erreur non
+  // fermée cachait toutes les confirmations suivantes (le bandeau n'en
+  // affiche qu'une). Il s'efface donc de lui-même.
+  useEffect(() => {
+    if (!mobileList || (!error && !success)) return;
+    const timer = window.setTimeout(() => {
+      setError(null);
+      setSuccess(null);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [mobileList, error, success]);
   const activeFolderLabel = activeCustomLabelId
     ? (customLabels.find((l) => l.id === activeCustomLabelId)?.name || 'Dossier')
     : (FOLDERS.find((f) => f.id === activeFolder)?.label || 'Réception');
@@ -912,7 +944,12 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
     // Retour/Répondre/Transférer et le contenu (puis tout le cadre autour du
     // mail lui-même) prenait trop de place à l'écran pour peu de gain —
     // resserré ci-dessous et sur le panneau de lecture juste en dessous.
-    <div className={`${mobileList ? '' : 'p-4 sm:p-6'} max-w-[1600px] mx-auto h-full flex flex-col gap-2 sm:gap-4 text-white`}>
+    // `h-full` bornait la colonne mobile à la hauteur de la fenêtre : au-delà
+    // d'un écran de messages, la barre de recherche « collée en haut » sortait
+    // du champ de son conteneur et disparaissait. `min-h-full` la laisse
+    // s'étendre avec la liste. L'ordinateur garde `h-full`, dont dépendent la
+    // colonne latérale et le panneau de lecture.
+    <div className={`${mobileList ? 'min-h-full' : 'p-4 sm:p-6 h-full'} max-w-[1600px] mx-auto flex flex-col gap-2 sm:gap-4 text-white`}>
       {mobileList ? (
         <>
           {/* Retours d'action : la liste mobile occupe tout l'écran, le
@@ -920,8 +957,13 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
               barre de navigation du bas. */}
           {(error || success) && (
             <div
+              // Les nuances 200 ne sont pas reprises par le remappage d'encre
+              // du mode jour (il ne couvre que les nuances 300 à 500) : le
+              // texte restait pastel sur fond clair, illisible. 400 tombe sur
+              // --ink-red / --ink-emerald en mode jour, et reste lisible sur
+              // fond sombre en mode nuit.
               className={`fixed left-3 right-3 z-[65] px-4 py-3 rounded-2xl text-xs font-semibold flex items-center justify-between gap-3 shadow-2xl bg-[#0b292b] border ${
-                error ? 'border-rose-500/40 text-rose-200' : 'border-emerald-500/40 text-emerald-200'
+                error ? 'border-rose-500/40 text-rose-400' : 'border-emerald-500/40 text-emerald-400'
               }`}
               style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
             >
@@ -941,6 +983,7 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
             folders={SIDEBAR_FOLDERS}
             activeFolderId={activeFolder}
             activeFolderLabel={activeFolderLabel}
+            isTrash={!activeCustomLabelId && activeFolder === 'TRASH'}
             customLabels={customLabels}
             activeCustomLabelId={activeCustomLabelId}
             unreadCount={unreadCount}
