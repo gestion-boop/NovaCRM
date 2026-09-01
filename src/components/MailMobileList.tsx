@@ -488,7 +488,15 @@ export const MailMobileList: React.FC<MailMobileListProps> = ({
           <p className="text-sm font-medium text-slate-400">Aucun message dans ce dossier.</p>
         </div>
       ) : (
-        <div className="divide-y divide-white/5">
+        <div
+          className="divide-y divide-white/5"
+          /* Signalé : le dernier message restait coincé sous la barre de
+             navigation, impossible à atteindre ou à balayer. La coquille de
+             l'application réserve déjà 5 rem en bas, mais c'est tout juste la
+             hauteur de la barre — il ne restait rien pour le doigt. On dégage
+             une vraie marge, encoche comprise. */
+          style={{ paddingBottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px))' }}
+        >
           {mails.map((mail) => (
             <MailRow
               key={mail.id}
@@ -504,9 +512,6 @@ export const MailMobileList: React.FC<MailMobileListProps> = ({
               onToggleStar={(e) => onToggleStar(mail, e)}
             />
           ))}
-          {/* Respiration en bas de liste : sans ça, le dernier message se
-              retrouve collé sous la barre de navigation du téléphone. */}
-          <div className="h-6" />
         </div>
       )}
 
