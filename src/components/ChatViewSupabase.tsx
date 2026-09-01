@@ -1653,6 +1653,52 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     };
   }, [messages.length, activeChannel?.id]);
 
+  // Bug nº 6 (consigne du 1er septembre), deuxieme partie. Signale a la
+  // recette : « quand je mets un chat dans le dossier, elle ne recoit rien ».
+  // Le chat d'un DOSSIER passe par `chat_messages` (colonne `channel`), un
+  // chemin distinct du chat d'une TACHE (table `messages`, deja corrige dans
+  // useTaskMessages.ts) : personne n'etait donc prevenu. On reutilise la RPC
+  // `create_notification` deja en place partout ailleurs — pas de second
+  // systeme, et aucun declencheur base n'existe sur `chat_messages` (celui
+  // documente plus haut ne porte que sur `messages`, cf. sendConvMessage).
+  const notifierMembresDuDossier = async (canal: ChatChannel, apercu: string) => {
+    if (!currentUser) return;
+    try {
+      const { data: membres } = await supabase
+        .from('chat_project_members')
+        .select('user_id')
+        .eq('project_id', canal.project_id);
+
+      const destinataires = Array.from(
+        new Set(
+          ((membres as { user_id: string }[]) || [])
+            .map((m) => m.user_id)
+            .filter((uid) => uid && uid !== currentUser.uid)
+        )
+      );
+      if (destinataires.length === 0) return;
+
+      const projet = projects.find((p) => p.id === canal.project_id);
+      await Promise.all(
+        destinataires.map((uid) =>
+          supabase.rpc('create_notification', {
+            _user_id: uid,
+            _type: 'message',
+            _title: `💬 ${projet ? projet.name : 'Projet interne'} · ${canal.name}`,
+            _message: `${displayName} : ${apercu}`.slice(0, 180),
+            _entity_type: 'chat_channel',
+            _entity_id: canal.id,
+            _agency_id: /^[0-9a-f-]{36}$/i.test(activeAgency.id) ? activeAgency.id : null,
+            _metadata: { url: '/messagerie' },
+          } as any)
+        )
+      );
+    } catch (e) {
+      // Une notification qui echoue ne doit jamais faire echouer l'envoi.
+      console.warn('Notification de message de dossier impossible :', e);
+    }
+  };
+
   const sendMessage = async () => {
     if (!draft.trim() || !activeChannel || !currentUser) return;
     // Même garde que pour les conversations directes : voir sendConvMessage.
@@ -1680,6 +1726,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
     } as any);
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
+    await notifierMembresDuDossier(activeChannel, body);
     } finally {
       sendingChannelRef.current = false;
     }
@@ -1697,6 +1744,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
     } as any);
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
+    await notifierMembresDuDossier(activeChannel, 'a envoye une mini-expression');
   };
 
   // ── Gestion des canaux (admin uniquement) ─────────────────────────────
@@ -2302,7 +2350,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                         ))}
                                         {/* Suite #240 : séparation visuelle nette entre les
                                             mini-expressions Nova et "les vrais" emojis. */}
-                                        <div className="col-span-10 h-px bg-[#153c3f] my-1" />
+                                        <div className={`${isMobile || isCoarsePointer ? 'col-span-5' : 'col-span-6'} h-px bg-[#153c3f] my-1`} />
                                         {QUICK_EMOJIS.map((e) => (
                                           <button key={e} type="button" onClick={() => void handleToggleConvReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
                                             {e}

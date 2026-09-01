@@ -82,7 +82,11 @@ export async function requireSuperAdmin(req: { headers: Record<string, string | 
 // connus : jamais confiance aveugle en Origin/Referer (un onglet resté sur
 // un domaine périmé pourrait sinon régénérer le même problème).
 const ALLOWED_PUBLIC_ORIGINS = new Set(['https://test.nova360.space', 'https://app.nova360.space', 'https://client.nova360.space']);
-const CANONICAL_PUBLIC_ORIGIN = 'https://test.nova360.space';
+// Repli quand la requête n'annonce ni Origin ni Referer reconnaissable.
+// Il pointait sur le site de TEST : un collaborateur invité depuis la
+// production pouvait donc recevoir un lien vers la recette. Le repli d'un
+// lien envoyé à un vrai utilisateur doit être la production (01/09/2026).
+const CANONICAL_PUBLIC_ORIGIN = 'https://app.nova360.space';
 
 // Demande explicite : "créer client.nova360.space pour le différencier du
 // Test, c'est-à-dire que quand le lien est envoyé, il s'envoie sur cette
