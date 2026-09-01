@@ -587,6 +587,10 @@ export function App() {
   // message vide dans MailView. Un compteur plutôt qu'un booléen, pour que
   // deux demandes successives se distinguent l'une de l'autre.
   const [mailComposeSignal, setMailComposeSignal] = useState(0);
+  // Vrai quand un message est ouvert en lecture sur téléphone : la barre du
+  // bas retire alors son « + Écrire », l'écran de lecture ayant ses propres
+  // boutons Répondre / Transférer.
+  const [mailReading, setMailReading] = useState(false);
   // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (14/16) : brouillon
   // pré-rempli par une automatisation de pipeline (jamais d'envoi silencieux).
   const [mailComposeSubject, setMailComposeSubject] = useState<string | null>(null);
@@ -948,6 +952,7 @@ export function App() {
               initialFolder={mailInitialFolder ?? undefined}
               onInitialFolderConsumed={() => setMailInitialFolder(null)}
               composeSignal={mailComposeSignal}
+              onReadingChange={setMailReading}
             />
           )}
 
@@ -1402,7 +1407,7 @@ export function App() {
           onOpenNova={() => openNovaMobile()}
           // Le « + » n'apparaît que sur l'écran Mail — ailleurs, la barre
           // garde ses trois boutons (Accueil / Nova / Menu).
-          onCompose={currentNav === 'mail' ? () => setMailComposeSignal((n) => n + 1) : undefined}
+          onCompose={currentNav === 'mail' && !mailReading ? () => setMailComposeSignal((n) => n + 1) : undefined}
           unreadMessagesCount={unreadMessagesCount}
           unreadNotificationsCount={unreadMobileNotificationsCount}
           unreadRemindersCount={unreadRemindersCount}

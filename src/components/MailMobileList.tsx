@@ -73,13 +73,13 @@ const AVATAR_COLORS = [
   'bg-[#B45309] text-[#FCE7C8]', 'bg-[#BE185D] text-pink-100', 'bg-[#4F46E5] text-indigo-100',
 ];
 
-const getAvatarColor = (seed: string) => {
+export const getAvatarColor = (seed: string) => {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 };
 
-const getInitial = (name: string) => (name.trim()[0] || '?').toUpperCase();
+export const getInitial = (name: string) => (name.trim()[0] || '?').toUpperCase();
 
 /* Format Gmail : l'heure pour aujourd'hui, le jour et le mois dans l'année en
    cours, la date complète au-delà. */
