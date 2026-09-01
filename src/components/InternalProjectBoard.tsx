@@ -71,10 +71,11 @@ function describeActivity(entry: { action: string; fromValue: string | null; toV
   }
 }
 
-const TaskCardContent: React.FC<{ task: InternalTask; users: NovaSphereUserProfile[]; onDelete?: (id: string) => void; checklistCount?: { done: number; total: number }; messageCount?: number }> = ({
+const TaskCardContent: React.FC<{ task: InternalTask; users: NovaSphereUserProfile[]; onDelete?: (id: string) => void; onMove?: (id: string, status: InternalTaskStatus) => void; checklistCount?: { done: number; total: number }; messageCount?: number }> = ({
   task,
   users,
   onDelete,
+  onMove,
   checklistCount,
   messageCount,
 }) => {
@@ -87,11 +88,34 @@ const TaskCardContent: React.FC<{ task: InternalTask; users: NovaSphereUserProfi
     <>
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-xs font-bold text-white leading-snug">{task.title}</h4>
-        {onDelete && (
-          <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} className="text-gray-600 hover:text-rose-300 shrink-0 p-0.5 -m-0.5">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Signalé deux fois (31/08/2026) : « quand on met les cartes dans
+              Terminé, on doit pouvoir les déplacer vers les colonnes que l'on
+              souhaite pour retravailler sur le projet en cours ».
+              Le glisser-déposer fonctionne à nouveau depuis le rétablissement
+              du défilement automatique, mais tirer une carte sur trois
+              colonnes reste pénible — impraticable au doigt. Ce menu déplace
+              la carte en deux touches, depuis n'importe quelle colonne vers
+              n'importe quelle autre. */}
+          {onMove && (
+            <select
+              value={task.status}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => { e.stopPropagation(); onMove(task.id, e.target.value as InternalTaskStatus); }}
+              title="Déplacer vers une autre colonne"
+              className="bg-transparent border border-white/15 rounded-md text-[9px] text-gray-400 hover:text-white hover:border-[#F7BC5F]/50 px-1 py-0.5 cursor-pointer focus:outline-none"
+            >
+              {COLUMNS.map((c) => (
+                <option key={c.id} value={c.id} className="bg-[#0E1A20] text-white">{c.label}</option>
+              ))}
+            </select>
+          )}
+          {onDelete && (
+            <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} className="text-gray-600 hover:text-rose-300 shrink-0 p-0.5 -m-0.5">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
       {task.description && <p className="text-[11px] text-gray-400 mt-1.5 line-clamp-2">{task.description}</p>}
       <div className="flex items-center flex-wrap gap-1.5 mt-2.5">
@@ -163,6 +187,7 @@ const TaskCard = React.memo<{
   users: NovaSphereUserProfile[];
   onOpen: (task: InternalTask) => void;
   onDelete: (id: string) => void;
+  onMove?: (id: string, status: InternalTaskStatus) => void;
   checklistCount?: { done: number; total: number };
   messageCount?: number;
   selectable?: boolean;
@@ -173,6 +198,7 @@ const TaskCard = React.memo<{
   users,
   onOpen,
   onDelete,
+  onMove,
   checklistCount,
   messageCount,
   selectable,
@@ -208,7 +234,7 @@ const TaskCard = React.memo<{
           {selected && <Check className="w-3 h-3 text-black" strokeWidth={3} />}
         </div>
       )}
-      <TaskCardContent task={task} users={users} onDelete={selectable ? undefined : onDelete} checklistCount={checklistCount} messageCount={messageCount} />
+      <TaskCardContent task={task} users={users} onDelete={selectable ? undefined : onDelete} onMove={selectable ? undefined : onMove} checklistCount={checklistCount} messageCount={messageCount} />
     </div>
   );
 });
@@ -220,12 +246,13 @@ const BoardColumn: React.FC<{
   onAddTask?: () => void;
   onOpenTask: (task: InternalTask) => void;
   onDeleteTask: (id: string) => void;
+  onMoveTask?: (id: string, status: InternalTaskStatus) => void;
   checklistCounts: Record<string, { done: number; total: number }>;
   messageCounts: Record<string, number>;
   selectionMode?: boolean;
   selectedTaskIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
-}> = ({ column, tasks, users, onAddTask, onOpenTask, onDeleteTask, checklistCounts, messageCounts, selectionMode, selectedTaskIds, onToggleSelect }) => {
+}> = ({ column, tasks, users, onAddTask, onOpenTask, onDeleteTask, onMoveTask, checklistCounts, messageCounts, selectionMode, selectedTaskIds, onToggleSelect }) => {
   const { setNodeRef, isOver } = useDroppable({ id: `column-${column.id}`, data: { type: 'column', status: column.id } });
   return (
     // Demande explicite : même opacité que les colonnes du pipeline
@@ -256,6 +283,7 @@ const BoardColumn: React.FC<{
             users={users}
             onOpen={onOpenTask}
             onDelete={onDeleteTask}
+            onMove={onMoveTask}
             checklistCount={checklistCounts[task.id]}
             messageCount={messageCounts[task.id]}
             selectable={selectionMode}
@@ -609,6 +637,14 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
                 onDeleteTask={(id) => {
                   deleteTask.mutateAsync(id).catch((err: any) => {
                     toast.error(err?.message || "Impossible de supprimer cette tâche.");
+                  });
+                }}
+                onMoveTask={(id, status) => {
+                  // Même bascule optimiste que le glisser-déposer : la carte
+                  // change de colonne immédiatement, la base suit derrière.
+                  setTaskStatusOptimistic(id, status);
+                  updateTask.mutateAsync({ id, updates: { status } }).catch((err: any) => {
+                    toast.error(err?.message || "Impossible de déplacer cette tâche.");
                   });
                 }}
                 checklistCounts={checklistCounts}
