@@ -24,6 +24,8 @@ import { supabase } from '@/lib/supabase';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { useContacts } from '@/hooks/useContacts';
 import { Contact } from '@/types';
+import { useIsMobile } from '@/hooks/use-mobile';
+import MailMobileList from './MailMobileList';
 
 type MailFolder = 'INBOX' | 'UNREAD' | 'SENT' | 'SPAM' | 'TRASH' | 'STARRED' | 'DRAFT';
 
@@ -301,12 +303,22 @@ interface MailViewProps {
   // (barre latérale, etc.) rouvre normalement la boîte de réception.
   initialFolder?: MailFolder;
   onInitialFolderConsumed?: () => void;
+  // Compteur incrémenté par la barre du bas mobile (bouton « + ») pour
+  // ouvrir un nouveau message. Un simple booléen ne suffirait pas : il
+  // resterait à `true` après la première ouverture, et refermer puis
+  // redemander un brouillon ne déclencherait plus rien.
+  composeSignal?: number;
 }
 
-export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggleFullScreen, onUnreadCountChanged, unreadMailCount, initialComposeTo, initialComposeSubject, initialComposeBody, onInitialComposeConsumed, initialFolder, onInitialFolderConsumed }) => {
+export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggleFullScreen, onUnreadCountChanged, unreadMailCount, initialComposeTo, initialComposeSubject, initialComposeBody, onInitialComposeConsumed, initialFolder, onInitialFolderConsumed, composeSignal }) => {
   const { currentUser } = useAuth();
   // Suggestions du composeur (À/Cc) — voir EmailAutocompleteInput plus haut.
   const { contacts } = useContacts();
+  // Sur téléphone, la liste des messages est un écran à part entière (façon
+  // Gmail : recherche ronde, tiroir de dossiers, gestes du doigt) — voir
+  // MailMobileList. La lecture d'un message et le composeur restent communs
+  // aux deux formats.
+  const isMobile = useIsMobile();
 
   const [activeFolder, setActiveFolder] = useState<MailFolder>(initialFolder ?? 'INBOX');
   // Demande explicite : "des utilisateurs ont créé des dossiers [Gmail], il
@@ -647,6 +659,79 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
     }
   };
 
+  // Actions GROUPÉES — utilisées par l'écran mobile : un balayage n'agit que
+  // sur un message, une sélection par appui long peut en viser plusieurs.
+  // Écrites à part des fonctions unitaires ci-dessus pour ne demander
+  // confirmation qu'UNE fois pour tout le lot, ne resynchroniser le compteur
+  // de non-lus qu'à la fin, et ne retirer de la liste que ce qui est
+  // réellement passé côté Gmail (si le lot casse en cours de route, les
+  // messages restants restent affichés plutôt que de disparaître à tort).
+  const setMailsRead = async (list: GmailMessageSummary[], read: boolean) => {
+    if (list.length === 0) return;
+    setActionBusy(list[0].id);
+    const done: string[] = [];
+    try {
+      const token = await getGoogleToken();
+      for (const mail of list) {
+        if (mail.isRead !== read) {
+          if (read) await modifyGmailMessageLabels(token, mail.id, [], ['UNREAD']);
+          else await modifyGmailMessageLabels(token, mail.id, ['UNREAD'], []);
+        }
+        done.push(mail.id);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors du changement de statut de lecture.');
+    } finally {
+      if (done.length > 0) {
+        const ids = new Set(done);
+        setMails(prev => prev.map(m => (ids.has(m.id) ? { ...m, isRead: read } : m)));
+        if (selectedMail && ids.has(selectedMail.id)) {
+          setSelectedMail(prev => (prev ? { ...prev, isRead: read } : null));
+        }
+        onUnreadCountChanged?.();
+      }
+      setActionBusy(null);
+    }
+  };
+
+  const deleteMails = async (list: GmailMessageSummary[]) => {
+    if (list.length === 0) return;
+    // Dans la corbeille, il n'y a plus de filet : la suppression est
+    // définitive, donc confirmée — une fois pour tout le lot.
+    const permanent = activeFolder === 'TRASH';
+    if (permanent) {
+      const question = list.length > 1
+        ? `Supprimer définitivement ces ${list.length} courriels ? Cette action est irréversible.`
+        : 'Supprimer définitivement ce courriel ? Cette action est irréversible.';
+      if (!window.confirm(question)) return;
+    }
+    setActionBusy(list[0].id);
+    const done: string[] = [];
+    try {
+      const token = await getGoogleToken();
+      for (const mail of list) {
+        if (permanent) await deleteGmailMessagePermanently(token, mail.id);
+        else await trashGmailMessage(token, mail.id);
+        done.push(mail.id);
+      }
+      setSuccess(
+        permanent
+          ? (list.length > 1 ? `${list.length} messages supprimés définitivement.` : 'Message supprimé définitivement.')
+          : (list.length > 1 ? `${list.length} messages déplacés dans la corbeille.` : 'Message déplacé dans la corbeille.')
+      );
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors de la suppression.');
+    } finally {
+      if (done.length > 0) {
+        const ids = new Set(done);
+        setMails(prev => prev.filter(m => !ids.has(m.id)));
+        if (selectedMail && ids.has(selectedMail.id)) setSelectedMail(null);
+        onUnreadCountChanged?.();
+      }
+      setActionBusy(null);
+    }
+  };
+
   // Composer Actions
   const resetComposer = () => {
     setComposeTo('');
@@ -700,6 +785,16 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
     onInitialComposeConsumed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialComposeTo, initialComposeSubject, initialComposeBody]);
+
+  // Bouton « + » de la barre du bas, sur téléphone : ouvre un brouillon vide.
+  // Le compteur ne vaut 0 qu'au tout premier rendu, jamais après un clic —
+  // on ignore donc cette seule valeur pour ne pas ouvrir le composeur à
+  // l'arrivée sur l'écran.
+  useEffect(() => {
+    if (!composeSignal) return;
+    openNewMessage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composeSignal]);
 
   const openReply = (mail: GmailMessageSummary) => {
     resetComposer();
@@ -804,12 +899,72 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
   // Accueil) — jamais la liste locale, qui ne couvre que le dossier ouvert.
   const unreadCount = unreadMailCount ?? 0;
 
+  // Écran mobile complet (liste + tiroir de dossiers + gestes du doigt) tant
+  // qu'aucun message n'est ouvert ; dès qu'on en lit un, on retombe sur le
+  // panneau de lecture, commun aux deux formats.
+  const mobileList = isMobile && !selectedMail;
+  const activeFolderLabel = activeCustomLabelId
+    ? (customLabels.find((l) => l.id === activeCustomLabelId)?.name || 'Dossier')
+    : (FOLDERS.find((f) => f.id === activeFolder)?.label || 'Réception');
+
   return (
     // Signalé : sur mobile, en lisant un mail, l'espace entre la barre
     // Retour/Répondre/Transférer et le contenu (puis tout le cadre autour du
     // mail lui-même) prenait trop de place à l'écran pour peu de gain —
     // resserré ci-dessous et sur le panneau de lecture juste en dessous.
-    <div className="p-4 sm:p-6 max-w-[1600px] mx-auto h-full flex flex-col gap-2 sm:gap-4 text-white">
+    <div className={`${mobileList ? '' : 'p-4 sm:p-6'} max-w-[1600px] mx-auto h-full flex flex-col gap-2 sm:gap-4 text-white`}>
+      {mobileList ? (
+        <>
+          {/* Retours d'action : la liste mobile occupe tout l'écran, le
+              message s'affiche donc en surimpression, juste au-dessus de la
+              barre de navigation du bas. */}
+          {(error || success) && (
+            <div
+              className={`fixed left-3 right-3 z-[65] px-4 py-3 rounded-2xl text-xs font-semibold flex items-center justify-between gap-3 shadow-2xl bg-[#0b292b] border ${
+                error ? 'border-rose-500/40 text-rose-200' : 'border-emerald-500/40 text-emerald-200'
+              }`}
+              style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
+            >
+              <span className="min-w-0">{error || success}</span>
+              <button
+                onClick={() => { setError(null); setSuccess(null); }}
+                className="shrink-0 opacity-70"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          <MailMobileList
+            mails={filteredMails}
+            loading={loading}
+            folders={SIDEBAR_FOLDERS}
+            activeFolderId={activeFolder}
+            activeFolderLabel={activeFolderLabel}
+            customLabels={customLabels}
+            activeCustomLabelId={activeCustomLabelId}
+            unreadCount={unreadCount}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onSelectFolder={(id) => {
+              setActiveFolder(id as MailFolder);
+              setActiveCustomLabelId(null);
+              setSelectedMail(null);
+            }}
+            onSelectCustomLabel={(id) => {
+              setActiveCustomLabelId(id);
+              setSelectedMail(null);
+            }}
+            onOpenMail={handleSelectMail}
+            onToggleStar={toggleStar}
+            onSetRead={setMailsRead}
+            onDelete={deleteMails}
+            onRefresh={() => void loadMails(activeFolder)}
+            userEmail={currentUser?.email ?? undefined}
+          />
+        </>
+      ) : (
+      <>
       {/* ONGLETS PRINCIPAUX — remplace l'ancienne barre d'en-tête séparée
           (titre "Mail" + recherche + actions), fusionnée ici pour libérer
           une ligne entière au profit de la lecture du mail. */}
@@ -1280,6 +1435,9 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
       </div>
 
       {/* COMPOSER MODAL */}
+      </>
+      )}
+
       {showComposer && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           {/* Ticket #16 (nouvelle base) : fenêtre sans hauteur limitée ni

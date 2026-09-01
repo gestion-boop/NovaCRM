@@ -560,7 +560,7 @@ main[class*="bg-[#071015]/55" i] {
    dire s'il est périmé — à lancer après avoir ajouté un écran. */
 /* @generated:theme-surfaces:start — ne pas éditer à la main, voir scripts/theme-surfaces.mjs */
 /* ── Fonds sombres écrits en dur dans les composants → jeton de surface ──
-   50 teintes recensées automatiquement dans src/ (voir
+   51 teintes recensées automatiquement dans src/ (voir
    scripts/theme-surfaces.mjs). Le sélecteur ne cite PAS la valeur finale :
    il pose un jeton, redéfini une seule fois par thème plus haut dans ce
    fichier. Une même liste sert donc au mode nuit et au mode jour. */
@@ -610,7 +610,8 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#28133b" i],
 [class*="bg-[#282112" i],
 [class*="bg-[#2a133d" i],
-[class*="bg-[#2a2211" i] {
+[class*="bg-[#2a2211" i],
+[class*="bg-[#6b5220" i] {
   background-color: var(--nv-surface-1) !important;
 }
 /* Barre du haut, barre latérale, navigation mobile. */
@@ -683,6 +684,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#2a133d" i],
 [class*="bg-[#2a2211" i],
 [class*="bg-[#2b2b2b" i],
+[class*="bg-[#6b5220" i],
 .dash-card,
 .pipeline-column-bg
 ) :is(
@@ -735,7 +737,8 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#282112" i],
 [class*="bg-[#2a133d" i],
 [class*="bg-[#2a2211" i],
-[class*="bg-[#2b2b2b" i]
+[class*="bg-[#2b2b2b" i],
+[class*="bg-[#6b5220" i]
 ) {
   background-color: var(--nv-surface-2) !important;
 }

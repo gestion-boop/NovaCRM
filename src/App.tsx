@@ -622,6 +622,10 @@ function App() {
   const [highlightPulse, setHighlightPulse] = useState(0);
   const [mailFullScreen, setMailFullScreen] = useState(false);
   const [mailComposeTo, setMailComposeTo] = useState<string | null>(null);
+  // Incrémenté par le « + » de la barre du bas (mobile) : ouvre un nouveau
+  // message vide dans MailView. Un compteur plutôt qu'un booléen, pour que
+  // deux demandes successives se distinguent l'une de l'autre.
+  const [mailComposeSignal, setMailComposeSignal] = useState(0);
   // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (14/16) : brouillon
   // pré-rempli par une automatisation de pipeline (jamais d'envoi silencieux).
   const [mailComposeSubject, setMailComposeSubject] = useState<string | null>(null);
@@ -1018,6 +1022,7 @@ function App() {
               onInitialComposeConsumed={() => { setMailComposeTo(null); setMailComposeSubject(null); setMailComposeBody(null); }}
               initialFolder={mailInitialFolder ?? undefined}
               onInitialFolderConsumed={() => setMailInitialFolder(null)}
+              composeSignal={mailComposeSignal}
             />
           )}
 
@@ -1486,6 +1491,9 @@ function App() {
           // ensuite : "mode Commercial/Bureau" — openNovaMobile respecte le
           // dernier mode choisi (voir plus haut).
           onOpenNova={() => openNovaMobile()}
+          // Le « + » n'apparaît que sur l'écran Mail — ailleurs, la barre
+          // garde ses trois boutons (Accueil / Nova / Menu).
+          onCompose={currentNav === 'mail' ? () => setMailComposeSignal((n) => n + 1) : undefined}
           unreadMessagesCount={unreadMessagesCount}
           unreadNotificationsCount={unreadMobileNotificationsCount}
           unreadRemindersCount={unreadRemindersCount}

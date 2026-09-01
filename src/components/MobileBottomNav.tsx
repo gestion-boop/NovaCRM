@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Menu } from 'lucide-react';
+import { Home, Menu, Plus } from 'lucide-react';
 import NovaMascotte from './NovaMascotte';
 
 interface MobileBottomNavProps {
@@ -11,6 +11,10 @@ interface MobileBottomNavProps {
   // directement — plus rapide sur mobile, pas de changement d'écran complet
   // avant même d'avoir tapé/dicté une demande.
   onOpenNova: () => void;
+  // Action d'écriture propre à l'écran Mail (demande explicite : « en bas,
+  // la barre pour l'accueil tout à gauche, nova et peut être un + pour créer
+  // un mail »). Absente ailleurs : la barre reprend alors ses trois boutons.
+  onCompose?: () => void;
   unreadMessagesCount?: number;
   unreadNotificationsCount?: number;
   unreadRemindersCount?: number;
@@ -26,6 +30,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onNavigate,
   onOpenMobileMenu,
   onOpenNova,
+  onCompose,
 }) => {
   return (
     // Logo Nova redimensionné pour tenir dans la hauteur de la barre,
@@ -41,6 +46,19 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <Home className="w-8 h-8" />
         <span className="text-sm font-semibold mt-1">Accueil</span>
       </button>
+
+      {onCompose && (
+        <button
+          onClick={onCompose}
+          title="Nouveau message"
+          className="flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all cursor-pointer text-[#F7BC5F] active:scale-95"
+        >
+          <span className="w-8 h-8 rounded-full bg-[#F7BC5F] text-[#061719] flex items-center justify-center">
+            <Plus className="w-6 h-6" strokeWidth={3} />
+          </span>
+          <span className="text-sm font-semibold mt-1">Écrire</span>
+        </button>
+      )}
 
       <button
         onClick={onOpenNova}
