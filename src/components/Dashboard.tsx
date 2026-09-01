@@ -31,7 +31,8 @@ export default function Dashboard({
   // sur l'étape correspondante (au lieu de rester à choisir soi-même).
   onNavigateToStage?: (stage: string) => void;
 }) {
-  const { currentUser, activeAgency } = useAuth();
+  const { currentUser, userProfile, activeAgency } = useAuth();
+  const isSuperAdmin = userProfile?.role === 'super_admin';
   const { contacts = [] } = useContacts();
   const { deals = [] } = useDeals();
   const { tasks = [] } = useTasks();
@@ -105,6 +106,47 @@ export default function Dashboard({
       return (data as { id: string; name: string; agency_id: string; is_default: boolean }[]) || [];
     },
   });
+
+  // Ticket #34 : « toute affaire deposee dans la colonne Facture du pipeline
+  // Transaction B2 doit etre comptabilisee dans le chiffre d'affaires de
+  // l'agence, visible des seuls super admins ». Le montant retenu est le hors
+  // taxes : `estimated_value` (ici `amount`) porte deja la commission agence
+  // en HT, rien a convertir. Une affaire sans HT ne compte pas, mais on la
+  // compte a part pour pouvoir le dire.
+  //
+  // Le pipeline et l'etape sont crees dans l'application, pas dans le code :
+  // on vise donc le NOM, pas un identifiant fige, et de façon tolerante —
+  // « Transaction B2 » comme « Transactions B2 », « Facture » comme
+  // « Facture » ou « Dossier facture ». Meme principe que « Accord banque »
+  // juste au-dessus.
+  const sansAccents = (v: string) =>
+    v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+  const chiffreAffairesAgence = useMemo(() => {
+    const pipelinesVises = new Set(
+      pipelinesData
+        .filter((p) => {
+          const nom = sansAccents(p.name);
+          return nom.includes('transaction') && nom.includes('b2');
+        })
+        .map((p) => p.id)
+    );
+    if (pipelinesVises.size === 0) return { total: 0, comptees: 0, sansMontant: 0, pipelineTrouve: false };
+
+    let total = 0;
+    let comptees = 0;
+    let sansMontant = 0;
+    deals.forEach((d) => {
+      if (!d.pipelineId || !pipelinesVises.has(d.pipelineId)) return;
+      if (!sansAccents(d.stage || '').includes('factur')) return;
+      const montant = Number(d.amount) || 0;
+      if (montant <= 0) { sansMontant += 1; return; }
+      total += montant;
+      comptees += 1;
+    });
+    return { total, comptees, sansMontant, pipelineTrouve: true };
+  }, [deals, pipelinesData]);
+
 
   // On ne considère que les agences réellement affichées (l'agence active,
   // ou toutes celles présentes dans les dossiers si "Toutes les agences" est
@@ -378,6 +420,32 @@ export default function Dashboard({
             <Coins className="w-6 h-6" />
           </div>
         </div>
+
+        {/* Ticket #34 — Chiffre d'affaires de l'agence, super admins seulement.
+            Colonne « Facturé » du pipeline « Transaction B2 », montants HT. */}
+        {isSuperAdmin && (
+          <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">Chiffre d'affaires de l'agence</span>
+              <div className="text-2xl font-black text-[#F9C977] tracking-tight">
+                {formatCurrency(chiffreAffairesAgence.total)}
+              </div>
+              <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
+                {!chiffreAffairesAgence.pipelineTrouve
+                  ? 'Aucun pipeline « Transaction B2 » trouvé'
+                  : `${chiffreAffairesAgence.comptees} affaire${chiffreAffairesAgence.comptees > 1 ? 's' : ''} facturée${chiffreAffairesAgence.comptees > 1 ? 's' : ''}`}
+                {chiffreAffairesAgence.sansMontant > 0 && (
+                  <span className="text-amber-400/90">
+                    {' '}· {chiffreAffairesAgence.sansMontant} sans HT, non comptée{chiffreAffairesAgence.sansMontant > 1 ? 's' : ''}
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977] group-hover:scale-105 transition-transform">
+              <TrendingUp className="w-6 h-6" />
+            </div>
+          </div>
+        )}
 
         {/* Metric 4 - Tâches en Attente (Deep Slate-Indigo theme) */}
         <div className="dash-card p-6 rounded-2xl border border-indigo-500/25 hover:border-indigo-500/40 shadow-lg hover:shadow-indigo-500/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
