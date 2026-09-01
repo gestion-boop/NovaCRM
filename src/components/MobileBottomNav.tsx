@@ -36,14 +36,26 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   composeLabel = 'Écrire',
 }) => {
   return (
-    // Logo Nova redimensionné pour tenir dans la hauteur de la barre,
-    // centré verticalement entre le haut et le bas (trop gros/débordant
-    // avant, avec un -mt-24 qui le sortait complètement de la case).
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#081318]/95 backdrop-blur-md border-t border-white/10 px-6 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] flex items-center justify-between select-none shadow-2xl">
+    // Demandé le 1er septembre, capture d'Instagram à l'appui : une barre
+    // flottante en capsule, détachée du bord, fond translucide avec flou,
+    // contour fin, et une pastille sombre derrière l'élément actif.
+    //
+    // Consigne explicite qui va avec : « les mêmes icônes, on ne change
+    // rien ». Seule la FORME change donc — mêmes boutons, mêmes tailles,
+    // mêmes libellés, même ordre, même « + » doré. Et la hauteur totale est
+    // conservée au pixel près (le rembourrage extérieur reprend ce que la
+    // capsule ajoute), pour ne pas rouvrir les tickets #13 et #18 où le
+    // dernier message et le composeur passaient dessous.
+    //
+    // `pointer-events-none` sur le cadre, `auto` sur la capsule : les coins
+    // laissés libres de chaque côté ne doivent pas avaler les touchers
+    // destinés au contenu de la page.
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 px-3 pt-1 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] select-none pointer-events-none">
+      <div className="pointer-events-auto mx-auto max-w-md rounded-[2rem] bg-[#081318]/80 backdrop-blur-xl border border-white/15 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.8)] px-4 py-1.5 flex items-center justify-between">
       <button
         onClick={() => onNavigate('accueil')}
-        className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all cursor-pointer ${
-          currentNav === 'accueil' ? 'text-[#F7BC5F] font-bold scale-105' : 'text-gray-400 hover:text-gray-200'
+        className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-2xl transition-all cursor-pointer ${
+          currentNav === 'accueil' ? 'text-[#F7BC5F] font-bold bg-white/10' : 'text-gray-400 hover:text-gray-200'
         }`}
       >
         <Home className="w-8 h-8" />
@@ -73,11 +85,12 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
       <button
         onClick={onOpenMobileMenu}
-        className="flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all cursor-pointer text-gray-400 hover:text-gray-200"
+        className="flex flex-col items-center justify-center py-1.5 px-3 rounded-2xl transition-all cursor-pointer text-gray-400 hover:text-gray-200"
       >
         <Menu className="w-8 h-8" />
         <span className="text-sm font-semibold mt-1">Menu</span>
       </button>
+      </div>
     </nav>
   );
 };
