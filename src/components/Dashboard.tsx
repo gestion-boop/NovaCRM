@@ -133,8 +133,8 @@ export default function Dashboard({
     );
     if (pipelinesVises.size === 0) {
       return {
-        total: 0, comptees: 0, sansMontant: 0, pipelineTrouve: false,
-        dansLePipeline: 0, horsEtape: 0,
+        total: 0, comptees: 0, aVenir: 0, comptessAVenir: 0, sansMontant: 0,
+        pipelineTrouve: false, dansLePipeline: 0, horsEtape: 0,
         // On montre les noms réellement trouvés : si la règle ne reconnaît
         // pas le pipeline, autant voir tout de suite comment il s'appelle
         // plutôt que de chercher à l'aveugle.
@@ -167,8 +167,17 @@ export default function Dashboard({
     const pipelineParEtape = new Map<string, string>();
     stagesWithPosition.forEach((s) => { pipelineParEtape.set(s.id, s.pipeline_id); });
 
+    // Demandé le 1er septembre : « mets le chiffre facturé, et tout ce qui
+    // n'est pas encore facturé — donc archivé avec un prix confirmé — sera en
+    // à venir ». Deux réalités comptables distinctes, deux chiffres :
+    //   FACTURÉ  : la facture est émise (étape « Facturé »).
+    //   À VENIR  : c'est gagné mais pas encore facturé — étape « À facturer »,
+    //              ou dossier archivé avec un montant confirmé.
+    // Les additionner donnerait un chiffre qui mélange le réalisé et le prévu.
     let total = 0;
+    let aVenir = 0;
     let comptees = 0;
+    let comptessAVenir = 0;
     let sansMontant = 0;
     let dansLePipeline = 0;
     let horsEtape = 0;
@@ -176,13 +185,24 @@ export default function Dashboard({
       const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
       if (!pipelineReel || !pipelinesVises.has(pipelineReel)) return;
       dansLePipeline += 1;
-      if (!sansAccents(d.stage || '').includes('factur')) { horsEtape += 1; return; }
+
+      const etape = sansAccents(d.stage || '');
+      const aFacturer = etape.startsWith('a factur');
+      const facture = etape.includes('factur') && !aFacturer;
+      const archiveAvecPrix = Boolean(d.archivedAt) && (Number(d.amount) || 0) > 0;
+
+      if (!facture && !aFacturer && !archiveAvecPrix) { horsEtape += 1; return; }
+
       const montant = Number(d.amount) || 0;
       if (montant <= 0) { sansMontant += 1; return; }
-      total += montant;
-      comptees += 1;
+
+      if (facture) { total += montant; comptees += 1; }
+      else { aVenir += montant; comptessAVenir += 1; }
     });
-    return { total, comptees, sansMontant, pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [] };
+    return {
+      total, comptees, aVenir, comptessAVenir, sansMontant,
+      pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [],
+    };
   }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition]);
 
 
@@ -484,6 +504,11 @@ export default function Dashboard({
                 ) : (
                   <>
                     {chiffreAffairesAgence.comptees} affaire{chiffreAffairesAgence.comptees > 1 ? 's' : ''} facturée{chiffreAffairesAgence.comptees > 1 ? 's' : ''}
+                    {chiffreAffairesAgence.aVenir > 0 && (
+                      <span className="text-emerald-400/90">
+                        {' '}· à venir {formatCurrency(chiffreAffairesAgence.aVenir)} ({chiffreAffairesAgence.comptessAVenir})
+                      </span>
+                    )}
                     {chiffreAffairesAgence.sansMontant > 0 && (
                       <span className="text-amber-400/90">
                         {' '}· {chiffreAffairesAgence.sansMontant} sans HT
