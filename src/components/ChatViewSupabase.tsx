@@ -130,6 +130,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // celui des conversations directes, sans le bouton Nova ajouté au ticket
   // #260 — ajouté ici aussi.
   const [showChannelNovaPicker, setShowChannelNovaPicker] = useState(false);
+  // Images et vocaux dans les canaux de projet (31/08/2026) — « pour tous les
+  // messages du chat, dans tous les dossiers et conversations, je veux qu'on
+  // puisse mettre des images, vocaux, emojis et Novadji ». Les conversations
+  // directes avaient les quatre ; les canaux n'avaient que les deux derniers.
+  const channelImageInputRef = useRef<HTMLInputElement>(null);
+  const channelMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const channelAudioChunksRef = useRef<Blob[]>([]);
+  const channelRecordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [isRecordingChannel, setIsRecordingChannel] = useState(false);
+  const [recordingChannelSeconds, setRecordingChannelSeconds] = useState(0);
+  const [uploadingChannelMedia, setUploadingChannelMedia] = useState(false);
   const [newChannelFor, setNewChannelFor] = useState<string | null>(null);
   const [newChannelName, setNewChannelName] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1131,6 +1142,100 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  /**
+   * Envoie une image ou un vocal dans le canal de projet actif.
+   *
+   * Les messages de canal vivent dans `chat_messages`, dont le contenu est un
+   * JSONB libre — contrairement aux conversations directes qui ont des
+   * colonnes dédiées. On range donc le média dans ce même objet `data`, à
+   * côté du corps du message, sans migration de schéma.
+   */
+  const insertChannelMedia = async (kind: 'image' | 'voice', attachmentUrl: string, attachmentDuration?: number) => {
+    if (!activeChannel || !currentUser) return;
+    await supabase.from('chat_messages').insert({
+      id: crypto.randomUUID(),
+      channel: activeChannel.id,
+      sender_id: currentUser.uid,
+      is_deleted: false,
+      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
+      data: {
+        body: '',
+        kind,
+        attachmentUrl,
+        attachmentDuration: attachmentDuration ?? null,
+        sender_id: currentUser.uid,
+        sender_name: displayName,
+        created_at: new Date().toISOString(),
+      },
+    } as any);
+    await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
+  };
+
+  const handleChannelImagePick = async (file: File | null) => {
+    if (!file) return;
+    setUploadingChannelMedia(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      await insertChannelMedia('image', dataUrl);
+    } finally {
+      setUploadingChannelMedia(false);
+      if (channelImageInputRef.current) channelImageInputRef.current.value = '';
+    }
+  };
+
+  const handleStartRecordingChannel = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let mimeType = 'audio/webm';
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      channelMediaRecorderRef.current = recorder;
+      channelAudioChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) channelAudioChunksRef.current.push(e.data); };
+      recorder.start(100);
+      setIsRecordingChannel(true);
+      setRecordingChannelSeconds(0);
+      channelRecordingTimerRef.current = setInterval(() => setRecordingChannelSeconds((x) => x + 1), 1000);
+    } catch {
+      // micro refusé ou indisponible
+    }
+  };
+
+  const handleStopRecordingChannel = async (cancel = false) => {
+    const recorder = channelMediaRecorderRef.current;
+    if (channelRecordingTimerRef.current) { clearInterval(channelRecordingTimerRef.current); channelRecordingTimerRef.current = null; }
+    const duration = recordingChannelSeconds;
+    setIsRecordingChannel(false);
+    setRecordingChannelSeconds(0);
+    if (!recorder || recorder.state === 'inactive') return;
+    if (cancel) {
+      recorder.stop();
+      recorder.stream.getTracks().forEach((t) => t.stop());
+      channelAudioChunksRef.current = [];
+      return;
+    }
+    recorder.onstop = async () => {
+      recorder.stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(channelAudioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        setUploadingChannelMedia(true);
+        try {
+          await insertChannelMedia('voice', reader.result as string, duration);
+        } finally {
+          setUploadingChannelMedia(false);
+        }
+      };
+      reader.readAsDataURL(blob);
+    };
+    recorder.stop();
   };
 
   const handleStartRecordingConv = async () => {
@@ -2492,6 +2597,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           </div>
                         ) : isNova ? (
                           <img src={m.data?.body} alt="Nova" className="w-14 h-14 object-contain" />
+                        ) : m.data?.kind === 'image' && m.data?.attachmentUrl ? (
+                          /* Images et vocaux dans les canaux (31/08/2026) : le
+                             média est rangé dans le JSONB `data`, les canaux
+                             n'ayant pas les colonnes dédiées des conversations. */
+                          <button type="button" onClick={() => setConvLightboxUrl(m.data.attachmentUrl)} className="block">
+                            <img src={m.data.attachmentUrl} alt="Pièce jointe" className="max-w-[220px] max-h-[220px] rounded-xl object-cover" />
+                          </button>
+                        ) : m.data?.kind === 'voice' && m.data?.attachmentUrl ? (
+                          <div className="flex items-center gap-2">
+                            <audio controls preload="none" src={m.data.attachmentUrl} className="h-9 max-w-[220px]" />
+                            {Boolean(m.data.attachmentDuration) && (
+                              <span className="text-[10px] opacity-70">{m.data.attachmentDuration}s</span>
+                            )}
+                          </div>
                         ) : (
                           <p className="whitespace-pre-line">{linkifyText(m.data?.body || '')}</p>
                         )}
@@ -2599,6 +2718,55 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   placeholder="Écrire un message..."
                   className="flex-1 bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
                 />
+                {/* Image et vocal dans les canaux (31/08/2026) — les
+                    conversations directes les avaient depuis toujours, les
+                    canaux de projet non. Même comportement, même rendu. */}
+                <input
+                  ref={channelImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => void handleChannelImagePick(e.target.files?.[0] || null)}
+                />
+                <button
+                  type="button"
+                  onClick={() => channelImageInputRef.current?.click()}
+                  disabled={uploadingChannelMedia || isRecordingChannel}
+                  title="Envoyer une image"
+                  className="p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                </button>
+                {isRecordingChannel ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleStopRecordingChannel(true)}
+                      title="Annuler"
+                      className="p-2.5 rounded-xl text-slate-300 hover:bg-white/10"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleStopRecordingChannel(false)}
+                      title={`Envoyer (${recordingChannelSeconds}s)`}
+                      className="p-2.5 rounded-xl bg-rose-500 text-white"
+                    >
+                      <Square className="w-4 h-4 fill-current" />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleStartRecordingChannel()}
+                    disabled={uploadingChannelMedia}
+                    title="Message vocal"
+                    className="p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   onClick={sendMessage}
                   className="p-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950"
