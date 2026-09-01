@@ -2222,17 +2222,32 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     setOpenFolderStack(prev => prev.filter(f => f.id !== folderId));
   };
 
+  // Visibilité d'une tuile selon l'agence active — appliquée RÉCURSIVEMENT
+  // (voir filtrerEnProfondeur juste après).
+  //
+  // Signalé (31/08/2026) : « supprime la tuile Statistiques pour les autres
+  // agences sauf Immosphera ». Elle était bien filtrée… mais uniquement au
+  // niveau affiché. Or elle vit DANS UN DOSSIER : l'aperçu 2×2 du dossier
+  // rendait `tile.children` sans le moindre filtre, et l'icône Statistiques y
+  // restait visible pour toutes les agences.
+  const tuileVisible = (t: TileItemNode) =>
+    (t.id !== 'immosphera360' || canSeeImmosphera)
+    && (!IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
+    && (!NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
+    && (!CONSEILS_EXTRA_TILE_IDS.includes(t.id) || canSeeConseilsFinances)
+    && ((t.id !== 'annonce' && t.id !== 'nova-lock-spacer') || canSeeAnnonceTile);
+
+  const filtrerEnProfondeur = (items: TileItemNode[]): TileItemNode[] =>
+    items
+      .filter(tuileVisible)
+      .map((t) => (t.children ? { ...t, children: filtrerEnProfondeur(t.children) } : t));
+
+  // Un seul passage : `filtrerEnProfondeur` applique `tuileVisible` à tous les
+  // niveaux, y compris au contenu des dossiers. Les filtres à plat qui se
+  // trouvaient ici faisaient double emploi — et surtout ne voyaient jamais ce
+  // qui était rangé dans un dossier.
   const currentDisplayTiles = applyLocks(
-    (activeFolder ? (activeFolder.children || []) : tiles)
-      .filter((t) => t.id !== 'immosphera360' || canSeeImmosphera)
-      .filter((t) => !IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
-      .filter((t) => !NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
-      .filter((t) => !CONSEILS_EXTRA_TILE_IDS.includes(t.id) || canSeeConseilsFinances)
-      // Ticket #255 : tuile "Annonce" réservée aux administrateurs (+ liste
-      // ponctuelle, voir canSeeAnnonceTile) — sa case invisible
-      // "nova-lock-spacer" (qui n'a de sens que juste avant elle) suit la
-      // même règle.
-      .filter((t) => (t.id !== 'annonce' && t.id !== 'nova-lock-spacer') || canSeeAnnonceTile)
+    filtrerEnProfondeur(activeFolder ? (activeFolder.children || []) : tiles)
   );
 
   // Cap à 24 tuiles réelles visibles sur l'accueil (ticket #256 : 6 colonnes
