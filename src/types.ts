@@ -55,6 +55,11 @@ export interface Deal {
   // Colonne `assigned_to` de la table leads, avec repli sur `created_by`
   // pour les affaires anterieures a l'attribution.
   advisorId?: string;
+  // Identifiant reel de l'etape (leads.stage_id). `stage` n'en est que le
+  // NOM : deux pipelines peuvent avoir une etape du meme nom, et surtout un
+  // dossier peut n'avoir aucun pipeline enregistre alors que son etape, elle,
+  // sait a quel pipeline elle appartient.
+  stageId?: string;
   stage: string;
   pipelineId?: string;
   agencyId: string;

@@ -55,8 +55,8 @@ export default function Dashboard({
     queryFn: async () => {
       const { data } = await supabase
         .from('pipeline_stages')
-        .select('pipeline_id, name, position');
-      return (data as { pipeline_id: string; name: string; position: number }[]) || [];
+        .select('id, pipeline_id, name, position');
+      return (data as { id: string; pipeline_id: string; name: string; position: number }[]) || [];
     },
   });
 
@@ -150,13 +150,27 @@ export default function Dashboard({
       (d) => activeAgency.id === 'all' || d.agencyId === activeAgency.id
     );
 
+    // Le pipeline d'une affaire se lit d'abord sur SON ÉTAPE, et seulement
+    // ensuite sur la colonne pipeline_id du dossier.
+    //
+    // Signalé le 1er septembre : « j'ai facturé toute la colonne, plus de
+    // 53 000 €, et ça ne remonte pas ». Le Pipeline affiche une affaire sans
+    // pipeline_id dans le pipeline OUVERT (Pipeline.tsx : `deal.pipelineId ||
+    // activePipeline.id`) : à l'écran elle est bien dans « Facturé », mais en
+    // base elle n'a aucun pipeline. Le calcul, lui, écartait tout dossier
+    // sans pipeline_id — et perdait donc exactement ces dossiers-là.
+    // L'étape, elle, sait toujours à quel pipeline elle appartient.
+    const pipelineParEtape = new Map<string, string>();
+    stagesWithPosition.forEach((s) => { pipelineParEtape.set(s.id, s.pipeline_id); });
+
     let total = 0;
     let comptees = 0;
     let sansMontant = 0;
     let dansLePipeline = 0;
     let horsEtape = 0;
     perimetre.forEach((d) => {
-      if (!d.pipelineId || !pipelinesVises.has(d.pipelineId)) return;
+      const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
+      if (!pipelineReel || !pipelinesVises.has(pipelineReel)) return;
       dansLePipeline += 1;
       if (!sansAccents(d.stage || '').includes('factur')) { horsEtape += 1; return; }
       const montant = Number(d.amount) || 0;
@@ -165,7 +179,7 @@ export default function Dashboard({
       comptees += 1;
     });
     return { total, comptees, sansMontant, pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [] };
-  }, [allDeals, activeAgency.id, pipelinesData]);
+  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition]);
 
 
   // On ne considère que les agences réellement affichées (l'agence active,
