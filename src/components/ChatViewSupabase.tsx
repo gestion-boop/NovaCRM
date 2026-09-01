@@ -1330,11 +1330,26 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         } as any)
         .select()
         .single();
-      if (error || !conv) return;
-      await supabase.from('conversation_members').insert([
+      // Signalé (31/08/2026) : « impossible de créer un groupe de discussion ».
+      // Même défaut que pour les conversations directes, corrigé ce matin :
+      // l'échec était avalé — la fenêtre se fermait sans rien dire, et l'erreur
+      // d'ajout des participants n'était même pas regardée.
+      if (error || !conv) {
+        setConvCreateError(error?.message || "Le groupe n'a pas pu être créé.");
+        return;
+      }
+      const { error: membresError } = await supabase.from('conversation_members').insert([
         { conversation_id: (conv as any).id, user_id: currentUser.uid },
         ...memberIds.map((id) => ({ conversation_id: (conv as any).id, user_id: id })),
       ] as any);
+      if (membresError) {
+        // On ne laisse pas de groupe vide derrière soi : sans participants,
+        // il serait invisible pour tout le monde, y compris son auteur.
+        await supabase.from('conversations').delete().eq('id', (conv as any).id);
+        setConvCreateError(`Participants non enregistrés : ${membresError.message}`);
+        return;
+      }
+      setConvCreateError(null);
       setShowNewConvModal(false);
       setNewConvMode('direct');
       setSelectedGroupMemberIds(new Set());
