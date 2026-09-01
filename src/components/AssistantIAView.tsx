@@ -2472,14 +2472,30 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     recognition.interimResults = true;
     heroBaseTextRef.current = promptInput.trim();
     heroFinalSoFarRef.current = '';
+    // CORRECTIF (31/08/2026) — signalé sur le téléphone de Natacha : la dictée
+    // écrivait « écris-moi une tâche écris-moi une tâche écris-moi une… » en
+    // boucle, rendant Nova inutilisable.
+    //
+    // La version précédente ACCUMULAIT : `heroFinalSoFarRef += chunk` à chaque
+    // segment devenu final, en parcourant depuis `e.resultIndex`. Or Android
+    // Chrome renvoie très souvent TOUT l'historique des résultats à chaque
+    // événement, avec resultIndex à 0 — chaque passage réajoutait donc ce qui
+    // était déjà enregistré, d'où la répétition qui enflait à chaque mot.
+    //
+    // On reconstruit désormais la phrase entière à partir de `e.results` à
+    // chaque fois, sans rien accumuler entre les événements. L'opération
+    // devient idempotente : que le navigateur renvoie un segment ou cent, le
+    // résultat est le même.
     recognition.onresult = (e: any) => {
+      let final = '';
       let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      for (let i = 0; i < e.results.length; i++) {
         const chunk = e.results[i][0].transcript;
-        if (e.results[i].isFinal) heroFinalSoFarRef.current += `${chunk} `;
+        if (e.results[i].isFinal) final += `${chunk} `;
         else interim += chunk;
       }
-      const combined = `${heroBaseTextRef.current} ${heroFinalSoFarRef.current} ${interim}`.replace(/\s+/g, ' ').trim();
+      heroFinalSoFarRef.current = final;
+      const combined = `${heroBaseTextRef.current} ${final} ${interim}`.replace(/\s+/g, ' ').trim();
       setPromptInput(combined);
     };
     recognition.onend = () => setHeroListening(false);

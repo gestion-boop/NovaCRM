@@ -1839,19 +1839,36 @@ export default function ClientProfileView({
       recognition.continuous = true;
       recognition.interimResults = true;
 
+      // CORRECTIF (31/08/2026) — signalé : « quand Natacha veut rédiger une
+      // note en vocal, cela ne marche pas ». Deux defauts cumules :
+      //
+      // 1. ACCUMULATION. `setNoteContent(prev => prev + currentTranscript)`
+      //    ajoutait a chaque evenement. Or Android Chrome renvoie tres souvent
+      //    TOUT l'historique des resultats a chaque fois, avec resultIndex a
+      //    0 : chaque passage reecrivait ce qui etait deja la, et la note
+      //    gonflait en repetitions — le meme defaut que la dictee de Nova.
+      //
+      // 2. PERTE DU DERNIER SEGMENT. Seuls les segments marques `isFinal`
+      //    etaient retenus. Si l'on arrete de parler avant que le navigateur
+      //    ne valide le dernier, il n'etait jamais ecrit — et sur une phrase
+      //    courte, souvent AUCUN segment n'atteint cet etat : la note restait
+      //    vide, d'ou « ca ne marche pas ».
+      //
+      // On capture le texte deja saisi, puis on reconstruit la phrase entiere
+      // a chaque evenement — segments definitifs ET en cours. L'operation
+      // devient idempotente et ne perd plus rien.
+      const texteDeBase = noteContent.trim();
+
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let currentTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            currentTranscript += event.results[i][0].transcript + ' ';
-          }
+        let definitif = '';
+        let enCours = '';
+        for (let i = 0; i < event.results.length; i++) {
+          const chunk = event.results[i][0].transcript;
+          if (event.results[i].isFinal) definitif += `${chunk} `;
+          else enCours += chunk;
         }
-        if (currentTranscript) {
-          setNoteContent(prev => {
-            const trimmed = prev.trim();
-            return trimmed ? `${trimmed} ${currentTranscript.trim()}` : currentTranscript.trim();
-          });
-        }
+        const complet = `${texteDeBase} ${definitif} ${enCours}`.replace(/\s+/g, ' ').trim();
+        setNoteContent(complet);
       };
 
       recognition.onerror = (event: any) => {

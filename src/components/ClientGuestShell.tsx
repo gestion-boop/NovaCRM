@@ -102,17 +102,21 @@ const ClientGuestShell: React.FC = () => {
       recognition.lang = 'fr-FR';
       recognition.continuous = true;
       recognition.interimResults = true;
+      // Même correctif que la dictée des notes et celle de Nova (31/08/2026) :
+      // on ne cumule plus d'un événement à l'autre — Android renvoie tout
+      // l'historique à chaque fois, ce qui produisait des répétitions — et on
+      // retient aussi le segment en cours, sans quoi une phrase courte
+      // n'atteignant jamais l'état « définitif » n'écrivait rien du tout.
+      const texteDeBase = draft.trim();
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let currentTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (event.results[i].isFinal) currentTranscript += event.results[i][0].transcript + ' ';
+        let definitif = '';
+        let enCours = '';
+        for (let i = 0; i < event.results.length; i++) {
+          const chunk = event.results[i][0].transcript;
+          if (event.results[i].isFinal) definitif += `${chunk} `;
+          else enCours += chunk;
         }
-        if (currentTranscript) {
-          setDraft((prev) => {
-            const trimmed = prev.trim();
-            return trimmed ? `${trimmed} ${currentTranscript.trim()}` : currentTranscript.trim();
-          });
-        }
+        setDraft(`${texteDeBase} ${definitif} ${enCours}`.replace(/\s+/g, ' ').trim());
       };
       recognition.onerror = () => setIsListening(false);
       recognition.onend = () => setIsListening(false);
