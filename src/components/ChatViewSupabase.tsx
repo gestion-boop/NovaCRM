@@ -1820,6 +1820,41 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     }
   };
 
+  // Bug nº 6 (consigne du 1er septembre), troisieme partie. Signale a la
+  // recette : « quand je cree le dossier, elle ne recoit aucune notification ».
+  // La creation ecrivait le dossier, son canal et ses participants, puis
+  // s'arretait. Meme RPC que partout ailleurs — pas de second systeme. Le
+  // risque de doublon a ete leve par le test lui-meme : aucune notification
+  // n'arrivait, donc aucun declencheur base ne couvre ce cas.
+  const notifierAjoutAuDossier = async (
+    projectId: string,
+    nomDuDossier: string,
+    destinataires: string[],
+  ) => {
+    if (!currentUser) return;
+    const cibles = Array.from(new Set(destinataires.filter((uid) => uid && uid !== currentUser.uid)));
+    if (cibles.length === 0) return;
+    try {
+      await Promise.all(
+        cibles.map((uid) =>
+          supabase.rpc('create_notification', {
+            _user_id: uid,
+            _type: 'message',
+            _title: '📁 Ajouté à un dossier de projet',
+            _message: `${displayName} t'a ajouté au dossier « ${nomDuDossier} ».`,
+            _entity_type: 'chat_project',
+            _entity_id: projectId,
+            _agency_id: /^[0-9a-f-]{36}$/i.test(activeAgency.id) ? activeAgency.id : null,
+            _metadata: { url: '/messagerie' },
+          } as any)
+        )
+      );
+    } catch (e) {
+      // Une notification qui echoue ne doit jamais faire echouer la creation.
+      console.warn('Notification d\'ajout au dossier impossible :', e);
+    }
+  };
+
   /**
    * Crée un dossier de projet dans l'AGENCE ACTIVE, avec ses participants.
    *
@@ -1862,9 +1897,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
       const participants = Array.from(newProjectMemberIds);
       if (participants.length > 0) {
-        await supabase.from('chat_project_members').insert(
+        // L'echec de cet ajout etait avale en silence : la fenetre se fermait
+        // comme si tout allait bien, et le dossier se retrouvait sans aucun
+        // participant. On le dit maintenant, comme pour le canal juste avant.
+        const { error: membresError } = await supabase.from('chat_project_members').insert(
           participants.map((uid) => ({ project_id: projectId, user_id: uid, added_by: currentUser.uid })) as any,
         );
+        if (membresError) {
+          setProjectError(`Participants non ajoutés : ${membresError.message}`);
+          return;
+        }
+        await notifierAjoutAuDossier(projectId, nom, participants);
       }
 
       setShowAddProject(false);
@@ -1886,6 +1929,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       .single();
     if (!error && data) {
       setProjectMembers((prev) => [...prev, data as ChatProjectMember]);
+      // Même règle qu'à la création : on prévient la personne qu'on vient de
+      // l'ajouter, sinon elle découvre le dossier par hasard.
+      const dossier = projects.find((p) => p.id === projectId);
+      await notifierAjoutAuDossier(projectId, dossier ? dossier.name : 'un dossier', [userId]);
     }
   };
 
