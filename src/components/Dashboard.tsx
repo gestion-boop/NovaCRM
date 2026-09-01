@@ -489,13 +489,18 @@ export default function Dashboard({
                         {' '}· {chiffreAffairesAgence.sansMontant} sans HT
                       </span>
                     )}
-                    {chiffreAffairesAgence.comptees === 0 && (
-                      <span className="text-slate-500 font-normal block mt-0.5">
-                        {chiffreAffairesAgence.dansLePipeline === 0
-                          ? 'Aucune affaire dans ce pipeline'
-                          : `${chiffreAffairesAgence.dansLePipeline} affaire${chiffreAffairesAgence.dansLePipeline > 1 ? 's' : ''} dans le pipeline, ${chiffreAffairesAgence.horsEtape} hors d'une étape « facturé »`}
-                      </span>
-                    )}
+                    {/* La ligne ne s'affichait qu'à zéro. Signalé le 1er
+                        septembre : « 6 500 €, 3 affaires — mais où sont tous
+                        les dossiers que j'ai archivés ? ». Le compte rendu est
+                        donc permanent : on voit d'un coup d'œil combien de
+                        dossiers sont dans le pipeline, et pourquoi les autres
+                        ne comptent pas. */}
+                    <span className="text-slate-500 font-normal block mt-0.5">
+                      {chiffreAffairesAgence.dansLePipeline === 0
+                        ? 'Aucune affaire dans ce pipeline'
+                        : `sur ${chiffreAffairesAgence.dansLePipeline} dans le pipeline · ${chiffreAffairesAgence.horsEtape} hors d'une étape « factur »`}
+                      {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans montant`}
+                    </span>
                   </>
                 )}
               </span>
