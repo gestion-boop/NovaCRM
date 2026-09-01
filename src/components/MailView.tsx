@@ -26,6 +26,7 @@ import { useContacts } from '@/hooks/useContacts';
 import { Contact } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import MailMobileList from './MailMobileList';
+import MailMobileReader from './MailMobileReader';
 
 type MailFolder = 'INBOX' | 'UNREAD' | 'SENT' | 'SPAM' | 'TRASH' | 'STARRED' | 'DRAFT';
 
@@ -308,9 +309,13 @@ interface MailViewProps {
   // resterait à `true` après la première ouverture, et refermer puis
   // redemander un brouillon ne déclencherait plus rien.
   composeSignal?: number;
+  // Prévient la coquille mobile qu'un message est ouvert : la barre du bas
+  // remplace alors son « + Écrire » — pendant une lecture, l'action utile
+  // est Répondre, et elle vit dans l'écran de lecture lui-même.
+  onReadingChange?: (reading: boolean) => void;
 }
 
-export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggleFullScreen, onUnreadCountChanged, unreadMailCount, initialComposeTo, initialComposeSubject, initialComposeBody, onInitialComposeConsumed, initialFolder, onInitialFolderConsumed, composeSignal }) => {
+export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggleFullScreen, onUnreadCountChanged, unreadMailCount, initialComposeTo, initialComposeSubject, initialComposeBody, onInitialComposeConsumed, initialFolder, onInitialFolderConsumed, composeSignal, onReadingChange }) => {
   const { currentUser } = useAuth();
   // Suggestions du composeur (À/Cc) — voir EmailAutocompleteInput plus haut.
   const { contacts } = useContacts();
@@ -923,6 +928,17 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
   // qu'aucun message n'est ouvert ; dès qu'on en lit un, on retombe sur le
   // panneau de lecture, commun aux deux formats.
   const mobileList = isMobile && !selectedMail;
+  const mobileReader = isMobile && !!selectedMail;
+  const inTrash = !activeCustomLabelId && activeFolder === 'TRASH';
+
+  useEffect(() => {
+    onReadingChange?.(mobileReader);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobileReader]);
+  // Quitter l'écran Mail démonte MailView : la barre du bas doit alors
+  // retrouver son « + », sans quoi il resterait masqué au prochain passage.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => onReadingChange?.(false), []);
   // Le bandeau mobile est un calque posé au-dessus de la liste : laissé
   // affiché, il masque une ligne de messages, et une vieille erreur non
   // fermée cachait toutes les confirmations suivantes (le bandeau n'en
@@ -949,8 +965,8 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
     // du champ de son conteneur et disparaissait. `min-h-full` la laisse
     // s'étendre avec la liste. L'ordinateur garde `h-full`, dont dépendent la
     // colonne latérale et le panneau de lecture.
-    <div className={`${mobileList ? 'min-h-full' : 'p-4 sm:p-6 h-full'} max-w-[1600px] mx-auto flex flex-col gap-2 sm:gap-4 text-white`}>
-      {mobileList ? (
+    <div className={`${mobileList ? 'min-h-full' : mobileReader ? 'h-full' : 'p-4 sm:p-6 h-full'} max-w-[1600px] mx-auto flex flex-col gap-2 sm:gap-4 text-white`}>
+      {isMobile ? (
         <>
           {/* Retours d'action : la liste mobile occupe tout l'écran, le
               message s'affiche donc en surimpression, juste au-dessus de la
@@ -983,7 +999,7 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
             folders={SIDEBAR_FOLDERS}
             activeFolderId={activeFolder}
             activeFolderLabel={activeFolderLabel}
-            isTrash={!activeCustomLabelId && activeFolder === 'TRASH'}
+            isTrash={inTrash}
             customLabels={customLabels}
             activeCustomLabelId={activeCustomLabelId}
             unreadCount={unreadCount}
@@ -1004,6 +1020,48 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
             onDelete={deleteMails}
             onRefresh={() => void loadMails(activeFolder)}
             userEmail={currentUser?.email ?? undefined}
+          />
+        </>
+      ) : mobileReader && selectedMail ? (
+        <>
+          {(error || success) && (
+            <div
+              className={`fixed left-3 right-3 z-[65] px-4 py-3 rounded-2xl text-xs font-semibold flex items-center justify-between gap-3 shadow-2xl bg-[#0b292b] border ${
+                error ? 'border-rose-500/40 text-rose-400' : 'border-emerald-500/40 text-emerald-400'
+              }`}
+              style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
+            >
+              <span className="min-w-0">{error || success}</span>
+              <button
+                onClick={() => { setError(null); setSuccess(null); }}
+                className="shrink-0 opacity-70"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          <MailMobileReader
+            mail={selectedMail}
+            folderLabel={activeFolderLabel}
+            isTrash={inTrash}
+            body={selectedMail.bodyHtml ? (
+              <EmailHtmlFrame html={selectedMail.bodyHtml} />
+            ) : (
+              <pre className="px-3 text-sm text-slate-200 whitespace-pre-wrap font-sans leading-relaxed break-words">
+                {selectedMail.bodyText}
+              </pre>
+            )}
+            onBack={() => setSelectedMail(null)}
+            onReply={() => openReply(selectedMail)}
+            onReplyAll={() => openReplyAll(selectedMail)}
+            onForward={() => openForward(selectedMail)}
+            onToggleRead={() => void toggleReadStatus(selectedMail)}
+            onToggleStar={(e) => toggleStar(selectedMail, e)}
+            onSpam={() => void moveToSpam(selectedMail)}
+            onTrash={() => void moveToTrash(selectedMail)}
+            onRestore={() => void restoreFromTrash(selectedMail)}
+            onDeleteForever={() => void deletePermanently(selectedMail)}
           />
         </>
       ) : (
