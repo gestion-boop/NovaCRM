@@ -500,6 +500,37 @@ export default function ClientProfileView({
     ? stages.findIndex((s: any) => s.id === leadStage.stage_id)
     : -1;
 
+  // Demandé le 2 septembre : « quand c'est à facturer, on met le montant ».
+  // Même fenêtre que dans le Pipeline, pour le même geste : ici les pastilles
+  // d'étape de la fiche. Posée APRÈS le changement d'étape, jamais avant.
+  const [montantEtapePrompt, setMontantEtapePrompt] = useState<string | null>(null);
+  const [montantEtapeSaisi, setMontantEtapeSaisi] = useState('');
+  const [montantEtapeEnCours, setMontantEtapeEnCours] = useState(false);
+
+  const estEtapeAFacturer = (nom: string) =>
+    nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().includes('factur');
+
+  const validerMontantEtape = async () => {
+    const saisi = montantEtapeSaisi.trim().replace(',', '.');
+    if (saisi === '') { setMontantEtapePrompt(null); return; }
+    const montant = Number(saisi);
+    if (!Number.isFinite(montant) || montant < 0) {
+      toast.error("Le montant hors taxes n'est pas un nombre valide.");
+      return;
+    }
+    setMontantEtapeEnCours(true);
+    const { error } = await supabase
+      .from('leads')
+      .update({ estimated_value: montant } as any)
+      .eq('id', clientId);
+    setMontantEtapeEnCours(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Commission agence HT enregistrée');
+    qc.invalidateQueries({ queryKey: ['contacts_all'] });
+    qc.invalidateQueries({ queryKey: ['deals'] });
+    setMontantEtapePrompt(null);
+  };
+
   const changeStage = async (stageId: string) => {
     const { error } = await (supabase as any).rpc('change_lead_stage', {
       p_lead_id: clientId,
@@ -516,6 +547,18 @@ export default function ClientProfileView({
     // rechargement complet. Même oubli que celui corrigé pour l'archivage.
     qc.invalidateQueries({ queryKey: ['deals'] });
     toast.success('Étape mise à jour');
+
+    const nom = (stages as any[]).find((e) => e.id === stageId)?.name || '';
+    if (estEtapeAFacturer(nom)) {
+      const { data } = await supabase
+        .from('leads')
+        .select('estimated_value')
+        .eq('id', clientId)
+        .maybeSingle();
+      const valeur = (data as { estimated_value: number | null } | null)?.estimated_value;
+      setMontantEtapeSaisi(valeur === null || valeur === undefined ? '' : String(valeur));
+      setMontantEtapePrompt(nom);
+    }
   };
 
   const changePipeline = async (pipelineId: string) => {
@@ -4375,6 +4418,49 @@ export default function ClientProfileView({
                 <button onClick={() => setShowGuestInviteModal(false)} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs">Fermer</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {montantEtapePrompt && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => setMontantEtapePrompt(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-[#07191b] border border-[#1b4e52] rounded-2xl max-w-sm w-full p-6 text-white shadow-2xl relative animate-scale-up">
+            <h3 className="text-base font-bold text-white mb-2">Commission agence, hors taxes</h3>
+            <p className="text-sm text-slate-300 mb-4">
+              La fiche vient de passer en « {montantEtapePrompt} ». Quel est le montant de la
+              commission agence, hors taxes ?
+            </p>
+            <input
+              autoFocus
+              type="text"
+              inputMode="decimal"
+              value={montantEtapeSaisi}
+              onChange={(e) => setMontantEtapeSaisi(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void validerMontantEtape(); }}
+              disabled={montantEtapeEnCours}
+              placeholder="Non renseigné"
+              className="w-full px-3 py-2.5 rounded-xl bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60 disabled:opacity-60"
+            />
+            <p className="text-[11px] text-slate-500 mt-2 mb-5 leading-relaxed">
+              C'est ce montant qui apparaît en « CA à venir » sur le Tableau de bord, puis dans le
+              chiffre d'affaires de l'agence une fois la fiche archivée. Laissé vide, le montant
+              déjà enregistré est conservé.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setMontantEtapePrompt(null)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white"
+              >
+                Plus tard
+              </button>
+              <button
+                onClick={() => void validerMontantEtape()}
+                disabled={montantEtapeEnCours}
+                className="px-4 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-50 text-black text-xs font-bold"
+              >
+                Enregistrer
+              </button>
+            </div>
           </div>
         </div>
       )}

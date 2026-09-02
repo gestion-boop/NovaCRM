@@ -1402,6 +1402,44 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     body: string;
   } | null>(null);
 
+  // Demandé le 2 septembre : « quand c'est à facturer, on met le montant ».
+  // Le chiffre d'affaires de l'agence se calcule sur la commission agence HT
+  // (leads.estimated_value) : c'est au moment où le dossier entre dans
+  // « À facturer » qu'on la connaît. Posée APRÈS le déplacement, jamais
+  // avant : la carte ne doit pas rester bloquée si on annule.
+  const [pendingMontantPrompt, setPendingMontantPrompt] = useState<{
+    dealId: string;
+    dealTitle: string;
+    etape: string;
+  } | null>(null);
+  const [montantHtSaisi, setMontantHtSaisi] = useState('');
+  const [montantHtEnCours, setMontantHtEnCours] = useState(false);
+
+  const estEtapeAFacturer = (nom: string) =>
+    nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().includes('factur');
+
+  const validerMontantHt = async () => {
+    if (!pendingMontantPrompt) return;
+    // Virgule ou point, au choix — même règle que la modale d'archivage.
+    const saisi = montantHtSaisi.trim().replace(',', '.');
+    if (saisi === '') { setPendingMontantPrompt(null); return; }
+    const montant = Number(saisi);
+    if (!Number.isFinite(montant) || montant < 0) {
+      toast.error("Le montant hors taxes n'est pas un nombre valide.");
+      return;
+    }
+    setMontantHtEnCours(true);
+    try {
+      await updateDeal.mutateAsync({ id: pendingMontantPrompt.dealId, updates: { amount: montant } });
+      toast.success('Commission agence HT enregistrée');
+      setPendingMontantPrompt(null);
+    } catch (montantError: any) {
+      toast.error(montantError?.message || "Impossible d'enregistrer le montant.");
+    } finally {
+      setMontantHtEnCours(false);
+    }
+  };
+
   // Demande explicite : "quand on déplace un dossier dans une colonne, on
   // puisse mettre un message relance programmé — 3/5/10/15 jours — et Nova
   // nous dise où on en est quand ça fait un moment qu'il n'y a pas eu de
@@ -1474,9 +1512,18 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
       // d'avoir lieu, toute relance en attente sur ce dossier n'a plus lieu
       // d'être — et on propose d'en programmer une nouvelle depuis cette
       // étape fraîchement atteinte.
+      // Une seule fenêtre à la fois : sur « À facturer », c'est le montant
+      // qui prime — la relance n'a pas de sens sur un dossier qu'on facture.
+      const demandeMontant = estEtapeAFacturer(destinationStage);
       if (deal.contactId) {
         cancelPendingFollowups(deal.contactId);
-        setPendingFollowupPrompt({ dealId: deal.id, dealTitle: deal.title, leadId: deal.contactId });
+        if (!demandeMontant) {
+          setPendingFollowupPrompt({ dealId: deal.id, dealTitle: deal.title, leadId: deal.contactId });
+        }
+      }
+      if (demandeMontant) {
+        setMontantHtSaisi(deal.amount ? String(deal.amount) : '');
+        setPendingMontantPrompt({ dealId: deal.id, dealTitle: deal.title, etape: destinationStage });
       }
 
       // Automatisation éventuelle pour cette étape — jamais bloquant, jamais
@@ -2078,6 +2125,48 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
               className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold"
             >
               Supprimer
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
+      {pendingMontantPrompt && (
+        <ModalShell title="Commission agence, hors taxes" onClose={() => setPendingMontantPrompt(null)}>
+          <p className="text-sm text-gray-300 mb-4">
+            "{pendingMontantPrompt.dealTitle}" vient de passer en « {pendingMontantPrompt.etape} ».
+            Quel est le montant de la commission agence, hors taxes ?
+          </p>
+          <input
+            autoFocus
+            type="text"
+            inputMode="decimal"
+            value={montantHtSaisi}
+            onChange={(event) => setMontantHtSaisi(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Enter') void validerMontantHt(); }}
+            disabled={montantHtEnCours}
+            placeholder="Non renseigné"
+            className="w-full px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-sm text-white focus:outline-none focus:border-[#F7BC5F]/60 disabled:opacity-60"
+          />
+          <p className="text-[11px] text-gray-500 mt-2 mb-4 leading-relaxed">
+            C'est ce montant qui apparaît en « CA à venir » sur le Tableau de bord, puis dans le
+            chiffre d'affaires de l'agence une fois le dossier archivé. Laissé vide, le montant
+            déjà enregistré est conservé.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPendingMontantPrompt(null)}
+              className="px-4 py-2 rounded-xl bg-white/5 text-xs"
+            >
+              Plus tard
+            </button>
+            <button
+              type="button"
+              onClick={() => void validerMontantHt()}
+              disabled={montantHtEnCours}
+              className="px-4 py-2 rounded-xl bg-[#F7BC5F] text-black text-xs font-bold disabled:opacity-50"
+            >
+              Enregistrer
             </button>
           </div>
         </ModalShell>
