@@ -40,6 +40,7 @@ const MailView = lazy(() => import('./components/MailView'));
 const EquipeView = lazy(() => import('./components/EquipeView'));
 const DocumentsView = lazy(() => import('./components/DocumentsView'));
 const CarteProspectionView = lazy(() => import('./components/CarteProspectionView'));
+const AcademyView = lazy(() => import('./components/AcademyView'));
 const NotesView = lazy(() => import('./components/NotesView'));
 const SupportView = lazy(() => import('./components/SupportView'));
 const ParametresView = lazy(() => import('./components/ParametresView'));
@@ -1090,6 +1091,12 @@ function App() {
           {currentNav === 'carte-novavisio' && (
             <CarteProspectionView onSelectContact={(contactId) => openClientProfile(contactId)} />
           )}
+
+          {/* Académy : bibliothèque de procédures de l'agence (demandé le
+              2 septembre pour ImmoSphera). La tuile qui y mène n'est proposée
+              qu'à ImmoSphera, mais l'écran lui-même marche pour n'importe
+              quelle société — il lit les ressources de l'agence active. */}
+          {currentNav === 'academy' && <AcademyView />}
 
           {currentNav === 'documents' && <DocumentsView />}
 

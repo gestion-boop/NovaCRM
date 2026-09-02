@@ -529,6 +529,16 @@ const INITIAL_TILES: TileItemNode[] = [
       },
     ],
   },
+  // Demandé le 2 septembre : « je voudrais une tuile Académy ImmoSphera, on
+  // regroupera dedans toutes les procédures en PDF et voir vidéos ».
+  {
+    id: 'immosphera-academy',
+    title: 'Académy',
+    iconName: 'Award',
+    gradient: 'from-[#B45309] via-[#92400E] to-[#451A03]',
+    badgeCount: 0,
+    navTarget: 'academy',
+  },
   {
     id: 'immosphera-amanda',
     title: 'Amanda',
@@ -600,6 +610,7 @@ const NOVAVISIO_EXTRA_TILE_IDS = ['carte-novavisio'];
 const CONSEILS_EXTRA_TILE_IDS = ['conseils-aura'];
 
 const IMMOSPHERA_EXTRA_TILE_IDS = [
+  'immosphera-academy',
   'immosphera-site',
   'immosphera-partenaires',
   'immosphera-netty',
