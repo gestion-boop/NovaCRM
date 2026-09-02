@@ -90,18 +90,18 @@ function echapper(valeur: unknown): string {
 function ligneFiche(icone: string, valeur: string | null | undefined): string {
   if (!valeur || !String(valeur).trim()) return '';
   return `
-    <div style="display:flex;gap:7px;align-items:flex-start;margin-top:5px">
-      <span style="flex:0 0 13px;opacity:0.75;margin-top:1px">${icone}</span>
-      <span style="flex:1;min-width:0;color:#cbd5e1;font-size:11.5px;line-height:1.35;word-break:break-word">${echapper(valeur)}</span>
+    <div style="display:flex;gap:10px;align-items:flex-start;margin-top:8px">
+      <span style="flex:0 0 17px;opacity:0.85;margin-top:1px">${icone}</span>
+      <span style="flex:1;min-width:0;color:#dbe4e6;font-size:13.5px;line-height:1.4;word-break:break-word">${echapper(valeur)}</span>
     </div>`;
 }
 
 const ICONE_TEL =
-  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F7BC5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#F7BC5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
 const ICONE_MAIL =
-  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F7BC5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>';
+  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#F7BC5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>';
 const ICONE_ADRESSE =
-  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F7BC5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#F7BC5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>';
 
 /**
  * La fiche client affichée au survol du pin : bandeau coloré à la couleur du
@@ -119,19 +119,19 @@ function ficheSurvol(
   adresse: string | null
 ): string {
   return `
-    <div style="width:232px;border-radius:14px;overflow:hidden;background:#07191b;border:1px solid #1b4e52;box-shadow:0 10px 30px rgba(0,0,0,0.45);font-family:inherit">
-      <div style="height:4px;background:${couleur}"></div>
-      <div style="padding:10px 12px 11px">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-          <p style="margin:0;font-size:13px;font-weight:700;color:#ffffff;line-height:1.25">${echapper(nom)}</p>
-          <span style="flex:0 0 auto;font-size:9.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:3px 7px;border-radius:999px;background:${couleur}22;color:${couleur};border:1px solid ${couleur}55">${echapper(etat)}</span>
+    <div style="width:320px;border-radius:18px;overflow:hidden;background:#07191b;border:1px solid #1b4e52;box-shadow:0 16px 42px rgba(0,0,0,0.55);font-family:inherit">
+      <div style="height:6px;background:${couleur}"></div>
+      <div style="padding:14px 16px 15px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+          <p style="margin:0;font-size:17px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.01em">${echapper(nom)}</p>
+          <span style="flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;padding:5px 10px;border-radius:999px;background:${couleur}22;color:${couleur};border:1px solid ${couleur}55;white-space:nowrap">${echapper(etat)}</span>
         </div>
-        ${etape ? `<p style="margin:3px 0 0;font-size:10.5px;color:#7c9ba0;letter-spacing:0.02em">${echapper(etape)}</p>` : ''}
-        ${telephone || email || adresse ? '<div style="height:1px;background:#153c3f;margin:9px 0 4px"></div>' : ''}
+        ${etape ? `<p style="margin:5px 0 0;font-size:12.5px;color:#7c9ba0;letter-spacing:0.02em">${echapper(etape)}</p>` : ''}
+        ${telephone || email || adresse ? '<div style="height:1px;background:#153c3f;margin:13px 0 5px"></div>' : ''}
         ${ligneFiche(ICONE_TEL, telephone)}
         ${ligneFiche(ICONE_MAIL, email)}
         ${ligneFiche(ICONE_ADRESSE, adresse)}
-        <p style="margin:9px 0 0;font-size:10px;color:#5b7c81">Cliquer pour ouvrir la fiche</p>
+        <p style="margin:14px 0 0;font-size:11.5px;color:#5b7c81">Cliquer pour ouvrir la fiche</p>
       </div>
     </div>`;
 }
@@ -140,17 +140,17 @@ function createPinIcon(color: string, pulse: boolean): L.DivIcon {
   return L.divIcon({
     className: "",
     html: `
-      <div style="position:relative;width:26px;height:26px;">
-        ${pulse ? `<span style="position:absolute;inset:-6px;border-radius:9999px;background:${color};opacity:0.25;animation:carteprospection-pulse 1.8s ease-out infinite;"></span>` : ""}
-        <svg width="26" height="26" viewBox="0 0 24 24" style="position:relative;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.35));">
+      <div style="position:relative;width:34px;height:34px;">
+        ${pulse ? `<span style="position:absolute;inset:-8px;border-radius:9999px;background:${color};opacity:0.25;animation:carteprospection-pulse 1.8s ease-out infinite;"></span>` : ""}
+        <svg width="34" height="34" viewBox="0 0 24 24" style="position:relative;filter:drop-shadow(0 3px 4px rgba(0,0,0,0.4));">
           <path fill="${color}" stroke="white" stroke-width="1.2" d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 15 9 15s9-8.25 9-15c0-4.97-4.03-9-9-9z"/>
           <circle cx="12" cy="9" r="3.4" fill="white"/>
         </svg>
       </div>
     `,
-    iconSize: [26, 26],
-    iconAnchor: [13, 26],
-    popupAnchor: [0, -24],
+    iconSize: [34, 34],
+    iconAnchor: [17, 34],
+    popupAnchor: [0, -32],
   });
 }
 
@@ -257,7 +257,7 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
         ),
         {
           direction: 'top',
-          offset: [0, -28],
+          offset: [0, -34],
           opacity: 1,
           className: 'nova-carte-fiche',
         }
