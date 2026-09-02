@@ -247,6 +247,37 @@ export default function AcademyView() {
     return () => { vivant = false; };
   }, [activeAgency?.id]);
 
+  // Signalé le 2 septembre : « quand je clique sur les trois points du
+  // dossier, la fenêtre est toujours visible, je suis obligé de faire un hard
+  // refresh pour qu'elle disparaisse ». Le menu ne se fermait qu'en
+  // re-cliquant sur les trois points ou en choisissant une action : un clic
+  // ailleurs ne le concernait pas.
+  //
+  // L'écoute est posée sur `mousedown`, qui précède le clic de React : on
+  // reconnaît donc ce qui appartient au menu par un attribut plutôt que par
+  // l'arrêt de propagation, qui arriverait trop tard.
+  useEffect(() => {
+    if (!menuDossier) return;
+    const fermerSiDehors = (e: MouseEvent) => {
+      const cible = e.target as Element | null;
+      if (cible?.closest('[data-menu-dossier]')) return;
+      setMenuDossier(null);
+    };
+    const fermerSiEchap = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuDossier(null);
+    };
+    document.addEventListener('mousedown', fermerSiDehors);
+    document.addEventListener('keydown', fermerSiEchap);
+    return () => {
+      document.removeEventListener('mousedown', fermerSiDehors);
+      document.removeEventListener('keydown', fermerSiEchap);
+    };
+  }, [menuDossier]);
+
+  // Changer d'écran ou de dossier referme le menu : il n'a plus de sens une
+  // fois qu'on a quitté la grille des dossiers.
+  useEffect(() => { setMenuDossier(null); }, [rubriqueActive, vueDossiers, activeAgency?.id]);
+
   // Plein écran demandé le 2 septembre : « on peut cliquer sur un logo en
   // haut à droite, plein écran — sans partir sur une ouverture avec un onglet
   // différent, ça je ne veux pas ». On utilise donc le plein écran du
@@ -906,6 +937,7 @@ export default function AcademyView() {
                         {estSuperAdmin && (
                           <span
                             role="button"
+                            data-menu-dossier=""
                             title="Gérer ce dossier"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -939,6 +971,7 @@ export default function AcademyView() {
                           marcheraient dessus. */}
                       {estSuperAdmin && menuDossier === nom && (
                         <span
+                          data-menu-dossier=""
                           onClick={(e) => e.stopPropagation()}
                           className="absolute z-20 top-[70%] left-1/2 -translate-x-1/2 w-52 rounded-xl bg-white border border-black/10 shadow-2xl py-1 text-left"
                         >
