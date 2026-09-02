@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import { Deal } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { matchesAgency } from '@/hooks/useContacts';
@@ -30,6 +31,10 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
         ? undefined
         : Number(item.advisor_commission_ttc),
     mandateNumber: (item.mandate_number as string) || undefined,
+    caDevisAVenir:
+      item.pending_quote_amount === null || item.pending_quote_amount === undefined
+        ? undefined
+        : Number(item.pending_quote_amount),
     advisorId: (item.assigned_to as string) || (item.created_by as string) || undefined,
     stageId: (stageId as string) || undefined,
     stage: (stageId && stageNameById[stageId]) || (item.temperature as string) || 'Nouveau',
@@ -319,11 +324,30 @@ export const useDeals = () => {
         throw new Error("Identifiant de l'opportunité manquant.");
       }
 
-      const { error: sbError } = await supabase.from('leads').delete().eq('id', id);
+      // Signalé le 2 septembre : « impossible de supprimer les dossiers en
+      // cours en passant par le pipeline » et « il faut que les utilisateurs
+      // puissent supprimer des clients avec la poubelle ».
+      //
+      // Quand la sécurité de la base (RLS) refuse une suppression, PostgREST
+      // ne renvoie AUCUNE erreur : la requête réussit, simplement zéro ligne
+      // n'est supprimée. Le CRM invalidait alors ses caches, la fiche
+      // réapparaissait telle quelle, et rien n'expliquait pourquoi. On
+      // redemande donc la ligne supprimée : si elle revient vide, c'est un
+      // refus de droits, et on le dit clairement au lieu de faire comme si.
+      const { data: supprimees, error: sbError } = await supabase
+        .from('leads')
+        .delete()
+        .eq('id', id)
+        .select('id');
 
       if (sbError) {
         console.error('Erreur Supabase lors de la suppression :', sbError);
         throw new Error(sbError.message);
+      }
+      if (!supprimees || supprimees.length === 0) {
+        throw new Error(
+          "Suppression refusée par la base de données : votre compte n'a pas le droit de supprimer ce dossier. Un super admin doit ouvrir ce droit (politique de sécurité de la table « leads »)."
+        );
       }
 
       return id;
@@ -337,8 +361,9 @@ export const useDeals = () => {
       ]);
     },
 
-    onError: (error) => {
+    onError: (error: any) => {
       console.error("Impossible de supprimer l'opportunité :", error);
+      toast.error(error?.message || "Impossible de supprimer ce dossier.");
     },
   });
 

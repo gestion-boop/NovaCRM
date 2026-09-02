@@ -9,6 +9,7 @@ import { Users, Coins, Briefcase, CheckCircle2, ArrowRight, Building, Sparkles, 
 import { useAuth } from '@/context/AuthContext';
 import { useContacts, matchesAgency } from '@/hooks/useContacts';
 import { useDeals } from '@/hooks/useDeals';
+import { useAssignableUsers } from '@/hooks/useAssignableUsers';
 import { useTasks } from '@/hooks/useTasks';
 
 // Recharts applique ces réglages en style INLINE sur l'info-bulle : aucune
@@ -132,14 +133,28 @@ export default function Dashboard({
   const sansAccents = (v: string) =>
     v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
+  // Demandé le 2 septembre : « ce chiffre-là sera comptabilisé sur le
+  // pipeline Novavisio principal, du moment qu'il sera à partir de envoi
+  // facture / à régler ». Le pipeline suivi dépend donc de l'agence :
+  // ImmoSphera compte sur « Transaction V2 », Novavisio sur son pipeline
+  // principal, et seulement à partir des étapes de facturation.
+  const estNovavisio = /novavisio/i.test(activeAgency?.name || '');
+
   const chiffreAffairesAgence = useMemo(() => {
+    const pipelinesAgence = pipelinesData.filter((p) =>
+      matchesAgency((p as { agency_id?: string }).agency_id || '', activeAgency.id)
+    );
+    const principalNovavisio = pipelinesAgence.filter((p) => (p as { is_default?: boolean }).is_default);
     const pipelinesVises = new Set(
-      pipelinesData
-        .filter((p) => {
-          const nom = sansAccents(p.name);
-          return nom.includes('transaction') && nom.includes('v2');
-        })
-        .map((p) => p.id)
+      (estNovavisio
+        ? // Le « principal » = celui marqué par défaut ; si aucun ne l'est,
+          // on prend tous ceux de l'agence plutôt que de ne rien compter.
+          (principalNovavisio.length > 0 ? principalNovavisio : pipelinesAgence)
+        : pipelinesData.filter((p) => {
+            const nom = sansAccents(p.name);
+            return nom.includes('transaction') && nom.includes('v2');
+          })
+      ).map((p) => p.id)
     );
     if (pipelinesVises.size === 0) {
       return {
@@ -152,6 +167,7 @@ export default function Dashboard({
         // pas le pipeline, autant voir tout de suite comment il s'appelle
         // plutôt que de chercher à l'aveugle.
         nomsConnus: pipelinesData.map((p) => p.name).slice(0, 6),
+        devis: 0, devisNb: 0, parConseiller: new Map<string, number>(),
       };
     }
 
@@ -210,6 +226,20 @@ export default function Dashboard({
     // en silence — ce qui a coûté plusieurs allers-retours — on l'affiche.
     let horsPipelineMontant = 0;
     let horsPipelineNb = 0;
+    // « CA devis à venir » : saisi fiche par fiche, indépendamment du
+    // pipeline — un devis peut partir avant que le dossier n'avance.
+    let devis = 0;
+    let devisNb = 0;
+    perimetreAgence.forEach((d) => {
+      if (d.archivedAt) return;
+      const montantDevis = Number(d.caDevisAVenir) || 0;
+      if (montantDevis <= 0) return;
+      devis += montantDevis;
+      devisNb += 1;
+    });
+    // Chiffre d'affaires réalisé, conseiller par conseiller (tuile « CA de
+    // Natacha », et base d'un éventuel classement plus tard).
+    const parConseiller = new Map<string, number>();
     // Demandé le 2 septembre : « quand je clique dans la colonne chiffre
     // d'affaires d'agence, je voudrais un tableau avec le nom et prénom des
     // clients, le numéro de mandat et le chiffre, et pouvoir modifier le
@@ -222,6 +252,13 @@ export default function Dashboard({
       if (!pipelineReel || !pipelinesVises.has(pipelineReel)) {
         if (d.archivedAt && montant > 0) { horsPipelineMontant += montant; horsPipelineNb += 1; }
         return;
+      }
+      // Novavisio : seules comptent les affaires arrivées à la facturation
+      // (« Envoi facture », « À régler »...). Ailleurs, tout le pipeline
+      // compte, comme avant.
+      if (estNovavisio && !d.archivedAt) {
+        const etape = sansAccents(d.stage || '');
+        if (!etape.includes('factur') && !etape.includes('regler')) return;
       }
       dansLePipeline += 1;
       if (montant <= 0) {
@@ -249,7 +286,11 @@ export default function Dashboard({
         etape: d.stage || '',
         archive: Boolean(d.archivedAt),
       });
-      if (d.archivedAt) { total += montant; comptees += 1; }
+      if (d.archivedAt) {
+        total += montant;
+        comptees += 1;
+        if (d.advisorId) parConseiller.set(d.advisorId, (parConseiller.get(d.advisorId) || 0) + montant);
+      }
       else {
         aVenir += montant;
         comptessAVenir += 1;
@@ -263,13 +304,24 @@ export default function Dashboard({
     return {
       total, comptees, aVenir, comptessAVenir, sansMontant,
       pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [],
-      repartitionAVenir, horsPipelineMontant, horsPipelineNb,
+      repartitionAVenir, horsPipelineMontant, horsPipelineNb, devis, devisNb, parConseiller,
       // Archivés d'abord — c'est ce qui est déjà compté — puis par montant.
       lignes: lignes.sort(
         (a, b) => Number(b.archive) - Number(a.archive) || b.montant - a.montant || a.nom.localeCompare(b.nom, 'fr')
       ),
     };
-  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, isSuperAdmin, currentUser?.uid]);
+  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, isSuperAdmin, currentUser?.uid, estNovavisio]);
+
+  // « Rajoute sur le tableau de bord une autre case avec CA de Natacha » —
+  // repérée par son prénom dans la liste des collaborateurs de l'agence
+  // plutôt que par un identifiant écrit en dur, qui deviendrait faux au
+  // premier changement de compte.
+  const collaborateurs = useAssignableUsers(activeAgency.id);
+  const natacha = useMemo(
+    () => collaborateurs.find((u) => /nata[sc]ha/i.test(u.name || '')),
+    [collaborateurs]
+  );
+  const caNatacha = natacha ? chiffreAffairesAgence.parConseiller.get(natacha.id) || 0 : 0;
 
 
   // On ne considère que les agences réellement affichées (l'agence active,
@@ -596,7 +648,9 @@ export default function Dashboard({
               <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
                 {!chiffreAffairesAgence.pipelineTrouve ? (
                   <span className="text-amber-400/90">
-                    Aucun pipeline dont le nom contient « transaction » et « v2 »
+                    {estNovavisio
+                      ? "Aucun pipeline principal pour cette agence"
+                      : 'Aucun pipeline dont le nom contient « transaction » et « v2 »'}
                     {chiffreAffairesAgence.nomsConnus.length > 0 && (
                       <span className="text-slate-500 font-normal block mt-0.5">
                         Trouvés : {chiffreAffairesAgence.nomsConnus.join(', ')}
@@ -620,7 +674,7 @@ export default function Dashboard({
                     <span className="text-slate-500 font-normal block mt-0.5">
                       {chiffreAffairesAgence.dansLePipeline === 0
                         ? 'Aucune affaire dans ce pipeline'
-                        : `sur ${chiffreAffairesAgence.dansLePipeline} dans Transaction V2`}
+                        : `sur ${chiffreAffairesAgence.dansLePipeline} dans ${estNovavisio ? 'le pipeline principal' : 'Transaction V2'}`}
                       {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans montant HT`}
                     </span>
                     {/* Dossier archivé, montant confirmé, mais rattaché à
@@ -629,7 +683,7 @@ export default function Dashboard({
                         perdre en silence. */}
                     {chiffreAffairesAgence.horsPipelineNb > 0 && (
                       <span className="text-amber-400/90 font-normal block mt-0.5">
-                        {chiffreAffairesAgence.horsPipelineNb} archivée{chiffreAffairesAgence.horsPipelineNb > 1 ? 's' : ''} hors Transaction V2 : {formatCurrency(chiffreAffairesAgence.horsPipelineMontant)}
+                        {chiffreAffairesAgence.horsPipelineNb} archivée{chiffreAffairesAgence.horsPipelineNb > 1 ? 's' : ''} hors {estNovavisio ? 'pipeline principal' : 'Transaction V2'} : {formatCurrency(chiffreAffairesAgence.horsPipelineMontant)}
                       </span>
                     )}
                   </>
@@ -638,6 +692,48 @@ export default function Dashboard({
             </div>
             <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977] group-hover:scale-105 transition-transform">
               <TrendingUp className="w-6 h-6" />
+            </div>
+          </div>
+        )}
+
+        {/* Demandé le 2 septembre pour Novavisio : « rajoute sur le tableau de
+            bord une autre case avec CA de Natacha, et une autre case avec CA
+            devis à venir ». Deux tuiles de plus, seulement sur Novavisio :
+            ailleurs, elles n'auraient aucun sens. */}
+        {isSuperAdmin && estNovavisio && (
+          <div className="dash-card p-6 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">
+                CA de {natacha?.name?.split(' ')[0] || 'Natacha'}
+              </span>
+              <div className="text-2xl font-black text-sky-300 tracking-tight">{formatCurrency(caNatacha)}</div>
+              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                {natacha
+                  ? 'Affaires archivées et confirmées, à son nom'
+                  : "Aucun collaborateur nommé Natacha dans cette agence"}
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300 group-hover:scale-105 transition-transform">
+              <TrendingUp className="w-6 h-6" />
+            </div>
+          </div>
+        )}
+
+        {isSuperAdmin && estNovavisio && (
+          <div className="dash-card p-6 rounded-2xl border border-violet-500/25 hover:border-violet-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">CA devis à venir</span>
+              <div className="text-2xl font-black text-violet-300 tracking-tight">
+                {formatCurrency(chiffreAffairesAgence.devis)}
+              </div>
+              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                {chiffreAffairesAgence.devisNb === 0
+                  ? 'Aucun devis en attente — case « CA devis à venir » de la fiche client'
+                  : `${chiffreAffairesAgence.devisNb} devis en attente de signature`}
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-violet-300 group-hover:scale-105 transition-transform">
+              <Briefcase className="w-6 h-6" />
             </div>
           </div>
         )}

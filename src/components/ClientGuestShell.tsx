@@ -4,6 +4,7 @@ import {
   Paperclip, Smile, X, Pencil, Trash2, Square, Image as ImageIcon, FileText, MoreVertical,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { assemblerDictee } from '@/lib/dictee';
 import { useAuth } from '@/context/AuthContext';
 import { useLeadChat, LeadMessage } from '@/hooks/useLeadChat';
 import { toast } from 'sonner';
@@ -108,15 +109,11 @@ const ClientGuestShell: React.FC = () => {
       // retient aussi le segment en cours, sans quoi une phrase courte
       // n'atteignant jamais l'état « définitif » n'écrivait rien du tout.
       const texteDeBase = draft.trim();
+      // Même correctif que la dictée des notes client : sur Android, chaque
+      // prolongement de la phrase arrive comme un NOUVEAU segment définitif,
+      // et tout concaténer répétait la ligne (voir src/lib/dictee.ts).
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let definitif = '';
-        let enCours = '';
-        for (let i = 0; i < event.results.length; i++) {
-          const chunk = event.results[i][0].transcript;
-          if (event.results[i].isFinal) definitif += `${chunk} `;
-          else enCours += chunk;
-        }
-        setDraft(`${texteDeBase} ${definitif} ${enCours}`.replace(/\s+/g, ' ').trim());
+        setDraft(assemblerDictee(event.results, texteDeBase));
       };
       recognition.onerror = () => setIsListening(false);
       recognition.onend = () => setIsListening(false);

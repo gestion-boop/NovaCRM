@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import { Contact } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { toValidUuidOrNull, getAssignedUserIdAsUuid } from '@/data/teamMembers';
@@ -111,6 +112,12 @@ export function supabaseLeadToContact(item: Record<string, unknown>): Contact {
     typeBien: (item.property_type as string) || undefined,
     honoraires: (item.estimated_value as number) || undefined,
     coBorrower: secondaryStr,
+    caDevisAVenir:
+      item.pending_quote_amount === null || item.pending_quote_amount === undefined
+        ? undefined
+        : Number(item.pending_quote_amount),
+    companyName: ((item.company as Record<string, unknown> | null)?.name as string) || undefined,
+    companyAddress: ((item.company as Record<string, unknown> | null)?.address as string) || undefined,
   };
 }
 
@@ -306,6 +313,27 @@ export const useContacts = () => {
         patch.contact_type = updates.contactType;
       }
 
+      if (updates.caDevisAVenir !== undefined) {
+        patch.pending_quote_amount = updates.caDevisAVenir;
+      }
+
+      // Colonne JSON : on la réécrit entière, en conservant ce qu'elle
+      // contient déjà (SIRET, ville... saisis à la création) — sans quoi
+      // modifier l'adresse effacerait le reste.
+      if (updates.companyName !== undefined || updates.companyAddress !== undefined) {
+        const { data: ligne } = await supabase
+          .from('leads')
+          .select('company')
+          .eq('id', id)
+          .maybeSingle();
+        const existant = ((ligne as { company: Record<string, unknown> | null } | null)?.company) || {};
+        patch.company = {
+          ...existant,
+          ...(updates.companyName !== undefined ? { name: updates.companyName } : {}),
+          ...(updates.companyAddress !== undefined ? { address: updates.companyAddress } : {}),
+        };
+      }
+
       if (updates.clientType !== undefined) {
         patch.lead_type = updates.clientType;
       }
@@ -398,11 +426,30 @@ export const useContacts = () => {
         throw new Error('Identifiant du contact manquant.');
       }
 
-      const { error: sbError } = await supabase.from('leads').delete().eq('id', id);
+      // Signalé le 2 septembre : « impossible de supprimer les dossiers en
+      // cours en passant par le pipeline » et « il faut que les utilisateurs
+      // puissent supprimer des clients avec la poubelle ».
+      //
+      // Quand la sécurité de la base (RLS) refuse une suppression, PostgREST
+      // ne renvoie AUCUNE erreur : la requête réussit, simplement zéro ligne
+      // n'est supprimée. Le CRM invalidait alors ses caches, la fiche
+      // réapparaissait telle quelle, et rien n'expliquait pourquoi. On
+      // redemande donc la ligne supprimée : si elle revient vide, c'est un
+      // refus de droits, et on le dit clairement au lieu de faire comme si.
+      const { data: supprimees, error: sbError } = await supabase
+        .from('leads')
+        .delete()
+        .eq('id', id)
+        .select('id');
 
       if (sbError) {
         console.error('Erreur Supabase lors de la suppression :', sbError);
         throw new Error(sbError.message);
+      }
+      if (!supprimees || supprimees.length === 0) {
+        throw new Error(
+          "Suppression refusée par la base de données : votre compte n'a pas le droit de supprimer cette fiche. Un super admin doit ouvrir ce droit (politique de sécurité de la table « leads »)."
+        );
       }
 
       return id;
@@ -416,8 +463,9 @@ export const useContacts = () => {
       ]);
     },
 
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Impossible de supprimer le contact :', error);
+      toast.error(error?.message || 'Impossible de supprimer cette fiche.');
     },
   });
 

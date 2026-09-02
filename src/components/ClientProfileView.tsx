@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { assemblerDictee } from '@/lib/dictee';
 import { AGENCIES, NoteItem, DocItem, Task } from '@/types';
 import TransactionChecklistModal, {
   STAGE_CHECKLISTS,
@@ -24,7 +25,7 @@ import { consentSignedAt, consentValidUntil, isConsentExpired, latestConsent, fo
 import ConsentViewDialog, { useLeadConsents, useConsentSenders, downloadConsentPdf } from './consent/ConsentViewDialog';
 import ConsentStatusBadge from './consent/ConsentStatusBadge';
 import ConsentDocument from './consent/ConsentDocument';
-import { formatCurrency, cn } from '@/lib/utils';
+import { formatCurrency, cn, htDepuisTtc, ttcDepuisHt } from '@/lib/utils';
 import { NOVA_QUICK_REACTIONS, renderEmojiOrNova } from '@/lib/novaReactions';
 import { toast } from 'sonner';
 import TaskModal from './TaskModal';
@@ -512,6 +513,20 @@ export default function ClientProfileView({
 
   const estConciergerie = /concierg/i.test(client?.clientType || '');
 
+  // Novavisio, demandé le 2 septembre : « remettre le CA agence en TTC, et tu
+  // le calculeras dans le tableau de bord en hors taxes ». La saisie se fait
+  // donc en TTC et la base continue de stocker le HT — exactement la règle
+  // déjà appliquée au champ « Commission agence » de la fiche. Les autres
+  // agences confirment leurs montants en HT depuis le 1er septembre : leur
+  // saisie n'est pas touchée, sans quoi tout l'historique serait faussé.
+  const estNovavisio = /novavisio/i.test(
+    AGENCIES.find((a) => a.id === client?.agencyId)?.name || ''
+  );
+  const uniteMontant = estNovavisio ? 'TTC' : 'HT';
+  const versBase = (saisi: number) => (estNovavisio ? Math.round(htDepuisTtc(saisi) * 100) / 100 : saisi);
+  const depuisBase = (stocke: number) =>
+    estNovavisio ? Math.round(ttcDepuisHt(stocke) * 100) / 100 : stocke;
+
   const validerMontantEtape = async () => {
     const saisi = montantEtapeSaisi.trim().replace(',', '.');
     if (saisi === '') { setMontantEtapePrompt(null); return; }
@@ -523,7 +538,7 @@ export default function ClientProfileView({
     setMontantEtapeEnCours(true);
     const { error } = await supabase
       .from('leads')
-      .update({ estimated_value: montant } as any)
+      .update({ estimated_value: versBase(montant) } as any)
       .eq('id', clientId);
     setMontantEtapeEnCours(false);
     if (error) { toast.error(error.message); return; }
@@ -558,7 +573,7 @@ export default function ClientProfileView({
         .eq('id', clientId)
         .maybeSingle();
       const valeur = (data as { estimated_value: number | null } | null)?.estimated_value;
-      setMontantEtapeSaisi(valeur === null || valeur === undefined ? '' : String(valeur));
+      setMontantEtapeSaisi(valeur === null || valeur === undefined ? '' : String(depuisBase(Number(valeur))));
       setMontantEtapePrompt(nom);
     }
   };
@@ -773,7 +788,7 @@ export default function ClientProfileView({
         .maybeSingle();
       if (!vivant) return;
       const valeur = (data as { estimated_value: number | null } | null)?.estimated_value;
-      setMontantHt(valeur === null || valeur === undefined ? '' : String(valeur));
+      setMontantHt(valeur === null || valeur === undefined ? '' : String(depuisBase(Number(valeur))));
       setMontantCharge(true);
     })();
     return () => { vivant = false; };
@@ -833,7 +848,7 @@ export default function ClientProfileView({
           signed_at: signed ? new Date().toISOString() : null,
           // Champ laissé vide : on ne touche pas au montant déjà enregistré,
           // plutôt que de l'effacer par inadvertance.
-          ...(montant === null ? {} : { estimated_value: montant }),
+          ...(montant === null ? {} : { estimated_value: versBase(montant) }),
           ...(pipelineARenseigner ? { pipeline_id: pipelineARenseigner } : {}),
         } as any)
         .eq('id', clientId);
@@ -1989,16 +2004,15 @@ export default function ClientProfileView({
       // devient idempotente et ne perd plus rien.
       const texteDeBase = noteContent.trim();
 
+      // 3. RÉPÉTITION DE LA MÊME LIGNE (signalé le 2 septembre, photo de la
+      //    note de Natacha à l'appui). Concaténer tous les segments
+      //    « définitifs » ne suffit pas : sur Android, Chrome empile une
+      //    nouvelle entrée définitive à chaque prolongement de la phrase, si
+      //    bien qu'on obtenait « j'ai / j'ai vu / j'ai vu le / j'ai vu le
+      //    client... ». L'assemblage est désormais fait par assemblerDictee,
+      //    qui replie les segments qui se prolongent (voir src/lib/dictee.ts).
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let definitif = '';
-        let enCours = '';
-        for (let i = 0; i < event.results.length; i++) {
-          const chunk = event.results[i][0].transcript;
-          if (event.results[i].isFinal) definitif += `${chunk} `;
-          else enCours += chunk;
-        }
-        const complet = `${texteDeBase} ${definitif} ${enCours}`.replace(/\s+/g, ' ').trim();
-        setNoteContent(complet);
+        setNoteContent(assemblerDictee(event.results, texteDeBase));
       };
 
       recognition.onerror = (event: any) => {
@@ -4412,13 +4426,15 @@ export default function ClientProfileView({
                 comptabilisé dans le chiffre d'affaires de l'agence ». Même
                 champ, même circuit — seul l'intitulé change. */}
             <h3 className="text-base font-bold text-white mb-2">
-              {estConciergerie ? 'Montant TTC (conciergerie)' : 'Commission agence, hors taxes'}
+              {estConciergerie
+                ? 'Montant TTC (conciergerie)'
+                : `Commission agence, ${estNovavisio ? 'TTC' : 'hors taxes'}`}
             </h3>
             <p className="text-sm text-slate-300 mb-4">
               La fiche vient de passer en « {montantEtapePrompt} ».{' '}
               {estConciergerie
                 ? 'Quel est le montant TTC de la prestation de conciergerie ?'
-                : 'Quel est le montant de la commission agence, hors taxes ?'}
+                : `Quel est le montant de la commission agence, ${estNovavisio ? 'TTC' : 'hors taxes'} ?`}
             </p>
             <input
               autoFocus
@@ -4468,7 +4484,7 @@ export default function ClientProfileView({
 
             <div className="mb-5">
               <label htmlFor="archive-montant-ht" className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Commission agence, hors taxes
+                Commission agence, {estNovavisio ? 'TTC' : 'hors taxes'}
               </label>
               <input
                 id="archive-montant-ht"
@@ -4481,9 +4497,10 @@ export default function ClientProfileView({
                 className="w-full px-3 py-2.5 rounded-xl bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60 disabled:opacity-60"
               />
               <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                C'est ce montant qui comptera dans le chiffre d'affaires de l'agence. Corrige-le
-                si besoin — laissé vide, celui déjà enregistré est conservé. En répondant
-                « signature faite », l'affaire est comptée comme signée dans les statistiques.
+                C'est ce montant qui comptera dans le chiffre d'affaires de l'agence
+                {estNovavisio ? ', converti en hors taxes' : ''}. Corrige-le si besoin — laissé
+                vide, celui déjà enregistré est conservé. En répondant « signature faite »,
+                l'affaire est comptée comme signée dans les statistiques.
               </p>
             </div>
 

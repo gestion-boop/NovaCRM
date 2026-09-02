@@ -54,6 +54,16 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
   const [typeBien, setTypeBien] = useState(client.typeBien || client.projectType || '');
   const [assignedTo, setAssignedTo] = useState(client.assignedTo || '');
   const [coBorrower, setCoBorrower] = useState(client.coBorrower || '');
+  // Novavisio, demandé le 2 septembre : l'identité et l'adresse du
+  // professionnel, saisies juste sous le choix « Professionnel ».
+  const [companyName, setCompanyName] = useState(client.companyName || '');
+  const [companyAddress, setCompanyAddress] = useState(client.companyAddress || '');
+  // « Dans la fiche client, tu devras créer juste une petite case CA devis à
+  // venir pour marquer le montant » — c'est cette case qui alimente la tuile
+  // du même nom sur le Tableau de bord.
+  const [caDevis, setCaDevis] = useState(
+    client.caDevisAVenir === undefined || client.caDevisAVenir === null ? '' : String(client.caDevisAVenir)
+  );
   const [comments, setComments] = useState(client.comments || '');
   const [saving, setSaving] = useState(false);
   // Signalé : « je ne peux pas l'enregistrer ». L'enregistrement échouait
@@ -107,6 +117,9 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
         typeBien: typeBien.trim(),
         assignedTo,
         coBorrower: coBorrower.trim(),
+        companyName: companyName.trim(),
+        companyAddress: companyAddress.trim(),
+        caDevisAVenir: caDevis.trim() === '' ? undefined : Number(caDevis.trim().replace(',', '.')),
         comments: comments.trim(),
       });
       onClose();
@@ -118,6 +131,14 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
       setSaving(false);
     }
   };
+
+  // « Supprimer également sur cette fiche : type de biens, secteur, budget
+  // max, le numéro de mandat et seconde personne » — pour Novavisio
+  // uniquement : ces champs restent indispensables aux autres agences
+  // (le numéro de mandat alimente les statistiques ImmoSphera).
+  const estNovavisio = /novavisio/i.test(
+    AGENCIES.find((a) => a.id === agencyId)?.name || ''
+  );
 
   const field = 'w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]';
   const label = 'block text-xs font-bold text-slate-300 mb-1';
@@ -193,6 +214,28 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
                 <option value="Professionnel">Professionnel</option>
               </select>
             </div>
+            {contactType === 'Professionnel' && (
+              <>
+                <div>
+                  <label className={label}>Identité du professionnel</label>
+                  <input
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Raison sociale"
+                    className={`${field} placeholder-slate-500`}
+                  />
+                </div>
+                <div>
+                  <label className={label}>Adresse du professionnel</label>
+                  <input
+                    value={companyAddress}
+                    onChange={(e) => setCompanyAddress(e.target.value)}
+                    placeholder="N°, rue, code postal, ville"
+                    className={`${field} placeholder-slate-500`}
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -215,16 +258,36 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={label}>Budget max (€)</label>
-              <input type="number" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} className={field} />
+          {!estNovavisio && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={label}>Budget max (€)</label>
+                <input type="number" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} className={field} />
+              </div>
+              <div>
+                <label className={label}>Numéro de mandat</label>
+                <input value={mandateNumber} onChange={(e) => setMandateNumber(e.target.value)} className={field} />
+              </div>
             </div>
+          )}
+
+          {estNovavisio && (
             <div>
-              <label className={label}>Numéro de mandat</label>
-              <input value={mandateNumber} onChange={(e) => setMandateNumber(e.target.value)} className={field} />
+              <label className={label}>CA devis à venir (€)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={caDevis}
+                onChange={(e) => setCaDevis(e.target.value)}
+                placeholder="Montant du devis envoyé, en attente de signature"
+                className={`${field} placeholder-slate-500`}
+              />
+              <p className="mt-1 text-[10px] text-slate-500">
+                Repris tel quel dans la tuile « CA devis à venir » du Tableau de bord. Vidé, le
+                devis n'y compte plus.
+              </p>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -247,31 +310,35 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {!estNovavisio && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={label}>Secteur</label>
+                <input
+                  value={secteur}
+                  onChange={(e) => setSecteur(e.target.value)}
+                  onBlur={() => setSecteur((v) => formatVille(v.trim()))}
+                  className={field}
+                />
+              </div>
+              <div>
+                <label className={label}>Type de bien / projet</label>
+                <input value={typeBien} onChange={(e) => setTypeBien(e.target.value)} className={field} />
+              </div>
+            </div>
+          )}
+
+          {!estNovavisio && (
             <div>
-              <label className={label}>Secteur</label>
+              <label className={label}>Deuxième personne (conjoint, co-contact)</label>
               <input
-                value={secteur}
-                onChange={(e) => setSecteur(e.target.value)}
-                onBlur={() => setSecteur((v) => formatVille(v.trim()))}
-                className={field}
+                value={coBorrower}
+                onChange={(e) => setCoBorrower(e.target.value)}
+                placeholder="Nom, téléphone, e-mail…"
+                className={`${field} placeholder-slate-500`}
               />
             </div>
-            <div>
-              <label className={label}>Type de bien / projet</label>
-              <input value={typeBien} onChange={(e) => setTypeBien(e.target.value)} className={field} />
-            </div>
-          </div>
-
-          <div>
-            <label className={label}>Deuxième personne (conjoint, co-contact)</label>
-            <input
-              value={coBorrower}
-              onChange={(e) => setCoBorrower(e.target.value)}
-              placeholder="Nom, téléphone, e-mail…"
-              className={`${field} placeholder-slate-500`}
-            />
-          </div>
+          )}
 
           <div>
             <label className={label}>Commentaires</label>

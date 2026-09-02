@@ -27,7 +27,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { formatCurrency, htDepuisTtc } from '@/lib/utils';
+import { formatCurrency, htDepuisTtc, ttcDepuisHt } from '@/lib/utils';
 // Ticket #277 (suite) : même détection de mode jour que l'accueil, pour que
 // les colonnes du pipeline suivent la même bascule vers de vraies couleurs
 // claires (au lieu du filtre global qui pâlit juste le bleu canard).
@@ -1441,8 +1441,17 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
   const [montantHtSaisi, setMontantHtSaisi] = useState('');
   const [montantHtEnCours, setMontantHtEnCours] = useState(false);
 
-  const estEtapeAFacturer = (nom: string) =>
-    nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().includes('factur');
+  const estEtapeAFacturer = (nom: string) => {
+    const sansAccents = nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    // Novavisio facture par « Envoi facture » puis « À régler » : les deux
+    // étapes appellent la même question sur le montant.
+    return sansAccents.includes('factur') || sansAccents.includes('regler');
+  };
+
+  // Novavisio saisit sa commission agence en TTC ; la base conserve le HT,
+  // comme le champ « Commission agence » de la fiche client. Les autres
+  // agences confirment en HT — on ne touche pas à leur historique.
+  const estNovavisio = /novavisio/i.test(activeAgency?.name || '');
 
   const validerMontantHt = async () => {
     if (!pendingMontantPrompt) return;
@@ -1456,7 +1465,10 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     }
     setMontantHtEnCours(true);
     try {
-      await updateDeal.mutateAsync({ id: pendingMontantPrompt.dealId, updates: { amount: montant } });
+      await updateDeal.mutateAsync({
+        id: pendingMontantPrompt.dealId,
+        updates: { amount: estNovavisio ? Math.round(htDepuisTtc(montant) * 100) / 100 : montant },
+      });
       toast.success('Commission agence HT enregistrée');
       setPendingMontantPrompt(null);
     } catch (montantError: any) {
@@ -1549,7 +1561,11 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
       }
       if (demandeMontant) {
         const fiche = contacts.find((c) => c.id === deal.contactId);
-        setMontantHtSaisi(deal.amount ? String(deal.amount) : '');
+        setMontantHtSaisi(
+          deal.amount
+            ? String(estNovavisio ? Math.round(ttcDepuisHt(deal.amount) * 100) / 100 : deal.amount)
+            : ''
+        );
         setPendingMontantPrompt({
           dealId: deal.id,
           dealTitle: deal.title,
@@ -2164,14 +2180,18 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
       {pendingMontantPrompt && (
         <ModalShell
-          title={pendingMontantPrompt.ttc ? 'Montant TTC (conciergerie)' : 'Commission agence, hors taxes'}
+          title={
+            pendingMontantPrompt.ttc
+              ? 'Montant TTC (conciergerie)'
+              : `Commission agence, ${estNovavisio ? 'TTC' : 'hors taxes'}`
+          }
           onClose={() => setPendingMontantPrompt(null)}
         >
           <p className="text-sm text-gray-300 mb-4">
             "{pendingMontantPrompt.dealTitle}" vient de passer en « {pendingMontantPrompt.etape} ».
             {pendingMontantPrompt.ttc
               ? ' Quel est le montant TTC de la prestation de conciergerie ?'
-              : ' Quel est le montant de la commission agence, hors taxes ?'}
+              : ` Quel est le montant de la commission agence, ${estNovavisio ? 'TTC' : 'hors taxes'} ?`}
           </p>
           <input
             autoFocus

@@ -574,6 +574,22 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                       {l.phone}
                     </p>
                   )}
+                  {/* Demandé le 2 septembre pour Novavisio : « cette
+                      information-là doit être à la vue sur la fiche client
+                      quand on est sur le panneau gestion des clients ».
+                      Affiché dès qu'un professionnel est renseigné, quelle
+                      que soit l'agence — un professionnel sans identité
+                      visible n'aide personne. */}
+                  {(l.company?.name || l.company?.address) && (
+                    <p className="flex items-start gap-2.5 text-muted-foreground">
+                      <Building2 className="w-4 h-4 shrink-0 text-primary/60 mt-0.5" />
+                      <span className="min-w-0">
+                        {l.company?.name && <span className="font-semibold text-foreground">{l.company.name}</span>}
+                        {l.company?.name && l.company?.address && <span> — </span>}
+                        {l.company?.address}
+                      </span>
+                    </p>
+                  )}
                 </div>
 
                 {/* ── Pipeline + Commentaires ── */}

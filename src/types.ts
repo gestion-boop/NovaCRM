@@ -19,6 +19,16 @@ export interface Contact {
   assignedTo?: string;
   contactType?: string;
   clientType?: string;
+  // Demandé le 2 septembre pour Novavisio : « quand on choisit Professionnel
+  // juste en dessous, on puisse mettre l'identité du professionnel avec
+  // l'adresse ; cette information doit être à la vue sur la fiche client
+  // quand on est sur le panneau gestion des clients ». Stockées dans la
+  // colonne JSON `leads.company`, déjà prévue pour ça.
+  companyName?: string;
+  companyAddress?: string;
+  // « CA devis à venir » (Novavisio) : montant du devis envoyé, en attente de
+  // signature. Colonne `leads.pending_quote_amount`.
+  caDevisAVenir?: number;
   type?: string;
   budgetMax?: number;
   secteur?: string;
@@ -53,6 +63,9 @@ export interface Deal {
   // Numéro de mandat (leads.mandate_number) — affiché dans le détail du
   // chiffre d'affaires pour retrouver le dossier d'un coup d'œil.
   mandateNumber?: string;
+  // « CA devis à venir » (Novavisio) : montant du devis envoyé, en attente de
+  // signature. Colonne `leads.pending_quote_amount`.
+  caDevisAVenir?: number;
   // Ticket #35 : « c'est le conseiller qui va mettre son affaire sur le
   // pipeline » — c'est donc lui qui porte le chiffre d'affaires personnel.
   // Colonne `assigned_to` de la table leads, avec repli sur `created_by`
