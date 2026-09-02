@@ -144,7 +144,15 @@ export default function Dashboard({
     const pipelinesAgence = pipelinesData.filter((p) =>
       matchesAgency((p as { agency_id?: string }).agency_id || '', activeAgency.id)
     );
-    const principalNovavisio = pipelinesAgence.filter((p) => (p as { is_default?: boolean }).is_default);
+    // « C'est le pipeline Novavisio principal » : on le reconnaît d'abord à
+    // son nom (« principal », « principale »), sinon à l'indicateur « par
+    // défaut » de la base. Un nom explicite l'emporte : c'est celui que
+    // l'utilisateur voit et désigne.
+    const parLeNom = pipelinesAgence.filter((p) => sansAccents(p.name).includes('principal'));
+    const principalNovavisio =
+      parLeNom.length > 0
+        ? parLeNom
+        : pipelinesAgence.filter((p) => (p as { is_default?: boolean }).is_default);
     const pipelinesVises = new Set(
       (estNovavisio
         ? // Le « principal » = celui marqué par défaut ; si aucun ne l'est,
@@ -256,6 +264,9 @@ export default function Dashboard({
       // Novavisio : seules comptent les affaires arrivées à la facturation
       // (« Envoi facture », « À régler »...). Ailleurs, tout le pipeline
       // compte, comme avant.
+      // « Le CA de l'agence se compte à partir de À facturer » : toute étape
+      // de facturation compte donc — « À facturer », « Envoi facture »,
+      // « À régler »... — et rien avant.
       if (estNovavisio && !d.archivedAt) {
         const etape = sansAccents(d.stage || '');
         if (!etape.includes('factur') && !etape.includes('regler')) return;
