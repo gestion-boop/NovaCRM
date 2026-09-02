@@ -639,6 +639,14 @@ export default function Dashboard({
           au milieu des compteurs (prospects, dossiers, tâches), qui suivent
           maintenant en dessous. Hors Novavisio, seul le chiffre d'affaires
           s'affiche : la rangée reste alignée à gauche. */}
+      {/* « Aligne les premières écritures des tableaux » (2 septembre) : les
+          quatre cartes centraient leur contenu verticalement. Celle du chiffre
+          d'affaires ayant trois lignes de commentaire au lieu d'une, son titre
+          remontait — les quatre intitulés ne commençaient pas à la même
+          hauteur. Contenu calé en haut : les titres, puis les montants,
+          s'alignent, quelle que soit la longueur du commentaire en dessous.
+          La grille, elle, garde des cartes de même hauteur : les caler en haut
+          les aurait rendues inégales, ce qui aurait été pire. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Ticket #34 — Chiffre d'affaires de l'agence, super admins seulement.
             Pipeline « Transaction V2 », montants HT (commission agence).
@@ -652,7 +660,7 @@ export default function Dashboard({
             onClick={() => setDetailCa('realise')}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('realise'); } }}
             title="Voir le détail des affaires comptabilisées, ligne par ligne"
-            className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group cursor-pointer text-left">
+            className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Chiffre d'affaires de l'agence</span>
               <div className="text-2xl font-black text-[#F9C977] tracking-tight">
@@ -717,7 +725,7 @@ export default function Dashboard({
             devis à venir ». Deux tuiles de plus, seulement sur Novavisio :
             ailleurs, elles n'auraient aucun sens. */}
         {isSuperAdmin && estNovavisio && (
-          <div className="dash-card p-6 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+          <div className="dash-card p-6 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">
                 Commission {natacha?.name?.split(' ')[0] || 'Natacha'}
@@ -736,7 +744,7 @@ export default function Dashboard({
         )}
 
         {isSuperAdmin && estNovavisio && (
-          <div className="dash-card p-6 rounded-2xl border border-violet-500/25 hover:border-violet-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+          <div className="dash-card p-6 rounded-2xl border border-violet-500/25 hover:border-violet-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Devis signés à venir</span>
               <div className="text-2xl font-black text-violet-300 tracking-tight">
@@ -755,7 +763,7 @@ export default function Dashboard({
         )}
 
         {isSuperAdmin && estNovavisio && (
-          <div className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+          <div className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Récurrence</span>
               <div className="text-2xl font-black text-teal-300 tracking-tight">
