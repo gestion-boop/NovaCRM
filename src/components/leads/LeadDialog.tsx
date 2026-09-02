@@ -84,6 +84,10 @@ export const LeadDialog = ({
 
   // Champ "Provenance" réservé à l'agence Immosphera
   const isImmosphera = (activeAgency?.name ?? "").toLowerCase().includes("immosphera");
+  // Demandé le 2 septembre : « supprimer sur cette fiche type de biens,
+  // secteur, budget max et seconde personne » — pour Novavisio seulement :
+  // ces champs restent utilisés par les autres agences.
+  const isNovavisio = (activeAgency?.name ?? "").toLowerCase().includes("novavisio");
 
   const [form, setForm] = useState<any>({
     first_name: "",
@@ -557,7 +561,16 @@ export const LeadDialog = ({
                   CONTACT_TYPES.includes(form.contact_type) || form.contact_type === "" ? form.contact_type : "Autre"
                 }
                 onValueChange={(v) =>
-                  setForm({ ...form, contact_type: v === "Autre" ? "" : v, contact_type_other: v === "Autre" })
+                  setForm({
+                    ...form,
+                    contact_type: v === "Autre" ? "" : v,
+                    contact_type_other: v === "Autre",
+                    // « Quand on choisit Professionnel, juste en dessous on
+                    //  puisse mettre l'identité du professionnel avec
+                    //  l'adresse » : la saisie société s'ouvre d'elle-même,
+                    //  au lieu d'attendre qu'on pense à déplier le bloc.
+                    has_company: v === "Professionnel" ? true : form.has_company,
+                  })
                 }
               >
                 <SelectTrigger>
@@ -578,6 +591,31 @@ export const LeadDialog = ({
                   value={form.contact_type}
                   onChange={(e) => setForm({ ...form, contact_type: e.target.value })}
                 />
+              )}
+              {/* Novavisio : l'identité et l'adresse du professionnel se
+                  saisissent ici même. Le bloc « Société » complet (SIRET,
+                  fonction, code postal, ville) reste réservé aux autres
+                  agences, qui s'en servent — sans quoi la même information
+                  serait saisissable à deux endroits. */}
+              {isNovavisio && form.contact_type === "Professionnel" && (
+                <div className="mt-2 space-y-2">
+                  <div className="space-y-1">
+                    <Label>Identité du professionnel</Label>
+                    <Input
+                      placeholder="Raison sociale"
+                      value={form.company?.name ?? ""}
+                      onChange={(e) => setForm({ ...form, company: { ...form.company, name: e.target.value } })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Adresse du professionnel</Label>
+                    <Input
+                      placeholder="N°, rue, code postal, ville"
+                      value={form.company?.address ?? ""}
+                      onChange={(e) => setForm({ ...form, company: { ...form.company, address: e.target.value } })}
+                    />
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -619,6 +657,7 @@ export const LeadDialog = ({
             </div>
           )}
 
+          {!isNovavisio && (
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Budget max client (€)</Label>
@@ -641,6 +680,7 @@ export const LeadDialog = ({
               />
             </div>
           </div>
+          )}
 
           {/* Société selon pipeline */}
           <div className="space-y-2">
@@ -762,6 +802,7 @@ export const LeadDialog = ({
           </div>
 
           {/* Deuxième personne (conjoint / co-contact) */}
+          {!isNovavisio && (
           <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
             <button
               type="button"
@@ -825,8 +866,12 @@ export const LeadDialog = ({
               </div>
             )}
           </div>
+          )}
 
-          {/* Panneau Société (professionnel) */}
+          {/* Panneau Société (professionnel) — remplacé sur Novavisio par les
+              deux champs posés sous « Type de contact » (identité + adresse),
+              pour ne pas saisir la même information à deux endroits. */}
+          {!isNovavisio && (
           <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
             <button
               type="button"
@@ -890,6 +935,7 @@ export const LeadDialog = ({
               </div>
             )}
           </div>
+          )}
 
           {/* Attribution super_admin uniquement */}
           {isSuperAdmin && (
