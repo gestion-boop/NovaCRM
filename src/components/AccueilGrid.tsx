@@ -2445,11 +2445,51 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     enfants.forEach((enfant) => idsImposesParUnDossier.add(enfant.id));
   });
 
+  // Signalé le 2 septembre : « je ne vois pas la tuile Académy ». Les grilles
+  // synchronisées depuis le serveur ne passent plus par la réconciliation qui
+  // ajoute les nouveautés — je l'avais retirée le matin même, parce qu'elle
+  // faisait ressortir les cartes des dossiers verrouillés (voir la note dans
+  // le chargement serveur). Conséquence : une tuile ajoutée au CRM
+  // n'apparaissait plus jamais chez ceux dont la grille vient du serveur.
+  //
+  // On la pose donc à l'AFFICHAGE, et seulement dans les cas sûrs :
+  //   - la tuile est réellement absente de la grille ;
+  //   - ce n'est pas une carte imposée par un dossier verrouillé — c'est
+  //     exactement ce qui avait fait sortir les tuiles ImmoSphera ;
+  //   - elle n'a pas été mise à la corbeille par l'utilisateur ;
+  //   - elle passe les filtres de visibilité comme n'importe quelle autre.
+  // Rien n'est écrit dans la grille enregistrée : l'ordre de chacun est
+  // intact, et la tuile prend simplement la première case libre.
+  const idsMasques = (() => {
+    try {
+      const brut = localStorage.getItem('novasphere_hidden_tiles_v1');
+      return new Set<string>(brut ? (JSON.parse(brut) as string[]) : []);
+    } catch {
+      return new Set<string>();
+    }
+  })();
+
+  const dejaReposes = new Set(dossiersVerrouillesAReposer.map((d) => d.id));
+  const nouveautesAPoser = activeFolder
+    ? []
+    : filtrerEnProfondeur(
+        INITIAL_TILES.filter(
+          (t) =>
+            !existsRecursive(tiles, t.id) &&
+            !idsImposesParUnDossier.has(t.id) &&
+            !idsMasques.has(t.id) &&
+            // Un dossier verrouillé absent est déjà reposé juste au-dessus :
+            // sans ce garde-fou, il apparaîtrait deux fois.
+            !dejaReposes.has(t.id)
+        )
+      );
+
   const currentDisplayTiles = [
     ...applyLocks(
       activeFolder ? filtrerEnProfondeur(activeFolder.children || []) : racineFiltree
     ).filter((tuile) => activeFolder || !idsImposesParUnDossier.has(tuile.id)),
     ...(activeFolder ? [] : dossiersVerrouillesAReposer),
+    ...applyLocks(nouveautesAPoser),
   ];
 
   // Cap à 24 tuiles réelles visibles sur l'accueil (ticket #256 : 6 colonnes
