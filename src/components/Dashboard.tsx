@@ -5,7 +5,7 @@ import { AGENCIES } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { Users, Coins, Briefcase, CheckCircle2, ArrowRight, Building, Sparkles, Pencil, TrendingUp, TrendingDown } from 'lucide-react';
+import { Users, Coins, Briefcase, CheckCircle2, ArrowRight, Building, Sparkles, Pencil, TrendingUp, TrendingDown, Target } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useContacts, matchesAgency } from '@/hooks/useContacts';
 import { useDeals } from '@/hooks/useDeals';
@@ -535,6 +535,80 @@ export default function Dashboard({
     }
   };
 
+  // ── Objectif de l'année (demandé le 2 septembre, tableau de bord ImmoSphera) ──
+  // « Tout en haut, le CA de l'agence, le CA à venir, et à droite une
+  // troisième case : Objectif de l'année, avec un camembert en fonction du
+  // CA de l'agence — la soustraction par rapport à l'objectif. »
+  // Un objectif par agence et par année : table annual_goals (migration
+  // 20260902220000), sur le modèle de monthly_goals. Lu ici, écrit par les
+  // super admins depuis la case elle-même.
+  const { data: objectifAnnee, error: erreurObjectifAnnee } = useQuery({
+    queryKey: ['annual-goal', goalAgencyId, currentYear],
+    enabled: !!goalAgencyId && isSuperAdmin && !estNovavisio,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('annual_goals' as any)
+        .select('id, target_amount')
+        .eq('agency_id', goalAgencyId as string)
+        .eq('year', currentYear)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as { id: string; target_amount: number } | null) ?? null;
+    },
+  });
+  const [editionObjectifAnnee, setEditionObjectifAnnee] = useState(false);
+  const [saisieObjectifAnnee, setSaisieObjectifAnnee] = useState('');
+  const [enregistrementObjectifAnnee, setEnregistrementObjectifAnnee] = useState(false);
+
+  const enregistrerObjectifAnnee = async () => {
+    if (!goalAgencyId) return;
+    const montant = parseFloat(saisieObjectifAnnee.replace(/\s/g, '').replace(',', '.'));
+    if (Number.isNaN(montant) || montant < 0) {
+      toast.error("Ce montant n'est pas un nombre valide.");
+      return;
+    }
+    setEnregistrementObjectifAnnee(true);
+    try {
+      const { error } = await supabase
+        .from('annual_goals' as any)
+        .upsert(
+          { agency_id: goalAgencyId, year: currentYear, target_amount: montant, updated_at: new Date().toISOString() },
+          { onConflict: 'agency_id,year' }
+        );
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['annual-goal', goalAgencyId, currentYear] });
+      setEditionObjectifAnnee(false);
+      toast.success(`Objectif ${currentYear} enregistré : ${formatCurrency(montant)}`);
+    } finally {
+      setEnregistrementObjectifAnnee(false);
+    }
+  };
+
+  // Le réalisé de l'année : les mêmes dossiers que la tuile Chiffre
+  // d'affaires (archivés, montant confirmé), restreints à l'année en cours,
+  // datés par leur archivage — comme la ligne « Facturé » du mois.
+  const realiseAnnee = useMemo(
+    () => chiffreAffairesAgence.lignes.reduce((somme, ligne) => {
+      if (!ligne.archive || !ligne.archiveLe) return somme;
+      return new Date(ligne.archiveLe).getFullYear() === currentYear ? somme + ligne.montant : somme;
+    }, 0),
+    [chiffreAffairesAgence, currentYear]
+  );
+  const cibleAnnee = objectifAnnee?.target_amount ?? 0;
+  const resteAnnee = Math.max(0, cibleAnnee - realiseAnnee);
+  const depassementAnnee = Math.max(0, realiseAnnee - cibleAnnee);
+  const pourcentAnnee = cibleAnnee > 0 ? Math.round((realiseAnnee / cibleAnnee) * 100) : null;
+  // Deux parts : ce qui est fait, ce qui reste. Une part vide n'est pas
+  // dessinée (à zéro réalisé, le cercle est tout gris ; objectif atteint,
+  // tout doré).
+  const camembertAnnee = [
+    { name: 'Réalisé', value: realiseAnnee },
+    { name: 'Reste à faire', value: resteAnnee },
+  ].filter((part) => part.value > 0);
+
   // « Facturé » du mois : le même chiffre que la tuile Chiffre d'affaires de
   // l'agence, restreint au mois.
   //
@@ -647,7 +721,7 @@ export default function Dashboard({
           s'alignent, quelle que soit la longueur du commentaire en dessous.
           La grille, elle, garde des cartes de même hauteur : les caler en haut
           les aurait rendues inégales, ce qui aurait été pire. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${estNovavisio ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         {/* Ticket #34 — Chiffre d'affaires de l'agence, super admins seulement.
             Pipeline « Transaction V2 », montants HT (commission agence).
             Y entrent les dossiers ARCHIVÉS dont le montant a été confirmé au
@@ -717,6 +791,135 @@ export default function Dashboard({
             <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977] group-hover:scale-105 transition-transform">
               <TrendingUp className="w-6 h-6" />
             </div>
+          </div>
+        )}
+
+        {/* Demandé le 2 septembre pour ImmoSphera : « tout en haut, le CA de
+            l'agence, le CA à venir, et à droite une troisième case Objectif de
+            l'année, avec un camembert ». Hors Novavisio, la rangée compte donc
+            trois cases ; Novavisio garde ses quatre. Le CA à venir est le
+            même chiffre que le cercle plus bas, sans sa répartition par
+            colonne : ici, le total, à côté du réalisé. */}
+        {isSuperAdmin && !estNovavisio && (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setDetailCa('avenir')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('avenir'); } }}
+            title="Voir le détail des affaires à venir, ligne par ligne"
+            className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">CA à venir</span>
+              <div className="text-2xl font-black text-white tracking-tight">
+                {formatCurrency(chiffreAffairesAgence.aVenir)}
+              </div>
+              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                {chiffreAffairesAgence.comptessAVenir === 0
+                  ? 'Aucun montant HT en attente dans Transaction V2'
+                  : `${chiffreAffairesAgence.comptessAVenir} affaire${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} encore dans Transaction V2, commission agence HT`}
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
+              <Coins className="w-6 h-6" />
+            </div>
+          </div>
+        )}
+
+        {/* Objectif de l'année : le montant se saisit dans la case (crayon),
+            le camembert oppose le réalisé de l'année à ce qui reste — la
+            soustraction demandée. Objectif atteint : cercle tout doré et
+            dépassement affiché. */}
+        {isSuperAdmin && !estNovavisio && (
+          <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 flex items-start justify-between gap-4 group">
+            <div className="space-y-1 min-w-0 flex-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">Objectif de l'année {currentYear}</span>
+              {editionObjectifAnnee ? (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <input
+                    type="number"
+                    min="0"
+                    value={saisieObjectifAnnee}
+                    onChange={(e) => setSaisieObjectifAnnee(e.target.value)}
+                    placeholder="Montant en €"
+                    autoFocus
+                    className="w-32 px-2 py-1 rounded-lg bg-[#07191b] border border-[#1b4b4e] text-white text-xs focus:outline-none focus:border-[#F7BC5F]"
+                    onKeyDown={(e) => { if (e.key === 'Enter') void enregistrerObjectifAnnee(); if (e.key === 'Escape') setEditionObjectifAnnee(false); }}
+                  />
+                  <button
+                    onClick={() => void enregistrerObjectifAnnee()}
+                    disabled={enregistrementObjectifAnnee}
+                    className="px-2.5 py-1 rounded-lg bg-[#F7BC5F] text-slate-950 text-xs font-bold disabled:opacity-60"
+                  >
+                    {enregistrementObjectifAnnee ? 'Enregistrement…' : 'Enregistrer'}
+                  </button>
+                  <button onClick={() => setEditionObjectifAnnee(false)} className="text-xs text-slate-400 hover:text-white">Annuler</button>
+                </div>
+              ) : (
+                <div className="text-2xl font-black text-[#F9C977] tracking-tight flex items-center gap-2">
+                  {cibleAnnee > 0 ? formatCurrency(cibleAnnee) : <span className="text-base font-bold text-slate-500">non défini</span>}
+                  <button
+                    onClick={() => { setSaisieObjectifAnnee(cibleAnnee > 0 ? String(cibleAnnee) : ''); setEditionObjectifAnnee(true); }}
+                    className="text-slate-400 hover:text-white"
+                    title="Définir l'objectif de l'année"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                {erreurObjectifAnnee ? (
+                  <span className="text-amber-400/90">Objectif indisponible : {(erreurObjectifAnnee as Error).message}</span>
+                ) : cibleAnnee <= 0 ? (
+                  "Saisissez l'objectif pour voir le camembert"
+                ) : (
+                  <>
+                    Réalisé en {currentYear} : <b className="text-slate-300">{formatCurrency(realiseAnnee)}</b>
+                    <span className="block mt-0.5">
+                      {depassementAnnee > 0
+                        ? `Objectif dépassé de ${formatCurrency(depassementAnnee)}`
+                        : `Reste à faire : ${formatCurrency(resteAnnee)}`}
+                    </span>
+                  </>
+                )}
+              </span>
+            </div>
+            {cibleAnnee > 0 && !erreurObjectifAnnee ? (
+              <div className="relative w-24 h-24 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={camembertAnnee}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={46}
+                      paddingAngle={camembertAnnee.length > 1 ? 2 : 0}
+                      startAngle={90}
+                      endAngle={-270}
+                      dataKey="value"
+                      stroke="none"
+                      isAnimationActive={false}
+                    >
+                      {camembertAnnee.map((part) => (
+                        <Cell key={part.name} fill={part.name === 'Réalisé' ? '#F7BC5F' : '#3d3d3d'} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: unknown, name: unknown) => [formatCurrency(Number(value) || 0), String(name)]}
+                      contentStyle={{ ...CHART_TOOLTIP_STYLE, fontSize: '11px' }}
+                      itemStyle={{ color: 'var(--ink-1)' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <span className="text-sm font-black text-white">{pourcentAnnee} %</span>
+                </div>
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977] shrink-0">
+                <Target className="w-6 h-6" />
+              </div>
+            )}
           </div>
         )}
 
