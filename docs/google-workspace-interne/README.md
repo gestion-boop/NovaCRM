@@ -17,3 +17,15 @@ d'écran d'avertissement, plus de jeton qui expire au bout de sept jours.
   Preview) et dans Supabase (secrets des Edge Functions), sous les noms
   `GOOGLE_OAUTH_CLIENT_ID_<SOCIÉTÉ>` / `GOOGLE_OAUTH_CLIENT_SECRET_<SOCIÉTÉ>`.
   Vercel ne lit une nouvelle variable qu'au déploiement suivant.
+
+## Vérifier que la prod voit les clés
+
+Ouvrir `https://app.nova360.space/api/google/connect` dans un navigateur :
+la réponse indique, société par société, si les deux clés sont présentes
+dans cet environnement (`true`/`false`), sans jamais afficher une valeur.
+
+Piège rencontré le 2 septembre : des variables saisies dans l'onglet
+« Shared » (équipe Vercel) ne s'appliquent pas au projet tant qu'elles ne
+lui sont pas rattachées. Les saisir dans le projet `crm-novasphere-v2`
+(Settings → Environment Variables, onglet « Project »), Production et
+Preview cochés, puis redéployer.
