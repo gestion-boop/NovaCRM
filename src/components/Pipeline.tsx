@@ -46,6 +46,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Shield,
   Star,
   Trash2,
 } from 'lucide-react';
@@ -104,6 +105,11 @@ interface StoredPipeline extends PipelineDef {
   agencyId: string;
   sortOrder: number;
   createdAt: string;
+  // Demandé le 2 septembre : « les utilisateurs peuvent supprimer les
+  // pipelines, sauf les pipelines officiels ». Est officiel le pipeline
+  // marqué PAR DÉFAUT pour la société (colonne is_default) : c'est le
+  // pipeline de référence, celui sur lequel tout le monde travaille.
+  officiel: boolean;
   // Jamais chargée depuis la base ni écrite à la création : optionnelle,
   // plutôt que déclarée obligatoire et toujours absente.
   updatedAt?: string;
@@ -592,6 +598,19 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
   const canManageStructure = !!currentUser && userProfile?.role === 'super_admin';
 
+  // « Je veux que les utilisateurs puissent supprimer les pipelines, sauf
+  // les pipelines officiels, ou même renommer » (2 septembre). Renommer et
+  // supprimer s'ouvrent donc à tout le monde, SAUF sur le pipeline officiel
+  // — celui marqué par défaut pour la société. La règle est aussi appliquée
+  // côté serveur (api/admin/announcements.ts) : ici, elle ne fait qu'éviter
+  // de proposer un bouton qui serait refusé.
+  //
+  // Ce qui touche à la STRUCTURE (colonnes : ajouter, renommer, supprimer,
+  // réordonner) reste réservé aux super admins : une colonne supprimée
+  // déplace tous les dossiers qui s'y trouvent.
+  const peutRenommerOuSupprimerPipeline = (pipeline?: StoredPipeline | null) =>
+    canManageStructure || (!!pipeline && !pipeline.officiel);
+
   // Ticket #219 : le Pipeline était volontairement verrouillé sur Conseils
   // Finances ("temporaire", cf. historique) — toutes les autres agences
   // affichaient donc silencieusement les pipelines de Conseils Finances au
@@ -831,6 +850,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
             name: p.name,
             agencyId: p.agency_id,
             stages: pStages.length > 0 ? pStages : [...BASE_PIPELINES[0].stages],
+            officiel: Boolean(p.is_default),
             sortOrder: p.is_default ? 0 : 1,
             createdAt: p.created_at,
           };
@@ -871,17 +891,37 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     pipelineId: string,
     updates: Partial<Pick<StoredPipeline, 'name' | 'stages' | 'sortOrder'>>
   ) => {
-    if (!canManageStructure) {
-      setError("Vous n'avez pas la permission de modifier la structure du pipeline.");
+    // Le renommage suit la règle « sauf les pipelines officiels » ; tout ce
+    // qui touche aux COLONNES reste réservé aux super admins.
+    const cible = pipelines.find((p) => p.id === pipelineId);
+    const droitRequis = updates.stages
+      ? canManageStructure
+      : peutRenommerOuSupprimerPipeline(cible);
+    if (!droitRequis) {
+      setError(
+        updates.stages
+          ? "Seul un super admin peut modifier les colonnes d'un pipeline."
+          : 'Le pipeline officiel de la société ne peut être renommé que par un super admin.'
+      );
       throw new Error('Accès refusé');
     }
 
     if (updates.name) {
-      const { error: err } = await supabase
+      // Même piège que la suppression des fiches : si la sécurité de la base
+      // refuse la modification, PostgREST ne renvoie pas d'erreur — zéro
+      // ligne est simplement modifiée. On redemande donc la ligne pour ne
+      // pas annoncer un renommage qui n'a pas eu lieu.
+      const { data: modifiees, error: err } = await supabase
         .from('pipelines')
         .update({ name: updates.name })
-        .eq('id', pipelineId);
+        .eq('id', pipelineId)
+        .select('id');
       if (err) throw err;
+      if (!modifiees || modifiees.length === 0) {
+        throw new Error(
+          "Renommage refusé par la base de données : votre compte n'a pas le droit de modifier ce pipeline. Un super admin doit ouvrir ce droit."
+        );
+      }
     }
 
     if (updates.stages) {
@@ -1033,6 +1073,8 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
         agencyId: currentAgencyId,
         name,
         stages: initialStages,
+        // Un pipeline fraîchement créé n'est jamais celui de référence.
+        officiel: false,
         sortOrder: pipelines.length,
         createdAt: now,
       };
@@ -1080,8 +1122,37 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     }
   };
 
+  // Sans ce bouton, « officiel » serait décidé une fois pour toutes à la
+  // création de la société, sans aucun moyen de le changer — et le pipeline
+  // réellement important pourrait n'être protégé par rien.
+  const marquerCommeOfficiel = async () => {
+    if (!canManageStructure || !activePipeline || activePipeline.officiel) return;
+    setError(null);
+    try {
+      // Un seul pipeline officiel par société : on retire d'abord le marquage
+      // aux autres, sinon deux références coexisteraient.
+      const { error: razErr } = await supabase
+        .from('pipelines')
+        .update({ is_default: false } as any)
+        .eq('agency_id', currentAgencyId);
+      if (razErr) throw razErr;
+      const { error: majErr } = await supabase
+        .from('pipelines')
+        .update({ is_default: true } as any)
+        .eq('id', activePipeline.id);
+      if (majErr) throw majErr;
+
+      setPipelines((prev) => prev.map((p) => ({ ...p, officiel: p.id === activePipeline.id })));
+      setSuccess(`« ${activePipeline.name} » est désormais le pipeline officiel de cette société.`);
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pipelines'] });
+    } catch (officielError: any) {
+      console.error(officielError);
+      setError(officielError?.message || "Impossible de marquer ce pipeline comme officiel.");
+    }
+  };
+
   const handleDeletePipeline = async () => {
-    if (!activePipeline || !canManageStructure) {
+    if (!activePipeline || !peutRenommerOuSupprimerPipeline(activePipeline)) {
       return;
     }
 
@@ -1729,49 +1800,86 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
             <span className="hidden sm:inline">{isActivePipelineDefault ? 'Par défaut' : 'Définir par défaut'}</span>
           </button>
 
+          {peutRenommerOuSupprimerPipeline(activePipeline) && (
+            <button
+              onClick={() => {
+                setError(null);
+                setRenamePipelineTitle(
+                  activePipeline?.name || ''
+                );
+                setShowRenamePipelineModal(
+                  true
+                );
+              }}
+              className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs flex items-center gap-1.5"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Renommer pipeline
+            </button>
+          )}
+
+          {/* Réservé aux super admins : désigne LE pipeline de référence de
+              la société, celui que personne d'autre ne pourra renommer ni
+              supprimer. À ne pas confondre avec l'étoile ci-dessus, qui est
+              un choix personnel d'ouverture. */}
+          {canManageStructure && activePipeline && (
+            <button
+              onClick={() => void marquerCommeOfficiel()}
+              disabled={activePipeline.officiel}
+              title={
+                activePipeline.officiel
+                  ? 'Ce pipeline est le pipeline officiel de la société'
+                  : "Protéger ce pipeline : personne d'autre ne pourra le renommer ni le supprimer"
+              }
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                activePipeline.officiel
+                  ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F] cursor-default'
+                  : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white cursor-pointer'
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">
+                {activePipeline.officiel ? 'Pipeline officiel' : 'Rendre officiel'}
+              </span>
+            </button>
+          )}
+
           {canManageStructure && (
-            <>
-              <button
-                onClick={() => {
-                  setError(null);
-                  setRenamePipelineTitle(
-                    activePipeline?.name || ''
-                  );
-                  setShowRenamePipelineModal(
-                    true
-                  );
-                }}
-                className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs flex items-center gap-1.5"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Renommer pipeline
-              </button>
+            <button
+              onClick={() => {
+                setError(null);
+                setShowCreatePipelineModal(
+                  true
+                );
+              }}
+              className="px-3 py-2 rounded-xl bg-[#F7BC5F] text-black text-xs font-bold flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Nouveau pipeline
+            </button>
+          )}
 
-              <button
-                onClick={() => {
-                  setError(null);
-                  setShowCreatePipelineModal(
-                    true
-                  );
-                }}
-                className="px-3 py-2 rounded-xl bg-[#F7BC5F] text-black text-xs font-bold flex items-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Nouveau pipeline
-              </button>
+          {peutRenommerOuSupprimerPipeline(activePipeline) && (
+            <button
+              onClick={() =>
+                setShowDeletePipelineModal(
+                  true
+                )
+              }
+              className="px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Supprimer pipeline
+            </button>
+          )}
 
-              <button
-                onClick={() =>
-                  setShowDeletePipelineModal(
-                    true
-                  )
-                }
-                className="px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Supprimer pipeline
-              </button>
-            </>
+          {/* Un pipeline officiel ne se renomme ni ne se supprime : on le dit,
+              plutôt que de laisser chercher des boutons absents. */}
+          {activePipeline?.officiel && !canManageStructure && (
+            <span className="px-3 py-2 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 text-[#F9C977] text-xs flex items-center gap-1.5">
+              <Star className="w-3.5 h-3.5 fill-[#F7BC5F]" />
+              Pipeline officiel
+            </span>
           )}
         </div>
       </div>
