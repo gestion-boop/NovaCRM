@@ -1064,7 +1064,16 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // "+", cases à cocher pour masquer/afficher) est retirée : ces 4 tuiles
   // sont désormais fixes pour tout le monde, plus de choix par appareil.
   // PRIORITY_TILES_KEY (localStorage) n'est donc plus lu/écrit ici du tout.
-  const visiblePriorityTiles = priorityOptions.filter((o) => ['rappels', 'chat', 'mail', 'agenda'].includes(o.id));
+  // Demandé le 2 septembre : « je veux simplement que la tuile de tableau de
+  // bord soit sur la barre du haut ; ensuite on aura alerte, chat, agenda,
+  // e-mail dans l'ordre, pour toutes les agences ». L'ordre est donc celui de
+  // cette liste, et non plus celui, arbitraire, dans lequel les tuiles
+  // apparaissent dans INITIAL_TILES : `filter` conservait l'ordre de la
+  // source (rappels, chat, mail, agenda), pas celui demandé.
+  const ORDRE_BARRE_HAUT = ['tableau-de-bord', 'rappels', 'chat', 'agenda', 'mail'];
+  const visiblePriorityTiles = ORDRE_BARRE_HAUT.map((id) =>
+    priorityOptions.find((o) => o.id === id)
+  ).filter((o): o is (typeof priorityOptions)[number] => Boolean(o));
 
   // ── Barre NovaAI (texte + micro) ─────────────────────────────────────
   const [novaInput, setNovaInput] = useState('');
@@ -2579,7 +2588,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
             {/* Demande explicite (30/08/2026, suite) : "grossi encore les 4
                 carrés des priorités c'est trop petits" — w-11/w-4/text-[10px]
                 passés à w-16/w-7/text-xs. */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {visiblePriorityTiles.map((opt) => {
                 const OptIcon = ICON_MAP[opt.iconName || ''] || LayoutGrid;
                 // Demande explicite (30/08/2026) : "sur les icônes accueil et
