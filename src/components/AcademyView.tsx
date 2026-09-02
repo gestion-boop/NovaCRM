@@ -1171,10 +1171,18 @@ export default function AcademyView() {
                       className="relative block w-full aspect-[16/10] bg-slate-200 overflow-hidden"
                     >
                       {r.image_url ? (
+                        // Signalé le 2 septembre : « les images ne sont pas
+                        // centrées ». Elles l'étaient, mais RECADRÉES :
+                        // `object-cover` remplit la vignette en rognant les
+                        // bords, et une diapositive de formation y perdait son
+                        // logo et son titre. On affiche donc l'image ENTIÈRE,
+                        // centrée, quitte à laisser un liseré clair autour :
+                        // sur une couverture qui porte du texte, tout voir
+                        // vaut mieux que tout remplir.
                         <img
                           src={r.image_url}
                           alt=""
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-[1.03]"
                         />
                       ) : (
                         <span className="w-full h-full flex flex-col items-center justify-center gap-3 bg-slate-100 text-slate-400">
