@@ -4,7 +4,8 @@ import {
   Home, LayoutDashboard, Users, GitFork, FolderKanban, Calendar, 
   Bell, MessageSquare, Mail, UserPlus, FileText, FileEdit, 
   LifeBuoy, Settings, ChevronDown, ChevronLeft, ChevronRight, LogOut,
-  Building2, Sparkles, Camera as CameraIcon, X, Map as MapIcon, Sun, Moon
+  Building2,
+  GraduationCap, Sparkles, Camera as CameraIcon, X, Map as MapIcon, Sun, Moon
 } from 'lucide-react';
 import { AGENCIES, Agency } from '@/types';
 import { useAuth } from '@/context/AuthContext';
@@ -47,6 +48,11 @@ export const NAV_ITEMS = [
   { id: 'assistant-ia', label: 'Nova', icon: Sparkles },
   { id: 'reserver-camera', label: 'Réserver caméra', icon: CameraIcon },
   { id: 'immosphera360', label: 'Immosphera360', icon: Building2 },
+  // Académy : bibliothèque de procédures de l'agence. Réservée à ImmoSphera
+  // (filtrée juste en dessous, comme la carte Novavisio). Elle figure dans le
+  // menu ET dans les tuiles : une entrée de menu se trouve toujours, une
+  // tuile dépend de la grille enregistrée de chacun.
+  { id: 'academy', label: 'Académy', icon: GraduationCap },
   // Carte de prospection Novavisio (accès aussi filtré côté composant, voir
   // CarteProspectionView.tsx) — même principe que Immosphera360 ci-dessus.
   { id: 'carte-novavisio', label: 'Carte', icon: MapIcon },
@@ -81,9 +87,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // menu quelle que soit l'agence active, y compris ImmoSphera et Conseils
   // Finances — même principe que canSeeNovavisio dans AccueilGrid.tsx.
   const isNovavisioActive = /novavisio/i.test(activeAgency?.name ?? '');
+  const isImmospheraActive = /immosphera/i.test(activeAgency?.name ?? '');
   const visibleNavItems = useMemo(
-    () => (isNovavisioActive ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.id !== 'carte-novavisio')),
-    [isNovavisioActive]
+    () =>
+      NAV_ITEMS.filter(
+        (item) =>
+          (item.id !== 'carte-novavisio' || isNovavisioActive) &&
+          (item.id !== 'academy' || isImmospheraActive)
+      ),
+    [isNovavisioActive, isImmospheraActive]
   );
 
   // Filter available agencies according to user rights/profile
