@@ -1500,7 +1500,16 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         const tuilesServeur = lireDispositionAgence((data as any)?.home_tiles, agencyId);
         if (tuilesServeur && tuilesServeur.length > 0) {
           skipNextTilesSaveRef.current = true;
-          setTiles(reconcilierGrille((tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))));
+          // ATTENTION — ne pas repasser cette grille par reconcilierGrille.
+          // Essayé le 2 septembre, pour que les nouveaux modules
+          // apparaissent aussi sur les grilles synchronisées : les tuiles
+          // ImmoSphera sont ressorties de leur dossier. Le contenu d'un
+          // dossier VERROUILLÉ n'est pas stocké dans la grille (il est
+          // imposé à l'affichage par applyLocks, à partir de
+          // agency_ui_settings) : la réconciliation ne les trouve donc pas,
+          // les croit disparues, et les repose à la racine. Même piège que
+          // les « cinq Immosphera » du 1er septembre.
+          setTiles((tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t)));
         }
         const slotsServeur = lireDispositionAgence((data as any)?.home_root_slots, agencyId);
         if (slotsServeur) {
@@ -2354,9 +2363,26 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // niveaux, y compris au contenu des dossiers. Les filtres à plat qui se
   // trouvaient ici faisaient double emploi — et surtout ne voyaient jamais ce
   // qui était rangé dans un dossier.
+  // « Ils ne pourront pas sortir des dossiers » : une carte imposée par un
+  // dossier verrouillé n'a rien à faire à la racine. Certaines grilles en
+  // ont gardé une copie (posée à tort par la réconciliation, cf. la note
+  // dans le chargement serveur juste au-dessus) : on ne l'affiche pas deux
+  // fois — elle reste visible dans son dossier, où le verrou la place.
+  // Sans verrou chargé, la liste est vide et rien n'est retiré.
+  const racineFiltree = filtrerEnProfondeur(tiles);
+  const idsImposesParUnDossier = new Set<string>();
+  Object.entries(lockedTiles).forEach(([dossierId, lock]) => {
+    const enfants = (lock as TileItemNode).children;
+    if (!enfants || enfants.length === 0) return;
+    // Le dossier doit être RÉELLEMENT visible pour cet utilisateur : sinon
+    // retirer ses cartes de la racine les ferait disparaître complètement.
+    if (!existsRecursive(racineFiltree, dossierId)) return;
+    enfants.forEach((enfant) => idsImposesParUnDossier.add(enfant.id));
+  });
+
   const currentDisplayTiles = applyLocks(
-    filtrerEnProfondeur(activeFolder ? (activeFolder.children || []) : tiles)
-  );
+    activeFolder ? filtrerEnProfondeur(activeFolder.children || []) : racineFiltree
+  ).filter((tuile) => activeFolder || !idsImposesParUnDossier.has(tuile.id));
 
   // Cap à 24 tuiles réelles visibles sur l'accueil (ticket #256 : 6 colonnes
   // fixes × 4 lignes, au lieu de 7×3 quand la grille était responsive) — au-
