@@ -72,6 +72,70 @@ function addressFromCompany(company: unknown): string | null {
   return parts.length ? parts.join(", ") : null;
 }
 
+// Demandé le 2 septembre : « quand on passe la souris sur un pin's de la
+// carte, on doit voir le fichier du client dessus ». Le contenu est injecté
+// en HTML dans une infobulle Leaflet : tout ce qui vient de la base doit donc
+// être échappé, sinon une apostrophe ou un chevron dans un nom casse la carte
+// (et, dans le pire des cas, y injecte du balisage).
+function echapper(valeur: unknown): string {
+  return String(valeur ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Petite ligne d'information avec son icône, uniquement si la donnée existe.
+function ligneFiche(icone: string, valeur: string | null | undefined): string {
+  if (!valeur || !String(valeur).trim()) return '';
+  return `
+    <div style="display:flex;gap:7px;align-items:flex-start;margin-top:5px">
+      <span style="flex:0 0 13px;opacity:0.75;margin-top:1px">${icone}</span>
+      <span style="flex:1;min-width:0;color:#cbd5e1;font-size:11.5px;line-height:1.35;word-break:break-word">${echapper(valeur)}</span>
+    </div>`;
+}
+
+const ICONE_TEL =
+  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F7BC5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+const ICONE_MAIL =
+  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F7BC5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>';
+const ICONE_ADRESSE =
+  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F7BC5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+
+/**
+ * La fiche client affichée au survol du pin : bandeau coloré à la couleur du
+ * pin, nom, pastille d'état, puis téléphone / e-mail / adresse s'ils sont
+ * renseignés. Rien d'inventé : une information absente ne laisse pas de ligne
+ * vide.
+ */
+function ficheSurvol(
+  nom: string,
+  couleur: string,
+  etat: string,
+  etape: string | null,
+  telephone: string | null,
+  email: string | null,
+  adresse: string | null
+): string {
+  return `
+    <div style="width:232px;border-radius:14px;overflow:hidden;background:#07191b;border:1px solid #1b4e52;box-shadow:0 10px 30px rgba(0,0,0,0.45);font-family:inherit">
+      <div style="height:4px;background:${couleur}"></div>
+      <div style="padding:10px 12px 11px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+          <p style="margin:0;font-size:13px;font-weight:700;color:#ffffff;line-height:1.25">${echapper(nom)}</p>
+          <span style="flex:0 0 auto;font-size:9.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:3px 7px;border-radius:999px;background:${couleur}22;color:${couleur};border:1px solid ${couleur}55">${echapper(etat)}</span>
+        </div>
+        ${etape ? `<p style="margin:3px 0 0;font-size:10.5px;color:#7c9ba0;letter-spacing:0.02em">${echapper(etape)}</p>` : ''}
+        ${telephone || email || adresse ? '<div style="height:1px;background:#153c3f;margin:9px 0 4px"></div>' : ''}
+        ${ligneFiche(ICONE_TEL, telephone)}
+        ${ligneFiche(ICONE_MAIL, email)}
+        ${ligneFiche(ICONE_ADRESSE, adresse)}
+        <p style="margin:9px 0 0;font-size:10px;color:#5b7c81">Cliquer pour ouvrir la fiche</p>
+      </div>
+    </div>`;
+}
+
 function createPinIcon(color: string, pulse: boolean): L.DivIcon {
   return L.divIcon({
     className: "",
@@ -178,14 +242,26 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
         : lead.temperature
           ? TEMPERATURE_LABEL[lead.temperature]
           : stage?.name || "";
-      marker.bindPopup(`
-        <div style="min-width:170px">
-          <p style="font-weight:600;font-size:13px;margin:0">${lead.full_name}</p>
-          ${address ? `<p style="font-size:11px;color:#888;margin:2px 0">${address}</p>` : ""}
-          ${stage ? `<p style="font-size:10px;color:#aaa;margin:2px 0">${stage.name}</p>` : ""}
-          ${statusLabel ? `<p style="font-size:11px;font-weight:700;margin:4px 0 0;color:${color}">${statusLabel}</p>` : ""}
-        </div>
-      `);
+      // Infobulle au SURVOL plutôt que fenêtre au clic : le clic, lui, ouvre
+      // la vraie fiche (voir juste en dessous). Sur mobile, où il n'y a pas
+      // de survol, Leaflet l'affiche au premier appui.
+      marker.bindTooltip(
+        ficheSurvol(
+          lead.full_name,
+          color,
+          statusLabel || 'Non renseigné',
+          stage?.name ?? null,
+          lead.phone,
+          lead.email,
+          address
+        ),
+        {
+          direction: 'top',
+          offset: [0, -28],
+          opacity: 1,
+          className: 'nova-carte-fiche',
+        }
+      );
       marker.on("click", () => onSelectContact?.(lead.id));
       marker.addTo(map);
       markersRef.current.push(marker);
@@ -214,6 +290,21 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
         @keyframes carteprospection-pulse {
           0% { transform: scale(0.6); opacity: 0.35; }
           100% { transform: scale(1.6); opacity: 0; }
+        }
+        /* Leaflet habille ses infobulles d'un cadre blanc à coins carrés : on
+           le neutralise pour ne garder que la fiche elle-même. */
+        .leaflet-tooltip.nova-carte-fiche {
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+          padding: 0;
+          border-radius: 14px;
+          animation: carteprospection-fiche 0.14s ease-out;
+        }
+        .leaflet-tooltip.nova-carte-fiche::before { display: none; }
+        @keyframes carteprospection-fiche {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
 
