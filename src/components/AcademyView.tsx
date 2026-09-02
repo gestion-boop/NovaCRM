@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   GraduationCap, FileText, PlayCircle, Plus, Search, Trash2, X, Loader2, Upload, Link as LinkIcon, Pencil,
+  CheckCircle2, Circle, Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -77,6 +78,13 @@ export default function AcademyView() {
   const [recherche, setRecherche] = useState('');
   const [rubriqueActive, setRubriqueActive] = useState<string | null>(null);
   const [ouverte, setOuverte] = useState<Ressource | null>(null);
+  // Demandé le 2 septembre : « les utilisateurs, une fois vu, pourront cocher
+  // valider la procédure comme quoi ils l'ont vue. » Validation personnelle :
+  // chacun coche pour lui. Les super admins voient en plus combien de
+  // personnes ont validé chaque procédure.
+  const [validees, setValidees] = useState<Set<string>>(new Set());
+  const [validationsParRessource, setValidationsParRessource] = useState<Map<string, number>>(new Map());
+  const [validationEnCours, setValidationEnCours] = useState<string | null>(null);
 
   // Formulaire d'ajout / modification (super admins)
   const [formOuvert, setFormOuvert] = useState(false);
@@ -113,12 +121,77 @@ export default function AcademyView() {
           : error.message
       );
     }
-    setRessources(((data as unknown as Ressource[]) || []));
+    const liste = ((data as unknown as Ressource[]) || []);
+    setRessources(liste);
     setChargement(false);
+
+    // Les validations arrivent séparément : la table est filtrée par la
+    // sécurité de la base (chacun les siennes, les super admins toutes), donc
+    // le même appel sert aux deux usages sans traitement particulier ici.
+    if (liste.length > 0 && currentUser?.uid) {
+      const { data: lectures } = await supabase
+        .from('academy_reads' as any)
+        .select('resource_id, user_id')
+        .in('resource_id', liste.map((r) => r.id));
+      const miennes = new Set<string>();
+      const compte = new Map<string, number>();
+      ((lectures as unknown as { resource_id: string; user_id: string }[]) || []).forEach((l) => {
+        compte.set(l.resource_id, (compte.get(l.resource_id) || 0) + 1);
+        if (l.user_id === currentUser.uid) miennes.add(l.resource_id);
+      });
+      setValidees(miennes);
+      setValidationsParRessource(compte);
+    } else {
+      setValidees(new Set());
+      setValidationsParRessource(new Map());
+    }
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void charger(); }, [activeAgency?.id]);
+  useEffect(() => { void charger(); }, [activeAgency?.id, currentUser?.uid]);
+
+  const basculerValidation = async (r: Ressource) => {
+    if (!currentUser?.uid) return;
+    const dejaValidee = validees.has(r.id);
+    setValidationEnCours(r.id);
+    try {
+      if (dejaValidee) {
+        const { error } = await supabase
+          .from('academy_reads' as any)
+          .delete()
+          .eq('resource_id', r.id)
+          .eq('user_id', currentUser.uid);
+        if (error) throw error;
+        setValidees((prev) => { const suivant = new Set(prev); suivant.delete(r.id); return suivant; });
+        setValidationsParRessource((prev) => {
+          const suivant = new Map(prev);
+          suivant.set(r.id, Math.max(0, (suivant.get(r.id) || 1) - 1));
+          return suivant;
+        });
+      } else {
+        const { error } = await supabase
+          .from('academy_reads' as any)
+          .insert({ resource_id: r.id, user_id: currentUser.uid } as any);
+        if (error) throw error;
+        setValidees((prev) => new Set(prev).add(r.id));
+        setValidationsParRessource((prev) => {
+          const suivant = new Map(prev);
+          suivant.set(r.id, (suivant.get(r.id) || 0) + 1);
+          return suivant;
+        });
+        toast.success(`« ${r.titre} » validée.`);
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error(
+        String(e?.message || '').includes('academy_reads')
+          ? "Le suivi de lecture n'est pas encore en place : la migration 20260902170000 doit être appliquée."
+          : e?.message || 'Impossible d\'enregistrer cette validation.'
+      );
+    } finally {
+      setValidationEnCours(null);
+    }
+  };
 
   const rubriques = useMemo(() => {
     const compte = new Map<string, number>();
@@ -322,6 +395,32 @@ export default function AcademyView() {
         </div>
       </div>
 
+      {/* Avancement personnel : combien de procédures restent à voir. Un
+          chiffre, pas un tableau de bord — il sert à savoir s'il reste
+          quelque chose, pas à être analysé. */}
+      {ressources.length > 0 && (
+        <div className="flex items-center gap-3 rounded-2xl bg-[#0a1e20] border border-white/10 px-4 py-3">
+          <CheckCircle2
+            className={`w-5 h-5 shrink-0 ${validees.size === ressources.length ? 'text-emerald-400' : 'text-slate-500'}`}
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-white">
+              {validees.size === ressources.length
+                ? 'Toutes les procédures sont validées.'
+                : `${validees.size} procédure${validees.size > 1 ? 's' : ''} validée${validees.size > 1 ? 's' : ''} sur ${ressources.length}`}
+            </p>
+            <div className="mt-1.5 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  validees.size === ressources.length ? 'bg-emerald-500' : 'bg-[#F7BC5F]'
+                }`}
+                style={{ width: `${Math.round((validees.size / ressources.length) * 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Rubriques — on voit où chercher avant même de lire. */}
       {rubriques.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -401,8 +500,37 @@ export default function AcademyView() {
                           <div className="flex items-center gap-2 mt-2 text-[10px] font-bold uppercase tracking-wider">
                             <span style={{ color: accent }}>{estVideo ? 'Vidéo' : 'PDF'}</span>
                             {r.duree && <span className="text-slate-500">· {r.duree}</span>}
+                            {estSuperAdmin && (validationsParRessource.get(r.id) || 0) > 0 && (
+                              <span className="text-slate-500 flex items-center gap-1 normal-case tracking-normal">
+                                · <Users className="w-3 h-3" />
+                                {validationsParRessource.get(r.id)} validée
+                                {(validationsParRessource.get(r.id) || 0) > 1 ? 's' : ''}
+                              </span>
+                            )}
                           </div>
                         </div>
+                      </button>
+
+                      {/* La validation est un geste à part, jamais déclenchée
+                          par l'ouverture : on coche parce qu'on a lu, pas
+                          parce qu'on a cliqué. */}
+                      <button
+                        onClick={() => void basculerValidation(r)}
+                        disabled={validationEnCours === r.id}
+                        className={`flex items-center gap-2 px-4 py-2.5 border-t text-xs font-bold transition-colors disabled:opacity-60 ${
+                          validees.has(r.id)
+                            ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15'
+                            : 'border-white/10 bg-white/[0.02] text-slate-400 hover:bg-white/5 hover:text-white'
+                        }`}
+                      >
+                        {validationEnCours === r.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : validees.has(r.id) ? (
+                          <CheckCircle2 className="w-4 h-4" />
+                        ) : (
+                          <Circle className="w-4 h-4" />
+                        )}
+                        {validees.has(r.id) ? 'Procédure validée' : 'Marquer comme vue'}
                       </button>
 
                       {estSuperAdmin && (
