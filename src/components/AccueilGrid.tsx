@@ -535,7 +535,9 @@ const INITIAL_TILES: TileItemNode[] = [
     id: 'immosphera-academy',
     title: 'Académy',
     iconName: 'Award',
-    gradient: 'from-[#B45309] via-[#92400E] to-[#451A03]',
+    // Demandé le 2 septembre : « je veux la tuile en bleue ». Bleu Saphir,
+    // celui de la palette de l'application (voir PRESET_GRADIENTS).
+    gradient: 'from-[#00B4DB] via-[#0083B0] to-[#005C8A]',
     badgeCount: 0,
     navTarget: 'academy',
   },

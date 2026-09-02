@@ -58,7 +58,13 @@ const RUBRIQUES_SUGGEREES = [
 
 const lienOuvrable = (r: Ressource) => r.external_url || r.drive_web_view_link || '';
 
-/** Transforme un lien de partage en lien lisible dans une fenêtre intégrée. */
+/**
+ * Transforme un lien de partage en lien affichable dans une fenêtre intégrée.
+ *
+ * Demandé le 2 septembre : « pour les PDF et vidéos, je voudrais avoir un
+ * visuel en iframe ». Les PDF passent donc par la même fenêtre que les
+ * vidéos, au lieu de partir dans un onglet séparé.
+ */
 function lienIntegrable(url: string): string | null {
   const drive = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
   if (drive) return `https://drive.google.com/file/d/${drive[1]}/preview`;
@@ -66,6 +72,9 @@ function lienIntegrable(url: string): string | null {
   if (youtube) return `https://www.youtube.com/embed/${youtube[1]}`;
   const vimeo = url.match(/vimeo\.com\/(\d+)/);
   if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
+  // Un PDF servi en direct s'affiche tel quel dans un cadre : le lecteur du
+  // navigateur s'en charge, sans bibliothèque à embarquer.
+  if (/\.pdf(\?|#|$)/i.test(url)) return url;
   return null;
 }
 
@@ -340,9 +349,10 @@ export default function AcademyView() {
   const ouvrirRessource = (r: Ressource) => {
     const url = lienOuvrable(r);
     if (!url) { toast.error('Aucun fichier ni lien sur cette ressource.'); return; }
-    // Une vidéo se regarde sur place ; un PDF s'ouvre en grand, dans un onglet,
-    // où on peut le faire défiler, l'imprimer et le télécharger.
-    if (r.type === 'video' && lienIntegrable(url)) setOuverte(r);
+    // Vidéo comme PDF : on reste dans l'application. Le passage par un onglet
+    // n'a lieu que si le lien ne peut pas s'afficher dans un cadre — un
+    // partage Dropbox, une page web quelconque.
+    if (lienIntegrable(url)) setOuverte(r);
     else window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -568,16 +578,30 @@ export default function AcademyView() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-4xl rounded-2xl bg-[#07191b] border border-[#1b4e52] overflow-hidden shadow-2xl"
+            className={`w-full ${ouverte.type === 'video' ? 'max-w-4xl' : 'max-w-5xl'} rounded-2xl bg-[#07191b] border border-[#1b4e52] overflow-hidden shadow-2xl`}
           >
             <div className="flex items-center justify-between gap-4 px-5 py-3 border-b border-[#144447]/60">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-white truncate">{ouverte.titre}</p>
                 <p className="text-[11px] text-slate-400">{ouverte.rubrique}{ouverte.duree ? ` · ${ouverte.duree}` : ''}</p>
               </div>
-              <button onClick={() => setOuverte(null)} className="text-slate-400 hover:text-white text-xl leading-none px-1">×</button>
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Certains PDF refusent d'être affichés dans un cadre : la
+                    sortie de secours est toujours là, plutôt qu'un cadre
+                    blanc sans explication. */}
+                <a
+                  href={lienOuvrable(ouverte)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-semibold text-slate-400 hover:text-[#F9C977] underline decoration-dotted underline-offset-4"
+                >
+                  Ouvrir dans un onglet
+                </a>
+                <button onClick={() => setOuverte(null)} className="text-slate-400 hover:text-white text-xl leading-none px-1">×</button>
+              </div>
             </div>
-            <div className="aspect-video bg-black">
+            {/* Une vidéo garde ses proportions ; un PDF se lit en hauteur. */}
+            <div className={ouverte.type === 'video' ? 'aspect-video bg-black' : 'h-[78vh] bg-[#0b1416]'}>
               <iframe
                 src={lienIntegrable(lienOuvrable(ouverte)) || ''}
                 title={ouverte.titre}
