@@ -179,7 +179,54 @@ const WORKSPACE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
 ].join(' ');
 
+// Retour de l'écran d'autorisation Google de la société (api/google/callback) :
+// `?google=connecte` ou `?google_erreur=...` sur l'adresse de l'application.
+// Consommé une seule fois — l'adresse est nettoyée aussitôt.
+export const traiterRetourConnexionGoogle = (): { statut: 'connecte' } | { statut: 'erreur'; message: string } | null => {
+  try {
+    const url = new URL(window.location.href);
+    const ok = url.searchParams.get('google');
+    const erreur = url.searchParams.get('google_erreur');
+    if (!ok && !erreur) return null;
+    url.searchParams.delete('google');
+    url.searchParams.delete('google_erreur');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    if (ok === 'connecte') {
+      // Le prochain appel repart chercher le jeton fraîchement enregistré
+      // côté serveur, au lieu de resservir un éventuel jeton périmé.
+      cachedAccessToken = null;
+      return { statut: 'connecte' };
+    }
+    return { statut: 'erreur', message: erreur || 'Connexion Google refusée.' };
+  } catch {
+    return null;
+  }
+};
+
 export const reconnectGoogleWorkspace = async (): Promise<void> => {
+  // Décidé le 2 septembre : trois Workspace distincts, trois applications
+  // Google « internes ». On demande d'abord au serveur l'adresse
+  // d'autorisation de la société de l'utilisateur (api/google/connect) ; si
+  // sa société n'a pas encore ses clés, on retombe sur la connexion
+  // historique ci-dessous, inchangée.
+  try {
+    const { data } = await supabase.auth.getSession();
+    const jeton = data.session?.access_token;
+    if (jeton) {
+      const reponse = await fetch('/api/google/connect', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${jeton}` },
+      });
+      const corps = (await reponse.json().catch(() => ({}))) as { url?: string; configured?: boolean };
+      if (reponse.ok && corps?.url) {
+        window.location.href = corps.url;
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn('[workspace] connexion interne indisponible, repli sur la connexion historique :', e);
+  }
+
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {

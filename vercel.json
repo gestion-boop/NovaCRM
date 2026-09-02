@@ -7,18 +7,38 @@
   },
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/auth/kdrive/callback", "destination": "/api/settings/bootstrap" },
-    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/auth/kdrive/callback",
+      "destination": "/api/settings/bootstrap"
+    },
+    {
+      "source": "/api/google/connect",
+      "destination": "/api/admin/drive/google-connect"
+    },
+    {
+      "source": "/api/google/callback",
+      "destination": "/api/admin/drive/google-callback"
+    },
+    {
+      "source": "/((?!api/|assets/).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
       "source": "/assets/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     }
   ],
   "crons": [
-    { "path": "/api/cron/daily-summary", "schedule": "0 9 * * *" }
+    {
+      "path": "/api/cron/daily-summary",
+      "schedule": "0 9 * * *"
+    }
   ]
 }
