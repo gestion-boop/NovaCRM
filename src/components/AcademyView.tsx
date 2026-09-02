@@ -107,6 +107,15 @@ export default function AcademyView() {
   const [validees, setValidees] = useState<Set<string>>(new Set());
   const [validationsParRessource, setValidationsParRessource] = useState<Map<string, number>>(new Map());
   const [validationEnCours, setValidationEnCours] = useState<string | null>(null);
+  // Demandé le 2 septembre : « voilà ce que je voudrais que tu mettes dans
+  // ImmoSphera Académie en fond d'écran, et par-dessus on pourra mettre les
+  // dossiers qui sont alignés ». L'image porte le logo et l'identité de la
+  // société : elle se règle depuis l'écran, par un super admin, et se range
+  // avec les autres réglages d'apparence de l'agence — pas dans le code, sans
+  // quoi il faudrait une livraison à chaque changement de visuel.
+  const [fond, setFond] = useState<string | null>(null);
+  const [fondEnCours, setFondEnCours] = useState(false);
+  const champFond = useRef<HTMLInputElement>(null);
 
   // Formulaire d'ajout / modification (super admins)
   const [formOuvert, setFormOuvert] = useState(false);
@@ -178,6 +187,21 @@ export default function AcademyView() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void charger(); }, [activeAgency?.id, currentUser?.uid]);
+
+  useEffect(() => {
+    if (!activeAgency?.id || activeAgency.id === 'all') { setFond(null); return; }
+    let vivant = true;
+    (async () => {
+      const { data } = await supabase
+        .from('agency_ui_settings' as any)
+        .select('academy_background_url')
+        .eq('agency_id', activeAgency.id)
+        .maybeSingle();
+      if (!vivant) return;
+      setFond(((data as { academy_background_url: string | null } | null)?.academy_background_url) || null);
+    })();
+    return () => { vivant = false; };
+  }, [activeAgency?.id]);
 
   const basculerValidation = async (r: Ressource) => {
     if (!currentUser?.uid) return;
@@ -297,6 +321,31 @@ export default function AcademyView() {
     return supabase.storage.from('academy').getPublicUrl(chemin).data.publicUrl;
   };
 
+  const changerFond = async (image: File) => {
+    if (!activeAgency?.id || activeAgency.id === 'all') return;
+    setFondEnCours(true);
+    try {
+      const url = await deposerImage(image, 'fond');
+      const { error } = await supabase
+        .from('agency_ui_settings' as any)
+        .upsert({ agency_id: activeAgency.id, academy_background_url: url } as any, { onConflict: 'agency_id' });
+      if (error) {
+        throw new Error(
+          error.message.includes('academy_background_url')
+            ? "La colonne de l'image de fond n'existe pas encore : la migration 20260902190000 doit être appliquée."
+            : error.message
+        );
+      }
+      setFond(url);
+      toast.success("Image de fond mise à jour pour toute l'agence.");
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Impossible d'enregistrer cette image de fond.");
+    } finally {
+      setFondEnCours(false);
+    }
+  };
+
   const enregistrer = async () => {
     if (!currentUser || !activeAgency?.id || activeAgency.id === 'all') {
       toast.error("Sélectionnez une société avant d'ajouter une ressource.");
@@ -406,113 +455,185 @@ export default function AcademyView() {
     );
   }
 
-  const boutonFiltre = (actif: boolean) =>
-    `px-1 pb-1 text-sm font-semibold transition-colors border-b-2 ${
-      actif ? 'text-white border-[#F7BC5F]' : 'text-slate-400 border-transparent hover:text-white'
-    }`;
+  // Deux niveaux, comme demandé : d'abord des DOSSIERS, puis les formations
+  // qu'ils contiennent. La recherche, elle, court-circuite les dossiers : qui
+  // sait ce qu'il cherche ne veut pas ouvrir trois classeurs.
+  const enRecherche = recherche.trim().length > 0;
+  const auNiveauDossiers = rubriqueActive === null && !enRecherche;
 
   return (
-    <div className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6">
-      {/* Bandeau d'accueil — le titre de la page, comme en tête d'un catalogue. */}
-      <div className="relative bg-[#0a1e20] px-6 pt-12 pb-10 text-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0f2f33] to-[#0a1e20]" />
-        <div className="relative">
-          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-            Académy {activeAgency?.name}
-          </h1>
-          <p className="mt-3 text-sm text-slate-300">
-            Toutes les procédures de l'agence, en documents et en vidéo.
-          </p>
-        </div>
-      </div>
-
-      <div className="px-4 sm:px-6 lg:px-8 pb-10 -mt-4">
+    <div
+      className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 min-h-[calc(100vh-4rem)]"
+      style={{
+        backgroundColor: '#F7F1E5',
+        backgroundImage: fond ? `url(${fond})` : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'top center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'local',
+      }}
+    >
+      <div className={`px-4 sm:px-6 lg:px-8 pb-16 ${fond ? 'pt-32 sm:pt-44' : 'pt-10'}`}>
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-center text-xl sm:text-2xl font-bold text-white pt-8">
-            Choisissez votre procédure
-          </h2>
+          {/* Sans image de fond, l'écran a besoin de son titre. Avec, l'image
+              le porte déjà — le répéter ferait double emploi. */}
+          {!fond && (
+            <div className="text-center mb-8">
+              <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+                Académy {activeAgency?.name}
+              </h1>
+              <p className="mt-2 text-sm text-slate-600">
+                Toutes les procédures de l'agence, en documents et en vidéo.
+              </p>
+            </div>
+          )}
 
-          {/* Filtres en ligne de texte, puis grande barre de recherche : la
-              présentation d'un catalogue, pas d'un panneau de réglages. */}
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-            <button onClick={() => setRubriqueActive(null)} className={boutonFiltre(rubriqueActive === null)}>
-              Tout <span className="text-slate-500 font-normal">({ressources.length})</span>
-            </button>
-            {rubriques.map(([nom, nombre]) => (
-              <button
-                key={nom}
-                onClick={() => setRubriqueActive(nom === rubriqueActive ? null : nom)}
-                className={boutonFiltre(rubriqueActive === nom)}
-              >
-                {nom} <span className="text-slate-500 font-normal">({nombre})</span>
-              </button>
-            ))}
-          </div>
+          {/* Recherche + actions */}
+          <div className="flex flex-wrap items-center gap-3 justify-center">
+            <div className="relative flex-1 min-w-[240px] max-w-2xl">
+              <input
+                value={recherche}
+                onChange={(e) => setRecherche(e.target.value)}
+                placeholder="Rechercher une procédure…"
+                className="w-full pl-6 pr-14 py-3.5 rounded-full bg-white text-slate-800 placeholder-slate-400 text-sm shadow-lg border border-black/5 focus:outline-none focus:ring-2 focus:ring-[#E0A21A]"
+              />
+              <Search className="w-5 h-5 text-slate-400 absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
 
-          <div className="mt-6 max-w-2xl mx-auto relative">
-            <input
-              value={recherche}
-              onChange={(e) => setRecherche(e.target.value)}
-              placeholder="Rechercher une procédure…"
-              className="w-full pl-6 pr-14 py-4 rounded-full bg-white text-slate-800 placeholder-slate-400 text-sm shadow-lg focus:outline-none focus:ring-2 focus:ring-[#F7BC5F]"
-            />
-            <Search className="w-5 h-5 text-slate-500 absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
-
-          {/* Avancement personnel + ajout, sur une même ligne discrète. */}
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-            {ressources.length > 0 ? (
-              <div className="flex items-center gap-2.5 text-xs text-slate-300">
-                <CheckCircle2
-                  className={`w-4 h-4 ${validees.size === ressources.length ? 'text-emerald-400' : 'text-slate-500'}`}
-                />
-                {validees.size === ressources.length
-                  ? 'Toutes les procédures sont validées.'
-                  : `${validees.size} validée${validees.size > 1 ? 's' : ''} sur ${ressources.length}`}
-                <span className="w-28 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                  <span
-                    className={`block h-full rounded-full transition-all duration-500 ${
-                      validees.size === ressources.length ? 'bg-emerald-500' : 'bg-[#F7BC5F]'
-                    }`}
-                    style={{ width: `${Math.round((validees.size / ressources.length) * 100)}%` }}
-                  />
-                </span>
-              </div>
-            ) : (
-              <span />
-            )}
             {estSuperAdmin && (
-              <button
-                onClick={ouvrirAjout}
-                className="px-4 py-2 rounded-full bg-[#F7BC5F] hover:bg-[#d9ab38] text-black font-bold text-xs flex items-center gap-2 shadow-md"
-              >
-                <Plus className="w-4 h-4" />
-                Ajouter une procédure
-              </button>
+              <>
+                <button
+                  onClick={ouvrirAjout}
+                  className="px-4 py-3 rounded-full bg-[#1b2b2e] hover:bg-[#0f1c1e] text-white font-bold text-xs flex items-center gap-2 shadow-lg"
+                >
+                  <Plus className="w-4 h-4" />
+                  Ajouter une procédure
+                </button>
+                <input
+                  ref={champFond}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const image = e.target.files?.[0];
+                    e.target.value = '';
+                    if (image) void changerFond(image);
+                  }}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => champFond.current?.click()}
+                  disabled={fondEnCours}
+                  title="Choisir l'image de fond de l'Académy"
+                  className="px-4 py-3 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 font-bold text-xs flex items-center gap-2 shadow disabled:opacity-60"
+                >
+                  {fondEnCours ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+                  Image de fond
+                </button>
+              </>
             )}
           </div>
 
-          {/* Le catalogue */}
+          {/* Avancement personnel */}
+          {ressources.length > 0 && (
+            <div className="mt-5 flex items-center justify-center gap-2.5 text-xs text-slate-700">
+              <CheckCircle2
+                className={`w-4 h-4 ${validees.size === ressources.length ? 'text-emerald-600' : 'text-slate-400'}`}
+              />
+              {validees.size === ressources.length
+                ? 'Toutes les procédures sont validées.'
+                : `${validees.size} validée${validees.size > 1 ? 's' : ''} sur ${ressources.length}`}
+              <span className="w-28 h-1.5 rounded-full bg-black/10 overflow-hidden">
+                <span
+                  className={`block h-full rounded-full transition-all duration-500 ${
+                    validees.size === ressources.length ? 'bg-emerald-600' : 'bg-[#E0A21A]'
+                  }`}
+                  style={{ width: `${Math.round((validees.size / ressources.length) * 100)}%` }}
+                />
+              </span>
+            </div>
+          )}
+
+          {/* ── NIVEAU 1 : les dossiers ─────────────────────────────────
+              Demandé : « un vrai dossier jaune comme on a l'habitude de voir,
+              et quand on clique dedans on accède aux différentes formations ».
+              Le dossier est dessiné en CSS — onglet, corps, rabat avant — pour
+              rester net à toutes les tailles et suivre le thème sans image. */}
+          {auNiveauDossiers && !chargement && rubriques.length > 0 && (
+            <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
+              {rubriques.map(([nom, nombre]) => {
+                const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
+                return (
+                  <button
+                    key={nom}
+                    onClick={() => setRubriqueActive(nom)}
+                    className="group flex flex-col items-center focus:outline-none"
+                  >
+                    <div className="relative w-full max-w-[210px] aspect-[5/4] transition-transform duration-200 group-hover:-translate-y-1.5">
+                      {/* dos du dossier */}
+                      <div className="absolute inset-x-0 top-[12%] bottom-0 rounded-xl bg-gradient-to-b from-[#E8B33A] to-[#C88C12] shadow-[0_14px_24px_-12px_rgba(0,0,0,0.55)]" />
+                      {/* onglet */}
+                      <div className="absolute left-[4%] top-[2%] h-[16%] w-[46%] rounded-t-lg bg-gradient-to-b from-[#F2C55C] to-[#E3AE33]" />
+                      {/* rabat avant */}
+                      <div className="absolute inset-x-0 top-[28%] bottom-0 rounded-xl bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40 shadow-inner" />
+                      {/* compteur */}
+                      <span className="absolute right-3 top-[36%] px-2.5 py-1 rounded-full bg-black/25 text-white text-[11px] font-black">
+                        {nombre}
+                      </span>
+                      {vues > 0 && (
+                        <span className="absolute left-3 bottom-3 flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/80 text-[10px] font-bold text-emerald-700">
+                          <CheckCircle2 className="w-3 h-3" />
+                          {vues}/{nombre}
+                        </span>
+                      )}
+                    </div>
+                    <span className="mt-3 text-sm font-bold text-slate-800 text-center leading-snug group-hover:text-black">
+                      {nom}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── NIVEAU 2 : le contenu d'un dossier ─────────────────────── */}
+          {!auNiveauDossiers && (
+            <div className="mt-8 flex items-center gap-3">
+              <button
+                onClick={() => { setRubriqueActive(null); setRecherche(''); }}
+                className="px-3.5 py-2 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 text-xs font-bold shadow-sm"
+              >
+                ← Tous les dossiers
+              </button>
+              <h2 className="text-lg font-black text-slate-900 truncate">
+                {enRecherche ? `Résultats pour « ${recherche.trim()} »` : rubriqueActive}
+              </h2>
+              <span className="text-xs text-slate-500">
+                {visibles.length} procédure{visibles.length > 1 ? 's' : ''}
+              </span>
+            </div>
+          )}
+
+          {/* Le catalogue — au niveau 2, ou dès qu'une recherche est en cours */}
           {chargement ? (
-            <div className="flex items-center justify-center py-20 text-slate-400 gap-2">
+            <div className="flex items-center justify-center py-20 text-slate-600 gap-2">
               <Loader2 className="w-4 h-4 animate-spin" /> Chargement de l'Académy…
             </div>
           ) : ressources.length === 0 ? (
-            <div className="mt-8 p-12 text-center bg-white/5 border border-dashed border-white/10 rounded-2xl">
-              <GraduationCap className="w-9 h-9 mx-auto mb-3 text-slate-600" />
-              <p className="text-sm text-slate-300">L'Académy est vide pour le moment.</p>
+            <div className="mt-10 p-12 text-center bg-white/70 border border-dashed border-black/10 rounded-2xl">
+              <GraduationCap className="w-9 h-9 mx-auto mb-3 text-slate-400" />
+              <p className="text-sm text-slate-700">L'Académy est vide pour le moment.</p>
               <p className="text-xs text-slate-500 mt-1">
                 {estSuperAdmin
                   ? 'Ajoutez une première procédure : un document, une vidéo, une photo de couverture et son auteur.'
                   : "Les procédures de l'agence apparaîtront ici dès qu'elles seront publiées."}
               </p>
             </div>
-          ) : visibles.length === 0 ? (
-            <div className="mt-8 p-12 text-center text-sm text-slate-400 bg-white/5 border border-white/10 rounded-2xl">
+          ) : auNiveauDossiers ? null : visibles.length === 0 ? (
+            <div className="mt-8 p-12 text-center text-sm text-slate-600 bg-white/70 border border-black/10 rounded-2xl">
               Aucune procédure ne correspond à « {recherche} ».
             </div>
           ) : (
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {visibles.map((r) => {
                 const estVideo = r.type === 'video';
                 const estValidee = validees.has(r.id);
@@ -631,49 +752,86 @@ export default function AcademyView() {
         </div>
       </div>
 
-      {/* Lecteur : vidéo et PDF, sans quitter l'application */}
+      {/* Lecteur plein écran — demandé le 2 septembre : « quand on clique sur
+          le dossier, je voudrais qu'ils apparaissent plein écran, qu'ils
+          utilisent toute l'interface du CRM ». Une procédure se lit, elle ne
+          se consulte pas dans une vignette : le document occupe donc tout
+          l'écran, avec un simple bandeau au-dessus. */}
       {ouverte && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setOuverte(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className={`w-full ${ouverte.type === 'video' ? 'max-w-4xl' : 'max-w-5xl'} rounded-2xl bg-[#07191b] border border-[#1b4e52] overflow-hidden shadow-2xl`}
-          >
-            <div className="flex items-center justify-between gap-4 px-5 py-3 border-b border-[#144447]/60">
+        <div className="fixed inset-0 z-[100] bg-[#050f11] flex flex-col">
+          <div className="flex items-center justify-between gap-4 px-4 sm:px-6 py-3 border-b border-[#144447]/60 bg-[#07191b] shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              {ouverte.auteur_photo_url ? (
+                <img src={ouverte.auteur_photo_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0 ring-1 ring-white/10" />
+              ) : (
+                <span className="w-9 h-9 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] flex items-center justify-center shrink-0">
+                  {ouverte.type === 'video' ? <PlayCircle className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                </span>
+              )}
               <div className="min-w-0">
                 <p className="text-sm font-bold text-white truncate">{ouverte.titre}</p>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-slate-400 truncate">
                   {ouverte.rubrique}
                   {ouverte.auteur ? ` · ${ouverte.auteur}` : ''}
                   {ouverte.duree ? ` · ${ouverte.duree}` : ''}
                 </p>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                {/* Certains PDF refusent d'être affichés dans un cadre : la
-                    sortie de secours est toujours là, plutôt qu'un cadre blanc
-                    sans explication. */}
-                <a
-                  href={lienOuvrable(ouverte)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[11px] font-semibold text-slate-400 hover:text-[#F9C977] underline decoration-dotted underline-offset-4"
-                >
-                  Ouvrir dans un onglet
-                </a>
-                <button onClick={() => setOuverte(null)} className="text-slate-400 hover:text-white text-xl leading-none px-1">×</button>
-              </div>
             </div>
-            <div className={ouverte.type === 'video' ? 'aspect-video bg-black' : 'h-[78vh] bg-[#0b1416]'}>
-              <iframe
-                src={lienIntegrable(lienOuvrable(ouverte)) || ''}
-                title={ouverte.titre}
-                allow="autoplay; fullscreen; picture-in-picture"
-                allowFullScreen
-                className="w-full h-full border-0"
-              />
+
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {/* Valider ici même : c'est au moment où l'on referme un document
+                  qu'on sait qu'on l'a lu. */}
+              <button
+                onClick={() => void basculerValidation(ouverte)}
+                disabled={validationEnCours === ouverte.id}
+                className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-colors disabled:opacity-60 ${
+                  validees.has(ouverte.id)
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                    : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                }`}
+              >
+                {validationEnCours === ouverte.id ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : validees.has(ouverte.id) ? (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                ) : (
+                  <Circle className="w-3.5 h-3.5" />
+                )}
+                {validees.has(ouverte.id) ? 'Validée' : 'Marquer comme vue'}
+              </button>
+
+              {/* Certains PDF refusent d'être affichés dans un cadre : la
+                  sortie de secours est toujours là, plutôt qu'un écran blanc
+                  sans explication. */}
+              <a
+                href={lienOuvrable(ouverte)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] font-semibold text-slate-400 hover:text-[#F9C977] underline decoration-dotted underline-offset-4 hidden sm:inline"
+              >
+                Ouvrir dans un onglet
+              </a>
+
+              <button
+                onClick={() => setOuverte(null)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-[11px] font-bold"
+              >
+                <X className="w-3.5 h-3.5" />
+                Fermer
+              </button>
             </div>
+          </div>
+
+          {/* Le document occupe tout ce qui reste. Fond noir pour une vidéo,
+              gris sombre pour un document : c'est ce que fait un lecteur. */}
+          <div className={`flex-1 min-h-0 ${ouverte.type === 'video' ? 'bg-black' : 'bg-[#0b1416]'}`}>
+            <iframe
+              src={lienIntegrable(lienOuvrable(ouverte)) || ''}
+              title={ouverte.titre}
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+              className="w-full h-full border-0"
+            />
           </div>
         </div>
       )}
