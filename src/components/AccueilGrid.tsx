@@ -2370,19 +2370,67 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // fois — elle reste visible dans son dossier, où le verrou la place.
   // Sans verrou chargé, la liste est vide et rien n'est retiré.
   const racineFiltree = filtrerEnProfondeur(tiles);
+
+  // Signalé le 2 septembre : « les tuiles ImmoSphera sont toutes dehors, c'est
+  // pénible ». Un dossier verrouillé par le super admin peut avoir disparu de
+  // la grille enregistrée d'un utilisateur (grille plus ancienne que le
+  // verrou, dossier supprimé avant qu'il ne soit verrouillé, réconciliation
+  // malheureuse...) : ses cartes se retrouvent alors éparpillées à la racine,
+  // sans moyen de les ranger. On repose donc le dossier tel que le super
+  // admin l'a verrouillé.
+  //
+  // ⚠️ Le 1er septembre, une première version de cette idée avait fait
+  // apparaître CINQ « Immosphera » d'un coup : `lockedTiles` conserve des
+  // verrous d'anciens dossiers, dont l'identifiant ne correspond plus à rien
+  // mais dont le TITRE, lui, se répète. D'où les deux garde-fous ici : un
+  // seul dossier par titre, et uniquement les verrous qui décrivent
+  // réellement un dossier (avec des cartes).
+  const sansCasse = (v: string) =>
+    v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const titresPresents = new Set(racineFiltree.map((t) => sansCasse(t.title || '')));
+  const dossiersVerrouillesAReposer: TileItemNode[] = [];
+
   const idsImposesParUnDossier = new Set<string>();
   Object.entries(lockedTiles).forEach(([dossierId, lock]) => {
-    const enfants = (lock as TileItemNode).children;
+    const verrou = lock as TileItemNode;
+    const enfants = verrou.children;
     if (!enfants || enfants.length === 0) return;
-    // Le dossier doit être RÉELLEMENT visible pour cet utilisateur : sinon
-    // retirer ses cartes de la racine les ferait disparaître complètement.
-    if (!existsRecursive(racineFiltree, dossierId)) return;
+
+    // Présent dans la grille mais masqué par les droits : on n'y touche pas.
+    // Le reposer contournerait un filtre de visibilité voulu.
+    const presentDansLaGrille = existsRecursive(tiles, dossierId);
+    const visible = existsRecursive(racineFiltree, dossierId);
+    if (presentDansLaGrille && !visible) return;
+
+    if (!presentDansLaGrille) {
+      const titre = sansCasse(verrou.title || '');
+      // Sans titre, ou un dossier du même nom déjà là : on ne repose rien.
+      if (!titre || titresPresents.has(titre)) return;
+      titresPresents.add(titre);
+      dossiersVerrouillesAReposer.push({
+        id: dossierId,
+        title: verrou.title || 'Dossier',
+        iconName: verrou.iconName || 'Folder',
+        gradient: verrou.gradient || 'from-[#6B21A8] via-[#3B0764] to-[#1E1B4B]',
+        badgeCount: 0,
+        navTarget: '',
+        imageUrl: verrou.imageUrl,
+        isFolder: true,
+        locked: true,
+        children: enfants,
+      });
+    }
+    // Que le dossier ait toujours été là ou qu'on vienne de le reposer, ses
+    // cartes n'ont plus à traîner à la racine.
     enfants.forEach((enfant) => idsImposesParUnDossier.add(enfant.id));
   });
 
-  const currentDisplayTiles = applyLocks(
-    activeFolder ? filtrerEnProfondeur(activeFolder.children || []) : racineFiltree
-  ).filter((tuile) => activeFolder || !idsImposesParUnDossier.has(tuile.id));
+  const currentDisplayTiles = [
+    ...applyLocks(
+      activeFolder ? filtrerEnProfondeur(activeFolder.children || []) : racineFiltree
+    ).filter((tuile) => activeFolder || !idsImposesParUnDossier.has(tuile.id)),
+    ...(activeFolder ? [] : dossiersVerrouillesAReposer),
+  ];
 
   // Cap à 24 tuiles réelles visibles sur l'accueil (ticket #256 : 6 colonnes
   // fixes × 4 lignes, au lieu de 7×3 quand la grille était responsive) — au-
