@@ -89,6 +89,34 @@ const requestServerManagedAccessToken = async (): Promise<string | null> => {
   }
 };
 
+// Signalé le 2 septembre (Académy) : « Request had invalid authentication
+// credentials. Expected OAuth 2 access token… » au dépôt d'un PDF, alors que
+// le même dépôt marchait une demi-heure plus tôt. Le jeton Google vit une
+// heure ; passé ce délai, `cachedAccessToken` — qui n'est jamais invalidé —
+// continuait d'être servi tel quel à chaque appel Drive, et Google le
+// refusait. Deux fonctions pour en sortir : reconnaître ce refus, et
+// repartir chercher un jeton frais (renouvellement serveur, sinon session).
+export const isGoogleAuthError = (e: unknown): boolean => {
+  const message = String((e as { message?: unknown } | null)?.message ?? e ?? '');
+  return /invalid authentication credentials|invalid credentials|unauthenticated|\b401\b/i.test(message);
+};
+
+export const renewWorkspaceAccessToken = async (stale?: string | null): Promise<string | null> => {
+  cachedAccessToken = null;
+  try {
+    const token = await requestWorkspaceAccessToken();
+    if (stale && token === stale) {
+      // Rien de plus frais que le jeton refusé : on ne le garde pas en
+      // cache, pour que la prochaine tentative repasse par la source.
+      cachedAccessToken = null;
+      return null;
+    }
+    return token;
+  } catch {
+    return null;
+  }
+};
+
 export const requestWorkspaceAccessToken = async (): Promise<string> => {
   if (cachedAccessToken) {
     return cachedAccessToken;
