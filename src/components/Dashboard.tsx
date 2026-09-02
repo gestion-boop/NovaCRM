@@ -1170,7 +1170,11 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* Recents list and Quick Actions */}
+      {/* Demandé le 2 septembre pour ImmoSphera : « tableau de bord, enlève
+          tout en bas ». La rangée du bas — derniers prospects et panneau
+          « Actualités immobilières » (texte figé, taux d'août 2026) — ne
+          s'affiche plus que sur Novavisio. */}
+      {estNovavisio && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Contacts List */}
         <div className="dash-card lg:col-span-2 p-6 rounded-2xl border border-[#144447]/60 hover:border-[#1e5d61] shadow-xl hover:shadow-teal-500/5 transition-all duration-300 space-y-4">
@@ -1241,6 +1245,7 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+      )}
 
       {/* Demandé le 2 septembre : « quand je clique dans la colonne chiffre
           d'affaires d'agence, je voudrais un tableau avec le nom et prénom

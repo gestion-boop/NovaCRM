@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getAuthedUser, isSuperAdminUser, requireSuperAdmin, statusForError, supabaseAdmin } from '../../_supabaseAdmin.js';
+import { PORTEES_WORKSPACE, clientPourEntite, clientPourUtilisateur } from '../../_googleUserOAuth.js';
 
 /**
  * /api/admin/drive/:agencyId
@@ -134,7 +135,137 @@ async function handleOAuthInitiate(req: any, res: any, agencyId: string) {
   }
 }
 
+// ── Connexion Google Workspace PAR SOCIÉTÉ (2 septembre) ────────────────
+// Trois Workspace distincts, trois applications Google « internes » : chaque
+// collaborateur autorise Gmail, Drive et Agenda sur l'application de SA
+// société (voir api/_googleUserOAuth.ts). Reçu ICI, et non dans un fichier
+// /api/google/*.ts : le plafond Vercel Hobby de 12 fonctions est atteint
+// (voir l'en-tête). vercel.json réécrit /api/google/connect et
+// /api/google/callback vers cette route dynamique, avec agencyId =
+// "google-connect" / "google-callback". L'adresse de retour déclarée chez
+// Google reste donc bien https://<hôte>/api/google/callback.
+//
+// - POST google-connect  : renvoie l'adresse d'autorisation Google de la
+//   société de l'utilisateur ({ url }), ou { configured: false } si sa
+//   société n'a pas encore ses clés — le CRM retombe alors sur la connexion
+//   historique.
+// - GET  google-callback : retour de Google, échange du code avec le client
+//   de la société, enregistrement du jeton de renouvellement dans
+//   user_google_tokens (la même table que l'edge function google-token, qui
+//   le renouvelle ensuite indéfiniment).
+
+const DUREE_DEMANDE_MS = 10 * 60 * 1000;
+
+async function handleUserConnect(req: any, res: any) {
+  try {
+    const user = await getAuthedUser(req);
+    const { societe, client } = await clientPourUtilisateur({ id: user.id, email: user.email });
+    if (!societe || !client) {
+      res.status(200).json({ configured: false, societe: societe?.nom ?? null });
+      return;
+    }
+    const origin = `https://${req.headers.host}`;
+    const expiration = Date.now() + DUREE_DEMANDE_MS;
+    const params = new URLSearchParams({
+      client_id: client.clientId,
+      redirect_uri: `${origin}/api/google/callback`,
+      response_type: 'code',
+      access_type: 'offline',
+      // Sans consentement explicite, Google ne renvoie pas de refresh_token
+      // à une reconnexion — et le jeton redeviendrait aussi fragile qu'avant.
+      prompt: 'consent',
+      scope: PORTEES_WORKSPACE,
+      state: signState(`${user.id}|${client.entite}|${expiration}`),
+      // Restreint l'écran Google aux comptes du Workspace de la société, et
+      // présélectionne la boîte du collaborateur.
+      hd: client.domaine,
+      ...(user.email ? { login_hint: user.email } : {}),
+    });
+    res.status(200).json({
+      configured: true,
+      societe: societe.nom,
+      url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+    });
+  } catch (e: any) {
+    console.error('[api/google/connect] error:', e);
+    res.status(statusForError(e?.message || '')).json({ error: e?.message || 'Erreur inconnue.' });
+  }
+}
+
+async function handleUserCallback(req: any, res: any) {
+  const { code, state, error: oauthError } = req.query || {};
+  const origin = `https://${req.headers.host}`;
+  try {
+    if (oauthError) throw new Error(String(oauthError));
+    const charge = verifyState(String(state || ''));
+    const [userId, entite, expiration] = String(charge || '').split('|');
+    if (!code || !userId || !entite) {
+      throw new Error('Réponse Google invalide ou expirée — relancez la connexion depuis le CRM.');
+    }
+    if (Number(expiration) < Date.now()) {
+      throw new Error('Cette demande de connexion a expiré — relancez-la depuis le CRM.');
+    }
+    const client = clientPourEntite(entite);
+    if (!client) throw new Error('Configuration Google manquante côté serveur pour cette société.');
+
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: String(code),
+        client_id: client.clientId,
+        client_secret: client.clientSecret,
+        redirect_uri: `${origin}/api/google/callback`,
+        grant_type: 'authorization_code',
+      }),
+    });
+    const tokenBody = await tokenRes.json();
+    if (!tokenRes.ok) throw new Error(tokenBody.error_description || tokenBody.error || 'Échange du jeton Google refusé.');
+    if (!tokenBody.refresh_token) {
+      throw new Error("Google n'a pas renvoyé de jeton de renouvellement — révoquez l'accès de Nova CRM dans myaccount.google.com/permissions puis réessayez.");
+    }
+
+    const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokenBody.access_token}` },
+    });
+    const userInfo = await userInfoRes.json().catch(() => ({}));
+
+    const { error } = await supabaseAdmin.from('user_google_tokens').upsert(
+      {
+        user_id: userId,
+        google_email: userInfo?.email || null,
+        access_token: tokenBody.access_token,
+        refresh_token: tokenBody.refresh_token,
+        expires_at: new Date(Date.now() + (tokenBody.expires_in || 3600) * 1000).toISOString(),
+        scope: tokenBody.scope || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' }
+    );
+    if (error) throw new Error(`Enregistrement du jeton impossible : ${error.message}`);
+
+    res.writeHead(302, { Location: `${origin}/?google=connecte` });
+    res.end();
+  } catch (e: any) {
+    console.error('[api/google/callback] error:', e);
+    res.writeHead(302, { Location: `${origin}/?google_erreur=${encodeURIComponent(e?.message || 'Erreur inconnue.')}` });
+    res.end();
+  }
+}
+
 export default async function handler(req: any, res: any) {
+  const cible = String(req.query?.agencyId || '');
+  if (cible === 'google-connect') {
+    if (req.method === 'POST') await handleUserConnect(req, res);
+    else res.status(405).json({ error: 'Méthode non autorisée.' });
+    return;
+  }
+  if (cible === 'google-callback') {
+    if (req.method === 'GET') await handleUserCallback(req, res);
+    else res.status(405).json({ error: 'Méthode non autorisée.' });
+    return;
+  }
+
   if (req.method === 'DELETE') {
     try {
       await requireSuperAdmin(req);

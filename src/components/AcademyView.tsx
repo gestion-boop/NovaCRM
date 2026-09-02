@@ -7,7 +7,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { getCachedAccessToken, requestWorkspaceAccessToken } from '@/lib/workspace';
+import { getCachedAccessToken, requestWorkspaceAccessToken, reconnectGoogleWorkspace, isGoogleAuthError } from '@/lib/workspace';
 import { uploadDocumentToDrive } from '@/lib/documentDrive';
 
 /**
@@ -693,7 +693,17 @@ export default function AcademyView() {
       await charger();
     } catch (e: any) {
       console.error(e);
-      toast.error(e?.message || "Impossible d'enregistrer cette ressource.");
+      if (e?.code === 'google-reconnect' || isGoogleAuthError(e)) {
+        // Le fichier n'est pas parti : l'accès Google a expiré et n'a pas pu
+        // être renouvelé en silence. Un clic pour se reconnecter, la page
+        // revient ensuite ici même.
+        toast.error(e?.message || "Votre accès Google Drive a expiré.", {
+          duration: 12000,
+          action: { label: 'Reconnecter Google', onClick: () => { void reconnectGoogleWorkspace(); } },
+        });
+      } else {
+        toast.error(e?.message || "Impossible d'enregistrer cette ressource.");
+      }
     } finally {
       setEnregistrement(false);
     }

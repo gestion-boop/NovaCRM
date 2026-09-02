@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link2Off, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { hydrateAccessTokenFromSession, isGoogleWorkspaceConnected, reconnectGoogleWorkspace } from '@/lib/workspace';
+import { toast } from 'sonner';
+import { hydrateAccessTokenFromSession, isGoogleWorkspaceConnected, reconnectGoogleWorkspace, traiterRetourConnexionGoogle } from '@/lib/workspace';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const SNOOZE_MS = 30 * 60 * 1000; // 30 minutes ("Plus tard")
@@ -29,6 +30,17 @@ export default function GoogleWorkspaceStatus() {
     }
 
     let cancelled = false;
+
+    // Retour de l'écran d'autorisation Google de la société : on le dit, et
+    // on ne rouvre pas le bandeau dans la foulée.
+    const retour = traiterRetourConnexionGoogle();
+    if (retour?.statut === 'connecte') {
+      toast.success('Google Workspace connecté : Gmail, Drive et Agenda sont prêts.');
+      setVisible(false);
+      snoozedUntilRef.current = Date.now() + 60 * 1000;
+    } else if (retour?.statut === 'erreur') {
+      toast.error(`Connexion Google : ${retour.message}`, { duration: 12000 });
+    }
 
     const check = async () => {
       if (Date.now() < snoozedUntilRef.current) return;
