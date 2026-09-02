@@ -4,6 +4,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import agencyImmosphera from '@/assets/agency-immosphera.png';
+import { getAgencyLogo } from '@/lib/agency-logos';
 import NovaMascotte from './NovaMascotte';
 import { NAV_ITEMS } from './Sidebar';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
@@ -2369,7 +2370,35 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // dans le chargement serveur juste au-dessus) : on ne l'affiche pas deux
   // fois — elle reste visible dans son dossier, où le verrou la place.
   // Sans verrou chargé, la liste est vide et rien n'est retiré.
-  const racineFiltree = filtrerEnProfondeur(tiles);
+  // Demandé le 2 septembre : « pour toutes les agences, mets le tableau de
+  // bord en haut à gauche avec son logo ; ce logo donnera un raccourci vers le
+  // tableau de bord de l'agence avec ses propres données ».
+  //
+  // La tuile est imposée à la première case, quelle que soit la grille
+  // enregistrée — y compris si l'utilisateur l'avait rangée dans un dossier ou
+  // masquée. Elle n'est PAS écrite dans la grille : c'est un placement
+  // d'affichage, donc réversible et sans effet sur l'ordre que chacun s'est
+  // fait. Le logo est celui de l'agence active, et le tableau de bord
+  // n'affiche déjà que les données de cette agence.
+  const ID_TABLEAU_DE_BORD = 'tableau-de-bord';
+  const sansTableauDeBord = (items: TileItemNode[]): TileItemNode[] =>
+    items
+      .filter((t) => t.id !== ID_TABLEAU_DE_BORD)
+      .map((t) => (t.children ? { ...t, children: sansTableauDeBord(t.children) } : t));
+
+  const tuileTableauDeBord: TileItemNode | null = (() => {
+    const existante = findTileById(tiles, ID_TABLEAU_DE_BORD) || findInitialTile(ID_TABLEAU_DE_BORD);
+    if (!existante) return null;
+    return {
+      ...existante,
+      title: 'Tableau de bord',
+      imageUrl: getAgencyLogo(activeAgency?.name),
+      navTarget: 'tableau-de-bord',
+      badgeCount: 0,
+    };
+  })();
+
+  const racineFiltree = sansTableauDeBord(filtrerEnProfondeur(tiles));
 
   // Signalé le 2 septembre : « les tuiles ImmoSphera sont toutes dehors, c'est
   // pénible ». Un dossier verrouillé par le super admin peut avoir disparu de
@@ -2427,7 +2456,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
 
   const currentDisplayTiles = [
     ...applyLocks(
-      activeFolder ? filtrerEnProfondeur(activeFolder.children || []) : racineFiltree
+      activeFolder
+        ? sansTableauDeBord(filtrerEnProfondeur(activeFolder.children || []))
+        : racineFiltree
     ).filter((tuile) => activeFolder || !idsImposesParUnDossier.has(tuile.id)),
     ...(activeFolder ? [] : dossiersVerrouillesAReposer),
   ];
@@ -2497,6 +2528,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // saute silencieusement — cassant l'alignement des clés `__empty-i__`.
     while (rootDisplaySlots.length < visibleSlotCount) rootDisplaySlots.push(null);
     if (rootDisplaySlots.length > visibleSlotCount) rootDisplaySlots.splice(visibleSlotCount);
+
+    // Le tableau de bord occupe la première case, toujours. Il est inséré
+    // APRÈS le calcul des positions : les autres tuiles gardent donc leur
+    // ordre relatif, simplement décalées d'une case. On reprend une case
+    // vide en fin de grille pour ne pas rallonger la page d'une ligne.
+    if (tuileTableauDeBord) {
+      rootDisplaySlots.unshift(tuileTableauDeBord);
+      const derniere = rootDisplaySlots.length - 1;
+      if (rootDisplaySlots[derniere] === null) rootDisplaySlots.splice(derniere, 1);
+    }
+
     visibleTiles = [];
   } else if (currentDisplayTiles.length > MAX_VISIBLE_TILES) {
     overflowTiles = currentDisplayTiles.slice(MAX_VISIBLE_TILES);
@@ -2747,8 +2789,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           liste dense classique (visibleTiles, inchangé). */}
       {(() => {
         const gridItems: (TileItemNode | null)[] = activeFolder ? visibleTiles : rootDisplaySlots;
+        // La tuile Tableau de bord est ajoutée devant la grille sans exister
+        // dans `rootSlots` : l'index d'une case vide à l'écran est donc décalé
+        // d'un cran par rapport à sa vraie position enregistrée. Sans ce
+        // décalage, déposer une tuile sur une case vide en échangerait une
+        // autre — celle d'à côté.
+        const decalageTdb = !activeFolder && tuileTableauDeBord ? 1 : 0;
+        const idCaseVide = (gridIndex: number) => `__empty-${gridIndex - decalageTdb}__`;
         const sortableIds = gridItems
-          .map((t, i) => (t ? t.id : `__empty-${i}__`))
+          .map((t, i) => (t ? t.id : idCaseVide(i)))
           .filter((_id, i) => gridItems[i]?.id !== 'nova-lock-spacer');
         return (
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragOver={handleTileDragOver} onDragEnd={handleTileDragEnd}>
@@ -2756,7 +2805,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           <div className={`grid ${activeFolder ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7' : 'grid-cols-6'} gap-3 sm:gap-3 max-w-7xl mx-auto w-full z-10 pb-1`}>
             {gridItems.map((tile, gridIndex) => (
               !tile ? (
-                <EmptyRootCell key={`__empty-${gridIndex}__`} id={`__empty-${gridIndex}__`} />
+                <EmptyRootCell key={idCaseVide(gridIndex)} id={idCaseVide(gridIndex)} />
               ) : tile.id === 'nova-lock-spacer' ? (
                 // Case invisible, non cliquable, non déplaçable — réserve
                 // juste sa place dans la grille (cf. commentaire sur cette
