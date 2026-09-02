@@ -35,6 +35,10 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
       item.pending_quote_amount === null || item.pending_quote_amount === undefined
         ? undefined
         : Number(item.pending_quote_amount),
+    recurrence:
+      item.recurring_amount === null || item.recurring_amount === undefined
+        ? undefined
+        : Number(item.recurring_amount),
     advisorId: (item.assigned_to as string) || (item.created_by as string) || undefined,
     stageId: (stageId as string) || undefined,
     stage: (stageId && stageNameById[stageId]) || (item.temperature as string) || 'Nouveau',

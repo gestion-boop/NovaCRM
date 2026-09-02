@@ -513,6 +513,7 @@ export default function ClientProfileView({
 
   const estConciergerie = /concierg/i.test(client?.clientType || '');
 
+
   // Novavisio, demandé le 2 septembre : « remettre le CA agence en TTC, et tu
   // le calculeras dans le tableau de bord en hors taxes ». La saisie se fait
   // donc en TTC et la base continue de stocker le HT — exactement la règle
@@ -659,6 +660,13 @@ export default function ClientProfileView({
   const [shareSaving, setShareSaving] = useState(false);
 
   const assignableUsers = useAssignableUsers(client?.agencyId);
+  // « La commission de Natacha » : on nomme la case avec le prénom du
+  // conseiller réellement attribué au dossier, plutôt qu'en écrivant
+  // « Natacha » en dur — un dossier peut appartenir à quelqu'un d'autre.
+  const prenomConseiller = (() => {
+    const nom = assignableUsers.find((u) => u.id === client?.assignedTo)?.name || '';
+    return nom.trim().split(/\s+/)[0] || '';
+  })();
   const colleagues = TEAM_MEMBERS.filter(
     (m) => m.agencyId === client?.agencyId && m.id !== currentUserId
   );
@@ -777,6 +785,12 @@ export default function ClientProfileView({
   // du Tableau de bord (voir chiffreAffairesAgence dans Dashboard.tsx).
   const [montantHt, setMontantHt] = useState('');
   const [montantCharge, setMontantCharge] = useState(false);
+  // Demandé le 2 septembre : « si on archive, ça serait bien qu'on ait la
+  // commission de Natacha au-dessus de la commission de l'agence, et voir
+  // pourquoi pas une troisième, récurrence — comme ça sur un dossier archivé
+  // on pourra marquer les trois éléments différents, à la main. »
+  const [commissionConseiller, setCommissionConseiller] = useState('');
+  const [recurrenceSaisie, setRecurrenceSaisie] = useState('');
 
   useEffect(() => {
     if (!showArchiveModal) return;
@@ -785,12 +799,28 @@ export default function ClientProfileView({
     (async () => {
       const { data } = await supabase
         .from('leads')
-        .select('estimated_value')
+        .select('estimated_value, advisor_commission_ttc, recurring_amount')
         .eq('id', clientId)
         .maybeSingle();
       if (!vivant) return;
-      const valeur = (data as { estimated_value: number | null } | null)?.estimated_value;
+      const ligne = data as {
+        estimated_value: number | null;
+        advisor_commission_ttc: number | null;
+        recurring_amount: number | null;
+      } | null;
+      const valeur = ligne?.estimated_value;
       setMontantHt(valeur === null || valeur === undefined ? '' : String(depuisBase(Number(valeur))));
+      // Ces deux-là sont stockés tels qu'ils sont saisis : aucune conversion.
+      setCommissionConseiller(
+        ligne?.advisor_commission_ttc === null || ligne?.advisor_commission_ttc === undefined
+          ? ''
+          : String(ligne.advisor_commission_ttc)
+      );
+      setRecurrenceSaisie(
+        ligne?.recurring_amount === null || ligne?.recurring_amount === undefined
+          ? ''
+          : String(ligne.recurring_amount)
+      );
       setMontantCharge(true);
     })();
     return () => { vivant = false; };
@@ -801,10 +831,19 @@ export default function ClientProfileView({
     try {
       // Virgule ou point, au choix : personne ne tape un montant deux fois
       // parce que le clavier a mis une virgule.
-      const saisi = montantHt.trim().replace(',', '.');
-      const montant = saisi === '' ? null : Number(saisi);
-      if (montant !== null && (!Number.isFinite(montant) || montant < 0)) {
-        toast.error('Le montant hors taxes n\'est pas un nombre valide.');
+      const lireMontant = (valeur: string): number | null | 'invalide' => {
+        const brut = valeur.trim().replace(',', '.');
+        if (brut === '') return null;
+        const nombre = Number(brut);
+        if (!Number.isFinite(nombre) || nombre < 0) return 'invalide';
+        return nombre;
+      };
+
+      const montant = lireMontant(montantHt);
+      const commission = lireMontant(commissionConseiller);
+      const recurrence = lireMontant(recurrenceSaisie);
+      if (montant === 'invalide' || commission === 'invalide' || recurrence === 'invalide') {
+        toast.error("Un des montants saisis n'est pas un nombre valide.");
         setArchiving(false);
         return;
       }
@@ -851,6 +890,11 @@ export default function ClientProfileView({
           // Champ laissé vide : on ne touche pas au montant déjà enregistré,
           // plutôt que de l'effacer par inadvertance.
           ...(montant === null ? {} : { estimated_value: versBase(montant) }),
+          // Saisis tels quels : la commission du conseiller est déjà une
+          // valeur TTC par définition, et la récurrence n'est pas une base
+          // taxable — aucune conversion sur ces deux-là.
+          ...(commission === null ? {} : { advisor_commission_ttc: commission }),
+          ...(recurrence === null ? {} : { recurring_amount: recurrence }),
           ...(pipelineARenseigner ? { pipeline_id: pipelineARenseigner } : {}),
         } as any)
         .eq('id', clientId);
@@ -4484,6 +4528,27 @@ export default function ClientProfileView({
             </div>
             <p className="text-sm text-slate-300 mb-4">La signature du dossier a-t-elle été faite ? Cela permet de comptabiliser cette affaire dans les statistiques du mois.</p>
 
+            {/* Demandé le 2 septembre : la commission du conseiller AU-DESSUS
+                de celle de l'agence, puis la récurrence — trois montants
+                distincts, saisis à la main au moment d'archiver. */}
+            {estNovavisio && (
+              <div className="mb-4">
+                <label htmlFor="archive-commission-conseiller" className="block text-xs font-semibold text-slate-400 mb-1.5">
+                  Commission {prenomConseiller ? `de ${prenomConseiller}` : 'du conseiller'}, TTC
+                </label>
+                <input
+                  id="archive-commission-conseiller"
+                  type="text"
+                  inputMode="decimal"
+                  value={montantCharge ? commissionConseiller : ''}
+                  onChange={(e) => setCommissionConseiller(e.target.value)}
+                  disabled={!montantCharge || archiving}
+                  placeholder={montantCharge ? 'Non renseigné' : 'Chargement…'}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60 disabled:opacity-60"
+                />
+              </div>
+            )}
+
             <div className="mb-5">
               <label htmlFor="archive-montant-ht" className="block text-xs font-semibold text-slate-400 mb-1.5">
                 Commission agence, {estNovavisio ? 'TTC' : 'hors taxes'}
@@ -4505,6 +4570,28 @@ export default function ClientProfileView({
                 l'affaire est comptée comme signée dans les statistiques.
               </p>
             </div>
+
+            {estNovavisio && (
+              <div className="mb-5">
+                <label htmlFor="archive-recurrence" className="block text-xs font-semibold text-slate-400 mb-1.5">
+                  Récurrence {prenomConseiller ? `de ${prenomConseiller}` : ''}
+                </label>
+                <input
+                  id="archive-recurrence"
+                  type="text"
+                  inputMode="decimal"
+                  value={montantCharge ? recurrenceSaisie : ''}
+                  onChange={(e) => setRecurrenceSaisie(e.target.value)}
+                  disabled={!montantCharge || archiving}
+                  placeholder={montantCharge ? 'Non renseigné' : 'Chargement…'}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60 disabled:opacity-60"
+                />
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                  Ce qui revient ensuite sur ce client — abonnement, prestation renouvelée. Noté à
+                  part : ce n'est ni une commission agence, ni une commission conseiller.
+                </p>
+              </div>
+            )}
 
             <div className="flex flex-col gap-2">
               <button

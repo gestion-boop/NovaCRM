@@ -116,6 +116,10 @@ export function supabaseLeadToContact(item: Record<string, unknown>): Contact {
       item.pending_quote_amount === null || item.pending_quote_amount === undefined
         ? undefined
         : Number(item.pending_quote_amount),
+    recurrence:
+      item.recurring_amount === null || item.recurring_amount === undefined
+        ? undefined
+        : Number(item.recurring_amount),
     companyName: ((item.company as Record<string, unknown> | null)?.name as string) || undefined,
     companyAddress: ((item.company as Record<string, unknown> | null)?.address as string) || undefined,
   };
@@ -326,6 +330,10 @@ export const useContacts = () => {
 
       if (updates.caDevisAVenir !== undefined) {
         patch.pending_quote_amount = updates.caDevisAVenir;
+      }
+
+      if (updates.recurrence !== undefined) {
+        patch.recurring_amount = updates.recurrence;
       }
 
       // Colonne JSON : on la réécrit entière, en conservant ce qu'elle
