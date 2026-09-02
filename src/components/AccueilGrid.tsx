@@ -4,6 +4,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import agencyImmosphera from '@/assets/agency-immosphera.png';
+import { chargerMasqueesDepuisServeur, masquerTuile, lireMasquees } from '@/lib/tuilesMasquees';
 import NovaMascotte from './NovaMascotte';
 import { NAV_ITEMS } from './Sidebar';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
@@ -1437,6 +1438,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     }
     return grid;
   };
+  // Incrémenté quand la liste des tuiles masquées change hors de ce
+  // composant (synchronisation serveur, Paramètres) : `idsMasques` la relit à
+  // chaque rendu, il suffit donc d'en provoquer un.
+  const [versionMasquees, setVersionMasquees] = useState(0);
   const [rootSlots, setRootSlots] = useState<(string | null)[]>(() => loadRootSlots(ROOT_SLOTS_KEY, tiles));
   const rootSlotsKeyRef = useRef(ROOT_SLOTS_KEY);
   useEffect(() => {
@@ -1514,6 +1519,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     homeSyncLoadedAgencies.add(agencyId);
     (async () => {
       try {
+        // Demandé le 2 septembre : « lors d'une mise à jour, je ne veux pas
+        // que des tuiles réapparaissent ». La liste des tuiles masquées
+        // suivait le navigateur, pas le compte : sur un autre poste, la
+        // grille arrivait sans elle, et tout ressortait. On la réunit avec
+        // celle du compte AVANT de poser la grille, puis on force un rendu
+        // pour que les tuiles posées à l'affichage la respectent.
+        await chargerMasqueesDepuisServeur(currentUser.uid);
+        setVersionMasquees((v) => v + 1);
+
         const { data } = await supabase
           .from('user_ui_settings')
           .select('home_tiles, home_root_slots')
@@ -1880,15 +1894,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     }
 
     if (tileToHide) {
-      try {
-        const raw = localStorage.getItem('novasphere_hidden_tiles_v1');
-        const hidden: TileItemNode[] = raw ? JSON.parse(raw) : [];
-        if (!hidden.some((t) => t.id === tileToHide.id)) {
-          localStorage.setItem('novasphere_hidden_tiles_v1', JSON.stringify([...hidden, tileToHide]));
-        }
-      } catch (err) {
-        console.warn('Impossible d\'enregistrer la tuile masquée :', err);
-      }
+      // Navigateur ET compte : masquée ici, masquée partout, mise à jour ou
+      // non (voir src/lib/tuilesMasquees.ts).
+      void masquerTuile(currentUser?.uid, { ...tileToHide }).then(() => setVersionMasquees((v) => v + 1));
     }
   };
 
@@ -2467,14 +2475,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   //   - elle passe les filtres de visibilité comme n'importe quelle autre.
   // Rien n'est écrit dans la grille enregistrée : l'ordre de chacun est
   // intact, et la tuile prend simplement la première case libre.
-  const idsMasques = (() => {
-    try {
-      const brut = localStorage.getItem('novasphere_hidden_tiles_v1');
-      return new Set<string>(brut ? (JSON.parse(brut) as string[]) : []);
-    } catch {
-      return new Set<string>();
-    }
-  })();
+  // `versionMasquees` n'est pas lu ici, mais sa mise à jour provoque le rendu
+  // qui relit la liste — c'est tout son rôle.
+  void versionMasquees;
+  const idsMasques = new Set<string>(lireMasquees().map((t) => t.id));
 
   const dejaReposes = new Set(dossiersVerrouillesAReposer.map((d) => d.id));
   const nouveautesAPoser = activeFolder

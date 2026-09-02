@@ -11,6 +11,7 @@ import {
 import { AGENCIES, Agency } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { getAgencyLogo, sortByAgencyOrder } from '@/lib/agency-logos';
+import { reafficherTuile } from '@/lib/tuilesMasquees';
 import { requestWorkspaceAccessToken, getCachedAccessToken, reconnectGoogleWorkspace } from '@/lib/workspace';
 import { updateCssAccentVars, updateCssCalendarAccentVars } from '@/utils/theme';
 import { supabase } from '@/lib/supabase';
@@ -402,7 +403,9 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
       const hidden: Array<{ id: string; [k: string]: unknown }> = rawHidden ? JSON.parse(rawHidden) : [];
       const tile = hidden.find((t) => t.id === id);
       if (!tile) return;
-      localStorage.setItem('novasphere_hidden_tiles_v1', JSON.stringify(hidden.filter((t) => t.id !== id)));
+      // Navigateur ET compte : la liste des tuiles masquées suit désormais
+      // l'utilisateur (voir src/lib/tuilesMasquees.ts).
+      void reafficherTuile(currentUser?.uid, id);
 
       const agencyId = activeAgency?.id || 'default';
       const tilesKey = `novasphere_home_tiles_v3_${agencyId}`;
