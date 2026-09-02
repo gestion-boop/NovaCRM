@@ -24,6 +24,9 @@ interface LigneCa {
   montant: number;
   etape: string;
   archive: boolean;
+  // Date d'archivage : c'est elle qui date réellement le chiffre d'affaires,
+  // et donc le montant « facturé » du mois.
+  archiveLe?: string;
 }
 
 const CHART_TOOLTIP_STYLE = {
@@ -296,6 +299,7 @@ export default function Dashboard({
         montant,
         etape: d.stage || '',
         archive: Boolean(d.archivedAt),
+        archiveLe: d.archivedAt || undefined,
       });
       if (d.archivedAt) {
         total += montant;
@@ -502,23 +506,34 @@ export default function Dashboard({
     }
   };
 
-  // "Dossier signé" = étape dont le nom contient "signat" (couvre toutes
-  // les variantes observées selon l'agence/pipeline : SIGNATURE, SIGNATURE
-  // ACTE, Signature compromis, Signature de l'acte, SIGNATURE NOTAIRE...).
-  // Faute d'un horodatage dédié "date de signature" en base, `updatedAt`
-  // (dernière modification du dossier) sert de meilleure approximation
-  // disponible du mois de signature — à affiner si une vraie date de
-  // signature est ajoutée un jour.
+  // « Facturé » du mois : le même chiffre que la tuile Chiffre d'affaires de
+  // l'agence, restreint au mois.
+  //
+  // Cette ligne comptait auparavant les dossiers POSÉS sur une étape dont le
+  // nom contient « signat », datés par leur dernière modification, et parmi
+  // les seuls dossiers NON archivés. Trois approximations qui se cumulaient :
+  // un dossier réellement facturé — donc archivé — en sortait, et la ligne
+  // affichait « Facturé : 0 € » pendant que la tuile dorée, juste en dessous,
+  // affichait plusieurs dizaines de milliers d'euros. Elle repart maintenant
+  // des mêmes dossiers que la tuile, datés par leur archivage.
   const billedForMonth = (month: number, year: number) =>
-    deals.reduce((sum, d) => {
-      if (!/signat/i.test(d.stage) || !d.updatedAt) return sum;
-      const dt = new Date(d.updatedAt);
+    chiffreAffairesAgence.lignes.reduce((sum, ligne) => {
+      if (!ligne.archive || !ligne.archiveLe) return sum;
+      const dt = new Date(ligne.archiveLe);
       if (dt.getMonth() + 1 !== month || dt.getFullYear() !== year) return sum;
-      return sum + d.amount;
+      return sum + ligne.montant;
     }, 0);
 
-  const billedThisMonth = useMemo(() => billedForMonth(currentMonth, currentYear), [deals, currentMonth, currentYear]);
-  const billedPrevMonth = useMemo(() => billedForMonth(prevMonth, prevYear), [deals, prevMonth, prevYear]);
+  const billedThisMonth = useMemo(
+    () => billedForMonth(currentMonth, currentYear),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chiffreAffairesAgence, currentMonth, currentYear]
+  );
+  const billedPrevMonth = useMemo(
+    () => billedForMonth(prevMonth, prevYear),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chiffreAffairesAgence, prevMonth, prevYear]
+  );
   const billedDelta = billedThisMonth - billedPrevMonth;
   const goalPercent = monthlyGoal && monthlyGoal.target_amount > 0
     ? Math.round((billedThisMonth / monthlyGoal.target_amount) * 100)

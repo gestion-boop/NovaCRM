@@ -222,6 +222,17 @@ export const useContacts = () => {
         advisor_commission_ttc: newContact.advisorCommissionTtc ?? null,
         mandate_number: newContact.mandateNumber?.trim() || null,
         secondary_contact: newContact.coBorrower?.trim() || null,
+        // Identité et adresse du professionnel : colonne dédiée, et plus
+        // seulement une ligne de texte dans les commentaires — sans quoi
+        // l'information n'apparaît nulle part ailleurs (panneau Gestion des
+        // clients, fiche, exports).
+        company:
+          newContact.companyName?.trim() || newContact.companyAddress?.trim()
+            ? {
+                name: newContact.companyName?.trim() || null,
+                address: newContact.companyAddress?.trim() || null,
+              }
+            : null,
       };
 
       const { data, error: sbError } = await supabase

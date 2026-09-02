@@ -3,6 +3,7 @@ import { X, UserPlus, Building, Building2, ChevronDown, ChevronUp, User, Briefca
 import { toast } from 'sonner';
 import { Contact, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { matchesAgency } from '@/hooks/useContacts';
 import { formatVille } from '@/lib/utils';
 
 interface NouveauLeadModalProps {
@@ -140,6 +141,14 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   const [companyCity, setCompanyCity] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Novavisio, demandé le 2 septembre : « quand on crée le client aussi il
+  // faut changer les données ». Mêmes champs retirés qu'à la modification.
+  // `matchesAgency` et non un `===` : les identifiants d'agence hérités
+  // (« novavisio », « agency-2 ») sont encore présents.
+  const estNovavisio = /novavisio/i.test(
+    AGENCIES.find((a) => matchesAgency(selectedAgencyId, a.id))?.name || ''
+  );
+
   // Signalé le 2 septembre : « quand je crée un client et que je le valide,
   // puis que j'en recrée un nouveau, j'ai les coordonnées de l'ancienne fiche
   // qui s'affichent — je dois faire un hard refresh ». La fenêtre n'est pas
@@ -237,6 +246,13 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         advisorCommissionTtc: advisorCommission === '' ? undefined : Number(advisorCommission),
         mandateNumber: mandateNumber.trim() || undefined,
         comments: (comments.trim() + companyComments).trim(),
+        // Signalé le 2 septembre : l'identité du professionnel doit être
+        // visible dans le panneau Gestion des clients. Elle n'était écrite
+        // que dans les commentaires, en texte libre — invisible partout
+        // ailleurs. Elle part maintenant aussi dans la colonne dédiée.
+        companyName: companyName.trim() || undefined,
+        companyAddress:
+          [companyAddress.trim(), companyZip.trim(), companyCity.trim()].filter(Boolean).join(' ') || undefined,
         coBorrower: coBorrowerInfo || undefined,
         assignedTo: assignedTo || undefined,
       });
@@ -395,6 +411,27 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                   </div>
+                  {/* « Quand on choisit Professionnel, juste en dessous on
+                      puisse mettre l'identité du professionnel avec
+                      l'adresse. » */}
+                  {contactType === 'Professionnel' && (
+                    <div className="space-y-1.5 pt-1">
+                      <input
+                        type="text"
+                        placeholder="Identité du professionnel (raison sociale)"
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Adresse du professionnel"
+                        value={companyAddress}
+                        onChange={(e) => setCompanyAddress(e.target.value)}
+                        className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Pipeline */}
@@ -449,6 +486,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Budget Max */}
+                {!estNovavisio && (
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-200">Budget max (€)</label>
                   <input
@@ -459,8 +497,10 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
                   />
                 </div>
+                )}
 
                 {/* Secteur */}
+                {!estNovavisio && (
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-200">Secteur</label>
                   <input
@@ -471,8 +511,10 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
                   />
                 </div>
+                )}
 
                 {/* Type de bien */}
+                {!estNovavisio && (
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-200">Type de bien</label>
                   <input
@@ -483,6 +525,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
                   />
                 </div>
+                )}
 
                 {/* Commission agence — anciennement « Honoraires ». C'est le
                     chiffre d'affaires de l'agence, celui qui alimente les
@@ -511,6 +554,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                 </div>
 
                 {/* Numéro de mandat */}
+                {!estNovavisio && (
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-200">Numéro de mandat</label>
                   <input
@@ -520,6 +564,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
                   />
                 </div>
+                )}
               </div>
             </div>
 
@@ -575,6 +620,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
             <div className="space-y-2 pt-1">
               
               {/* Toggle 1: Deuxième personne (conjoint) */}
+              {!estNovavisio && (
               <div className="bg-[#030d0f] border border-[#153c3f] rounded-xl overflow-hidden transition-all">
                 <button
                   type="button"
@@ -639,8 +685,11 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                   </div>
                 )}
               </div>
+              )}
 
-              {/* Toggle 2: Société (professionnel) */}
+              {/* Toggle 2: Société (professionnel) — remplacé sur Novavisio
+                  par les deux champs posés sous « Type de contact ». */}
+              {!estNovavisio && (
               <div className="bg-[#030d0f] border border-[#153c3f] rounded-xl overflow-hidden transition-all">
                 <button
                   type="button"
@@ -730,6 +779,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                   </div>
                 )}
               </div>
+              )}
 
             </div>
 
