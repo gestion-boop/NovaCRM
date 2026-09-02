@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText, PlayCircle, Plus, Search, Trash2, X, Loader2, Upload, Link as LinkIcon, Pencil,
-  CheckCircle2, Circle, Users, ImagePlus, GraduationCap,
+  CheckCircle2, Circle, Users, ImagePlus, GraduationCap, LayoutGrid, List as ListIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -113,6 +113,21 @@ export default function AcademyView() {
   // société : elle se règle depuis l'écran, par un super admin, et se range
   // avec les autres réglages d'apparence de l'agence — pas dans le code, sans
   // quoi il faudrait une livraison à chaque changement de visuel.
+  // Demandé le 2 septembre : « qu'on puisse mettre le dossier en forme de
+  // grille ou en forme de liste ». Le choix est personnel et tient dans le
+  // navigateur : il n'a pas à voyager d'un poste à l'autre.
+  const [vueDossiers, setVueDossiers] = useState<'grille' | 'liste'>(() => {
+    try {
+      return localStorage.getItem('nova_academy_vue') === 'liste' ? 'liste' : 'grille';
+    } catch {
+      return 'grille';
+    }
+  });
+  const choisirVue = (v: 'grille' | 'liste') => {
+    setVueDossiers(v);
+    try { localStorage.setItem('nova_academy_vue', v); } catch { /* stockage indisponible */ }
+  };
+
   const [fond, setFond] = useState<string | null>(null);
   const [fondEnCours, setFondEnCours] = useState(false);
   const champFond = useRef<HTMLInputElement>(null);
@@ -488,23 +503,47 @@ export default function AcademyView() {
             </div>
           )}
 
-          {/* Recherche + actions */}
-          <div className="flex flex-wrap items-center gap-3 justify-center">
-            <div className="relative flex-1 min-w-[240px] max-w-2xl">
+          {/* Recherche et actions calées à DROITE : à gauche, l'image de fond
+              porte le logo et le titre « IMMOSPHERA ACADEMY » — une barre
+              centrée passait dessus et le rendait illisible. */}
+          <div className="flex flex-wrap items-center gap-2.5 justify-end">
+            <div className="relative w-full sm:w-auto sm:min-w-[260px] sm:max-w-sm">
               <input
                 value={recherche}
                 onChange={(e) => setRecherche(e.target.value)}
                 placeholder="Rechercher une procédure…"
-                className="w-full pl-6 pr-14 py-3.5 rounded-full bg-white text-slate-800 placeholder-slate-400 text-sm shadow-lg border border-black/5 focus:outline-none focus:ring-2 focus:ring-[#E0A21A]"
+                className="w-full pl-5 pr-11 py-2.5 rounded-full bg-white/95 text-slate-800 placeholder-slate-400 text-sm shadow-md border border-black/10 focus:outline-none focus:ring-2 focus:ring-[#E0A21A]"
               />
-              <Search className="w-5 h-5 text-slate-400 absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {/* Grille ou liste */}
+            <div className="flex items-center rounded-full bg-white/90 border border-black/10 p-0.5 shadow-md">
+              <button
+                onClick={() => choisirVue('grille')}
+                title="Afficher les dossiers en grille"
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                  vueDossiers === 'grille' ? 'bg-[#E0A21A] text-white' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => choisirVue('liste')}
+                title="Afficher les dossiers en liste"
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                  vueDossiers === 'liste' ? 'bg-[#E0A21A] text-white' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <ListIcon className="w-4 h-4" />
+              </button>
             </div>
 
             {estSuperAdmin && (
               <>
                 <button
                   onClick={ouvrirAjout}
-                  className="px-4 py-3 rounded-full bg-[#1b2b2e] hover:bg-[#0f1c1e] text-white font-bold text-xs flex items-center gap-2 shadow-lg"
+                  className="px-3.5 py-2.5 rounded-full bg-[#1b2b2e] hover:bg-[#0f1c1e] text-white font-bold text-xs flex items-center gap-2 shadow-md"
                 >
                   <Plus className="w-4 h-4" />
                   Ajouter une procédure
@@ -524,7 +563,7 @@ export default function AcademyView() {
                   onClick={() => champFond.current?.click()}
                   disabled={fondEnCours}
                   title="Choisir l'image de fond de l'Académy"
-                  className="px-4 py-3 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 font-bold text-xs flex items-center gap-2 shadow disabled:opacity-60"
+                  className="px-3.5 py-2.5 rounded-full bg-white/90 hover:bg-white border border-black/10 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-md disabled:opacity-60"
                 >
                   {fondEnCours ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
                   Image de fond
@@ -535,7 +574,7 @@ export default function AcademyView() {
 
           {/* Avancement personnel */}
           {ressources.length > 0 && (
-            <div className="mt-5 flex items-center justify-center gap-2.5 text-xs text-slate-700">
+            <div className="mt-3 flex items-center justify-end gap-2.5 text-xs text-slate-700">
               <CheckCircle2
                 className={`w-4 h-4 ${validees.size === ressources.length ? 'text-emerald-600' : 'text-slate-400'}`}
               />
@@ -559,40 +598,73 @@ export default function AcademyView() {
               Le dossier est dessiné en CSS — onglet, corps, rabat avant — pour
               rester net à toutes les tailles et suivre le thème sans image. */}
           {auNiveauDossiers && !chargement && rubriques.length > 0 && (
-            <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
-              {rubriques.map(([nom, nombre]) => {
-                const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
-                return (
-                  <button
-                    key={nom}
-                    onClick={() => setRubriqueActive(nom)}
-                    className="group flex flex-col items-center focus:outline-none"
-                  >
-                    <div className="relative w-full max-w-[210px] aspect-[5/4] transition-transform duration-200 group-hover:-translate-y-1.5">
-                      {/* dos du dossier */}
-                      <div className="absolute inset-x-0 top-[12%] bottom-0 rounded-xl bg-gradient-to-b from-[#E8B33A] to-[#C88C12] shadow-[0_14px_24px_-12px_rgba(0,0,0,0.55)]" />
-                      {/* onglet */}
-                      <div className="absolute left-[4%] top-[2%] h-[16%] w-[46%] rounded-t-lg bg-gradient-to-b from-[#F2C55C] to-[#E3AE33]" />
-                      {/* rabat avant */}
-                      <div className="absolute inset-x-0 top-[28%] bottom-0 rounded-xl bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40 shadow-inner" />
-                      {/* compteur */}
-                      <span className="absolute right-3 top-[36%] px-2.5 py-1 rounded-full bg-black/25 text-white text-[11px] font-black">
-                        {nombre}
+            vueDossiers === 'grille' ? (
+              <div className="mt-8 grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-x-4 gap-y-6">
+                {rubriques.map(([nom, nombre]) => {
+                  const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
+                  return (
+                    <button
+                      key={nom}
+                      onClick={() => setRubriqueActive(nom)}
+                      className="group flex flex-col items-center focus:outline-none"
+                      title={`${nom} — ${nombre} procédure${nombre > 1 ? 's' : ''}`}
+                    >
+                      {/* Dossier réduit : signalé « beaucoup trop gros ». Il
+                          reste reconnaissable — onglet, corps, rabat — mais
+                          plusieurs tiennent maintenant sur une ligne. */}
+                      <div className="relative w-full max-w-[104px] aspect-[5/4] transition-transform duration-200 group-hover:-translate-y-1">
+                        <div className="absolute inset-x-0 top-[12%] bottom-0 rounded-lg bg-gradient-to-b from-[#E8B33A] to-[#C88C12] shadow-[0_10px_16px_-10px_rgba(0,0,0,0.55)]" />
+                        <div className="absolute left-[5%] top-[2%] h-[16%] w-[46%] rounded-t-md bg-gradient-to-b from-[#F2C55C] to-[#E3AE33]" />
+                        <div className="absolute inset-x-0 top-[28%] bottom-0 rounded-lg bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40" />
+                        <span className="absolute right-1.5 top-[34%] min-w-[18px] px-1.5 py-0.5 rounded-full bg-black/25 text-white text-[10px] font-black text-center">
+                          {nombre}
+                        </span>
+                        {vues > 0 && (
+                          <span className="absolute left-1.5 bottom-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white/85 text-[9px] font-bold text-emerald-700">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            {vues}/{nombre}
+                          </span>
+                        )}
+                      </div>
+                      <span className="mt-2 text-[11px] font-bold text-slate-800 text-center leading-tight line-clamp-2 group-hover:text-black">
+                        {nom}
                       </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-8 max-w-3xl rounded-2xl bg-white/85 border border-black/10 shadow-lg divide-y divide-black/5 overflow-hidden">
+                {rubriques.map(([nom, nombre]) => {
+                  const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
+                  return (
+                    <button
+                      key={nom}
+                      onClick={() => setRubriqueActive(nom)}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#E0A21A]/10 transition-colors text-left"
+                    >
+                      {/* Même dossier, en miniature : la liste garde le repère
+                          visuel, elle ne le remplace pas par une puce. */}
+                      <span className="relative w-9 h-7 shrink-0">
+                        <span className="absolute inset-x-0 top-[14%] bottom-0 rounded bg-gradient-to-b from-[#E8B33A] to-[#C88C12]" />
+                        <span className="absolute left-[6%] top-0 h-[20%] w-[46%] rounded-t-sm bg-[#F2C55C]" />
+                        <span className="absolute inset-x-0 top-[32%] bottom-0 rounded bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40" />
+                      </span>
+                      <span className="flex-1 min-w-0 text-sm font-bold text-slate-800 truncate">{nom}</span>
                       {vues > 0 && (
-                        <span className="absolute left-3 bottom-3 flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/80 text-[10px] font-bold text-emerald-700">
-                          <CheckCircle2 className="w-3 h-3" />
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
                           {vues}/{nombre}
                         </span>
                       )}
-                    </div>
-                    <span className="mt-3 text-sm font-bold text-slate-800 text-center leading-snug group-hover:text-black">
-                      {nom}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                      <span className="text-xs text-slate-500 tabular-nums">
+                        {nombre} procédure{nombre > 1 ? 's' : ''}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )
           )}
 
           {/* ── NIVEAU 2 : le contenu d'un dossier ─────────────────────── */}
