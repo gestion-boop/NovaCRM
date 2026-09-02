@@ -138,6 +138,11 @@ export default function AcademyView() {
   const [deplacementEnCours, setDeplacementEnCours] = useState<string | null>(null);
   const dossierPourVisuel = useRef<string | null>(null);
   const [menuDossier, setMenuDossier] = useState<string | null>(null);
+  // Demandé le 2 septembre : « ici, je voudrais rajouter une image de fond au
+  // choix » — sur la fiche elle-même, sans passer par le formulaire complet.
+  const ressourcePourCouverture = useRef<Ressource | null>(null);
+  const champCouvertureRapide = useRef<HTMLInputElement>(null);
+  const [couvertureEnCours, setCouvertureEnCours] = useState<string | null>(null);
   const cadreLecteur = useRef<HTMLDivElement>(null);
   const [pleinEcran, setPleinEcran] = useState(false);
   const champVisuelDossier = useRef<HTMLInputElement>(null);
@@ -470,6 +475,30 @@ export default function AcademyView() {
     }
   };
 
+  /** Pose ou remplace la couverture d'une procédure, depuis sa fiche. */
+  const changerCouvertureRapide = async (ressource: Ressource, image: File) => {
+    setCouvertureEnCours(ressource.id);
+    try {
+      const url = await deposerImage(image, `couverture-${ressource.id}`);
+      const { data, error } = await supabase
+        .from('academy_resources' as any)
+        .update({ image_url: url, updated_at: new Date().toISOString() } as any)
+        .eq('id', ressource.id)
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Modification refusée par la base : action réservée aux super admins.');
+      }
+      setRessources((prev) => prev.map((r) => (r.id === ressource.id ? { ...r, image_url: url } : r)));
+      toast.success(`Image posée sur « ${ressource.titre} ».`);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Impossible d'enregistrer cette image.");
+    } finally {
+      setCouvertureEnCours(null);
+    }
+  };
+
   const retirerVisuelDossier = async (nomDossier: string) => {
     if (!activeAgency?.id) return;
     const { error } = await supabase
@@ -765,6 +794,19 @@ export default function AcademyView() {
                   <Plus className="w-4 h-4" />
                   Ajouter une procédure
                 </button>
+                <input
+                  ref={champCouvertureRapide}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const image = e.target.files?.[0];
+                    const cible = ressourcePourCouverture.current;
+                    e.target.value = '';
+                    ressourcePourCouverture.current = null;
+                    if (image && cible) void changerCouvertureRapide(cible, image);
+                  }}
+                  className="hidden"
+                />
                 <input
                   ref={champVisuelDossier}
                   type="file"
@@ -1102,8 +1144,29 @@ export default function AcademyView() {
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
                       ) : (
-                        <span className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400">
+                        <span className="w-full h-full flex flex-col items-center justify-center gap-3 bg-slate-100 text-slate-400">
                           {estVideo ? <PlayCircle className="w-10 h-10" /> : <FileText className="w-10 h-10" />}
+                          {/* Poser l'image depuis la fiche : ouvrir le
+                              formulaire complet pour une seule photo faisait
+                              un détour inutile. */}
+                          {estSuperAdmin && (
+                            <span
+                              role="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                ressourcePourCouverture.current = r;
+                                champCouvertureRapide.current?.click();
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-black/10 text-slate-700 text-[11px] font-bold shadow-sm hover:bg-slate-50"
+                            >
+                              {couvertureEnCours === r.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <ImagePlus className="w-3.5 h-3.5" />
+                              )}
+                              Ajouter une image
+                            </span>
+                          )}
                         </span>
                       )}
                       <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/70 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5">
@@ -1176,6 +1239,22 @@ export default function AcademyView() {
 
                     {estSuperAdmin && (
                       <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {r.image_url && (
+                          <button
+                            onClick={() => {
+                              ressourcePourCouverture.current = r;
+                              champCouvertureRapide.current?.click();
+                            }}
+                            title="Changer l'image"
+                            className="w-8 h-8 rounded-full bg-black/70 text-white hover:text-[#F7BC5F] flex items-center justify-center"
+                          >
+                            {couvertureEnCours === r.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <ImagePlus className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )}
                         <button
                           onClick={() => ouvrirModification(r)}
                           title="Modifier"
