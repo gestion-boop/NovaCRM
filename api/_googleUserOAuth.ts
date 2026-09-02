@@ -106,6 +106,16 @@ const clientDe = (societe: (typeof SOCIETES)[number]): ClientGoogleSociete | nul
   return { entite: societe.entite, nom: societe.nom, domaine: societe.domaine, clientId, clientSecret };
 };
 
+/**
+ * Diagnostic : quelles sociétés ont leurs deux clés dans cet environnement.
+ * Uniquement des booléens — jamais une valeur.
+ */
+export function etatConfiguration(): Record<EntiteGoogle, boolean> {
+  const etat = {} as Record<EntiteGoogle, boolean>;
+  for (const s of SOCIETES) etat[s.entite] = clientDe(s) !== null;
+  return etat;
+}
+
 /** Le client d'une société, s'il est configuré (variables Vercel). */
 export function clientPourEntite(entite: string): ClientGoogleSociete | null {
   const societe = SOCIETES.find((s) => s.entite === entite);

@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { getAuthedUser, isSuperAdminUser, requireSuperAdmin, statusForError, supabaseAdmin } from '../../_supabaseAdmin.js';
-import { PORTEES_WORKSPACE, clientPourEntite, clientPourUtilisateur } from '../../_googleUserOAuth.js';
+import { PORTEES_WORKSPACE, clientPourEntite, clientPourUtilisateur, etatConfiguration } from '../../_googleUserOAuth.js';
 
 /**
  * /api/admin/drive/:agencyId
@@ -161,7 +161,11 @@ async function handleUserConnect(req: any, res: any) {
     const user = await getAuthedUser(req);
     const { societe, client } = await clientPourUtilisateur({ id: user.id, email: user.email });
     if (!societe || !client) {
-      res.status(200).json({ configured: false, societe: societe?.nom ?? null });
+      res.status(200).json({
+        configured: false,
+        societe: societe?.nom ?? null,
+        raison: societe ? 'cles_absentes' : 'societe_inconnue',
+      });
       return;
     }
     const origin = `https://${req.headers.host}`;
@@ -257,6 +261,10 @@ export default async function handler(req: any, res: any) {
   const cible = String(req.query?.agencyId || '');
   if (cible === 'google-connect') {
     if (req.method === 'POST') await handleUserConnect(req, res);
+    // GET : diagnostic lisible dans un navigateur — quelles sociétés ont
+    // leurs clés dans CET environnement (Production ou Preview). Des
+    // booléens seulement, jamais une valeur.
+    else if (req.method === 'GET') res.status(200).json({ environnement: process.env.VERCEL_ENV || null, cles: etatConfiguration() });
     else res.status(405).json({ error: 'Méthode non autorisée.' });
     return;
   }

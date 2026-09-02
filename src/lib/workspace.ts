@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { toast } from 'sonner';
 
 // In-memory token storage (Do NOT persist in localStorage/sessionStorage)
 let cachedAccessToken: string | null = null;
@@ -217,11 +218,25 @@ export const reconnectGoogleWorkspace = async (): Promise<void> => {
         method: 'POST',
         headers: { Authorization: `Bearer ${jeton}` },
       });
-      const corps = (await reponse.json().catch(() => ({}))) as { url?: string; configured?: boolean };
+      const corps = (await reponse.json().catch(() => ({}))) as {
+        url?: string; configured?: boolean; societe?: string | null; raison?: string; error?: string;
+      };
       if (reponse.ok && corps?.url) {
         window.location.href = corps.url;
         return;
       }
+      // On se rabat sur l'ancienne connexion, mais on dit pourquoi : sans
+      // ce message, un dépôt de clés incomplet est invisible (vécu le
+      // 2 septembre avec ImmoSphera).
+      const raison = !reponse.ok
+        ? `réponse ${reponse.status}${corps?.error ? ` : ${corps.error}` : ''}`
+        : corps?.raison === 'cles_absentes'
+          ? `clés Google absentes dans cet environnement pour ${corps.societe || 'votre société'}`
+          : corps?.raison === 'societe_inconnue'
+            ? 'société non reconnue pour ce compte'
+            : 'raison inconnue';
+      console.warn('[workspace] connexion interne indisponible, repli sur la connexion historique :', raison);
+      toast.warning(`Connexion Google par société indisponible (${raison}). Ancienne connexion utilisée.`, { duration: 12000 });
     }
   } catch (e) {
     console.warn('[workspace] connexion interne indisponible, repli sur la connexion historique :', e);
