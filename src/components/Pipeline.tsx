@@ -28,6 +28,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, htDepuisTtc, ttcDepuisHt } from '@/lib/utils';
+import { toValidUuidOrNull } from '@/data/teamMembers';
 // Ticket #277 (suite) : même détection de mode jour que l'accueil, pour que
 // les colonnes du pipeline suivent la même bascule vers de vraies couleurs
 // claires (au lieu du filtre global qui pâlit juste le bleu canard).
@@ -106,10 +107,17 @@ interface StoredPipeline extends PipelineDef {
   sortOrder: number;
   createdAt: string;
   // Demandé le 2 septembre : « les utilisateurs peuvent supprimer les
-  // pipelines, sauf les pipelines officiels ». Est officiel le pipeline
-  // marqué PAR DÉFAUT pour la société (colonne is_default) : c'est le
-  // pipeline de référence, celui sur lequel tout le monde travaille.
+  // pipelines, sauf les officiels » puis « c'est LEUR pipeline qu'ils
+  // pourront modifier uniquement, et je veux pouvoir en verrouiller ».
+  //
+  //   officiel    : le pipeline marqué par défaut pour la société — celui de
+  //                 référence, sur lequel tout le monde travaille.
+  //   verrouille  : posé par un super admin sur n'importe quel pipeline.
+  //   proprietaire: qui l'a créé (colonne owner_id) ; vide sur les pipelines
+  //                 antérieurs, qui restent donc réservés aux super admins.
   officiel: boolean;
+  verrouille: boolean;
+  proprietaire: string | null;
   // Jamais chargée depuis la base ni écrite à la création : optionnelle,
   // plutôt que déclarée obligatoire et toujours absente.
   updatedAt?: string;
@@ -608,8 +616,14 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
   // Ce qui touche à la STRUCTURE (colonnes : ajouter, renommer, supprimer,
   // réordonner) reste réservé aux super admins : une colonne supprimée
   // déplace tous les dossiers qui s'y trouvent.
-  const peutRenommerOuSupprimerPipeline = (pipeline?: StoredPipeline | null) =>
-    canManageStructure || (!!pipeline && !pipeline.officiel);
+  const peutRenommerOuSupprimerPipeline = (pipeline?: StoredPipeline | null) => {
+    if (canManageStructure) return true;
+    if (!pipeline) return false;
+    // Officiel ou verrouillé : réservé aux super admins.
+    if (pipeline.officiel || pipeline.verrouille) return false;
+    // Sinon, chacun chez soi : uniquement les pipelines qu'on a créés.
+    return !!pipeline.proprietaire && pipeline.proprietaire === currentUser?.uid;
+  };
 
   // Ticket #219 : le Pipeline était volontairement verrouillé sur Conseils
   // Finances ("temporaire", cf. historique) — toutes les autres agences
@@ -851,6 +865,8 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
             agencyId: p.agency_id,
             stages: pStages.length > 0 ? pStages : [...BASE_PIPELINES[0].stages],
             officiel: Boolean(p.is_default),
+            verrouille: Boolean((p as { locked?: boolean }).locked),
+            proprietaire: ((p as { owner_id?: string | null }).owner_id) ?? null,
             sortOrder: p.is_default ? 0 : 1,
             createdAt: p.created_at,
           };
@@ -1051,6 +1067,9 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           name,
           is_default: false,
           created_at: now,
+          // Sans propriétaire, personne ne peut « modifier son pipeline » :
+          // la colonne existait mais n'était jamais renseignée.
+          owner_id: toValidUuidOrNull(currentUser?.uid || '') ,
         })
         .select()
         .single();
@@ -1075,6 +1094,8 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
         stages: initialStages,
         // Un pipeline fraîchement créé n'est jamais celui de référence.
         officiel: false,
+        verrouille: false,
+        proprietaire: currentUser?.uid ?? null,
         sortOrder: pipelines.length,
         createdAt: now,
       };
@@ -1122,32 +1143,37 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     }
   };
 
-  // Sans ce bouton, « officiel » serait décidé une fois pour toutes à la
-  // création de la société, sans aucun moyen de le changer — et le pipeline
-  // réellement important pourrait n'être protégé par rien.
-  const marquerCommeOfficiel = async () => {
-    if (!canManageStructure || !activePipeline || activePipeline.officiel) return;
+  // « Peut-être trouver une solution que je peux verrouiller des pipelines
+  // quand elles sont créées » : un super admin fige n'importe quel pipeline,
+  // y compris celui créé par quelqu'un d'autre. Le pipeline officiel de la
+  // société (marqué par défaut) est protégé sans avoir à être verrouillé.
+  const basculerVerrouPipeline = async () => {
+    if (!canManageStructure || !activePipeline) return;
     setError(null);
+    const suivant = !activePipeline.verrouille;
     try {
-      // Un seul pipeline officiel par société : on retire d'abord le marquage
-      // aux autres, sinon deux références coexisteraient.
-      const { error: razErr } = await supabase
+      const { data: modifiees, error: majErr } = await supabase
         .from('pipelines')
-        .update({ is_default: false } as any)
-        .eq('agency_id', currentAgencyId);
-      if (razErr) throw razErr;
-      const { error: majErr } = await supabase
-        .from('pipelines')
-        .update({ is_default: true } as any)
-        .eq('id', activePipeline.id);
+        .update({ locked: suivant } as any)
+        .eq('id', activePipeline.id)
+        .select('id');
       if (majErr) throw majErr;
-
-      setPipelines((prev) => prev.map((p) => ({ ...p, officiel: p.id === activePipeline.id })));
-      setSuccess(`« ${activePipeline.name} » est désormais le pipeline officiel de cette société.`);
-      queryClient.invalidateQueries({ queryKey: ['dashboard-pipelines'] });
-    } catch (officielError: any) {
-      console.error(officielError);
-      setError(officielError?.message || "Impossible de marquer ce pipeline comme officiel.");
+      if (!modifiees || modifiees.length === 0) {
+        throw new Error(
+          "Verrouillage refusé par la base de données. La colonne « locked » existe-t-elle bien (migration 20260902140000) ?"
+        );
+      }
+      setPipelines((prev) =>
+        prev.map((p) => (p.id === activePipeline.id ? { ...p, verrouille: suivant } : p))
+      );
+      setSuccess(
+        suivant
+          ? `« ${activePipeline.name} » est verrouillé : seuls les super admins peuvent le renommer ou le supprimer.`
+          : `« ${activePipeline.name} » est déverrouillé.`
+      );
+    } catch (verrouError: any) {
+      console.error(verrouError);
+      setError(verrouError?.message || 'Impossible de changer le verrou de ce pipeline.');
     }
   };
 
@@ -1818,28 +1844,25 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
             </button>
           )}
 
-          {/* Réservé aux super admins : désigne LE pipeline de référence de
-              la société, celui que personne d'autre ne pourra renommer ni
-              supprimer. À ne pas confondre avec l'étoile ci-dessus, qui est
-              un choix personnel d'ouverture. */}
-          {canManageStructure && activePipeline && (
+          {/* Réservé aux super admins. À ne pas confondre avec l'étoile
+              ci-dessus, qui reste un choix personnel d'ouverture. */}
+          {canManageStructure && activePipeline && !activePipeline.officiel && (
             <button
-              onClick={() => void marquerCommeOfficiel()}
-              disabled={activePipeline.officiel}
+              onClick={() => void basculerVerrouPipeline()}
               title={
-                activePipeline.officiel
-                  ? 'Ce pipeline est le pipeline officiel de la société'
-                  : "Protéger ce pipeline : personne d'autre ne pourra le renommer ni le supprimer"
+                activePipeline.verrouille
+                  ? 'Déverrouiller : son créateur pourra de nouveau le renommer ou le supprimer'
+                  : "Verrouiller : personne d'autre ne pourra le renommer ni le supprimer"
               }
               className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                activePipeline.officiel
-                  ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F] cursor-default'
+                activePipeline.verrouille
+                  ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F] hover:bg-[#F7BC5F]/25 cursor-pointer'
                   : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white cursor-pointer'
               }`}
             >
-              <Shield className="w-3.5 h-3.5" />
+              <Shield className={`w-3.5 h-3.5 ${activePipeline.verrouille ? 'fill-[#F7BC5F]/40' : ''}`} />
               <span className="hidden sm:inline">
-                {activePipeline.officiel ? 'Pipeline officiel' : 'Rendre officiel'}
+                {activePipeline.verrouille ? 'Verrouillé' : 'Verrouiller'}
               </span>
             </button>
           )}
@@ -1873,12 +1896,16 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
             </button>
           )}
 
-          {/* Un pipeline officiel ne se renomme ni ne se supprime : on le dit,
-              plutôt que de laisser chercher des boutons absents. */}
-          {activePipeline?.officiel && !canManageStructure && (
+          {/* Un pipeline qu'on ne peut pas modifier : on dit pourquoi, plutôt
+              que de laisser chercher des boutons absents. */}
+          {!canManageStructure && activePipeline && !peutRenommerOuSupprimerPipeline(activePipeline) && (
             <span className="px-3 py-2 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 text-[#F9C977] text-xs flex items-center gap-1.5">
-              <Star className="w-3.5 h-3.5 fill-[#F7BC5F]" />
-              Pipeline officiel
+              <Shield className="w-3.5 h-3.5" />
+              {activePipeline.officiel
+                ? 'Pipeline officiel'
+                : activePipeline.verrouille
+                  ? 'Pipeline verrouillé'
+                  : "Pipeline d'un autre membre"}
             </span>
           )}
         </div>

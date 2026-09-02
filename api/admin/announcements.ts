@@ -16,9 +16,12 @@ async function handleDeletePipeline(req: any, res: any) {
   // la règle est vérifiée ICI, côté serveur : un contrôle posé seulement
   // dans l'interface se contourne avec une simple requête.
   //
-  // Est « officiel » un pipeline marqué PAR DÉFAUT (is_default) : c'est le
-  // pipeline de référence de l'agence. Lui seul reste réservé aux super
-  // admins, avec la règle déjà en place du dernier pipeline non supprimable.
+  // Précisé ensuite : « c'est LEUR pipeline qu'ils pourront modifier
+  // uniquement », et « je veux pouvoir verrouiller des pipelines ». Un membre
+  // ne peut donc supprimer qu'un pipeline qu'il a CRÉÉ (owner_id), qui n'est
+  // ni verrouillé (locked) ni officiel (is_default). Tout le reste reste
+  // réservé aux super admins, avec la règle déjà en place du dernier pipeline
+  // non supprimable.
   const user = await getAuthedUser(req);
   const estSuperAdmin = await isSuperAdminUser(user);
 
@@ -27,23 +30,32 @@ async function handleDeletePipeline(req: any, res: any) {
 
   const { data: pipeline, error: pipeErr } = await supabaseAdmin
     .from('pipelines')
-    .select('id, agency_id, name, is_default')
+    .select('id, agency_id, name, is_default, locked, owner_id')
     .eq('id', pipelineId)
     .maybeSingle();
   if (pipeErr) throw pipeErr;
   if (!pipeline) throw new Error('Pipeline introuvable.');
 
   if (!estSuperAdmin) {
-    if (pipeline.is_default) {
+    const p = pipeline as { name: string; agency_id: string; is_default: boolean; locked?: boolean; owner_id?: string | null };
+    if (p.is_default) {
       throw new Error(
-        `« ${pipeline.name} » est le pipeline officiel de la société : sa suppression est réservée aux super admins.`
+        `« ${p.name} » est le pipeline officiel de la société : sa suppression est réservée aux super admins.`
+      );
+    }
+    if (p.locked) {
+      throw new Error(`« ${p.name} » est verrouillé : sa suppression est réservée aux super admins.`);
+    }
+    if (!p.owner_id || p.owner_id !== user.id) {
+      throw new Error(
+        `Suppression refusée : « ${p.name} » n'a pas été créé par vous. Chacun ne peut supprimer que ses propres pipelines.`
       );
     }
     const { data: appartenance, error: membreErr } = await supabaseAdmin
       .from('agency_members')
       .select('id')
       .eq('user_id', user.id)
-      .eq('agency_id', pipeline.agency_id)
+      .eq('agency_id', p.agency_id)
       .maybeSingle();
     if (membreErr) throw membreErr;
     if (!appartenance) {
