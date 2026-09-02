@@ -1858,7 +1858,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // haut, qui la réintègre silencieusement au chargement suivant même si
   // elle était dans la corbeille) — sans bloquer l'action elle-même.
   const handleDeleteTile = (tileId: string) => {
-    const tileToHide = findTileRecursive(tiles, tileId);
+    // Repli sur la définition d'origine : une tuile posée à l'affichage
+    // (nouveauté pas encore enregistrée dans la grille) n'est PAS dans
+    // `tiles`. Sans ce repli, elle n'était jamais inscrite dans la liste des
+    // tuiles masquées, et revenait donc au rendu suivant — « je ne peux pas
+    // la masquer ».
+    const tileToHide = findTileRecursive(tiles, tileId) || findInitialTile(tileId);
 
     const deleteRecursive = (items: TileItemNode[]): TileItemNode[] => {
       return items
@@ -3567,7 +3572,16 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       {/* Menu d'actions consolidé (demande explicite) — Renommer / Ajouter
           à un dossier / Masquer / Supprimer définitivement. */}
       {actionsMenuTileId && (() => {
-        const menuTile = findTileById(tiles, actionsMenuTileId);
+        // Signalé le 2 septembre : « il y a des tuiles que je ne peux pas
+        // masquer ou supprimer ». Ces tuiles-là sont posées à l'affichage
+        // (nouveautés jamais enregistrées dans la grille, dossiers
+        // verrouillés reposés) : `findTileById(tiles, …)` ne les trouvait
+        // pas, le menu d'options renvoyait null, et aucune option
+        // n'apparaissait — d'où l'impossibilité d'agir dessus.
+        const menuTile =
+          findTileById(tiles, actionsMenuTileId) ||
+          findTileById(currentDisplayTiles, actionsMenuTileId) ||
+          findInitialTile(actionsMenuTileId);
         if (!menuTile) return null;
         const folders = tiles.filter((t) => t.isFolder && t.id !== menuTile.id);
         return (
