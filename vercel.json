@@ -1,5 +1,10 @@
 {
   "buildCommand": "vite build",
+  "git": {
+    "deploymentEnabled": {
+      "claude/finish-tasks-7f70wu": false
+    }
+  },
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/api/auth/kdrive/callback", "destination": "/api/settings/bootstrap" },

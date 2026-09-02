@@ -1177,6 +1177,18 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           }
         );
 
+        // Signalé le 2 septembre : « quand je crée une colonne dans un
+        // pipeline, elle ne s'affiche pas instantanément, je dois faire un
+        // hard refresh ». Les colonnes affichées viennent de l'état local
+        // `pipelines`, chargé une seule fois au montage : l'écriture en base
+        // réussissait, mais rien ne le disait à l'écran. Le renommage, lui,
+        // mettait déjà cet état à jour — l'ajout et la suppression non.
+        setPipelines((prev) =>
+          prev.map((p) =>
+            p.id === activePipeline.id ? { ...p, stages: [...p.stages, name] } : p
+          )
+        );
+
         setNewStageName('');
         setShowAddStageModal(
           false
@@ -1345,6 +1357,16 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                   stageToDelete
               ),
           }
+        );
+
+        // Même correctif que pour l'ajout ci-dessus : sans cette ligne, la
+        // colonne supprimée restait affichée jusqu'au rechargement.
+        setPipelines((prev) =>
+          prev.map((p) =>
+            p.id === activePipeline.id
+              ? { ...p, stages: p.stages.filter((stage) => stage !== stageToDelete) }
+              : p
+          )
         );
 
         setStageToDelete(

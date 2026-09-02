@@ -140,6 +140,45 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   const [companyCity, setCompanyCity] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Signalé le 2 septembre : « quand je crée un client et que je le valide,
+  // puis que j'en recrée un nouveau, j'ai les coordonnées de l'ancienne fiche
+  // qui s'affichent — je dois faire un hard refresh ». La fenêtre n'est pas
+  // démontée à la fermeture (`if (!isOpen) return null` juste en dessous) :
+  // ses champs gardaient donc la saisie précédente. On repart d'un formulaire
+  // vierge à chaque ouverture.
+  useEffect(() => {
+    if (!isOpen) return;
+    setFirstName('');
+    setLastName('');
+    setEmail('');
+    setPhone('');
+    setClientType('Acheteur');
+    setContactType('Particulier');
+    setBudgetMax('');
+    setSecteur('');
+    setTypeBien('');
+    setPipeline('');
+    setStatutLead('froid');
+    setHonoraires('');
+    setAdvisorCommission('');
+    setMandateNumber('');
+    setAssignedTo('');
+    setComments('');
+    setShowCoContact(false);
+    setCoFirstName('');
+    setCoLastName('');
+    setCoEmail('');
+    setCoPhone('');
+    setShowCompany(false);
+    setCompanyName('');
+    setSiret('');
+    setCompanyRole('');
+    setCompanyAddress('');
+    setCompanyZip('');
+    setCompanyCity('');
+    setSubmitting(false);
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const currentAgency = AGENCIES.find(a => a.id === selectedAgencyId) || AGENCIES[0];

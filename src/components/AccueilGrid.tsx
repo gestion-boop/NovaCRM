@@ -19,7 +19,7 @@ import {
   Home as HomeIcon, Camera, Settings, Plus, GripVertical, 
   Palette, Folder, FolderPlus, ArrowLeft, Check, Trash2, Edit3, X, ChevronRight, LayoutGrid,
   Globe, ExternalLink, Bookmark, Target, Shield, Award, Sparkles, Image as ImageIcon, Eye, EyeOff, Lock, Unlock, MoreVertical,
-  CheckSquare, MapPin, Mic, Megaphone
+  CheckSquare, MapPin, Mic, Megaphone, Star
 } from 'lucide-react';
 
 // Signalé ("gros problème : les tuiles déplacées ne se sauvegardent jamais
@@ -122,6 +122,13 @@ export interface TileItemNode {
   // eux) — valeur calculée à l'affichage à partir de agency_ui_settings,
   // jamais stockée dans novasphere_home_tiles_v3 (localStorage).
   locked?: boolean;
+  // Demandé le 2 septembre : « pouvoir mettre une épingle pour afficher en
+  // haut de la liste, ou une étoile de favoris avec un onglet favori pour
+  // les retrouver plus facilement ». Une étoile : la tuile ne bouge pas de
+  // sa place, elle apparaît EN PLUS dans le bandeau « Favoris » tout en haut
+  // de l'accueil — y compris quand elle est rangée dans un dossier, ce qui
+  // est justement le cas où on la cherche.
+  favorite?: boolean;
 }
 
 export const PRESET_GRADIENTS = [
@@ -201,6 +208,11 @@ const normalizeTile = (tile: TileItemNode): TileItemNode => {
   // grilles déjà personnalisées/enregistrées.
   const isSupportTile = tile.id === 'support';
 
+  // Demandé le 2 septembre : « je veux que cela s'appelle Projets internes ».
+  // Même principe : la tuile s'appelait "Pipeline interne" dans les grilles
+  // déjà enregistrées, et changer INITIAL_TILES ne les touche pas.
+  const isProjetsInternesTile = tile.id === 'projets-internes';
+
   // Logo mascotte Nova sur la tuile Assistant NovaAI (au lieu de l'icône
   // éclair générique) — forcé ici aussi pour les grilles déjà
   // personnalisées/enregistrées en localStorage, sinon changer seulement
@@ -210,7 +222,13 @@ const normalizeTile = (tile: TileItemNode): TileItemNode => {
   const baseTile = {
     ...tile,
     id: isLegacyNotificationTile ? 'rappels' : tile.id,
-    title: isLegacyNotificationTile ? 'Rappels & Alertes' : isSupportTile ? 'Support' : tile.title,
+    title: isLegacyNotificationTile
+      ? 'Rappels & Alertes'
+      : isSupportTile
+        ? 'Support'
+        : isProjetsInternesTile
+          ? 'Projets internes'
+          : tile.title,
     navTarget: tile.navTarget === 'notifications' || isLegacyNotificationTile ? 'rappels' : tile.navTarget,
     badgeCount: isLegacyNotificationTile || hasFakeBadge ? 0 : tile.badgeCount,
     imageUrl: isAssistantIaTile ? '/nova-mascotte.png' : tile.imageUrl,
@@ -1171,19 +1189,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       .upsert({ user_id: userId, [colonne]: base } as any, { onConflict: 'user_id' });
   };
 
-  const loadTilesForKey = (key: string): TileItemNode[] => {
-    const saved = localStorage.getItem(key);
-    let base = INITIAL_TILES;
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          base = parsed.map((tile) => normalizeTile(tile));
-        }
-      } catch (e) {
-        console.error('Failed to parse saved tiles:', e);
-      }
-    }
+  // Réconciliation d'une grille déjà enregistrée (localStorage OU serveur)
+  // avec la définition actuelle des tuiles : ajout des modules apparus
+  // depuis, retrait de ceux supprimés, réalignement des dossiers verrouillés.
+  //
+  // Demandé le 2 septembre : « la tuile Projets internes sur toutes les
+  // agences ». Elle manquait sur les agences dont la grille vient du serveur
+  // (user_ui_settings.home_tiles) : ce chemin-là n'appliquait que
+  // normalizeTile, jamais cette réconciliation — une tuile ajoutée après la
+  // dernière sauvegarde n'y apparaissait donc jamais.
+  const reconcilierGrille = (grille: TileItemNode[]): TileItemNode[] => {
+    let base = grille;
     // Nouvelle tuile "Immosphera 360" : l'ajouter aussi pour les grilles déjà
     // personnalisées/enregistrées qui ne l'ont pas encore, sinon changer
     // seulement INITIAL_TILES n'a aucun effet (cf. commentaire normalizeTile
@@ -1339,6 +1355,22 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     base = resyncLockedFolders(base);
     return dedupeRecursive(base);
   };
+
+  const loadTilesForKey = (key: string): TileItemNode[] => {
+    const saved = localStorage.getItem(key);
+    let base = INITIAL_TILES;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          base = parsed.map((tile) => normalizeTile(tile));
+        }
+      } catch (e) {
+        console.error('Failed to parse saved tiles:', e);
+      }
+    }
+    return reconcilierGrille(base);
+  };
   const [tiles, setTiles] = useState<TileItemNode[]>(() => loadTilesForKey(HOME_TILES_KEY));
 
   // Ticket #256 : "positionnement libre comme sur mobile — pouvoir poser une
@@ -1468,7 +1500,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         const tuilesServeur = lireDispositionAgence((data as any)?.home_tiles, agencyId);
         if (tuilesServeur && tuilesServeur.length > 0) {
           skipNextTilesSaveRef.current = true;
-          setTiles((tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t)));
+          setTiles(reconcilierGrille((tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))));
         }
         const slotsServeur = lireDispositionAgence((data as any)?.home_root_slots, agencyId);
         if (slotsServeur) {
@@ -2055,6 +2087,48 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // l'ancienne couleur affichée jusqu'au prochain rechargement, qui reconstruit
   // tout depuis `tiles`. Même correctif que handleDeleteTile un peu plus bas
   // (qui, lui, synchronisait déjà openFolderStack).
+  // Favoris (voir TileItemNode.favorite) : l'étoile ne déplace rien, elle
+  // ajoute simplement la tuile au bandeau du haut. Le drapeau voyage avec la
+  // grille, donc il est enregistré et synchronisé comme le reste.
+  const toggleTileFavorite = (tileId: string) => {
+    const basculer = (items: TileItemNode[]): TileItemNode[] =>
+      items.map((item) => {
+        if (item.id === tileId) return { ...item, favorite: !item.favorite };
+        if (item.children) return { ...item, children: basculer(item.children) };
+        return item;
+      });
+    setTiles(basculer(tiles));
+    setOpenFolderStack((prev) => prev.map((f) => ({ ...f, children: basculer(f.children || []) })));
+  };
+
+  // Ouverture d'une tuile — un seul point d'entrée, partagé par la grille et
+  // par le bandeau « Favoris » (sans quoi les deux divergeraient, comme cela
+  // s'était déjà produit pour la règle « Mail → non lus », cf. ticket #116).
+  const activerTuile = (tile: TileItemNode) => {
+    if (tile.isFolder) {
+      setOpenFolderStack([...openFolderStack, tile]);
+    } else if (tile.id === 'immosphera-pool' && !tile.externalUrl) {
+      // Ticket #221 : lien Google Sheets pas encore renseigné
+      // (IMMOSPHERA_POOL_SHEET_URL) — message clair plutôt
+      // qu'un onglet vide ou une navigation silencieuse.
+      toast.error("Le lien du fichier partagé ImmoSphera Pool n'a pas encore été configuré.");
+    } else if (tile.id === 'annonce') {
+      // Ticket #255 : ouvre directement Paramètres → Annonces
+      // (au lieu de l'écran Paramètres générique) — flag lu
+      // une seule fois par ParametresView à son montage.
+      try { sessionStorage.setItem('novaOpenParametresSection', 'announcements'); } catch { /* stockage indisponible, tant pis */ }
+      navigateToTile('parametres');
+    } else if (tile.externalUrl) {
+      let url = tile.externalUrl.trim();
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else if (tile.navTarget) {
+      navigateToTile(tile.navTarget);
+    }
+  };
+
   const handleUpdateColor = (tileId: string, gradientValue: string) => {
     const updateGradientRecursive = (items: TileItemNode[]): TileItemNode[] => {
       return items.map(item => {
@@ -2296,6 +2370,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // la grille au lieu d'être comblée automatiquement par la tuile suivante.
   // Les dossiers ouverts gardent leur liste dense classique (`visibleTiles`
   // ci-dessous), système inchangé.
+  // Favoris : parcours récursif, pour remonter aussi ceux rangés dans un
+  // dossier. On part de `currentDisplayTiles`, déjà filtré par les droits et
+  // les verrous — un favori ne peut donc jamais faire apparaître une tuile
+  // que l'utilisateur n'a pas le droit de voir.
+  const collecterFavoris = (items: TileItemNode[]): TileItemNode[] =>
+    items.flatMap((item) => [
+      ...(item.favorite ? [item] : []),
+      ...(item.children ? collecterFavoris(item.children) : []),
+    ]);
+  const favoris = collecterFavoris(currentDisplayTiles);
+
   const rootDisplaySlots: (TileItemNode | null)[] = [];
   let visibleTiles: TileItemNode[] = currentDisplayTiles;
   if (!activeFolder) {
@@ -2538,6 +2623,50 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           (demande explicite) — le reste de la disposition (fil d'Ariane,
           bouton masquer le bandeau) est inchangé. */}
 
+      {/* Demandé le 2 septembre : « pouvoir mettre une épingle pour afficher
+          tout en haut de la liste, ou une étoile de favoris avec un onglet
+          favori pour les retrouver plus facilement — à toi de voir ». Une
+          étoile : la tuile garde sa place dans la grille (rien ne bouge, rien
+          n'est réorganisé) et apparaît EN PLUS dans ce bandeau, tout en haut
+          à gauche. Les tuiles rangées dans un dossier y remontent aussi —
+          c'est justement là qu'on les cherche. Le bandeau n'existe que s'il y
+          a des favoris : sans étoile, l'accueil est exactement comme avant. */}
+      {!activeFolder && favoris.length > 0 && (
+        <div className="max-w-7xl mx-auto w-full mb-3 z-10">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-[#F7BC5F]/80 font-bold pr-1">
+              <Star className="w-3.5 h-3.5 fill-[#F7BC5F] text-[#F7BC5F]" />
+              Favoris
+            </span>
+            {favoris.map((fav) => {
+              const FavIcon = ICON_MAP[fav.iconName] || LayoutGrid;
+              return (
+                <div
+                  key={`fav-${fav.id}`}
+                  className="group flex items-center gap-2 pl-2.5 pr-1.5 py-1.5 rounded-xl bg-black/30 border border-[#F7BC5F]/25 hover:border-[#F7BC5F]/60 transition-colors"
+                >
+                  <button
+                    onClick={() => activerTuile(fav)}
+                    className="flex items-center gap-2 min-w-0 cursor-pointer"
+                    title={fav.title}
+                  >
+                    <FavIcon className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+                    <span className="text-xs font-semibold text-white truncate max-w-[9rem]">{fav.title}</span>
+                  </button>
+                  <button
+                    onClick={() => toggleTileFavorite(fav.id)}
+                    className="p-1 rounded-lg text-[#F7BC5F]/70 hover:text-[#F7BC5F] hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                    title="Retirer des favoris"
+                  >
+                    <Star className="w-3.5 h-3.5 fill-current" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Main Grid View */}
       {/* Ticket #256 : racine en positions libres (grille fixe 6 colonnes,
           cases vides possibles via rootDisplaySlots), dossier ouvert en
@@ -2565,30 +2694,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                 tile={tile}
                 count={resolveTotalCount(tile, liveStats)}
                 isDragTarget={mergeIntentId === tile.id}
-                onActivate={() => {
-                  if (tile.isFolder) {
-                    setOpenFolderStack([...openFolderStack, tile]);
-                  } else if (tile.id === 'immosphera-pool' && !tile.externalUrl) {
-                    // Ticket #221 : lien Google Sheets pas encore renseigné
-                    // (IMMOSPHERA_POOL_SHEET_URL) — message clair plutôt
-                    // qu'un onglet vide ou une navigation silencieuse.
-                    toast.error("Le lien du fichier partagé ImmoSphera Pool n'a pas encore été configuré.");
-                  } else if (tile.id === 'annonce') {
-                    // Ticket #255 : ouvre directement Paramètres → Annonces
-                    // (au lieu de l'écran Paramètres générique) — flag lu
-                    // une seule fois par ParametresView à son montage.
-                    try { sessionStorage.setItem('novaOpenParametresSection', 'announcements'); } catch { /* stockage indisponible, tant pis */ }
-                    navigateToTile('parametres');
-                  } else if (tile.externalUrl) {
-                    let url = tile.externalUrl.trim();
-                    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                      url = 'https://' + url;
-                    }
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                  } else if (tile.navTarget) {
-                    navigateToTile(tile.navTarget);
-                  }
-                }}
+                onActivate={() => activerTuile(tile)}
                 onOpenPalette={() => setPaletteTileId(tile.id)}
                 // Signalé : le super admin doit pouvoir modifier le logo/nom/
                 // couleur/lien de N'IMPORTE QUELLE tuile (y compris les
@@ -3389,6 +3495,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
                   >
                     <Palette className="w-4 h-4 text-gray-300 shrink-0" /> Changer la couleur
+                  </button>
+                  {/* Demandé le 2 septembre : une étoile de favoris pour
+                      retrouver une tuile plus facilement. */}
+                  <button
+                    onClick={() => { toggleTileFavorite(menuTile.id); setActionsMenuTileId(null); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
+                  >
+                    <Star className={`w-4 h-4 shrink-0 ${menuTile.favorite ? 'text-[#F7BC5F] fill-[#F7BC5F]' : 'text-gray-300'}`} />
+                    {menuTile.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                   </button>
                   {isSuperAdmin && (
                     <button

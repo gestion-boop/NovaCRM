@@ -363,7 +363,11 @@ export default function Dashboard({
   // d'affaires s'ouvre au clic sur la tuile, et chaque montant s'y corrige :
   // c'est la même colonne (leads.estimated_value) que partout ailleurs, donc
   // la correction se répercute immédiatement sur le Tableau de bord.
-  const [detailCaOuvert, setDetailCaOuvert] = useState(false);
+  // Demandé le 2 septembre : « sépare le tableau — le chiffre déjà réalisé
+  // d'un côté, le CA à venir de l'autre, pour ne pas tout avoir en même temps
+  // sur le même tableau ». Une seule fenêtre, deux contenus : la tuile dorée
+  // ouvre le réalisé, le cercle ouvre l'à-venir.
+  const [detailCa, setDetailCa] = useState<'realise' | 'avenir' | null>(null);
   const [montantsSaisis, setMontantsSaisis] = useState<Record<string, string>>({});
   const [ligneEnCours, setLigneEnCours] = useState<string | null>(null);
 
@@ -577,9 +581,9 @@ export default function Dashboard({
           <div
             role="button"
             tabIndex={0}
-            onClick={() => setDetailCaOuvert(true)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCaOuvert(true); } }}
-            title="Voir le détail, ligne par ligne"
+            onClick={() => setDetailCa('realise')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('realise'); } }}
+            title="Voir le détail des affaires comptabilisées, ligne par ligne"
             className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group cursor-pointer text-left">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Chiffre d'affaires de l'agence</span>
@@ -714,7 +718,14 @@ export default function Dashboard({
             <h3 className="font-bold text-sm text-white">CA à venir</h3>
             <p className="text-xs text-slate-400">Commission agence HT encore dans Transaction V2, par colonne.</p>
           </div>
-          <div className="h-48 w-full flex items-center justify-center relative">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setDetailCa('avenir')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('avenir'); } }}
+            title="Voir le détail des affaires à venir, ligne par ligne"
+            className="h-48 w-full flex items-center justify-center relative cursor-pointer"
+          >
             {chiffreAffairesAgence.repartitionAVenir.length === 0 ? (
               <span className="text-xs text-slate-500 text-center px-4">
                 Aucun montant HT en attente dans Transaction V2
@@ -847,10 +858,14 @@ export default function Dashboard({
           l'incidence en positif ou négatif sur le tableau de bord ». Le
           montant modifié ici est écrit dans la même colonne que partout
           ailleurs (leads.estimated_value) : le total se recalcule aussitôt. */}
-      {detailCaOuvert && (
+      {detailCa && (() => {
+        const realise = detailCa === 'realise';
+        const lignesVisibles = chiffreAffairesAgence.lignes.filter((l) => l.archive === realise);
+        const totalVisible = lignesVisibles.reduce((somme, l) => somme + l.montant, 0);
+        return (
         <div
           className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setDetailCaOuvert(false)}
+          onClick={() => setDetailCa(null)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -858,14 +873,17 @@ export default function Dashboard({
           >
             <div className="flex items-start justify-between gap-4 p-5 border-b border-[#144447]/60">
               <div>
-                <h3 className="text-base font-bold text-white">Détail du chiffre d'affaires</h3>
+                <h3 className="text-base font-bold text-white">
+                  {realise ? "Chiffre d'affaires réalisé" : 'CA à venir'}
+                </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Pipeline Transaction V2 · {formatCurrency(chiffreAffairesAgence.total)} comptabilisés
-                  {chiffreAffairesAgence.aVenir > 0 && ` · ${formatCurrency(chiffreAffairesAgence.aVenir)} à venir`}
+                  Transaction V2 · {lignesVisibles.length} dossier{lignesVisibles.length > 1 ? 's' : ''} ·{' '}
+                  {formatCurrency(totalVisible)}
+                  {realise ? ' comptabilisés' : ' en attente de facturation'}
                 </p>
               </div>
               <button
-                onClick={() => setDetailCaOuvert(false)}
+                onClick={() => setDetailCa(null)}
                 className="text-slate-500 hover:text-white text-xl leading-none px-1"
               >
                 ×
@@ -875,17 +893,18 @@ export default function Dashboard({
             <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
               <span className="flex-1">Client</span>
               <span className="w-28 hidden sm:block">Mandat</span>
-              <span className="w-24 text-center">État</span>
               <span className="w-32 text-right">Montant</span>
             </div>
 
             <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
-              {chiffreAffairesAgence.lignes.length === 0 ? (
+              {lignesVisibles.length === 0 ? (
                 <p className="p-8 text-center text-sm text-slate-500">
-                  Aucun dossier dans Transaction V2 pour cette agence.
+                  {realise
+                    ? 'Aucun dossier archivé avec un montant confirmé pour le moment.'
+                    : 'Aucun dossier en attente dans Transaction V2.'}
                 </p>
               ) : (
-                chiffreAffairesAgence.lignes.map((ligne) => (
+                lignesVisibles.map((ligne) => (
                   <div key={ligne.id} className="flex items-center gap-3 px-5 py-2.5">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
@@ -896,17 +915,6 @@ export default function Dashboard({
                     </div>
                     <span className="w-28 hidden sm:block text-xs text-slate-400 truncate">
                       {ligne.mandat || '—'}
-                    </span>
-                    <span className="w-24 text-center">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-1 rounded-lg ${
-                          ligne.archive
-                            ? 'bg-[#F7BC5F]/15 text-[#F9C977]'
-                            : 'bg-emerald-500/10 text-emerald-400'
-                        }`}
-                      >
-                        {ligne.archive ? 'Comptabilisé' : 'À venir'}
-                      </span>
                     </span>
                     <input
                       type="text"
@@ -930,13 +938,15 @@ export default function Dashboard({
 
             <p className="px-5 py-3 text-[11px] text-slate-500 border-t border-[#144447]/60 leading-relaxed">
               Le montant se corrige directement dans la ligne : il est enregistré en quittant le
-              champ (ou avec la touche Entrée), et le chiffre d'affaires se met à jour aussitôt.
-              « Comptabilisé » = dossier archivé, montant confirmé ; « À venir » = encore dans le
-              pipeline.
+              champ (ou avec la touche Entrée), et le chiffre se met à jour aussitôt.
+              {realise
+                ? " Ces dossiers sont archivés, montant confirmé : ils comptent dans le chiffre d'affaires de l'agence."
+                : " Ces dossiers sont encore dans le pipeline : ils basculeront dans le chiffre d'affaires une fois archivés et le montant confirmé."}
             </p>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
