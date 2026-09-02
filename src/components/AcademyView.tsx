@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText, PlayCircle, Plus, Search, Trash2, X, Loader2, Upload, Link as LinkIcon, Pencil,
   CheckCircle2, Circle, Users, ImagePlus, GraduationCap, LayoutGrid, List as ListIcon,
+  MoreVertical, ImageOff, Maximize2, Minimize2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -136,6 +137,9 @@ export default function AcademyView() {
   const [dossierSurvole, setDossierSurvole] = useState<string | null>(null);
   const [deplacementEnCours, setDeplacementEnCours] = useState<string | null>(null);
   const dossierPourVisuel = useRef<string | null>(null);
+  const [menuDossier, setMenuDossier] = useState<string | null>(null);
+  const cadreLecteur = useRef<HTMLDivElement>(null);
+  const [pleinEcran, setPleinEcran] = useState(false);
   const champVisuelDossier = useRef<HTMLInputElement>(null);
 
   const [fond, setFond] = useState<string | null>(null);
@@ -237,6 +241,27 @@ export default function AcademyView() {
     })();
     return () => { vivant = false; };
   }, [activeAgency?.id]);
+
+  // Plein écran demandé le 2 septembre : « on peut cliquer sur un logo en
+  // haut à droite, plein écran — sans partir sur une ouverture avec un onglet
+  // différent, ça je ne veux pas ». On utilise donc le plein écran du
+  // navigateur sur le cadre du lecteur : on ne quitte ni l'application, ni la
+  // page, ni l'onglet.
+  useEffect(() => {
+    const suivre = () => setPleinEcran(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', suivre);
+    return () => document.removeEventListener('fullscreenchange', suivre);
+  }, []);
+
+  const basculerPleinEcran = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (cadreLecteur.current) await cadreLecteur.current.requestFullscreen();
+    } catch (e) {
+      console.warn('Plein écran indisponible', e);
+      toast.error("Le plein écran n'est pas disponible sur ce navigateur.");
+    }
+  };
 
   const basculerValidation = async (r: Ressource) => {
     if (!currentUser?.uid) return;
@@ -442,6 +467,100 @@ export default function AcademyView() {
       toast.error(e?.message || 'Impossible de déplacer cette procédure.');
     } finally {
       setDeplacementEnCours(null);
+    }
+  };
+
+  const retirerVisuelDossier = async (nomDossier: string) => {
+    if (!activeAgency?.id) return;
+    const { error } = await supabase
+      .from('academy_folders' as any)
+      .update({ image_url: null, updated_at: new Date().toISOString() } as any)
+      .eq('agency_id', activeAgency.id)
+      .eq('nom', nomDossier);
+    if (error) { toast.error(error.message); return; }
+    setVisuelsDossiers((prev) => { const suivant = new Map(prev); suivant.delete(nomDossier); return suivant; });
+    toast.success(`Image retirée de « ${nomDossier} ».`);
+  };
+
+  /**
+   * Renomme un dossier.
+   *
+   * Le dossier n'est qu'un NOM porté par ses procédures : le renommer, c'est
+   * renommer la rubrique de chacune — et la ligne qui porte son image. Les
+   * deux vont ensemble, sans quoi le dossier perdrait son visuel en changeant
+   * de nom.
+   */
+  const renommerDossier = async (ancien: string) => {
+    const nouveau = window.prompt(`Nouveau nom pour le dossier « ${ancien} » :`, ancien)?.trim();
+    if (!nouveau || nouveau === ancien) return;
+    if (rubriques.some(([n]) => n === nouveau)) {
+      toast.error(`Un dossier « ${nouveau} » existe déjà. Déplacez plutôt les procédures dedans.`);
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('academy_resources' as any)
+        .update({ rubrique: nouveau, updated_at: new Date().toISOString() } as any)
+        .eq('agency_id', activeAgency!.id)
+        .eq('rubrique', ancien);
+      if (error) throw error;
+      await supabase
+        .from('academy_folders' as any)
+        .update({ nom: nouveau, updated_at: new Date().toISOString() } as any)
+        .eq('agency_id', activeAgency!.id)
+        .eq('nom', ancien);
+      setRessources((prev) => prev.map((r) => (r.rubrique === ancien ? { ...r, rubrique: nouveau } : r)));
+      setVisuelsDossiers((prev) => {
+        const suivant = new Map(prev);
+        const image = suivant.get(ancien);
+        suivant.delete(ancien);
+        if (image) suivant.set(nouveau, image);
+        return suivant;
+      });
+      if (rubriqueActive === ancien) setRubriqueActive(nouveau);
+      toast.success(`Dossier renommé « ${nouveau} ».`);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Impossible de renommer ce dossier.');
+    }
+  };
+
+  /**
+   * Supprime un dossier SANS supprimer son contenu : les procédures rejoignent
+   * « Général ». Effacer d'un clic plusieurs formations qu'on a mis du temps à
+   * écrire serait une bien mauvaise surprise ; elles restent donc, ailleurs.
+   */
+  const supprimerDossier = async (nomDossier: string, nombre: number) => {
+    const message =
+      nombre > 0
+        ? `Supprimer le dossier « ${nomDossier} » ?\n\nSes ${nombre} procédure${nombre > 1 ? 's' : ''} ne ${nombre > 1 ? 'seront' : 'sera'} pas supprimée${nombre > 1 ? 's' : ''} : elle${nombre > 1 ? 's' : ''} rejoin${nombre > 1 ? 'dront' : 'dra'} le dossier « Général ».`
+        : `Supprimer le dossier vide « ${nomDossier} » ?`;
+    if (!window.confirm(message)) return;
+    try {
+      if (nombre > 0) {
+        const { error } = await supabase
+          .from('academy_resources' as any)
+          .update({ rubrique: 'Général', updated_at: new Date().toISOString() } as any)
+          .eq('agency_id', activeAgency!.id)
+          .eq('rubrique', nomDossier);
+        if (error) throw error;
+      }
+      await supabase
+        .from('academy_folders' as any)
+        .delete()
+        .eq('agency_id', activeAgency!.id)
+        .eq('nom', nomDossier);
+      setRessources((prev) => prev.map((r) => (r.rubrique === nomDossier ? { ...r, rubrique: 'Général' } : r)));
+      setVisuelsDossiers((prev) => { const suivant = new Map(prev); suivant.delete(nomDossier); return suivant; });
+      if (rubriqueActive === nomDossier) setRubriqueActive(null);
+      toast.success(
+        nombre > 0
+          ? `Dossier supprimé. ${nombre} procédure${nombre > 1 ? 's' : ''} déplacée${nombre > 1 ? 's' : ''} vers « Général ».`
+          : 'Dossier supprimé.'
+      );
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Impossible de supprimer ce dossier.');
     }
   };
 
@@ -745,18 +864,19 @@ export default function AcademyView() {
                         {estSuperAdmin && (
                           <span
                             role="button"
-                            title="Choisir l'image de ce dossier"
+                            title="Gérer ce dossier"
                             onClick={(e) => {
                               e.stopPropagation();
-                              dossierPourVisuel.current = nom;
-                              champVisuelDossier.current?.click();
+                              setMenuDossier(menuDossier === nom ? null : nom);
                             }}
-                            className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-[#1b2b2e] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                            className={`absolute -top-1 -right-1 w-6 h-6 rounded-full bg-[#1b2b2e] text-white flex items-center justify-center transition-opacity shadow ${
+                              menuDossier === nom ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                            }`}
                           >
                             {dossierEnDepot === nom ? (
                               <Loader2 className="w-3 h-3 animate-spin" />
                             ) : (
-                              <ImagePlus className="w-3 h-3" />
+                              <MoreVertical className="w-3 h-3" />
                             )}
                           </span>
                         )}
@@ -770,6 +890,56 @@ export default function AcademyView() {
                       <span className="mt-2 text-[11px] font-bold text-slate-800 text-center leading-tight line-clamp-2 group-hover:text-black">
                         {nom}
                       </span>
+
+                      {/* Gérer le dossier : changer ou retirer son image, le
+                          renommer, le supprimer. Un menu plutôt que trois
+                          pastilles : sur un dossier de 104 px, elles se
+                          marcheraient dessus. */}
+                      {estSuperAdmin && menuDossier === nom && (
+                        <span
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute z-20 top-[70%] left-1/2 -translate-x-1/2 w-52 rounded-xl bg-white border border-black/10 shadow-2xl py-1 text-left"
+                        >
+                          <span
+                            role="button"
+                            onClick={() => {
+                              setMenuDossier(null);
+                              dossierPourVisuel.current = nom;
+                              champVisuelDossier.current?.click();
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                          >
+                            <ImagePlus className="w-3.5 h-3.5 text-slate-500" />
+                            {visuelsDossiers.get(nom) ? "Changer l'image" : 'Choisir une image'}
+                          </span>
+                          {visuelsDossiers.get(nom) && (
+                            <span
+                              role="button"
+                              onClick={() => { setMenuDossier(null); void retirerVisuelDossier(nom); }}
+                              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                            >
+                              <ImageOff className="w-3.5 h-3.5 text-slate-500" />
+                              Retirer l'image
+                            </span>
+                          )}
+                          <span
+                            role="button"
+                            onClick={() => { setMenuDossier(null); void renommerDossier(nom); }}
+                            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                            Renommer le dossier
+                          </span>
+                          <span
+                            role="button"
+                            onClick={() => { setMenuDossier(null); void supprimerDossier(nom, nombre); }}
+                            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Supprimer le dossier
+                          </span>
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -801,6 +971,26 @@ export default function AcademyView() {
                       <span className="text-xs text-slate-500 tabular-nums">
                         {nombre} procédure{nombre > 1 ? 's' : ''}
                       </span>
+                      {estSuperAdmin && (
+                        <>
+                          <span
+                            role="button"
+                            title="Renommer le dossier"
+                            onClick={(e) => { e.stopPropagation(); void renommerDossier(nom); }}
+                            className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-black/5 flex items-center justify-center"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </span>
+                          <span
+                            role="button"
+                            title="Supprimer le dossier"
+                            onClick={(e) => { e.stopPropagation(); void supprimerDossier(nom, nombre); }}
+                            className="w-7 h-7 rounded-lg text-rose-500 hover:bg-rose-50 flex items-center justify-center"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </span>
+                        </>
+                      )}
                     </button>
                   );
                 })}
@@ -1016,7 +1206,7 @@ export default function AcademyView() {
           se consulte pas dans une vignette : le document occupe donc tout
           l'écran, avec un simple bandeau au-dessus. */}
       {ouverte && (
-        <div className="fixed inset-0 z-[100] bg-[#050f11] flex flex-col">
+        <div ref={cadreLecteur} className="fixed inset-0 z-[100] bg-[#050f11] flex flex-col">
           <div className="flex items-center justify-between gap-4 px-4 sm:px-6 py-3 border-b border-[#144447]/60 bg-[#07191b] shrink-0">
             <div className="flex items-center gap-3 min-w-0">
               {ouverte.auteur_photo_url ? (
@@ -1061,13 +1251,28 @@ export default function AcademyView() {
               {/* Certains PDF refusent d'être affichés dans un cadre : la
                   sortie de secours est toujours là, plutôt qu'un écran blanc
                   sans explication. */}
+              {/* Plein écran par le navigateur : on ne quitte ni
+                  l'application, ni la page, ni l'onglet — « partir sur une
+                  ouverture avec un onglet différent, ça je ne veux pas ». */}
+              <button
+                onClick={() => void basculerPleinEcran()}
+                title={pleinEcran ? 'Quitter le plein écran' : 'Afficher en plein écran'}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-[11px] font-bold"
+              >
+                {pleinEcran ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">{pleinEcran ? 'Réduire' : 'Plein écran'}</span>
+              </button>
+
+              {/* Sortie de secours, pour les rares fichiers qu'un serveur
+                  refuse d'afficher dans un cadre — pas une façon d'obtenir le
+                  plein écran. */}
               <a
                 href={lienOuvrable(ouverte)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] font-semibold text-slate-400 hover:text-[#F9C977] underline decoration-dotted underline-offset-4 hidden sm:inline"
+                className="text-[11px] font-semibold text-slate-500 hover:text-[#F9C977] underline decoration-dotted underline-offset-4 hidden lg:inline"
               >
-                Ouvrir dans un onglet
+                Ouvrir le fichier
               </a>
 
               <button
