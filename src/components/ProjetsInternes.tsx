@@ -16,6 +16,7 @@ import {
   List as ListIcon,
   Loader2,
   Pencil,
+  Pin,
   Plus,
   Trash2,
   User,
@@ -335,6 +336,33 @@ export const ProjetsInternes: React.FC<
     };
   }, [currentUser?.uid]);
 
+  // Demandé le 2 septembre : « pour épingler, c'est peut-être plus approprié,
+  // de façon que les sujets les plus importants soient tout en haut ».
+  // L'épingle est personnelle (chacun a ses priorités) et n'existe pas en
+  // base : elle est mémorisée par navigateur, pour ce compte. Elle ne change
+  // rien à l'ordre des autres projets — les épinglés passent devant, le reste
+  // garde exactement l'ordre alphabétique actuel.
+  const CLE_EPINGLES = `nova_projets_epingles_${currentUser?.uid || 'anon'}`;
+  const [epingles, setEpingles] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const brut = localStorage.getItem(CLE_EPINGLES);
+      setEpingles(brut ? (JSON.parse(brut) as string[]) : []);
+    } catch {
+      setEpingles([]);
+    }
+  }, [CLE_EPINGLES]);
+
+  const basculerEpingle = (projectId: string) => {
+    setEpingles((prev) => {
+      const suivant = prev.includes(projectId)
+        ? prev.filter((id) => id !== projectId)
+        : [projectId, ...prev];
+      try { localStorage.setItem(CLE_EPINGLES, JSON.stringify(suivant)); } catch { /* stockage indisponible */ }
+      return suivant;
+    });
+  };
+
   const visibleProjects =
     useMemo(() => {
       const effectiveAgencyId =
@@ -354,8 +382,15 @@ export const ProjetsInternes: React.FC<
       // n'est plus groupée par statut/colonnes, donc `sortOrder`, qui ne
       // servait qu'à mémoriser la position dans une colonne kanban, n'a
       // plus lieu d'ordonner cet affichage).
-      return [...filtered].sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
+      // Les projets épinglés passent devant, sans rien changer à l'ordre
+      // des autres.
+      return [...filtered].sort(
+        (a, b) =>
+          Number(epingles.includes(b.id)) - Number(epingles.includes(a.id)) ||
+          a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' })
+      );
     }, [
+      epingles,
       projects,
       agencyId,
       activeAgency.id,
@@ -966,9 +1001,22 @@ export const ProjetsInternes: React.FC<
                           )}
                         </h3>
                       )}
-                      {project.status === 'Terminé' && (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {project.status === 'Terminé' && (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5" />
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); basculerEpingle(project.id); }}
+                          className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${
+                            epingles.includes(project.id)
+                              ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F]'
+                              : 'bg-white/5 border-white/10 text-gray-400 hover:text-[#F7BC5F] hover:bg-[#F7BC5F]/10'
+                          }`}
+                          title={epingles.includes(project.id) ? 'Retirer du haut de la liste' : 'Épingler en haut de la liste'}
+                        >
+                          <Pin className={`w-3.5 h-3.5 ${epingles.includes(project.id) ? 'fill-current' : ''}`} />
+                        </button>
+                      </div>
                     </div>
 
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: accent }}>
@@ -1089,6 +1137,20 @@ export const ProjetsInternes: React.FC<
                         </div>
                       </button>
                     )}
+                    {/* Épingle : visible en permanence quand le projet est
+                        épinglé, au survol sinon — comme les deux boutons
+                        suivants. */}
+                    <button
+                      onClick={() => basculerEpingle(project.id)}
+                      className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all shrink-0 ${
+                        epingles.includes(project.id)
+                          ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F]'
+                          : 'bg-white/5 border-white/10 text-gray-400 hover:text-[#F7BC5F] hover:bg-[#F7BC5F]/10 opacity-0 group-hover:opacity-100'
+                      }`}
+                      title={epingles.includes(project.id) ? 'Retirer du haut de la liste' : 'Épingler en haut de la liste'}
+                    >
+                      <Pin className={`w-3.5 h-3.5 ${epingles.includes(project.id) ? 'fill-current' : ''}`} />
+                    </button>
                     {canDelete(project) && renamingProjectId !== project.id && (
                       <button
                         onClick={() => startRenameProject(project)}
