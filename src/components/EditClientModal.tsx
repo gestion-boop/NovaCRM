@@ -4,6 +4,7 @@ import { Contact, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { htDepuisTtc, ttcDepuisHt, formatVille } from '@/lib/utils';
 import { useAssignableUsers } from '@/hooks/useAssignableUsers';
+import { matchesAgency } from '@/hooks/useContacts';
 
 interface Props {
   client: Contact;
@@ -136,8 +137,12 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
   // max, le numéro de mandat et seconde personne » — pour Novavisio
   // uniquement : ces champs restent indispensables aux autres agences
   // (le numéro de mandat alimente les statistiques ImmoSphera).
+  // `matchesAgency` et non un `===` : beaucoup de fiches portent encore un
+  // identifiant d'agence hérité (« novavisio », « agency-2 »...) au lieu de
+  // l'UUID. Une comparaison brute les prendrait pour une autre agence, et
+  // rien ne changerait sur les fiches concernées.
   const estNovavisio = /novavisio/i.test(
-    AGENCIES.find((a) => a.id === agencyId)?.name || ''
+    AGENCIES.find((a) => matchesAgency(agencyId, a.id))?.name || ''
   );
 
   const field = 'w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]';

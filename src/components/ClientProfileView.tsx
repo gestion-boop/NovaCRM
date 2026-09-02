@@ -519,8 +519,10 @@ export default function ClientProfileView({
   // déjà appliquée au champ « Commission agence » de la fiche. Les autres
   // agences confirment leurs montants en HT depuis le 1er septembre : leur
   // saisie n'est pas touchée, sans quoi tout l'historique serait faussé.
+  // `matchesAgency` et non un `===` : voir EditClientModal — les fiches
+  // portent encore des identifiants d'agence hérités.
   const estNovavisio = /novavisio/i.test(
-    AGENCIES.find((a) => a.id === client?.agencyId)?.name || ''
+    AGENCIES.find((a) => matchesAgency(client?.agencyId, a.id))?.name || ''
   );
   const uniteMontant = estNovavisio ? 'TTC' : 'HT';
   const versBase = (saisi: number) => (estNovavisio ? Math.round(htDepuisTtc(saisi) * 100) / 100 : saisi);
