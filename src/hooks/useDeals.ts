@@ -29,6 +29,7 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
       item.advisor_commission_ttc === null || item.advisor_commission_ttc === undefined
         ? undefined
         : Number(item.advisor_commission_ttc),
+    mandateNumber: (item.mandate_number as string) || undefined,
     advisorId: (item.assigned_to as string) || (item.created_by as string) || undefined,
     stageId: (stageId as string) || undefined,
     stage: (stageId && stageNameById[stageId]) || (item.temperature as string) || 'Nouveau',

@@ -4,6 +4,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pi
 import { AGENCIES } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import { Users, Coins, Briefcase, CheckCircle2, ArrowRight, Building, Sparkles, Pencil, TrendingUp, TrendingDown } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useContacts, matchesAgency } from '@/hooks/useContacts';
@@ -15,6 +16,15 @@ import { useTasks } from '@/hooks/useTasks';
 // du texte noir dessus, une fois l'appli passée en mode jour. Les variables
 // CSS, elles, sont résolues normalement dans un style inline — l'info-bulle
 // suit ainsi le thème comme le reste (voir --nv-chart-* dans index.css).
+interface LigneCa {
+  id: string;
+  nom: string;
+  mandat: string;
+  montant: number;
+  etape: string;
+  archive: boolean;
+}
+
 const CHART_TOOLTIP_STYLE = {
   backgroundColor: 'var(--nv-chart-tooltip-bg)',
   borderColor: 'var(--nv-chart-tooltip-border)',
@@ -137,6 +147,7 @@ export default function Dashboard({
         pipelineTrouve: false, dansLePipeline: 0, horsEtape: 0,
         repartitionAVenir: [] as { name: string; value: number }[],
         horsPipelineMontant: 0, horsPipelineNb: 0,
+        lignes: [] as LigneCa[],
         // On montre les noms réellement trouvés : si la règle ne reconnaît
         // pas le pipeline, autant voir tout de suite comment il s'appelle
         // plutôt que de chercher à l'aveugle.
@@ -199,6 +210,12 @@ export default function Dashboard({
     // en silence — ce qui a coûté plusieurs allers-retours — on l'affiche.
     let horsPipelineMontant = 0;
     let horsPipelineNb = 0;
+    // Demandé le 2 septembre : « quand je clique dans la colonne chiffre
+    // d'affaires d'agence, je voudrais un tableau avec le nom et prénom des
+    // clients, le numéro de mandat et le chiffre, et pouvoir modifier le
+    // chiffre de chaque ligne ». On garde donc le détail de ce qui a été
+    // compté, ligne à ligne.
+    const lignes: LigneCa[] = [];
     perimetre.forEach((d) => {
       const montant = Number(d.amount) || 0;
       const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
@@ -207,12 +224,31 @@ export default function Dashboard({
         return;
       }
       dansLePipeline += 1;
-      if (montant <= 0) { sansMontant += 1; return; }
+      if (montant <= 0) {
+        sansMontant += 1;
+        lignes.push({
+          id: d.id,
+          nom: d.title,
+          mandat: d.mandateNumber || '',
+          montant: 0,
+          etape: d.stage || '',
+          archive: Boolean(d.archivedAt),
+        });
+        return;
+      }
 
       // « Quand c'est archivé et confirmé sur la somme, cela ira dans le
       // chiffre d'affaires de l'agence » : l'archivage est donc le seul
       // passage entre les deux. Tant que le dossier vit dans le pipeline,
       // avec sa commission agence en HT, il est en « CA à venir ».
+      lignes.push({
+        id: d.id,
+        nom: d.title,
+        mandat: d.mandateNumber || '',
+        montant,
+        etape: d.stage || '',
+        archive: Boolean(d.archivedAt),
+      });
       if (d.archivedAt) { total += montant; comptees += 1; }
       else {
         aVenir += montant;
@@ -228,6 +264,10 @@ export default function Dashboard({
       total, comptees, aVenir, comptessAVenir, sansMontant,
       pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [],
       repartitionAVenir, horsPipelineMontant, horsPipelineNb,
+      // Archivés d'abord — c'est ce qui est déjà compté — puis par montant.
+      lignes: lignes.sort(
+        (a, b) => Number(b.archive) - Number(a.archive) || b.montant - a.montant || a.nom.localeCompare(b.nom, 'fr')
+      ),
     };
   }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, isSuperAdmin, currentUser?.uid]);
 
@@ -317,6 +357,39 @@ export default function Dashboard({
   // trimestriel" figé (texte codé en dur à 78%, sans aucun lien avec de
   // vraies données) par un objectif MENSUEL réellement saisi et enregistré.
   const queryClient = useQueryClient();
+
+  // Demandé le 2 septembre : « avec ça j'aurai une vue globale de ce qui a
+  // été validé, pour pallier aux éventuelles erreurs ». Le détail du chiffre
+  // d'affaires s'ouvre au clic sur la tuile, et chaque montant s'y corrige :
+  // c'est la même colonne (leads.estimated_value) que partout ailleurs, donc
+  // la correction se répercute immédiatement sur le Tableau de bord.
+  const [detailCaOuvert, setDetailCaOuvert] = useState(false);
+  const [montantsSaisis, setMontantsSaisis] = useState<Record<string, string>>({});
+  const [ligneEnCours, setLigneEnCours] = useState<string | null>(null);
+
+  const enregistrerMontantLigne = async (ligne: LigneCa) => {
+    const brut = montantsSaisis[ligne.id];
+    if (brut === undefined) return;
+    const saisi = brut.trim().replace(',', '.');
+    if (saisi === '') { setMontantsSaisis((v) => { const c = { ...v }; delete c[ligne.id]; return c; }); return; }
+    const montant = Number(saisi);
+    if (!Number.isFinite(montant) || montant < 0) {
+      toast.error("Ce montant n'est pas un nombre valide.");
+      return;
+    }
+    if (montant === ligne.montant) { setMontantsSaisis((v) => { const c = { ...v }; delete c[ligne.id]; return c; }); return; }
+    setLigneEnCours(ligne.id);
+    const { error } = await supabase
+      .from('leads')
+      .update({ estimated_value: montant } as any)
+      .eq('id', ligne.id);
+    setLigneEnCours(null);
+    if (error) { toast.error(error.message); return; }
+    setMontantsSaisis((v) => { const c = { ...v }; delete c[ligne.id]; return c; });
+    queryClient.invalidateQueries({ queryKey: ['deals'] });
+    queryClient.invalidateQueries({ queryKey: ['contacts_all'] });
+    toast.success(`Montant mis à jour : ${formatCurrency(montant)}`);
+  };
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
@@ -501,7 +574,13 @@ export default function Dashboard({
             moment de l'archivage : « quand c'est archivé et confirmé sur la
             somme, cela ira dans le chiffre d'affaires de l'agence ». */}
         {isSuperAdmin && (
-          <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setDetailCaOuvert(true)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCaOuvert(true); } }}
+            title="Voir le détail, ligne par ligne"
+            className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group cursor-pointer text-left">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Chiffre d'affaires de l'agence</span>
               <div className="text-2xl font-black text-[#F9C977] tracking-tight">
@@ -760,6 +839,104 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+
+      {/* Demandé le 2 septembre : « quand je clique dans la colonne chiffre
+          d'affaires d'agence, je voudrais un tableau avec le nom et prénom
+          des clients, s'il faut le numéro de mandat, et le chiffre — et que
+          je puisse modifier le chiffre de chaque ligne, ce qui aura
+          l'incidence en positif ou négatif sur le tableau de bord ». Le
+          montant modifié ici est écrit dans la même colonne que partout
+          ailleurs (leads.estimated_value) : le total se recalcule aussitôt. */}
+      {detailCaOuvert && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setDetailCaOuvert(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 p-5 border-b border-[#144447]/60">
+              <div>
+                <h3 className="text-base font-bold text-white">Détail du chiffre d'affaires</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Pipeline Transaction V2 · {formatCurrency(chiffreAffairesAgence.total)} comptabilisés
+                  {chiffreAffairesAgence.aVenir > 0 && ` · ${formatCurrency(chiffreAffairesAgence.aVenir)} à venir`}
+                </p>
+              </div>
+              <button
+                onClick={() => setDetailCaOuvert(false)}
+                className="text-slate-500 hover:text-white text-xl leading-none px-1"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
+              <span className="flex-1">Client</span>
+              <span className="w-28 hidden sm:block">Mandat</span>
+              <span className="w-24 text-center">État</span>
+              <span className="w-32 text-right">Montant</span>
+            </div>
+
+            <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
+              {chiffreAffairesAgence.lignes.length === 0 ? (
+                <p className="p-8 text-center text-sm text-slate-500">
+                  Aucun dossier dans Transaction V2 pour cette agence.
+                </p>
+              ) : (
+                chiffreAffairesAgence.lignes.map((ligne) => (
+                  <div key={ligne.id} className="flex items-center gap-3 px-5 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {ligne.etape || 'Sans étape'}
+                        {ligne.mandat && <span className="sm:hidden"> · Mandat {ligne.mandat}</span>}
+                      </div>
+                    </div>
+                    <span className="w-28 hidden sm:block text-xs text-slate-400 truncate">
+                      {ligne.mandat || '—'}
+                    </span>
+                    <span className="w-24 text-center">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg ${
+                          ligne.archive
+                            ? 'bg-[#F7BC5F]/15 text-[#F9C977]'
+                            : 'bg-emerald-500/10 text-emerald-400'
+                        }`}
+                      >
+                        {ligne.archive ? 'Comptabilisé' : 'À venir'}
+                      </span>
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={montantsSaisis[ligne.id] ?? (ligne.montant ? String(ligne.montant) : '')}
+                      onChange={(e) => setMontantsSaisis((v) => ({ ...v, [ligne.id]: e.target.value }))}
+                      onBlur={() => void enregistrerMontantLigne(ligne)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      disabled={ligneEnCours === ligne.id}
+                      placeholder="0"
+                      className={`w-32 px-2 py-1.5 rounded-lg bg-[#0a1e20] border text-right text-sm tabular-nums focus:outline-none focus:border-[#F7BC5F]/60 disabled:opacity-50 ${
+                        montantsSaisis[ligne.id] !== undefined
+                          ? 'border-[#F7BC5F]/60 text-[#F9C977]'
+                          : 'border-[#144447]/60 text-white'
+                      }`}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+
+            <p className="px-5 py-3 text-[11px] text-slate-500 border-t border-[#144447]/60 leading-relaxed">
+              Le montant se corrige directement dans la ligne : il est enregistré en quittant le
+              champ (ou avec la touche Entrée), et le chiffre d'affaires se met à jour aussitôt.
+              « Comptabilisé » = dossier archivé, montant confirmé ; « À venir » = encore dans le
+              pipeline.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

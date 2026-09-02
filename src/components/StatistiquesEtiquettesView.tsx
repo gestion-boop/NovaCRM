@@ -36,7 +36,12 @@ const LABEL_COLORS = [
 
 // « Location » vient en tête : l'ordre demandé est location, offre d'achat,
 // compromis, acte authentique.
-type StageKey = 'location' | 'offre' | 'compromis' | 'signature';
+// Demandé le 2 septembre : « on va rajouter une colonne Conciergerie » —
+// après Locations, Offre, Compromis et Signature acte authentique. Elle est
+// alimentée par l'étape du pipeline dont le nom contient « concierg » : tant
+// que cette colonne n'existe pas dans Transactions V2, la statistique affiche
+// simplement 0, sans casser le reste du tableau.
+type StageKey = 'location' | 'offre' | 'compromis' | 'signature' | 'conciergerie';
 
 interface StageLead {
   id: string;
@@ -56,6 +61,7 @@ interface AgentRow {
   offre: number;
   compromis: number;
   signature: number;
+  conciergerie: number;
   total: number;
   // Demandé : le chiffre d'affaires de chaque conseiller sur chacune des
   // trois étapes. Source : le champ « Honoraires (€) » de la fiche client
@@ -65,6 +71,7 @@ interface AgentRow {
   caOffre: number;
   caCompromis: number;
   caSignature: number;
+  caConciergerie: number;
 }
 
 // Demande explicite : "mets le prénom par exemple Isabelle G, c'est comme ça
@@ -122,6 +129,7 @@ const AgentRow: React.FC<{ row: AgentRow; color: string; onOpen?: (stage: StageK
       <BrassLabel count={row.offre} color={color} caption="Offre" onClick={onOpen && (() => onOpen('offre'))} />
       <BrassLabel count={row.compromis} color={color} caption="Compromis" onClick={onOpen && (() => onOpen('compromis'))} />
       <BrassLabel count={row.signature} color={color} caption="Signature" onClick={onOpen && (() => onOpen('signature'))} />
+      <BrassLabel count={row.conciergerie} color={color} caption="Conciergerie" onClick={onOpen && (() => onOpen('conciergerie'))} />
     </div>
 
     <div className="ml-auto flex items-center gap-3 sm:gap-4 shrink-0">
@@ -158,10 +166,19 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
       const offreStageId = (stages || []).find((s: any) => s.name === "Offre d'achat")?.id;
       const compromisStageId = (stages || []).find((s: any) => s.name === 'Signature compromis')?.id;
       const signatureStageId = (stages || []).find((s: any) => s.name === 'signature acte authentique')?.id;
+      // Repérée par motif, comme « Locations » : la colonne peut s'appeler
+      // « Conciergerie », « Conciergeries »... la casse n'est pas garantie.
+      const conciergerieStageId = (stages || []).find((s: any) => /concierg/i.test(s.name))?.id;
+      // Les colonnes de fin de parcours (« À facturer », « Facturé ») : un
+      // dossier qui y arrive a bel et bien été réalisé, il ne doit pas
+      // disparaître des statistiques pour autant.
+      const aFacturerStageIds = new Set(
+        (stages || []).filter((st: any) => /factur/i.test(st.name)).map((st: any) => st.id as string)
+      );
 
       const { data: leads } = await supabase
         .from('leads')
-        .select('id, stage_id, assigned_to, created_by, archived_at, estimated_value, full_name, first_name, last_name, sector, mandate_number')
+        .select('id, stage_id, assigned_to, created_by, archived_at, signed_at, lead_type, estimated_value, full_name, first_name, last_name, sector, mandate_number')
         .eq('pipeline_id', IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID)
         .eq('agency_id', IMMOSPHERA_AGENCY_ID);
 
@@ -172,60 +189,98 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
       // dossier) est, lui, toujours renseigné. On utilise donc `assigned_to`
       // en priorité quand il existe, sinon `created_by` comme agent de
       // référence de la carte.
+      // Signalé le 2 septembre : « je n'ai plus les locations de Clémence qui
+      // remontent dans les stats, ni les signatures ». Un dossier ne comptait
+      // que s'il était POSÉ, à l'instant, sur l'une des étapes suivies et
+      // non archivé. Or un dossier abouti part en « À facturer » puis à
+      // l'archivage : il sortait donc des statistiques au moment précis où il
+      // était enfin réalisé. Un dossier réalisé reste compté là où il a
+      // abouti — repéré par son type (Location, Conciergerie) ou par sa
+      // signature pour l'acte authentique.
+      const etapeDe = (l: any): StageKey | null => {
+        if (l.stage_id === locationStageId) return 'location';
+        if (l.stage_id === offreStageId) return 'offre';
+        if (l.stage_id === compromisStageId) return 'compromis';
+        if (l.stage_id === signatureStageId) return 'signature';
+        if (conciergerieStageId && l.stage_id === conciergerieStageId) return 'conciergerie';
+        if (aFacturerStageIds.has(l.stage_id) || l.archived_at) {
+          const type = String(l.lead_type || '').toLowerCase();
+          if (/concierg/.test(type)) return 'conciergerie';
+          if (/locat/.test(type)) return 'location';
+          if (l.signed_at) return 'signature';
+        }
+        return null;
+      };
+
       const relevant = (leads || []).filter(
-        (l: any) =>
-          !l.archived_at &&
-          (l.assigned_to || l.created_by) &&
-          (l.stage_id === locationStageId ||
-            l.stage_id === offreStageId ||
-            l.stage_id === compromisStageId ||
-            l.stage_id === signatureStageId)
+        (l: any) => (l.assigned_to || l.created_by) && etapeDe(l) !== null
       );
 
-      const assignedIds = Array.from(new Set(relevant.map((l: any) => l.assigned_to || l.created_by)));
+      // Demandé le 2 septembre : « il faudra qu'on rajoute Mélanie Grazia ».
+      // Un conseiller n'apparaissait que s'il avait au moins un dossier sur
+      // l'une des étapes suivies : tous les autres étaient simplement
+      // absents du tableau. On part donc des MEMBRES de l'agence, et les
+      // dossiers viennent remplir leurs compteurs — un conseiller sans
+      // dossier reste visible, à zéro.
+      const { data: membres } = await supabase
+        .from('agency_members')
+        .select('user_id')
+        .eq('agency_id', IMMOSPHERA_AGENCY_ID);
+      const membreIds = (membres || []).map((m: any) => m.user_id as string);
+
+      const assignedIds = Array.from(
+        new Set([...relevant.map((l: any) => (l.assigned_to || l.created_by) as string), ...membreIds])
+      );
       const { data: profiles } = assignedIds.length
-        ? await supabase.from('profiles').select('id, full_name').in('id', assignedIds)
+        ? await supabase.from('profiles').select('id, full_name, is_active').in('id', assignedIds)
         : { data: [] as any[] };
       const nameById: Record<string, string> = {};
-      (profiles || []).forEach((p: any) => { nameById[p.id] = p.full_name || 'Agent'; });
-
-      const byAgent: Record<string, AgentRow> = {};
-      relevant.forEach((l: any) => {
-        const id = (l.assigned_to || l.created_by) as string;
-        if (!byAgent[id]) {
-          const fullName = nameById[id] || 'Agent';
-          byAgent[id] = {
-            agentId: id,
-            agentFullName: fullName,
-            agentDisplay: firstNamePlusInitial(fullName),
-            location: 0,
-            offre: 0,
-            compromis: 0,
-            signature: 0,
-            total: 0,
-            caLocation: 0,
-            caOffre: 0,
-            caCompromis: 0,
-            caSignature: 0,
-          };
-        }
-        const honoraires = Number(l.estimated_value) || 0;
-        if (l.stage_id === locationStageId) { byAgent[id].location += 1; byAgent[id].caLocation += honoraires; }
-        if (l.stage_id === offreStageId) { byAgent[id].offre += 1; byAgent[id].caOffre += honoraires; }
-        if (l.stage_id === compromisStageId) { byAgent[id].compromis += 1; byAgent[id].caCompromis += honoraires; }
-        if (l.stage_id === signatureStageId) { byAgent[id].signature += 1; byAgent[id].caSignature += honoraires; }
-        byAgent[id].total += 1;
+      const actifById: Record<string, boolean> = {};
+      (profiles || []).forEach((p: any) => {
+        nameById[p.id] = p.full_name || 'Agent';
+        actifById[p.id] = p.is_active !== false;
       });
 
-      const stageOf = (stageId: string): StageKey | null =>
-        stageId === locationStageId ? 'location'
-        : stageId === offreStageId ? 'offre' : stageId === compromisStageId ? 'compromis' : stageId === signatureStageId ? 'signature' : null;
+      const byAgent: Record<string, AgentRow> = {};
+      const ligneVide = (id: string): AgentRow => {
+        const fullName = nameById[id] || 'Agent';
+        return {
+          agentId: id,
+          agentFullName: fullName,
+          agentDisplay: firstNamePlusInitial(fullName),
+          location: 0,
+          offre: 0,
+          compromis: 0,
+          signature: 0,
+          conciergerie: 0,
+          total: 0,
+          caLocation: 0,
+          caOffre: 0,
+          caCompromis: 0,
+          caSignature: 0,
+          caConciergerie: 0,
+        };
+      };
+      // Un membre désactivé n'a plus à figurer au classement.
+      membreIds.filter((id) => actifById[id] !== false).forEach((id) => { byAgent[id] = ligneVide(id); });
+      relevant.forEach((l: any) => {
+        const id = (l.assigned_to || l.created_by) as string;
+        if (!byAgent[id]) byAgent[id] = ligneVide(id);
+        const honoraires = Number(l.estimated_value) || 0;
+        const etape = etapeDe(l);
+        if (etape === 'location') { byAgent[id].location += 1; byAgent[id].caLocation += honoraires; }
+        if (etape === 'offre') { byAgent[id].offre += 1; byAgent[id].caOffre += honoraires; }
+        if (etape === 'compromis') { byAgent[id].compromis += 1; byAgent[id].caCompromis += honoraires; }
+        if (etape === 'signature') { byAgent[id].signature += 1; byAgent[id].caSignature += honoraires; }
+        if (etape === 'conciergerie') { byAgent[id].conciergerie += 1; byAgent[id].caConciergerie += honoraires; }
+        byAgent[id].total += 1;
+      });
 
       const detailRows: StageLead[] = relevant.map((l: any) => ({
         id: l.id,
         name: (l.full_name || [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Sans nom').trim(),
         agentId: (l.assigned_to || l.created_by) as string,
-        stage: stageOf(l.stage_id) as StageKey,
+        stage: etapeDe(l) as StageKey,
         honoraires: Number(l.estimated_value) || 0,
         ville: (l.sector || '').trim(),
         mandat: (l.mandate_number || '').trim(),
@@ -260,6 +315,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
     { key: 'offre' as const, label: "Offres d'achat" },
     { key: 'compromis' as const, label: 'Compromis' },
     { key: 'signature' as const, label: 'Actes authentiques' },
+    { key: 'conciergerie' as const, label: 'Conciergerie' },
   ];
 
   const formatEuros = (value: number) =>
@@ -275,7 +331,9 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           ? { count: r.offre, ca: r.caOffre }
           : tab === 'compromis'
             ? { count: r.compromis, ca: r.caCompromis }
-            : { count: r.signature, ca: r.caSignature };
+            : tab === 'signature'
+              ? { count: r.signature, ca: r.caSignature }
+              : { count: r.conciergerie, ca: r.caConciergerie };
     return orderedRows
       .map((r) => ({ ...r, ...pick(r) }))
       .filter((r) => r.count > 0 || r.ca > 0)
@@ -295,9 +353,10 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           offre: acc.offre + r.offre,
           compromis: acc.compromis + r.compromis,
           signature: acc.signature + r.signature,
+          conciergerie: acc.conciergerie + r.conciergerie,
           total: acc.total + r.total,
         }),
-        { location: 0, offre: 0, compromis: 0, signature: 0, total: 0 }
+        { location: 0, offre: 0, compromis: 0, signature: 0, conciergerie: 0, total: 0 }
       ),
     [orderedRows]
   );
@@ -322,6 +381,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
     offre: "Offres d'achat",
     compromis: 'Compromis',
     signature: 'Actes authentiques',
+    conciergerie: 'Conciergerie',
   };
 
   return (
@@ -342,7 +402,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
         ))}
 
         <div className="mb-4 sm:mb-5">
-          <h2 className="text-lg sm:text-2xl font-bold text-[#F3EAD3] tracking-wide">Statistiques — Locations, Offres, Compromis &amp; Signatures</h2>
+          <h2 className="text-lg sm:text-2xl font-bold text-[#F3EAD3] tracking-wide">Statistiques — Locations, Offres, Compromis, Signatures &amp; Conciergerie</h2>
           <p className="text-xs sm:text-sm text-[#C9B67B] mt-1">
             Répartition en direct par agent ImmoSphera sur le pipeline Transactions V2.
           </p>
@@ -454,7 +514,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           )
         ) : orderedRows.length === 0 ? (
           <div className="py-16 text-center text-sm text-[#C9B67B]">
-            Aucun dossier en Location, Offre, Compromis ou Signature pour le moment.
+            Aucun conseiller à afficher pour le moment.
           </div>
         ) : (
           <div className="space-y-2">
@@ -491,6 +551,10 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
                 <div className="text-center">
                   <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.signature}</div>
                   <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Signature</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.conciergerie}</div>
+                  <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Conciergerie</div>
                 </div>
                 <div className="w-px h-8 bg-[#D4AF37]/40" />
                 <div className="text-center">

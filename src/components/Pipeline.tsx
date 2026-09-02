@@ -1411,6 +1411,10 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     dealId: string;
     dealTitle: string;
     etape: string;
+    // Conciergerie : « ce sera le même système, le TTC sera comptabilisé dans
+    // le chiffre d'affaires de l'agence ». Même champ, même circuit — seul
+    // l'intitulé change, parce que ce n'est pas une commission HT.
+    ttc: boolean;
   } | null>(null);
   const [montantHtSaisi, setMontantHtSaisi] = useState('');
   const [montantHtEnCours, setMontantHtEnCours] = useState(false);
@@ -1522,8 +1526,14 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
         }
       }
       if (demandeMontant) {
+        const fiche = contacts.find((c) => c.id === deal.contactId);
         setMontantHtSaisi(deal.amount ? String(deal.amount) : '');
-        setPendingMontantPrompt({ dealId: deal.id, dealTitle: deal.title, etape: destinationStage });
+        setPendingMontantPrompt({
+          dealId: deal.id,
+          dealTitle: deal.title,
+          etape: destinationStage,
+          ttc: /concierg/i.test(fiche?.clientType || ''),
+        });
       }
 
       // Automatisation éventuelle pour cette étape — jamais bloquant, jamais
@@ -2131,10 +2141,15 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
       )}
 
       {pendingMontantPrompt && (
-        <ModalShell title="Commission agence, hors taxes" onClose={() => setPendingMontantPrompt(null)}>
+        <ModalShell
+          title={pendingMontantPrompt.ttc ? 'Montant TTC (conciergerie)' : 'Commission agence, hors taxes'}
+          onClose={() => setPendingMontantPrompt(null)}
+        >
           <p className="text-sm text-gray-300 mb-4">
             "{pendingMontantPrompt.dealTitle}" vient de passer en « {pendingMontantPrompt.etape} ».
-            Quel est le montant de la commission agence, hors taxes ?
+            {pendingMontantPrompt.ttc
+              ? ' Quel est le montant TTC de la prestation de conciergerie ?'
+              : ' Quel est le montant de la commission agence, hors taxes ?'}
           </p>
           <input
             autoFocus

@@ -510,6 +510,8 @@ export default function ClientProfileView({
   const estEtapeAFacturer = (nom: string) =>
     nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().includes('factur');
 
+  const estConciergerie = /concierg/i.test(client?.clientType || '');
+
   const validerMontantEtape = async () => {
     const saisi = montantEtapeSaisi.trim().replace(',', '.');
     if (saisi === '') { setMontantEtapePrompt(null); return; }
@@ -790,16 +792,15 @@ export default function ClientProfileView({
         return;
       }
 
-      // Demandé le 1er septembre : « peut-être rajouter "et facturé" si on
-      // archive, de façon que le chiffre rentre dans le tableau de bord ».
+      // L'archivage ne déplace plus la fiche sur une étape « Facturé ».
+      // Signalé le 2 septembre : « je n'ai plus les locations de Clémence qui
+      // remontent dans les stats, ni les signatures » — c'était ça. Les
+      // statistiques comptent les dossiers à l'étape qu'ils ont atteinte ;
+      // les déplacer à l'archivage les effaçait de leur colonne au moment
+      // précis où l'affaire était réalisée. Ce déplacement n'a plus lieu
+      // d'être : le chiffre d'affaires se calcule désormais sur l'archivage
+      // et le montant confirmé, sans regarder le nom de l'étape.
       //
-      // Le chiffre d'affaires de l'agence se calcule sur les affaires dont
-      // l'ÉTAPE contient « factur ». Une affaire archivée avec signature est
-      // une affaire facturée : on la pose donc explicitement sur cette étape,
-      // au lieu de dépendre de la colonne où elle se trouvait. C'est ce qui
-      // manquait ce soir — un dossier archivé, signé, mais resté sur une
-      // étape que le calcul ne reconnaissait pas, ne comptait nulle part.
-      let etapeFacturee: string | null = null;
       // Beaucoup de fiches n'ont pas de pipeline_id en base : le Pipeline les
       // affiche dans le pipeline ouvert, mais la colonne reste vide. Le
       // Tableau de bord, lui, ne peut pas deviner. On la renseigne donc au
@@ -823,21 +824,6 @@ export default function ClientProfileView({
           pipelineId = (etape as { pipeline_id: string | null } | null)?.pipeline_id ?? null;
           if (pipelineId) pipelineARenseigner = pipelineId;
         }
-        if (signed && pipelineId) {
-          const { data: etapes } = await supabase
-            .from('pipeline_stages')
-            .select('id, name')
-            .eq('pipeline_id', pipelineId);
-          const sansAccents = (v: string) =>
-            v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-          const candidates = ((etapes as { id: string; name: string }[]) || []).filter((e) =>
-            sansAccents(e.name).includes('factur')
-          );
-          // « Facturé » plutôt que « À facturer » quand les deux existent :
-          // archivé et signé, le dossier est facturé, pas à facturer.
-          const exacte = candidates.find((e) => !sansAccents(e.name).startsWith('a factur'));
-          etapeFacturee = (exacte || candidates[0])?.id ?? null;
-        }
       }
 
       const { error } = await supabase
@@ -848,9 +834,6 @@ export default function ClientProfileView({
           // Champ laissé vide : on ne touche pas au montant déjà enregistré,
           // plutôt que de l'effacer par inadvertance.
           ...(montant === null ? {} : { estimated_value: montant }),
-          // Aucune étape « factur » dans ce pipeline : on ne touche à rien
-          // plutôt que de déplacer le dossier au hasard.
-          ...(etapeFacturee ? { stage_id: etapeFacturee } : {}),
           ...(pipelineARenseigner ? { pipeline_id: pipelineARenseigner } : {}),
         } as any)
         .eq('id', clientId);
@@ -4425,10 +4408,17 @@ export default function ClientProfileView({
       {montantEtapePrompt && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => setMontantEtapePrompt(null)}>
           <div onClick={(e) => e.stopPropagation()} className="bg-[#07191b] border border-[#1b4e52] rounded-2xl max-w-sm w-full p-6 text-white shadow-2xl relative animate-scale-up">
-            <h3 className="text-base font-bold text-white mb-2">Commission agence, hors taxes</h3>
+            {/* Conciergerie : « ce sera le même système, le TTC sera
+                comptabilisé dans le chiffre d'affaires de l'agence ». Même
+                champ, même circuit — seul l'intitulé change. */}
+            <h3 className="text-base font-bold text-white mb-2">
+              {estConciergerie ? 'Montant TTC (conciergerie)' : 'Commission agence, hors taxes'}
+            </h3>
             <p className="text-sm text-slate-300 mb-4">
-              La fiche vient de passer en « {montantEtapePrompt} ». Quel est le montant de la
-              commission agence, hors taxes ?
+              La fiche vient de passer en « {montantEtapePrompt} ».{' '}
+              {estConciergerie
+                ? 'Quel est le montant TTC de la prestation de conciergerie ?'
+                : 'Quel est le montant de la commission agence, hors taxes ?'}
             </p>
             <input
               autoFocus
@@ -4493,7 +4483,7 @@ export default function ClientProfileView({
               <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
                 C'est ce montant qui comptera dans le chiffre d'affaires de l'agence. Corrige-le
                 si besoin — laissé vide, celui déjà enregistré est conservé. En répondant
-                « signature faite », le dossier passe aussi en <b className="text-slate-400">Facturé</b>.
+                « signature faite », l'affaire est comptée comme signée dans les statistiques.
               </p>
             </div>
 

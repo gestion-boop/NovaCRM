@@ -181,6 +181,7 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
                 <option value="Acheteur">Acheteur</option>
                 <option value="Vendeur">Vendeur</option>
                 <option value="Location">Location</option>
+                <option value="Conciergerie">Conciergerie</option>
                 <option value="Locataire">Locataire</option>
                 <option value="Investisseur">Investisseur</option>
               </select>

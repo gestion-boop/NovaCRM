@@ -50,6 +50,9 @@ export interface Deal {
   // Commission du conseiller, stockée en TTC ; affichée en HT dans les
   // colonnes du pipeline (voir htDepuisTtc).
   advisorCommissionTtc?: number;
+  // Numéro de mandat (leads.mandate_number) — affiché dans le détail du
+  // chiffre d'affaires pour retrouver le dossier d'un coup d'œil.
+  mandateNumber?: string;
   // Ticket #35 : « c'est le conseiller qui va mettre son affaire sur le
   // pipeline » — c'est donc lui qui porte le chiffre d'affaires personnel.
   // Colonne `assigned_to` de la table leads, avec repli sur `created_by`
