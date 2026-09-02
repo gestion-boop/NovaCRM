@@ -178,7 +178,8 @@ export default function Dashboard({
         // pas le pipeline, autant voir tout de suite comment il s'appelle
         // plutôt que de chercher à l'aveugle.
         nomsConnus: pipelinesData.map((p) => p.name).slice(0, 6),
-        devis: 0, devisNb: 0, parConseiller: new Map<string, number>(),
+        devis: 0, devisNb: 0, recurrence: 0, recurrenceNb: 0,
+        parConseiller: new Map<string, number>(), commissionParConseiller: new Map<string, number>(),
       };
     }
 
@@ -241,7 +242,17 @@ export default function Dashboard({
     // pipeline — un devis peut partir avant que le dossier n'avance.
     let devis = 0;
     let devisNb = 0;
+    // La récurrence se note à l'archivage, mais rien n'interdit de la saisir
+    // avant : on la compte partout où elle est renseignée, archivée ou non,
+    // et sans condition d'étape — ce n'est pas un chiffre de pipeline.
+    let recurrence = 0;
+    let recurrenceNb = 0;
     perimetreAgence.forEach((d) => {
+      const montantRecurrence = Number(d.recurrence) || 0;
+      if (montantRecurrence > 0) {
+        recurrence += montantRecurrence;
+        recurrenceNb += 1;
+      }
       if (d.archivedAt) return;
       const montantDevis = Number(d.caDevisAVenir) || 0;
       if (montantDevis <= 0) return;
@@ -251,6 +262,12 @@ export default function Dashboard({
     // Chiffre d'affaires réalisé, conseiller par conseiller (tuile « CA de
     // Natacha », et base d'un éventuel classement plus tard).
     const parConseiller = new Map<string, number>();
+    // « Il vaut mieux CA agence ET commission Natacha, car elle va avoir un
+    // pourcentage » (2 septembre) : sa commission est un montant à elle,
+    // saisi à l'archivage (advisor_commission_ttc), et non une part du
+    // chiffre d'affaires de l'agence. Les deux ne se déduisent pas l'un de
+    // l'autre — on les compte séparément.
+    const commissionParConseiller = new Map<string, number>();
     // Demandé le 2 septembre : « quand je clique dans la colonne chiffre
     // d'affaires d'agence, je voudrais un tableau avec le nom et prénom des
     // clients, le numéro de mandat et le chiffre, et pouvoir modifier le
@@ -304,7 +321,16 @@ export default function Dashboard({
       if (d.archivedAt) {
         total += montant;
         comptees += 1;
-        if (d.advisorId) parConseiller.set(d.advisorId, (parConseiller.get(d.advisorId) || 0) + montant);
+        if (d.advisorId) {
+          parConseiller.set(d.advisorId, (parConseiller.get(d.advisorId) || 0) + montant);
+          const commission = Number(d.advisorCommissionTtc) || 0;
+          if (commission > 0) {
+            commissionParConseiller.set(
+              d.advisorId,
+              (commissionParConseiller.get(d.advisorId) || 0) + commission
+            );
+          }
+        }
       }
       else {
         aVenir += montant;
@@ -319,7 +345,8 @@ export default function Dashboard({
     return {
       total, comptees, aVenir, comptessAVenir, sansMontant,
       pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [],
-      repartitionAVenir, horsPipelineMontant, horsPipelineNb, devis, devisNb, parConseiller,
+      repartitionAVenir, horsPipelineMontant, horsPipelineNb, devis, devisNb,
+      recurrence, recurrenceNb, parConseiller, commissionParConseiller,
       // Archivés d'abord — c'est ce qui est déjà compté — puis par montant.
       lignes: lignes.sort(
         (a, b) => Number(b.archive) - Number(a.archive) || b.montant - a.montant || a.nom.localeCompare(b.nom, 'fr')
@@ -336,7 +363,9 @@ export default function Dashboard({
     () => collaborateurs.find((u) => /nata[sc]ha/i.test(u.name || '')),
     [collaborateurs]
   );
-  const caNatacha = natacha ? chiffreAffairesAgence.parConseiller.get(natacha.id) || 0 : 0;
+  const commissionNatacha = natacha
+    ? chiffreAffairesAgence.commissionParConseiller.get(natacha.id) || 0
+    : 0;
 
 
   // On ne considère que les agences réellement affichées (l'agence active,
@@ -602,54 +631,15 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* KPI Stats Grid */}
+      {/* Demandé le 2 septembre : « mets les 4 tableaux de com en haut,
+          alignés ». Les quatre chiffres d'argent — chiffre d'affaires de
+          l'agence, commission du conseiller, devis signés à venir, récurrence
+          — forment leur propre rangée, en tête du tableau de bord, sur quatre
+          colonnes exactes pour qu'ils s'alignent. Ils étaient jusqu'ici noyés
+          au milieu des compteurs (prospects, dossiers, tâches), qui suivent
+          maintenant en dessous. Hors Novavisio, seul le chiffre d'affaires
+          s'affiche : la rangée reste alignée à gauche. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1 - Prospects (Deep Teal theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg hover:shadow-teal-500/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
-          <div className="space-y-1">
-            <span className="text-xs text-slate-400 font-medium tracking-wide">Prospects & Clients</span>
-            <div className="text-3xl font-black text-white tracking-tight">{totalContacts}</div>
-            <button 
-              onClick={() => onNavigate('clients')} 
-              className="text-[11px] text-[#F9C977] font-bold hover:text-[#FAD592] inline-flex items-center gap-1 cursor-pointer transition-all hover:underline"
-            >
-              Gérer les contacts <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-            </button>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-400 group-hover:scale-105 transition-transform">
-            <Users className="w-6 h-6" />
-          </div>
-        </div>
-
-        {/* Metric 2 - Dossiers Actifs (Deep Amber theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/25 hover:border-[#F7BC5F]/40 shadow-lg hover:shadow-[#F7BC5F]/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
-          <div className="space-y-1">
-            <span className="text-xs text-slate-400 font-medium tracking-wide">Dossiers actifs</span>
-            <div className="text-3xl font-black text-white tracking-tight">{activeDeals}</div>
-            <button 
-              onClick={() => onNavigate('pipeline')} 
-              className="text-[11px] text-[#F9C977] font-bold hover:text-[#FAD592] inline-flex items-center gap-1 cursor-pointer transition-all hover:underline"
-            >
-              Voir le pipeline <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-            </button>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977] group-hover:scale-105 transition-transform">
-            <Briefcase className="w-6 h-6" />
-          </div>
-        </div>
-
-        {/* Metric 3 - Volume Financier (Deep Emerald theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-emerald-500/25 hover:border-emerald-500/40 shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
-          <div className="space-y-1">
-            <span className="text-xs text-slate-400 font-medium tracking-wide">Volume financier</span>
-            <div className="text-2xl font-black text-emerald-400 tracking-tight">{formatCurrency(totalDealValue)}</div>
-            <span className="text-[11px] text-emerald-400/90 font-semibold tracking-wide block">Encours total sécurisé</span>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-            <Coins className="w-6 h-6" />
-          </div>
-        </div>
-
         {/* Ticket #34 — Chiffre d'affaires de l'agence, super admins seulement.
             Pipeline « Transaction V2 », montants HT (commission agence).
             Y entrent les dossiers ARCHIVÉS dont le montant a été confirmé au
@@ -730,12 +720,12 @@ export default function Dashboard({
           <div className="dash-card p-6 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">
-                CA de {natacha?.name?.split(' ')[0] || 'Natacha'}
+                Commission {natacha?.name?.split(' ')[0] || 'Natacha'}
               </span>
-              <div className="text-2xl font-black text-sky-300 tracking-tight">{formatCurrency(caNatacha)}</div>
+              <div className="text-2xl font-black text-sky-300 tracking-tight">{formatCurrency(commissionNatacha)}</div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {natacha
-                  ? 'Affaires archivées et confirmées, à son nom'
+                  ? 'Sa commission, saisie à l\'archivage — distincte du CA agence'
                   : "Aucun collaborateur nommé Natacha dans cette agence"}
               </span>
             </div>
@@ -748,14 +738,14 @@ export default function Dashboard({
         {isSuperAdmin && estNovavisio && (
           <div className="dash-card p-6 rounded-2xl border border-violet-500/25 hover:border-violet-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">CA devis à venir</span>
+              <span className="text-xs text-slate-400 font-medium tracking-wide">Devis signés à venir</span>
               <div className="text-2xl font-black text-violet-300 tracking-tight">
                 {formatCurrency(chiffreAffairesAgence.devis)}
               </div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.devisNb === 0
-                  ? 'Aucun devis en attente — case « CA devis à venir » de la fiche client'
-                  : `${chiffreAffairesAgence.devisNb} devis en attente de signature`}
+                  ? 'Aucun devis en attente — case « Devis signés à venir » de la fiche client'
+                  : `${chiffreAffairesAgence.devisNb} devis en attente de facturation`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-violet-300 group-hover:scale-105 transition-transform">
@@ -763,6 +753,74 @@ export default function Dashboard({
             </div>
           </div>
         )}
+
+        {isSuperAdmin && estNovavisio && (
+          <div className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">Récurrence</span>
+              <div className="text-2xl font-black text-teal-300 tracking-tight">
+                {formatCurrency(chiffreAffairesAgence.recurrence)}
+              </div>
+              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                {chiffreAffairesAgence.recurrenceNb === 0
+                  ? 'Aucune récurrence notée — case « Récurrence » à l\'archivage'
+                  : `${chiffreAffairesAgence.recurrenceNb} client${chiffreAffairesAgence.recurrenceNb > 1 ? 's' : ''} avec une récurrence`}
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
+              <TrendingUp className="w-6 h-6" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* KPI Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Metric 1 - Prospects (Deep Teal theme) */}
+        <div className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg hover:shadow-teal-500/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+          <div className="space-y-1">
+            <span className="text-xs text-slate-400 font-medium tracking-wide">Prospects & Clients</span>
+            <div className="text-3xl font-black text-white tracking-tight">{totalContacts}</div>
+            <button 
+              onClick={() => onNavigate('clients')} 
+              className="text-[11px] text-[#F9C977] font-bold hover:text-[#FAD592] inline-flex items-center gap-1 cursor-pointer transition-all hover:underline"
+            >
+              Gérer les contacts <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-400 group-hover:scale-105 transition-transform">
+            <Users className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* Metric 2 - Dossiers Actifs (Deep Amber theme) */}
+        <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/25 hover:border-[#F7BC5F]/40 shadow-lg hover:shadow-[#F7BC5F]/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+          <div className="space-y-1">
+            <span className="text-xs text-slate-400 font-medium tracking-wide">Dossiers actifs</span>
+            <div className="text-3xl font-black text-white tracking-tight">{activeDeals}</div>
+            <button 
+              onClick={() => onNavigate('pipeline')} 
+              className="text-[11px] text-[#F9C977] font-bold hover:text-[#FAD592] inline-flex items-center gap-1 cursor-pointer transition-all hover:underline"
+            >
+              Voir le pipeline <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977] group-hover:scale-105 transition-transform">
+            <Briefcase className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* Metric 3 - Volume Financier (Deep Emerald theme) */}
+        <div className="dash-card p-6 rounded-2xl border border-emerald-500/25 hover:border-emerald-500/40 shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+          <div className="space-y-1">
+            <span className="text-xs text-slate-400 font-medium tracking-wide">Volume financier</span>
+            <div className="text-2xl font-black text-emerald-400 tracking-tight">{formatCurrency(totalDealValue)}</div>
+            <span className="text-[11px] text-emerald-400/90 font-semibold tracking-wide block">Encours total sécurisé</span>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+            <Coins className="w-6 h-6" />
+          </div>
+        </div>
 
         {/* Metric 4 - Tâches en Attente (Deep Slate-Indigo theme) */}
         <div className="dash-card p-6 rounded-2xl border border-indigo-500/25 hover:border-indigo-500/40 shadow-lg hover:shadow-indigo-500/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
