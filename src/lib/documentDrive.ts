@@ -1,7 +1,5 @@
 import {
   getOrCreateDriveFolder,
-  isGoogleAuthError,
-  renewWorkspaceAccessToken,
 } from '@/lib/workspace';
 
 export interface DriveDocumentUploadResult {
@@ -20,31 +18,6 @@ export interface DriveDocumentUploadResult {
  * le token reste uniquement en mémoire via workspace.ts.
  */
 export const uploadDocumentToDrive = async (
-  token: string,
-  file: File,
-  agencyName: string
-): Promise<DriveDocumentUploadResult> => {
-  try {
-    return await envoyerVersDrive(token, file, agencyName);
-  } catch (e) {
-    // Jeton Google expiré (voir workspace.ts, isGoogleAuthError) : on en
-    // demande un frais et on refait UNE tentative. Sans jeton plus frais,
-    // l'utilisateur doit reconnecter Google — on le lui dit clairement, au
-    // lieu du message technique de Google.
-    if (!isGoogleAuthError(e)) throw e;
-    const frais = await renewWorkspaceAccessToken(token);
-    if (!frais) {
-      const erreur = new Error(
-        "Votre accès Google Drive a expiré. Reconnectez Google, puis déposez à nouveau le fichier."
-      ) as Error & { code?: string };
-      erreur.code = 'google-reconnect';
-      throw erreur;
-    }
-    return envoyerVersDrive(frais, file, agencyName);
-  }
-};
-
-const envoyerVersDrive = async (
   token: string,
   file: File,
   agencyName: string

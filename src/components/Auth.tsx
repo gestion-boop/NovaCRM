@@ -103,16 +103,6 @@ export default function Auth() {
             Plateforme CRM Conseils Finances, ImmoSphera, NovaVisio
           </p>
 
-          {/* Publication Google (vérification OAuth) : la page d'accueil doit
-              dire ce que fait l'application et à quoi servent les accès
-              Google demandés, et renvoyer vers la politique de
-              confidentialité (voir public/confidentialite.html). */}
-          <p className="text-xs text-slate-400">
-            Outil interne de gestion de la relation client : prospects, dossiers, rendez-vous, documents et
-            messagerie. Avec votre accord, il utilise votre Gmail, votre Google Drive et votre Google Agenda
-            pour envoyer vos e-mails, ranger vos documents et afficher vos rendez-vous.
-          </p>
-
           <p className="text-xs text-slate-400">
             Connectez-vous avec votre compte Google professionnel.
           </p>
@@ -172,11 +162,6 @@ export default function Auth() {
 
         <p className="text-center text-[11px] text-slate-500 mt-6">
           L'accès à Nova CRM est réservé aux utilisateurs autorisés.
-        </p>
-        <p className="text-center text-[11px] text-slate-500 mt-2">
-          <a href="/confidentialite.html" className="underline hover:text-slate-300">Politique de confidentialité</a>
-          {' · '}
-          <a href="/conditions.html" className="underline hover:text-slate-300">Conditions d'utilisation</a>
         </p>
       </div>
 

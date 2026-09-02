@@ -4,17 +4,15 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import agencyImmosphera from '@/assets/agency-immosphera.png';
-import { chargerMasqueesDepuisServeur, masquerTuile, lireMasquees, reafficherTuile } from '@/lib/tuilesMasquees';
+import { chargerMasqueesDepuisServeur, masquerTuile, lireMasquees } from '@/lib/tuilesMasquees';
 import NovaMascotte from './NovaMascotte';
 import { NAV_ITEMS } from './Sidebar';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createPortal } from 'react-dom';
 import {
-  DndContext, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay, defaultDropAnimationSideEffects,
-  PointerSensor, TouchSensor, useSensor, useSensors, closestCenter,
+  DndContext, DragEndEvent, DragOverEvent, PointerSensor, TouchSensor, useSensor, useSensors, closestCenter,
 } from '@dnd-kit/core';
-import { SortableContext, rectSortingStrategy, rectSwappingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { 
   Bell, MessageSquare, Calendar, Mail, Users, Headphones, 
@@ -133,12 +131,6 @@ export interface TileItemNode {
   // est justement le cas où on la cherche.
   favorite?: boolean;
 }
-
-// Ce qu'un verrou du super admin retient d'une tuile (agency_ui_settings
-// .home_layout.lockedTiles) : son apparence, son contenu, et — audit du
-// 2 septembre — la liste des cartes qu'il a RETIRÉES du dossier depuis, pour
-// qu'elles disparaissent aussi chez les membres qui les avaient déjà.
-type Verrou = Partial<TileItemNode> & { retires?: string[] };
 
 export const PRESET_GRADIENTS = [
   { name: 'Rubis Impérial', value: 'from-[#8B1E3F] via-[#63142A] to-[#3B0A18]' },
@@ -713,12 +705,7 @@ const EmptyRootCell: React.FC<{ id: string }> = ({ id }) => {
 };
 
 const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, onActivate, onOpenPalette, onEdit, isSuperAdmin, onToggleLock, onQuickAdd, onOpenActionsMenu }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging, active } = useSortable({ id: tile.id });
-  // Un glisser est en cours quelque part dans la grille : les effets de
-  // survol (rebond, halo) des autres tuiles sont coupés le temps du geste —
-  // sinon chaque tuile survolée par le pointeur sursautait sous la tuile
-  // déplacée, ce qui rendait le geste saccadé (signalé le 2 septembre).
-  const dragEnCours = active !== null;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tile.id });
   const Icon = ICON_MAP[tile.iconName] || LayoutGrid;
   // Sur mobile, l'accueil reste un simple clic : pas de glisser-déposer, pas
   // de changement de couleur, pas de suppression — l'ordre et le contenu
@@ -763,8 +750,7 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
       // hover:shadow-lg générique, qui n'utilisait pas la couleur propre
       // à la tuile).
       className={`relative group h-28 sm:h-36 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${tile.gradient} p-2.5 sm:p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-shadow duration-200 shadow-md border border-white/10 overflow-hidden active:scale-[0.97] active:shadow-[0_0_0_3px_var(--tile-glow),0_0_22px_8px_var(--tile-glow)] ${
-        isDragging ? 'opacity-30 z-50 border-dashed border-white/40 shadow-none' :
-        dragEnCours ? 'z-10 pointer-events-none' :
+        isDragging ? 'opacity-40 z-50' :
         isDragTarget ? 'border-[#F7BC5F] ring-4 ring-[#F7BC5F]/30 scale-105 z-40' : 'hover:scale-[1.03] hover:-translate-y-1 hover:border-[#F7BC5F]/40 hover:shadow-[0_0_18px_6px_var(--tile-glow)] z-10'
       }`}
     >
@@ -906,50 +892,6 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
 
 // Variante de SortableTile pour la grille des sous-tuiles (contenu d'un
 // dossier ouvert) — mêmes mécanismes @dnd-kit, gabarit plus compact.
-// Calque de déplacement (dnd-kit DragOverlay) : la copie de la tuile qui
-// suit le pointeur, pleine et nette, pendant que l'originale reste en place
-// en pointillé. Sans calque, c'était l'originale — rendue à 40 % — qui se
-// déplaçait, clignotant sous les tuiles voisines : l'impression de geste
-// « pas fluide » signalée le 2 septembre.
-const TuileFantome: React.FC<{ tile: TileItemNode; sousTuile?: boolean }> = ({ tile, sousTuile }) => {
-  const Icon = ICON_MAP[tile.iconName] || LayoutGrid;
-  return (
-    <div
-      className={`${sousTuile ? 'h-36 rounded-2xl p-4' : 'h-28 sm:h-36 rounded-2xl sm:rounded-3xl p-2.5 sm:p-4'} bg-gradient-to-br ${tile.gradient} flex flex-col items-center justify-center text-center border border-[#F7BC5F]/70 shadow-[0_18px_40px_rgba(0,0,0,0.55)] scale-105 cursor-grabbing overflow-hidden`}
-    >
-      {tile.isFolder ? (
-        <div className="flex flex-col items-center w-full px-1">
-          <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-black/30 border border-white/10 p-1 sm:p-2 grid grid-cols-2 gap-1 sm:gap-1.5 items-center justify-center mb-1.5 sm:mb-2 overflow-hidden">
-            {(tile.children || []).slice(0, 4).map((subItem, i) => {
-              const SubIcon = ICON_MAP[subItem.iconName] || LayoutGrid;
-              return (
-                <div key={i} className="w-3.5 h-3.5 sm:w-5 sm:h-5 rounded bg-white/10 flex items-center justify-center text-white p-0.5 overflow-hidden">
-                  {subItem.imageUrl ? <img src={subItem.imageUrl} alt="" className="w-full h-full object-contain" /> : <SubIcon className="w-2 h-2 sm:w-3 sm:h-3" />}
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex items-center justify-center gap-1 max-w-full">
-            <Folder className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
-            <h3 className="text-white font-bold text-xs sm:text-sm tracking-tight truncate">{tile.title}</h3>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center w-full px-1">
-          <div className="w-9 h-9 sm:w-12 sm:h-12 flex items-center justify-center mb-1 sm:mb-2 text-white">
-            {tile.imageUrl ? (
-              <img src={tile.imageUrl} alt={tile.title} className="w-full h-full object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.65)]" />
-            ) : (
-              <Icon className="w-7 h-7 sm:w-11 sm:h-11 stroke-[1.5]" />
-            )}
-          </div>
-          <h3 className="text-white font-bold text-xs sm:text-base tracking-tight line-clamp-1 max-w-full">{tile.title}</h3>
-        </div>
-      )}
-    </div>
-  );
-};
-
 interface SortableSubTileProps {
   subItem: TileItemNode;
   count: number;
@@ -967,8 +909,7 @@ interface SortableSubTileProps {
 }
 
 const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDragTarget, onActivate, onOpenPalette, onEdit, isSuperAdmin, onToggleLock, onOpenActionsMenu }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging, active } = useSortable({ id: subItem.id });
-  const dragEnCours = active !== null;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: subItem.id });
   const SubIcon = ICON_MAP[subItem.iconName] || LayoutGrid;
   const isMobile = useIsMobile();
   // Ticket #113 : verrouillée = plus modifiable, mais toujours déplaçable.
@@ -983,8 +924,7 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
       onClick={onActivate}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`relative group h-36 rounded-2xl bg-gradient-to-br ${subItem.gradient} p-4 flex flex-col items-center justify-center text-center cursor-pointer shadow-md transition-shadow duration-200 border border-white/10 overflow-hidden active:scale-[0.97] ${
-        isDragging ? 'opacity-30 z-50 border-dashed border-white/40 shadow-none' :
-        dragEnCours ? 'z-10 pointer-events-none' :
+        isDragging ? 'opacity-40 z-50' :
         isDragTarget ? 'border-[#F7BC5F] ring-4 ring-[#F7BC5F]/30 scale-105 z-40' : 'hover:scale-[1.03] hover:border-[#F7BC5F]/40 z-10'
       }`}
     >
@@ -1502,9 +1442,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // composant (synchronisation serveur, Paramètres) : `idsMasques` la relit à
   // chaque rendu, il suffit donc d'en provoquer un.
   const [versionMasquees, setVersionMasquees] = useState(0);
-  // Incrémenté quand la grille serveur de l'agence est chargée : les effets
-  // qui ne doivent écrire qu'après (voir plus bas) s'y accrochent.
-  const [syncPrete, setSyncPrete] = useState(0);
   const [rootSlots, setRootSlots] = useState<(string | null)[]>(() => loadRootSlots(ROOT_SLOTS_KEY, tiles));
   const rootSlotsKeyRef = useRef(ROOT_SLOTS_KEY);
   useEffect(() => {
@@ -1618,7 +1555,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         /* best-effort — le navigateur reste la source si le serveur échoue */
       } finally {
         homeSyncReadyAgencies.add(agencyId);
-        setSyncPrete((v) => v + 1);
       }
     })();
   }, [currentUser?.uid, activeAgency?.id]);
@@ -1716,7 +1652,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // synchronisation en direct (même mécanisme que l'ordre des onglets dans
   // Paramètres) pour qu'un verrouillage posé par le super admin s'applique
   // immédiatement, sans recharger, chez tous les membres déjà connectés.
-  const [lockedTiles, setLockedTiles] = useState<Record<string, Verrou>>({});
+  const [lockedTiles, setLockedTiles] = useState<Record<string, Partial<TileItemNode>>>({});
   useEffect(() => {
     if (!activeAgency?.id) return;
     let active = true;
@@ -1760,25 +1696,19 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       // (demande explicite : « ils pourront changer l'ordre des dossiers à
       // l'intérieur »), et les cartes qu'il a ajoutées à côté sont laissées
       // en place — les retirer effacerait son travail sans prévenir.
-      // `retires` n'est pas une propriété de tuile : on ne la propage pas.
-      const { retires, children: enfantsImposes, ...apparence } = lock;
-      const idsRetires = new Set(retires || []);
+      const enfantsImposes = (lock as TileItemNode).children;
       if (enfantsImposes && enfantsImposes.length > 0) {
         const idsImposes = new Set(enfantsImposes.map((c) => c.id));
-        const enfantsUtilisateur = withChildren.children || [];
-        const rangDeLUtilisateur = new Map(enfantsUtilisateur.map((c, i) => [c.id, i] as [string, number]));
-        // Le favori est à chacun : le verrou ne l'impose ni ne l'efface.
-        const favorisUtilisateur = new Set(enfantsUtilisateur.filter((c) => c.favorite).map((c) => c.id));
-        const imposes = [...enfantsImposes]
-          .sort((a, b) => (rangDeLUtilisateur.get(a.id) ?? 9999) - (rangDeLUtilisateur.get(b.id) ?? 9999))
-          .map((c) => (favorisUtilisateur.has(c.id) ? { ...c, favorite: true } : c));
-        // Audit du 2 septembre : une carte que le super admin a RETIRÉE du
-        // dossier restait chez ceux qui l'avaient déjà, prise pour un ajout
-        // personnel. Le verrou retient maintenant ces retraits.
-        const ajoutsPersonnels = enfantsUtilisateur.filter((c) => !idsImposes.has(c.id) && !idsRetires.has(c.id));
-        return { ...withChildren, ...apparence, children: [...imposes, ...ajoutsPersonnels], locked: true };
+        const rangDeLUtilisateur = new Map(
+          (withChildren.children || []).map((c, i) => [c.id, i] as [string, number])
+        );
+        const imposes = [...enfantsImposes].sort(
+          (a, b) => (rangDeLUtilisateur.get(a.id) ?? 9999) - (rangDeLUtilisateur.get(b.id) ?? 9999)
+        );
+        const ajoutsPersonnels = (withChildren.children || []).filter((c) => !idsImposes.has(c.id));
+        return { ...withChildren, ...lock, children: [...imposes, ...ajoutsPersonnels], locked: true };
       }
-      return { ...withChildren, ...apparence, locked: true };
+      return { ...withChildren, ...lock, locked: true };
     });
 
   // NOTE (1er septembre, au soir) : une version de ce correctif POSAIT sur
@@ -1792,29 +1722,27 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
 
   // Pose/retire un verrou — écrit directement dans agency_ui_settings pour
   // que ça s'applique à toute l'agence, pas seulement à ce navigateur.
-  // Instantané d'une tuile tel qu'un verrou le retient : apparence et
-  // contenu, sans ce qui appartient à chacun (favoris) ni les drapeaux
-  // calculés à l'affichage (locked).
-  const nettoyerPourVerrou = (items: TileItemNode[]): TileItemNode[] =>
-    items.map((t) => {
-      const { favorite, locked, ...reste } = t;
-      void favorite; void locked;
-      return reste.children ? { ...reste, children: nettoyerPourVerrou(reste.children) } : reste;
-    });
-  const instantaneVerrou = (tile: Partial<TileItemNode>): Verrou => ({
-    title: tile.title,
-    iconName: tile.iconName,
-    gradient: tile.gradient,
-    imageUrl: tile.imageUrl,
-    externalUrl: tile.externalUrl,
-    navTarget: tile.navTarget,
-    ...(tile.children ? { children: nettoyerPourVerrou(tile.children) } : {}),
-  });
-
-  // Écrit l'ensemble des verrous de l'agence — affichage optimiste, annulé
-  // si l'écriture échoue.
-  const enregistrerVerrous = async (next: Record<string, Verrou>, precedent: Record<string, Verrou>) => {
-    if (!activeAgency?.id) return;
+  const toggleTileLock = async (tile: TileItemNode) => {
+    if (!activeAgency?.id || !isSuperAdmin) return;
+    const next = { ...lockedTiles };
+    if (next[tile.id]) {
+      delete next[tile.id];
+    } else {
+      next[tile.id] = {
+        title: tile.title,
+        iconName: tile.iconName,
+        gradient: tile.gradient,
+        imageUrl: tile.imageUrl,
+        externalUrl: tile.externalUrl,
+        navTarget: tile.navTarget,
+        // Demandé le 1er septembre : « du moment qu'un super admin verrouille
+        // des dossiers, il faut que ce soit la même configuration pour tous
+        // les autres utilisateurs ». Le verrou retient donc aussi le CONTENU
+        // du dossier, pas seulement son apparence — sans quoi chacun gardait
+        // le sien.
+        children: tile.children,
+      };
+    }
     setLockedTiles(next);
     const { data: existing } = await supabase
       .from('agency_ui_settings')
@@ -1828,76 +1756,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       .eq('agency_id', activeAgency.id);
     if (error) {
       console.error('Erreur verrouillage tuile :', error);
-      setLockedTiles(precedent);
-      toast.error(`Verrou non enregistré : ${error.message}`);
+      setLockedTiles(lockedTiles); // annule l'affichage optimiste si l'écriture échoue
     }
-  };
-
-  // Audit du 2 septembre : le verrou était une PHOTO prise au moment du clic
-  // sur le cadenas. Une carte ajoutée ensuite par le super admin dans son
-  // dossier verrouillé (glisser, « Ajouter à un dossier », « Ajouter dans ce
-  // dossier »), un renommage, une couleur : rien ne partait chez les autres
-  // tant qu'il ne déverrouillait pas pour reverrouiller. Après chaque
-  // modification de sa grille, on réaligne donc les verrous sur ce qu'elle
-  // contient — le dossier verrouillé du super admin EST la référence.
-  // Appelé uniquement sur une action explicite (jamais sur un simple
-  // chargement), pour qu'un appareil resté sur une vieille grille ne
-  // réécrive pas un verrou plus récent.
-  const synchroniserVerrous = (grille: TileItemNode[], base: Record<string, Verrou> = lockedTiles) => {
-    if (!isSuperAdmin || !activeAgency?.id) return;
-    const next: Record<string, Verrou> = { ...base };
-    let change = false;
-    Object.entries(base).forEach(([id, verrou]) => {
-      const tuile = findTileRecursive(grille, id);
-      if (!tuile) return;
-      const nouveau = instantaneVerrou(tuile);
-      const ancien = instantaneVerrou(verrou);
-      if (JSON.stringify(nouveau) === JSON.stringify(ancien)) return;
-      const idsApres = new Set((nouveau.children || []).map((c) => c.id));
-      const retires = new Set<string>((verrou.retires || []).filter((r) => !idsApres.has(r)));
-      (ancien.children || []).forEach((c) => { if (!idsApres.has(c.id)) retires.add(c.id); });
-      next[id] = { ...nouveau, ...(retires.size > 0 ? { retires: Array.from(retires) } : {}) };
-      change = true;
-    });
-    if (change) void enregistrerVerrous(next, base);
-  };
-
-  // Audit du 2 septembre : supprimer ou dissoudre un dossier verrouillé
-  // laissait son verrou en place — le dossier revenait chez tout le monde,
-  // super admin compris, sans moyen de s'en défaire (c'est ainsi que les
-  // anciens verrous se sont accumulés). Le verrou part avec le dossier.
-  // Renvoie la nouvelle carte des verrous, pour enchaîner sans repartir de
-  // l'ancienne.
-  const retirerVerrous = (ids: string[]): Record<string, Verrou> => {
-    if (!isSuperAdmin || !activeAgency?.id) return lockedTiles;
-    const next: Record<string, Verrou> = { ...lockedTiles };
-    let change = false;
-    ids.forEach((id) => { if (next[id]) { delete next[id]; change = true; } });
-    if (!change) return lockedTiles;
-    void enregistrerVerrous(next, lockedTiles);
-    toast.info('Verrou retiré : ce dossier n\'est plus imposé aux membres de l\'agence.');
-    return next;
-  };
-  const idsDuSousArbre = (tileId: string): string[] => {
-    const tuile = findTileRecursive(tiles, tileId);
-    return [tileId, ...(tuile?.children ? flattenTileIds(tuile.children) : [])];
-  };
-
-  // Pose/retire un verrou — écrit directement dans agency_ui_settings pour
-  // que ça s'applique à toute l'agence, pas seulement à ce navigateur.
-  const toggleTileLock = async (tile: TileItemNode) => {
-    if (!activeAgency?.id || !isSuperAdmin) return;
-    const next = { ...lockedTiles };
-    if (next[tile.id]) {
-      delete next[tile.id];
-    } else {
-      // Demandé le 1er septembre : « du moment qu'un super admin verrouille
-      // des dossiers, il faut que ce soit la même configuration pour tous
-      // les autres utilisateurs ». Le verrou retient donc aussi le CONTENU
-      // du dossier, pas seulement son apparence.
-      next[tile.id] = instantaneVerrou(tile);
-    }
-    await enregistrerVerrous(next, lockedTiles);
   };
 
   // Folder Stack state for navigation inside open folders/nested folders
@@ -2025,10 +1885,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         .map(item => item.children ? { ...item, children: deleteRecursive(item.children) } : item);
     };
 
-    const verrousRestants = retirerVerrous(idsDuSousArbre(tileId));
-    const apresSuppression = deleteRecursive(tiles);
-    setTiles(apresSuppression);
-    synchroniserVerrous(apresSuppression, verrousRestants);
+    setTiles(deleteRecursive(tiles));
     if (activeFolder) {
       setOpenFolderStack(prev => prev.map(f => f.id === activeFolder.id ? {
         ...f,
@@ -2061,10 +1918,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         .filter((item) => item.id !== tileId)
         .map((item) => (item.children ? { ...item, children: deleteRecursive(item.children) } : item));
 
-    const verrousRestants = retirerVerrous(idsDuSousArbre(tileId));
-    const apresSuppression = deleteRecursive(tiles);
-    setTiles(apresSuppression);
-    synchroniserVerrous(apresSuppression, verrousRestants);
+    setTiles(deleteRecursive(tiles));
     if (activeFolder) {
       setOpenFolderStack((prev) =>
         prev.map((f) => (f.id === activeFolder.id ? { ...f, children: f.children?.filter((c) => c.id !== tileId) } : f))
@@ -2096,9 +1950,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         if (item.children) return { ...item, children: insertRecursive(item.children) };
         return item;
       });
-    const apresDeplacement = insertRecursive(withoutTile);
-    setTiles(apresDeplacement);
-    synchroniserVerrous(apresDeplacement);
+    setTiles(insertRecursive(withoutTile));
     setOpenFolderStack([]);
   };
 
@@ -2116,9 +1968,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         .map((item) => (item.children ? { ...item, children: extractRecursive(item.children) } : item));
     const withoutTile = extractRecursive(tiles);
     if (!moved) return;
-    const apresSortie = [...withoutTile, moved];
-    setTiles(apresSortie);
-    synchroniserVerrous(apresSortie);
+    setTiles([...withoutTile, moved]);
     setOpenFolderStack((prev) => prev.map((f) => ({ ...f, children: (f.children || []).filter((c) => c.id !== tileId) })));
   };
 
@@ -2150,16 +2000,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
   );
 
-  // Tuile en cours de déplacement — alimente le calque (TuileFantome) qui
-  // suit le pointeur, à la racine comme dans un dossier ouvert.
-  const [tuileEnDeplacement, setTuileEnDeplacement] = useState<TileItemNode | null>(null);
-  const handleTileDragStart = (event: DragStartEvent) => {
-    const id = String(event.active.id);
-    const source = activeFolder ? applyLocks(activeFolder.children || []) : currentDisplayTiles;
-    setTuileEnDeplacement(source.find((t) => t.id === id) || findTileRecursive(tiles, id) || null);
-  };
-  const handleTileDragCancel = () => setTuileEnDeplacement(null);
-
   // Save to localStorage — cloisonné par agence (HOME_TILES_KEY). Poussé au
   // serveur avec l'agence d'origine (`{ agencyId, items }`, voir commentaire
   // plus haut) pour ne jamais écraser la grille d'une AUTRE agence de ce
@@ -2190,7 +2030,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // #256.
   const handleTileDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setTuileEnDeplacement(null);
     if (!over || active.id === over.id) return;
 
     if (activeFolder) {
@@ -2245,9 +2084,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       });
     };
 
-    const apresMiseAJour = recursiveUpdate(tiles);
-    setTiles(apresMiseAJour);
-    synchroniserVerrous(apresMiseAJour);
+    setTiles(recursiveUpdate(tiles));
     setOpenFolderStack(prev => prev.map(f => f.id === folderId ? { ...f, children: newChildren } : f));
   };
 
@@ -2266,7 +2103,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       t.id === folderId ? { ...t, children: [...(t.children || []), ...moved] } : t
     );
     setTiles(updated);
-    synchroniserVerrous(updated);
     setOpenFolderStack((prev) =>
       prev.map((f) => (f.id === folderId ? { ...f, children: [...(f.children || []), ...moved] } : f))
     );
@@ -2350,9 +2186,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       });
     };
 
-    const apresCouleur = updateGradientRecursive(tiles);
-    setTiles(apresCouleur);
-    synchroniserVerrous(apresCouleur);
+    setTiles(updateGradientRecursive(tiles));
     setOpenFolderStack((prev) => prev.map((f) => ({ ...f, children: updateGradientRecursive(f.children || []) })));
     setPaletteTileId(null);
   };
@@ -2414,9 +2248,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       if (activeFolder) {
         updateActiveFolderChildren(updateShortcutRecursive(activeFolder.children || [], editingShortcutId, updates));
       } else {
-        const apresEdition = updateShortcutRecursive(tiles, editingShortcutId, updates);
-        setTiles(apresEdition);
-        synchroniserVerrous(apresEdition);
+        setTiles(updateShortcutRecursive(tiles, editingShortcutId, updates));
       }
       closeAddModal();
       return;
@@ -2501,9 +2333,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       });
     };
 
-    const apresRenommage = renameRecursive(tiles);
-    setTiles(apresRenommage);
-    synchroniserVerrous(apresRenommage);
+    setTiles(renameRecursive(tiles));
     setOpenFolderStack(prev => prev.map(f => f.id === renamingFolderId ? { ...f, title: renameTitle.trim() } : f));
     setRenamingFolderId(null);
   };
@@ -2540,10 +2370,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       return result;
     };
 
-    const verrousRestants = retirerVerrous([folderId]);
-    const apresDissolution = dissolveRecursive(tiles);
-    setTiles(apresDissolution);
-    synchroniserVerrous(apresDissolution, verrousRestants);
+    setTiles(dissolveRecursive(tiles));
     setOpenFolderStack(prev => prev.filter(f => f.id !== folderId));
   };
 
@@ -2632,32 +2459,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // cartes n'ont plus à traîner à la racine.
     enfants.forEach((enfant) => idsImposesParUnDossier.add(enfant.id));
   });
-
-  // Audit du 2 septembre : un dossier reposé ci-dessus n'existait qu'à
-  // l'AFFICHAGE. Chez un membre dont la grille ne l'avait pas, réordonner
-  // ses cartes, y ajouter les siennes ou le mettre en favori ne faisait
-  // rien (la grille enregistrée ne le connaissait pas), et sa case pouvait
-  // changer à chaque rendu. On l'inscrit donc une fois pour toutes dans la
-  // grille du membre — uniquement après le chargement de sa grille serveur,
-  // pour ne pas écrire avant de savoir ce qu'elle contient — et on le sort
-  // de sa liste de tuiles masquées, sans quoi la réconciliation du prochain
-  // chargement le retirerait à nouveau. Les garde-fous de la repose (un
-  // seul dossier par titre, verrous décrivant un vrai dossier) restent.
-  const idsDossiersAReposer = dossiersVerrouillesAReposer.map((d) => d.id).join('|');
-  useEffect(() => {
-    const agencyId = activeAgency?.id;
-    if (activeFolder || !agencyId || !homeSyncReadyAgencies.has(agencyId)) return;
-    const aPoser = dossiersVerrouillesAReposer.filter((d) => !existsRecursive(tiles, d.id));
-    if (aPoser.length === 0) return;
-    setTiles((prev) => [
-      ...prev,
-      ...aPoser
-        .filter((d) => !existsRecursive(prev, d.id))
-        .map((d) => { const { locked, ...reste } = d; void locked; return reste; }),
-    ]);
-    aPoser.forEach((d) => { void reafficherTuile(currentUser?.uid, d.id); });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsDossiersAReposer, activeFolder, activeAgency?.id, syncPrete]);
 
   // Signalé le 2 septembre : « je ne vois pas la tuile Académy ». Les grilles
   // synchronisées depuis le serveur ne passent plus par la réconciliation qui
@@ -2782,24 +2583,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     isFolder: true,
     children: overflowTiles,
   } : null;
-
-  // Calque qui suit le pointeur pendant un glisser. Rendu dans <body> : le
-  // dossier ouvert est animé par framer-motion (transform), ce qui casserait
-  // le positionnement fixe du calque s'il restait dedans. Il reste dans
-  // l'arbre React du DndContext qui l'inclut, donc dans son contexte.
-  const calqueDeplacement = createPortal(
-    <DragOverlay
-      zIndex={1000}
-      dropAnimation={{
-        duration: 220,
-        easing: 'cubic-bezier(0.2, 0, 0, 1)',
-        sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.3' } } }),
-      }}
-    >
-      {tuileEnDeplacement ? <TuileFantome tile={tuileEnDeplacement} sousTuile={Boolean(activeFolder)} /> : null}
-    </DragOverlay>,
-    document.body
-  );
 
   return (
     // Signalé : avec peu de tuiles, "justify-between" étirait l'espace
@@ -3039,14 +2822,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           .map((t, i) => (t ? t.id : `__empty-${i}__`))
           .filter((_id, i) => gridItems[i]?.id !== 'nova-lock-spacer');
         return (
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleTileDragStart} onDragOver={handleTileDragOver} onDragEnd={handleTileDragEnd} onDragCancel={handleTileDragCancel}>
-        {calqueDeplacement}
-        {/* À la racine, lâcher une tuile ÉCHANGE deux cases (handleTileDragEnd).
-            L'aperçu pendant le geste doit montrer la même chose : avec la
-            stratégie de tri, toutes les tuiles intermédiaires glissaient d'un
-            cran pendant le geste, puis sautaient à leur vraie place au lâcher.
-            Dans un dossier, la liste reste dense : stratégie de tri. */}
-        <SortableContext items={sortableIds} strategy={activeFolder ? rectSortingStrategy : rectSwappingStrategy}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragOver={handleTileDragOver} onDragEnd={handleTileDragEnd}>
+        <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
           <div className={`grid ${activeFolder ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7' : 'grid-cols-6'} gap-3 sm:gap-3 max-w-7xl mx-auto w-full z-10 pb-1`}>
             {gridItems.map((tile, gridIndex) => (
               !tile ? (
@@ -3268,8 +3045,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               </div>
 
               {/* Sub-Items Grid Inside iPhone Folder */}
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleTileDragStart} onDragOver={handleTileDragOver} onDragEnd={handleTileDragEnd} onDragCancel={handleTileDragCancel}>
-                {calqueDeplacement}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragOver={handleTileDragOver} onDragEnd={handleTileDragEnd}>
                 <SortableContext items={(activeFolder.children || []).map((t) => t.id)} strategy={rectSortingStrategy}>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 max-h-[60vh] overflow-y-auto custom-scrollbar p-1">
                 {applyLocks(activeFolder.children || []).map((subItem) => (
