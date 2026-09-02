@@ -128,6 +128,16 @@ export default function AcademyView() {
     try { localStorage.setItem('nova_academy_vue', v); } catch { /* stockage indisponible */ }
   };
 
+  // Image de fond propre à chaque dossier (table academy_folders, liée par le
+  // nom de la rubrique). Un dossier sans ligne reste un dossier valide,
+  // simplement sans visuel.
+  const [visuelsDossiers, setVisuelsDossiers] = useState<Map<string, string>>(new Map());
+  const [dossierEnDepot, setDossierEnDepot] = useState<string | null>(null);
+  const [dossierSurvole, setDossierSurvole] = useState<string | null>(null);
+  const [deplacementEnCours, setDeplacementEnCours] = useState<string | null>(null);
+  const dossierPourVisuel = useRef<string | null>(null);
+  const champVisuelDossier = useRef<HTMLInputElement>(null);
+
   const [fond, setFond] = useState<string | null>(null);
   const [fondEnCours, setFondEnCours] = useState(false);
   const champFond = useRef<HTMLInputElement>(null);
@@ -198,6 +208,16 @@ export default function AcademyView() {
       setValidees(new Set());
       setValidationsParRessource(new Map());
     }
+
+    const { data: dossiers } = await supabase
+      .from('academy_folders' as any)
+      .select('nom, image_url')
+      .eq('agency_id', activeAgency.id);
+    const visuels = new Map<string, string>();
+    ((dossiers as unknown as { nom: string; image_url: string | null }[]) || []).forEach((d) => {
+      if (d.image_url) visuels.set(d.nom, d.image_url);
+    });
+    setVisuelsDossiers(visuels);
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -361,6 +381,70 @@ export default function AcademyView() {
     }
   };
 
+  /** Pose ou remplace l'image de fond d'un dossier. */
+  const changerVisuelDossier = async (nomDossier: string, image: File) => {
+    if (!activeAgency?.id || activeAgency.id === 'all') return;
+    setDossierEnDepot(nomDossier);
+    try {
+      const url = await deposerImage(image, `dossier-${nomDossier.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`);
+      const { error } = await supabase
+        .from('academy_folders' as any)
+        .upsert(
+          { agency_id: activeAgency.id, nom: nomDossier, image_url: url, updated_at: new Date().toISOString() } as any,
+          { onConflict: 'agency_id,nom' }
+        );
+      if (error) {
+        throw new Error(
+          error.message.includes('academy_folders')
+            ? "Les dossiers n'ont pas encore leur table : la migration 20260902200000 doit être appliquée."
+            : error.message
+        );
+      }
+      setVisuelsDossiers((prev) => new Map(prev).set(nomDossier, url));
+      toast.success(`Image posée sur « ${nomDossier} ».`);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Impossible d'enregistrer cette image.");
+    } finally {
+      setDossierEnDepot(null);
+    }
+  };
+
+  /**
+   * Déplace une procédure d'un dossier à l'autre.
+   *
+   * Demandé le 2 septembre : « déplacer les formations des autres dossiers
+   * dans les autres dossiers, de façon à ce que si on s'est trompé on puisse
+   * avoir une solution de repli ». Le déplacement est donc toujours
+   * réversible : il ne fait que changer la rubrique, rien n'est copié ni
+   * supprimé, et le chemin inverse est le même geste.
+   */
+  const deplacerVers = async (ressource: Ressource, nomDossier: string) => {
+    if (ressource.rubrique === nomDossier) return;
+    setDeplacementEnCours(ressource.id);
+    const precedent = ressource.rubrique;
+    try {
+      const { data, error } = await supabase
+        .from('academy_resources' as any)
+        .update({ rubrique: nomDossier, updated_at: new Date().toISOString() } as any)
+        .eq('id', ressource.id)
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Déplacement refusé par la base : action réservée aux super admins.');
+      }
+      setRessources((prev) =>
+        prev.map((r) => (r.id === ressource.id ? { ...r, rubrique: nomDossier } : r))
+      );
+      toast.success(`« ${ressource.titre} » déplacée vers « ${nomDossier} ». Elle était dans « ${precedent} ».`);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Impossible de déplacer cette procédure.');
+    } finally {
+      setDeplacementEnCours(null);
+    }
+  };
+
   const enregistrer = async () => {
     if (!currentUser || !activeAgency?.id || activeAgency.id === 'all') {
       toast.error("Sélectionnez une société avant d'ajouter une ressource.");
@@ -488,7 +572,16 @@ export default function AcademyView() {
         backgroundAttachment: 'local',
       }}
     >
-      <div className={`px-4 sm:px-6 lg:px-8 pb-16 ${fond ? 'pt-32 sm:pt-44' : 'pt-10'}`}>
+      {/* Signalé le 2 septembre, capture à l'appui : la barre passait encore
+          sur « ACADEMY ». L'image est affichée en `cover` et ancrée en haut :
+          sa hauteur à l'écran suit donc la LARGEUR de la fenêtre, et un
+          espacement en pixels fixes ne peut pas suivre. L'espacement est
+          exprimé en pourcentage de la largeur (17vw), borné pour rester
+          raisonnable sur un très petit et un très grand écran. */}
+      <div
+        className="px-4 sm:px-6 lg:px-8 pb-16"
+        style={{ paddingTop: fond ? 'clamp(140px, 17vw, 380px)' : '2.5rem' }}
+      >
         <div className="max-w-6xl mx-auto">
           {/* Sans image de fond, l'écran a besoin de son titre. Avec, l'image
               le porte déjà — le répéter ferait double emploi. */}
@@ -512,7 +605,12 @@ export default function AcademyView() {
                 value={recherche}
                 onChange={(e) => setRecherche(e.target.value)}
                 placeholder="Rechercher une procédure…"
-                className="w-full pl-5 pr-11 py-2.5 rounded-full bg-white/95 text-slate-800 placeholder-slate-400 text-sm shadow-md border border-black/10 focus:outline-none focus:ring-2 focus:ring-[#E0A21A]"
+                // Style en ligne : une règle globale impose un fond sombre à
+                // TOUT champ de saisie de l'application (voir index.css, « 8.
+                // Champs de formulaire »). Sur ce seul écran, clair, il faut
+                // passer devant elle.
+                style={{ backgroundColor: '#ffffff', color: '#1f2937', borderColor: 'rgba(0,0,0,0.12)' }}
+                className="w-full pl-5 pr-11 py-2.5 rounded-full placeholder-slate-400 text-sm shadow-md border focus:outline-none focus:ring-2 focus:ring-[#E0A21A]"
               />
               <Search className="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
@@ -548,6 +646,19 @@ export default function AcademyView() {
                   <Plus className="w-4 h-4" />
                   Ajouter une procédure
                 </button>
+                <input
+                  ref={champVisuelDossier}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const image = e.target.files?.[0];
+                    const cible = dossierPourVisuel.current;
+                    e.target.value = '';
+                    dossierPourVisuel.current = null;
+                    if (image && cible) void changerVisuelDossier(cible, image);
+                  }}
+                  className="hidden"
+                />
                 <input
                   ref={champFond}
                   type="file"
@@ -615,10 +726,40 @@ export default function AcademyView() {
                       <div className="relative w-full max-w-[104px] aspect-[5/4] transition-transform duration-200 group-hover:-translate-y-1">
                         <div className="absolute inset-x-0 top-[12%] bottom-0 rounded-lg bg-gradient-to-b from-[#E8B33A] to-[#C88C12] shadow-[0_10px_16px_-10px_rgba(0,0,0,0.55)]" />
                         <div className="absolute left-[5%] top-[2%] h-[16%] w-[46%] rounded-t-md bg-gradient-to-b from-[#F2C55C] to-[#E3AE33]" />
-                        <div className="absolute inset-x-0 top-[28%] bottom-0 rounded-lg bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40" />
-                        <span className="absolute right-1.5 top-[34%] min-w-[18px] px-1.5 py-0.5 rounded-full bg-black/25 text-white text-[10px] font-black text-center">
+                        <div className="absolute inset-x-0 top-[28%] bottom-0 rounded-lg bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40 overflow-hidden">
+                          {/* « Je voudrais pouvoir mettre une image de fond
+                              dans les dossiers » : elle habille le rabat avant,
+                              le jaune restant visible autour pour que le
+                              dossier reste un dossier. */}
+                          {visuelsDossiers.get(nom) && (
+                            <img
+                              src={visuelsDossiers.get(nom)}
+                              alt=""
+                              className="absolute inset-[6%] rounded object-cover w-[88%] h-[88%]"
+                            />
+                          )}
+                        </div>
+                        <span className="absolute right-1.5 top-[34%] min-w-[18px] px-1.5 py-0.5 rounded-full bg-black/40 text-white text-[10px] font-black text-center">
                           {nombre}
                         </span>
+                        {estSuperAdmin && (
+                          <span
+                            role="button"
+                            title="Choisir l'image de ce dossier"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              dossierPourVisuel.current = nom;
+                              champVisuelDossier.current?.click();
+                            }}
+                            className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-[#1b2b2e] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                          >
+                            {dossierEnDepot === nom ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <ImagePlus className="w-3 h-3" />
+                            )}
+                          </span>
+                        )}
                         {vues > 0 && (
                           <span className="absolute left-1.5 bottom-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white/85 text-[9px] font-bold text-emerald-700">
                             <CheckCircle2 className="w-2.5 h-2.5" />
@@ -685,6 +826,47 @@ export default function AcademyView() {
             </div>
           )}
 
+          {/* Glisser-déposer entre dossiers — « de façon à ce que si on s'est
+              trompé, on puisse avoir une solution de repli ». Le déplacement
+              ne fait que changer le dossier d'une procédure : rien n'est copié
+              ni supprimé, et le chemin inverse est le même geste. */}
+          {!auNiveauDossiers && estSuperAdmin && rubriques.length > 1 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Glisser une procédure vers
+              </span>
+              {rubriques
+                .filter(([nom]) => nom !== rubriqueActive)
+                .map(([nom, nombre]) => (
+                  <span
+                    key={nom}
+                    onDragOver={(e) => { e.preventDefault(); setDossierSurvole(nom); }}
+                    onDragLeave={() => setDossierSurvole((v) => (v === nom ? null : v))}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDossierSurvole(null);
+                      const id = e.dataTransfer.getData('text/plain');
+                      const ressource = ressources.find((r) => r.id === id);
+                      if (ressource) void deplacerVers(ressource, nom);
+                    }}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold transition-colors ${
+                      dossierSurvole === nom
+                        ? 'bg-[#E0A21A] border-[#E0A21A] text-white scale-105'
+                        : 'bg-white/85 border-black/10 text-slate-700'
+                    }`}
+                  >
+                    <span className="relative w-5 h-4 shrink-0">
+                      <span className="absolute inset-x-0 top-[16%] bottom-0 rounded-sm bg-gradient-to-b from-[#E8B33A] to-[#C88C12]" />
+                      <span className="absolute left-[8%] top-0 h-[22%] w-[46%] rounded-t-[2px] bg-[#F2C55C]" />
+                      <span className="absolute inset-x-0 top-[34%] bottom-0 rounded-sm bg-gradient-to-b from-[#FFD976] to-[#EFB52C]" />
+                    </span>
+                    {nom}
+                    <span className="opacity-60">{nombre}</span>
+                  </span>
+                ))}
+            </div>
+          )}
+
           {/* Le catalogue — au niveau 2, ou dès qu'une recherche est en cours */}
           {chargement ? (
             <div className="flex items-center justify-center py-20 text-slate-600 gap-2">
@@ -712,7 +894,11 @@ export default function AcademyView() {
                 return (
                   <article
                     key={r.id}
-                    className="group relative bg-white rounded-sm overflow-hidden shadow-xl flex flex-col transition-transform duration-200 hover:-translate-y-1"
+                    draggable={estSuperAdmin}
+                    onDragStart={(e) => e.dataTransfer.setData('text/plain', r.id)}
+                    className={`group relative bg-white rounded-sm overflow-hidden shadow-xl flex flex-col transition-transform duration-200 hover:-translate-y-1 ${
+                      estSuperAdmin ? 'cursor-grab active:cursor-grabbing' : ''
+                    } ${deplacementEnCours === r.id ? 'opacity-50' : ''}`}
                   >
                     {/* Couverture */}
                     <button
