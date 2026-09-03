@@ -2050,7 +2050,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     };
 
     const verrousRestants = retirerVerrous(idsDuSousArbre(tileId));
-    const apresSuppression = deleteRecursive(tiles);
+    const apresSuppression = deleteRecursive(inscrireAffichage(tiles, tileId));
     setTiles(apresSuppression);
     synchroniserVerrous(apresSuppression, verrousRestants);
     if (activeFolder) {
@@ -2086,7 +2086,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         .map((item) => (item.children ? { ...item, children: deleteRecursive(item.children) } : item));
 
     const verrousRestants = retirerVerrous(idsDuSousArbre(tileId));
-    const apresSuppression = deleteRecursive(tiles);
+    const apresSuppression = deleteRecursive(inscrireAffichage(tiles, tileId));
     setTiles(apresSuppression);
     synchroniserVerrous(apresSuppression, verrousRestants);
     if (activeFolder) {
@@ -2110,7 +2110,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         })
         .map((item) => (item.children ? { ...item, children: extractRecursive(item.children) } : item));
 
-    const withoutTile = extractRecursive(tiles);
+    const withoutTile = extractRecursive(inscrireAffichage(tiles, tileId));
     // Garde-fou : jamais de dossier dans un dossier, quel que soit le
     // chemin emprunté pour y arriver.
     if (!moved || (moved as TileItemNode).isFolder) return;
@@ -2138,7 +2138,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           return true;
         })
         .map((item) => (item.children ? { ...item, children: extractRecursive(item.children) } : item));
-    const withoutTile = extractRecursive(tiles);
+    const withoutTile = extractRecursive(inscrireAffichage(tiles, tileId));
     if (!moved) return;
     const apresSortie = [...withoutTile, moved];
     setTiles(apresSortie);
@@ -2238,13 +2238,31 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     const activeId = String(active.id);
     const overId = String(over.id);
     if (activeId.startsWith('__empty-')) return; // une case vide ne se déplace jamais elle-même
+    // Tuile posée à l'affichage (absente de la grille et des cases) : on
+    // l'inscrit d'abord, sinon le glisser retombait sans rien faire — c'est
+    // ce qui empêchait de déplacer « Banques » et « Assurances ».
+    if (!findTileRecursive(tiles, activeId)) {
+      setTiles((prev) => inscrireAffichage(prev, activeId));
+    }
     setRootSlots((prev) => {
       const fromIndex = prev.findIndex((id) => id === activeId);
       const toIndex = overId.startsWith('__empty-')
         ? Number(overId.slice('__empty-'.length, -2))
         : prev.findIndex((id) => id === overId);
-      if (fromIndex === -1 || toIndex === -1 || toIndex >= prev.length || Number.isNaN(toIndex)) return prev;
+      if (toIndex === -1 || toIndex >= prev.length || Number.isNaN(toIndex)) return prev;
       const next = [...prev];
+      if (fromIndex === -1) {
+        // Nouvelle venue : elle prend la case visée ; l'occupante éventuelle
+        // part dans la première case libre.
+        const occupante = next[toIndex];
+        next[toIndex] = activeId;
+        if (occupante) {
+          const libre = next.findIndex((id, i) => id === null && i !== toIndex);
+          if (libre === -1) return prev;
+          next[libre] = occupante;
+        }
+        return next;
+      }
       const fromVal = next[fromIndex];
       next[fromIndex] = next[toIndex];
       next[toIndex] = fromVal;
@@ -2329,7 +2347,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         if (item.children) return { ...item, children: basculer(item.children) };
         return item;
       });
-    setTiles(basculer(tiles));
+    setTiles(basculer(inscrireAffichage(tiles, tileId)));
     setOpenFolderStack((prev) => prev.map((f) => ({ ...f, children: basculer(f.children || []) })));
   };
 
@@ -2381,20 +2399,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       });
     };
 
-    // Une carte imposée par le super admin après coup n'est peut-être pas
-    // encore inscrite dans la grille du membre (elle n'existe qu'à
-    // l'affichage) : on inscrit d'abord le contenu affiché du dossier, pour
-    // que le choix de couleur ait quelque chose sur quoi se poser.
-    let base = tiles;
-    if (activeFolder && !findTileById(tiles, tileId) && (activeFolder.children || []).some((c) => c.id === tileId)) {
-      const inscrire = (items: TileItemNode[]): TileItemNode[] =>
-        items.map((item) => {
-          if (item.id === activeFolder.id) return { ...item, children: activeFolder.children };
-          return item.children ? { ...item, children: inscrire(item.children) } : item;
-        });
-      base = inscrire(tiles);
-    }
-    const apresCouleur = updateGradientRecursive(base);
+    // Une tuile posée à l'affichage (carte imposée après coup, nouveauté…)
+    // n'est peut-être pas encore dans la grille : voir inscrireAffichage.
+    const apresCouleur = updateGradientRecursive(inscrireAffichage(tiles, tileId));
     setTiles(apresCouleur);
     synchroniserVerrous(apresCouleur);
     setOpenFolderStack((prev) => prev.map((f) => ({ ...f, children: updateGradientRecursive(f.children || []) })));
@@ -2567,7 +2574,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       return null;
     };
 
-    folderToDissolve = findFolder(tiles);
+    const baseDissolution = inscrireAffichage(tiles, folderId);
+    folderToDissolve = findFolder(baseDissolution);
     if (!folderToDissolve || !folderToDissolve.children) return;
 
     const dissolveRecursive = (items: TileItemNode[]): TileItemNode[] => {
@@ -2585,7 +2593,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     };
 
     const verrousRestants = retirerVerrous([folderId]);
-    const apresDissolution = dissolveRecursive(tiles);
+    const apresDissolution = dissolveRecursive(baseDissolution);
     setTiles(apresDissolution);
     synchroniserVerrous(apresDissolution, verrousRestants);
     setOpenFolderStack(prev => prev.filter(f => f.id !== folderId));
@@ -2749,6 +2757,39 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     ...(activeFolder ? [] : dossiersVerrouillesAReposer),
     ...applyLocks(nouveautesAPoser),
   ];
+
+  // 3 septembre (Conseils Finances : « je ne peux pas gérer la tuile
+  // Communication, ni déplacer Banques et Assurances où je veux ») : une
+  // tuile posée à l'AFFICHAGE — nouveauté jamais enregistrée, dossier
+  // verrouillé reposé, carte imposée — n'est ni dans `tiles` ni dans
+  // `rootSlots`. Toute action dessus (glisser, sortir du dossier, masquer,
+  // supprimer, dissoudre, favori) cherchait la tuile dans la grille
+  // enregistrée, ne la trouvait pas, et ne faisait rien, sans un mot. On
+  // l'inscrit donc dans la grille au moment où l'on agit dessus, telle
+  // qu'elle est affichée (sans le drapeau `locked`, recalculé au rendu).
+  const sansVerrou = (t: TileItemNode): TileItemNode => {
+    const { locked, ...reste } = t;
+    void locked;
+    return reste.children ? { ...reste, children: reste.children.map(sansVerrou) } : reste;
+  };
+  const inscrireAffichage = (base: TileItemNode[], tileId: string): TileItemNode[] => {
+    if (findTileRecursive(base, tileId)) return base;
+    if (activeFolder && (activeFolder.children || []).some((c) => c.id === tileId)) {
+      const enfants = applyLocks(activeFolder.children || []).map(sansVerrou);
+      if (findTileRecursive(base, activeFolder.id)) {
+        const poser = (items: TileItemNode[]): TileItemNode[] =>
+          items.map((item) =>
+            item.id === activeFolder.id
+              ? { ...item, children: enfants }
+              : item.children ? { ...item, children: poser(item.children) } : item
+          );
+        return poser(base);
+      }
+      return [...base, sansVerrou({ ...activeFolder, children: enfants })];
+    }
+    const affichee = currentDisplayTiles.find((t) => t.id === tileId) || findInitialTile(tileId);
+    return affichee ? [...base, sansVerrou(affichee)] : base;
+  };
 
   // Cap à 24 tuiles réelles visibles sur l'accueil (ticket #256 : 6 colonnes
   // fixes × 4 lignes, au lieu de 7×3 quand la grille était responsive) — au-
