@@ -156,6 +156,31 @@ async function handleOAuthInitiate(req: any, res: any, agencyId: string) {
 
 const DUREE_DEMANDE_MS = 10 * 60 * 1000;
 
+// Vécu le 3 septembre (Pauline, ImmoSphera) : Google répond « The OAuth
+// client was not found » APRÈS la redirection, sur sa propre page — le CRM
+// ne voit rien, la personne est bloquée. Pourtant l'identifiant de la console
+// Google existe : c'est donc la valeur lue dans Vercel qui ne correspond pas.
+// On demande à Google, avant de rediriger, s'il connaît cet identifiant : sa
+// page d'autorisation renvoie vers /signin/oauth/error pour un client inconnu.
+// Résultat gardé dix minutes pour ne pas interroger Google à chaque clic.
+const verdictsClients = new Map<string, { connu: boolean; jusqua: number }>();
+async function googleConnaitLeClient(clientId: string): Promise<boolean | null> {
+  const memo = verdictsClients.get(clientId);
+  if (memo && memo.jusqua > Date.now()) return memo.connu;
+  try {
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent('https://app.nova360.space/api/google/callback')}&response_type=code&scope=openid`;
+    const reponse = await fetch(url, { redirect: 'manual', headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const cible = reponse.headers.get('location') || '';
+    // Client connu : Google envoie vers l'écran de choix de compte ; inconnu :
+    // vers sa page d'erreur. Toute autre réponse : on ne conclut pas.
+    const connu = /signin\/oauth\/error/.test(cible) ? false : /accounts\.google\.com/.test(cible) || reponse.status === 200 ? true : null;
+    if (connu !== null) verdictsClients.set(clientId, { connu, jusqua: Date.now() + 10 * 60 * 1000 });
+    return connu;
+  } catch {
+    return null;
+  }
+}
+
 async function handleUserConnect(req: any, res: any) {
   try {
     const user = await getAuthedUser(req);
@@ -165,6 +190,18 @@ async function handleUserConnect(req: any, res: any) {
         configured: false,
         societe: societe?.nom ?? null,
         raison: societe ? 'cles_absentes' : 'societe_inconnue',
+      });
+      return;
+    }
+    if ((await googleConnaitLeClient(client.clientId)) === false) {
+      console.error('[api/google/connect] client Google inconnu pour', societe.nom, client.clientId);
+      res.status(200).json({
+        configured: false,
+        societe: societe.nom,
+        raison: 'client_inconnu',
+        // L'ID client n'est pas un secret (il figure dans chaque adresse
+        // d'autorisation Google) : on le renvoie pour le comparer à la console.
+        clientId: client.clientId,
       });
       return;
     }

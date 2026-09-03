@@ -265,7 +265,7 @@ export const reconnectGoogleWorkspace = async (): Promise<void> => {
         headers: { Authorization: `Bearer ${jeton}` },
       });
       const corps = (await reponse.json().catch(() => ({}))) as {
-        url?: string; configured?: boolean; societe?: string | null; raison?: string; error?: string;
+        url?: string; configured?: boolean; societe?: string | null; raison?: string; error?: string; clientId?: string;
       };
       if (reponse.ok && corps?.url) {
         window.location.href = corps.url;
@@ -278,9 +278,11 @@ export const reconnectGoogleWorkspace = async (): Promise<void> => {
         ? `réponse ${reponse.status}${corps?.error ? ` : ${corps.error}` : ''}`
         : corps?.raison === 'cles_absentes'
           ? `clés Google absentes dans cet environnement pour ${corps.societe || 'votre société'}`
-          : corps?.raison === 'societe_inconnue'
-            ? 'société non reconnue pour ce compte'
-            : 'raison inconnue';
+          : corps?.raison === 'client_inconnu'
+            ? `Google ne connaît pas l'identifiant client configuré pour ${corps.societe || 'votre société'} (${corps.clientId || '?'}) : la valeur dans Vercel ne correspond pas à la console Google`
+            : corps?.raison === 'societe_inconnue'
+              ? 'société non reconnue pour ce compte'
+              : 'raison inconnue';
       console.warn('[workspace] connexion interne indisponible, repli sur la connexion historique :', raison);
       toast.warning(`Connexion Google par société indisponible (${raison}). Ancienne connexion utilisée.`, { duration: 12000 });
     }
