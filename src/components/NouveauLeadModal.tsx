@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { X, UserPlus, Building, Building2, ChevronDown, ChevronUp, User, Briefcase, FileText, Loader2 } from 'lucide-react';
+import { X, UserPlus, Building, Building2, ChevronDown, ChevronUp, User, Briefcase, FileText, Loader2, Pencil, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { Contact, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { matchesAgency } from '@/hooks/useContacts';
-import { formatVille } from '@/lib/utils';
+import { formatVille, ttcDepuisHt } from '@/lib/utils';
 import {
   ChampsSociete, ChampsConjoint, SOCIETE_VIDE, CONJOINT_VIDE, societeRenseignee,
-  societeVersContact, conjointVersTexte, conjointRenseigne, type Societe, type Conjoint,
+  societeVersContact, societeDepuisContact, conjointVersTexte, conjointDepuisTexte, conjointRenseigne,
+  type Societe, type Conjoint,
 } from '@/components/leads/ChampsCommunsFiche';
 
 interface NouveauLeadModalProps {
@@ -15,7 +16,36 @@ interface NouveauLeadModalProps {
   onClose: () => void;
   onSubmit: (contact: Omit<Contact, 'id' | 'createdAt'>) => Promise<unknown>;
   selectedAgencyId: string;
+  /**
+   * Fiche existante : le formulaire s'ouvre pré-rempli, en mode
+   * modification. Demandé le 3 septembre : « quand je fais Modifier, je veux
+   * retomber sur les mêmes informations que quand je crée une fiche, pour
+   * toutes les agences ». C'est donc le MÊME formulaire qui sert aux deux
+   * (EditClientModal n'en est plus qu'une enveloppe), champ pour champ.
+   */
+  initial?: Contact;
 }
+
+/** Sépare « Prénom NOM (complément) » : les mots en MAJUSCULES forment le nom. */
+const separerNom = (complet: string | undefined): { prenom: string; nom: string } => {
+  const mots = (complet || '').trim().split(/\s+/).filter(Boolean);
+  if (mots.length === 0) return { prenom: '', nom: '' };
+  const estMaj = (m: string) => m.length > 1 && m === m.toUpperCase() && m !== m.toLowerCase();
+  const premierMaj = mots.findIndex(estMaj);
+  if (premierMaj > 0) {
+    return { prenom: mots.slice(0, premierMaj).join(' '), nom: mots.slice(premierMaj).join(' ') };
+  }
+  if (premierMaj === 0) return { prenom: '', nom: mots.join(' ') };
+  if (mots.length === 1) return { prenom: '', nom: mots[0] };
+  return { prenom: mots.slice(0, -1).join(' '), nom: mots[mots.length - 1] };
+};
+
+const temperatureDe = (c: Contact | undefined): string => {
+  const raw = (c?.statutLead || c?.status || 'froid').toLowerCase();
+  if (raw.startsWith('chaud')) return 'chaud';
+  if (raw.startsWith('ti')) return 'tiede';
+  return 'froid';
+};
 
 // Capitalize first letter of each word (e.g. "jean-pierre" -> "Jean-Pierre")
 const formatFirstName = (text: string) => {
@@ -34,7 +64,12 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   onClose,
   onSubmit,
   selectedAgencyId,
+  initial,
 }) => {
+  const modification = Boolean(initial);
+  // Société de la fiche : imposée à la création (agence active), modifiable
+  // en mode modification (la fiche peut être rangée sous une autre société).
+  const [agencyId, setAgencyId] = useState(initial?.agencyId || selectedAgencyId);
   // Main contact
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -98,12 +133,12 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         if (cancelled) return;
 
         const scopedPipelines = (pipelines || [])
-          .filter((pl: { agency_id: string }) => selectedAgencyId === 'all' || pl.agency_id === selectedAgencyId)
+          .filter((pl: { agency_id: string }) => agencyId === 'all' || pl.agency_id === agencyId)
           .map((pl: { id: string; name: string }) => ({ id: pl.id, name: pl.name }));
         setAgencyPipelines(scopedPipelines);
         setPipeline((current) => (current && !scopedPipelines.some((pl) => pl.id === current) ? '' : current));
         const idsForAgency = new Set(
-          (members || []).filter((m: { agency_id: string }) => m.agency_id === selectedAgencyId)
+          (members || []).filter((m: { agency_id: string }) => m.agency_id === agencyId)
             .map((m: { user_id: string }) => m.user_id)
         );
         const rows = (profiles || [])
@@ -127,7 +162,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
       }
     })();
     return () => { cancelled = true; };
-  }, [isOpen, selectedAgencyId]);
+  }, [isOpen, agencyId]);
 
   // Collapsible sections
   const [showCoContact, setShowCoContact] = useState(false);
@@ -148,7 +183,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   // `matchesAgency` et non un `===` : les identifiants d'agence hérités
   // (« novavisio », « agency-2 ») sont encore présents.
   const estNovavisio = /novavisio/i.test(
-    AGENCIES.find((a) => matchesAgency(selectedAgencyId, a.id))?.name || ''
+    AGENCIES.find((a) => matchesAgency(agencyId, a.id))?.name || ''
   );
 
   // Signalé le 2 septembre : « quand je crée un client et que je le valide,
@@ -159,33 +194,39 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   // vierge à chaque ouverture.
   useEffect(() => {
     if (!isOpen) return;
-    setFirstName('');
-    setLastName('');
-    setEmail('');
-    setPhone('');
-    setClientType('Acheteur');
-    setContactType('Particulier');
-    setBudgetMax('');
-    setSecteur('');
-    setTypeBien('');
-    setPipeline('');
-    setStatutLead('froid');
-    setHonoraires('');
-    setAdvisorCommission('');
-    setMandateNumber('');
-    setAssignedTo('');
-    setComments('');
-    setShowCoContact(false);
-    setConjoint({ ...CONJOINT_VIDE });
-    setShowCompany(false);
-    setSociete({ ...SOCIETE_VIDE });
-    setCaDevis('');
+    const c = initial;
+    const { prenom, nom } = separerNom(c?.name);
+    const conj = conjointDepuisTexte(c?.coBorrower);
+    const soc = c ? societeDepuisContact(c) : { ...SOCIETE_VIDE };
+    setAgencyId(c?.agencyId || selectedAgencyId);
+    setFirstName(prenom);
+    setLastName(nom);
+    setEmail(c?.email || '');
+    setPhone(c?.phone || '');
+    setClientType(c?.clientType || 'Acheteur');
+    setContactType(c?.contactType || 'Particulier');
+    setBudgetMax(c?.budgetMax ? Number(c.budgetMax) : '');
+    setSecteur(c?.secteur || '');
+    setTypeBien(c?.typeBien || c?.projectType || '');
+    setPipeline(c?.pipeline || '');
+    setStatutLead(temperatureDe(c));
+    // Le HT est en base ; le formulaire se saisit en TTC.
+    setHonoraires(c?.honoraires ? Math.round(ttcDepuisHt(c.honoraires) * 100) / 100 : '');
+    setAdvisorCommission(c?.advisorCommissionTtc ? Number(c.advisorCommissionTtc) : '');
+    setMandateNumber(c?.mandateNumber || '');
+    setAssignedTo(c?.assignedTo || '');
+    setComments(c?.comments || '');
+    setShowCoContact(conjointRenseigne(conj));
+    setConjoint(conj);
+    setShowCompany(societeRenseignee(soc));
+    setSociete(soc);
+    setCaDevis(c?.caDevisAVenir ? String(c.caDevisAVenir) : '');
     setSubmitting(false);
-  }, [isOpen]);
+  }, [isOpen, initial, selectedAgencyId]);
 
   if (!isOpen) return null;
 
-  const currentAgency = AGENCIES.find(a => a.id === selectedAgencyId) || AGENCIES[0];
+  const currentAgency = AGENCIES.find((a) => matchesAgency(agencyId, a.id)) || AGENCIES[0];
 
   // Ticket #119 : `status` est un affichage plus large ('Froid'/'Tiède'/
   // 'Chaud' avec majuscule+accent) que la vraie valeur enregistrée en base
@@ -210,11 +251,14 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
 
     setSubmitting(true);
     try {
+      // En modification, un champ vidé doit être effacé en base : on envoie
+      // '' / 0 plutôt que `undefined` (que la mise à jour ignore).
+      const vide = <T,>(valeurSiModif: T): T | undefined => (modification ? valeurSiModif : undefined);
       await onSubmit({
         name: `${formattedFirstName} ${formattedLastName}`.trim() || 'Nouveau Prospect',
         email: email.trim(),
         phone: phone.trim(),
-        agencyId: selectedAgencyId,
+        agencyId,
         status: STATUT_LABELS[statutLead] || 'Froid',
         contactType,
         clientType,
@@ -223,18 +267,18 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         typeBien: typeBien.trim(),
         pipeline,
         statutLead,
-        // Saisi en TTC, stocké en HT — voir EditClientModal et lib/utils.
+        // Saisi en TTC, stocké en HT — voir lib/utils.
         honoraires: honoraires === '' ? 0 : Math.round((Number(honoraires) / 1.2) * 100) / 100,
-        advisorCommissionTtc: advisorCommission === '' ? undefined : Number(advisorCommission),
-        mandateNumber: mandateNumber.trim() || undefined,
+        advisorCommissionTtc: advisorCommission === '' ? vide(0) : Number(advisorCommission),
+        mandateNumber: mandateNumber.trim() || vide(''),
         comments: comments.trim(),
         // Signalé le 2 septembre : l'identité du professionnel doit être
         // visible dans le panneau Gestion des clients. Colonne JSON dédiée
         // (nom, SIRET, fonction, adresse, code postal, ville).
-        ...societeAEnregistrer,
-        caDevisAVenir: caDevis.trim() === '' ? undefined : Number(caDevis.trim().replace(',', '.')),
-        coBorrower: coBorrowerInfo || undefined,
-        assignedTo: assignedTo || undefined,
+        ...(modification ? societeVersContact(societe) : societeAEnregistrer),
+        caDevisAVenir: caDevis.trim() === '' ? vide(0) : Number(caDevis.trim().replace(',', '.')),
+        coBorrower: coBorrowerInfo || vide(''),
+        assignedTo: assignedTo || vide(''),
       });
       // Ticket #119 : avant, `onClose()` était appelé immédiatement après
       // avoir déclenché `onSubmit` SANS attendre le résultat — la modale se
@@ -243,7 +287,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
       // l'était pas, sans aucun message d'erreur.
       onClose();
     } catch (err: any) {
-      toast.error(err?.message || "Impossible de créer ce lead. Réessayez.");
+      toast.error(err?.message || (modification ? "Impossible d'enregistrer cette fiche. Réessayez." : "Impossible de créer ce lead. Réessayez."));
     } finally {
       setSubmitting(false);
     }
@@ -257,11 +301,13 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         <div className="flex items-center justify-between px-5 py-3.5 bg-[#07191b] border-b border-[#144447]/80 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-[#F7BC5F]/20 border border-[#F7BC5F]/40 flex items-center justify-center text-[#F7BC5F]">
-              <UserPlus className="w-4 h-4" />
+              {modification ? <Pencil className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-white tracking-tight leading-none">Informations du lead</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">Saisissez les informations de votre nouveau prospect</p>
+              <h2 className="text-lg font-extrabold text-white tracking-tight leading-none">{modification ? 'Modifier la fiche' : 'Informations du lead'}</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {modification ? 'Mêmes informations qu\'à la création : corrige ce qu\'il faut, puis Enregistrer' : 'Saisissez les informations de votre nouveau prospect'}
+              </p>
             </div>
           </div>
           <button
@@ -553,9 +599,21 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                   <div className="w-8 h-8 rounded-md bg-[#F7BC5F]/10 border border-[#F7BC5F]/30 flex items-center justify-center shrink-0">
                     <Building2 className="w-4 h-4 text-[#F7BC5F]" />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Société du lead</p>
-                    <p className="text-xs font-bold text-white truncate">{currentAgency.name}</p>
+                    {modification ? (
+                      <select
+                        value={AGENCIES.find((a) => matchesAgency(agencyId, a.id))?.id || agencyId}
+                        onChange={(e) => setAgencyId(e.target.value)}
+                        className="mt-1 w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-[#F7BC5F]"
+                      >
+                        {AGENCIES.filter((a) => a.id !== 'all').map((a) => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="text-xs font-bold text-white truncate">{currentAgency.name}</p>
+                    )}
                   </div>
                 </div>
 
@@ -691,8 +749,8 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
             disabled={submitting}
             className="px-5 py-2.5 bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {submitting ? <Loader2 className="w-4 h-4 stroke-[2.5] animate-spin" /> : <UserPlus className="w-4 h-4 stroke-[2.5]" />}
-            <span>{submitting ? 'Création...' : 'Créer le lead'}</span>
+            {submitting ? <Loader2 className="w-4 h-4 stroke-[2.5] animate-spin" /> : modification ? <Save className="w-4 h-4 stroke-[2.5]" /> : <UserPlus className="w-4 h-4 stroke-[2.5]" />}
+            <span>{submitting ? (modification ? 'Enregistrement…' : 'Création...') : modification ? 'Enregistrer' : 'Créer le lead'}</span>
           </button>
         </div>
 
