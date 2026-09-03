@@ -7,7 +7,7 @@ import React, {
 
 import { Agency, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
-import { setCachedAccessToken, connectGoogleWorkspaceTokens } from '@/lib/workspace';
+import { adopterJetonDeSession, connectGoogleWorkspaceTokens } from '@/lib/workspace';
 
 const SUPER_ADMIN_EMAIL = 's.grazia@conseilfinances.fr';
 const REAL_AGENCY_IDS = AGENCIES.filter((agency) => agency.id !== 'all').map((agency) => agency.id);
@@ -337,7 +337,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // que rien ne le déclenchait) — l'agenda et les autres écrans liés à
       // Google Workspace repartaient donc vides à chaque rechargement. On le
       // récupère ici, dès que la session est valide, une fois pour toutes.
-      if (session.provider_token) setCachedAccessToken(session.provider_token);
+      // Depuis le 2 septembre, la connexion ne demande que l'identité : ce
+      // jeton n'est adopté que s'il porte réellement Gmail/Drive/Agenda
+      // (ancienne connexion complète, sociétés pas encore passées en
+      // application interne) — voir adopterJetonDeSession.
+      void adopterJetonDeSession(session);
       // Ticket #117 : capte le refresh_token Google (présent uniquement
       // juste après l'échange OAuth initial) et l'enregistre côté serveur
       // pour un renouvellement automatique indéfini — plus jamais besoin de

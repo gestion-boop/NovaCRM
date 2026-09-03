@@ -18,28 +18,14 @@ export default function Auth() {
         provider: 'google',
         options: {
           redirectTo: window.location.origin,
-          // Portées Google Workspace demandées dès la connexion (Drive, Gmail, Agenda) —
-          // un seul système d'authentification : Supabase.
-          scopes: [
-            'https://www.googleapis.com/auth/drive.file',
-            // gmail.modify (et non gmail.readonly, insuffisant) : nécessaire
-            // pour marquer lu/non lu, déplacer vers spam/corbeille — ces
-            // actions échouaient silencieusement ("insufficient
-            // authentication scopes") avec la seule portée readonly.
-            'https://www.googleapis.com/auth/gmail.modify',
-            'https://www.googleapis.com/auth/gmail.send',
-            // Lecture seule de la signature Gmail de l'utilisateur (Paramètres
-            // > Voir tous les paramètres > Signature côté Gmail), pour la
-            // reprendre automatiquement dans les messages rédigés depuis
-            // l'app — chaque utilisateur garde SA propre signature.
-            'https://www.googleapis.com/auth/gmail.settings.basic',
-            'https://www.googleapis.com/auth/calendar',
-            'https://www.googleapis.com/auth/calendar.events',
-          ].join(' '),
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
+          // Décidé le 2 septembre : la connexion au CRM ne demande plus que
+          // l'identité (nom, e-mail, photo). Gmail, Drive et Agenda sont
+          // autorisés juste après, sur l'application Google « interne » de la
+          // société de chacun (voir src/lib/workspace.ts,
+          // reconnectGoogleWorkspace). Demander ces accès ici faisait passer
+          // tout le monde par l'ancienne application « en cours de test »,
+          // avec l'écran « Google n'a pas validé cette application ».
+          scopes: 'email profile',
         },
       });
 

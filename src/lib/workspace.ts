@@ -30,14 +30,60 @@ export const getCachedAccessToken = (): string | null => {
  * une synchronisation cassée. On relit ici la session déjà persistée pour
  * réhydrater le jeton en mémoire, sans redemander de consentement Google.
  */
+// Depuis le 2 septembre, la connexion au CRM ne demande que l'identité :
+// le `provider_token` de la session Supabase ne porte plus Gmail, Drive ni
+// Agenda — sauf pour une société pas encore passée en application interne,
+// qui repasse par l'ancienne connexion complète (repli de
+// reconnectGoogleWorkspace). On ne le prend donc pour un accès Workspace
+// qu'après avoir vérifié ses portées auprès de Google ; sinon les appels
+// Gmail échoueraient en silence (« insufficient authentication scopes »).
+const portagesConnus = new Map<string, boolean>();
+export const jetonPorteWorkspace = async (token: string): Promise<boolean> => {
+  const connu = portagesConnus.get(token);
+  if (connu !== undefined) return connu;
+  let porte = false;
+  try {
+    const reponse = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(token)}`);
+    const infos = (await reponse.json().catch(() => ({}))) as { scope?: string };
+    const portees = String(infos?.scope || '');
+    porte = reponse.ok && /gmail|drive|calendar/.test(portees);
+  } catch {
+    porte = false;
+  }
+  portagesConnus.set(token, porte);
+  return porte;
+};
+
+/** Le jeton Google d'une session Supabase, seulement s'il porte les accès Workspace. */
+const jetonWorkspaceDeSession = async (session: { provider_token?: string | null } | null | undefined): Promise<string | null> => {
+  const token = session?.provider_token;
+  if (!token) return null;
+  return (await jetonPorteWorkspace(token)) ? token : null;
+};
+
+// Appelé par AuthContext dès que la session est valide : adopte le jeton de
+// la session s'il porte les accès Workspace (ancienne connexion complète).
+export const adopterJetonDeSession = async (session: { provider_token?: string | null } | null | undefined): Promise<void> => {
+  const token = await jetonWorkspaceDeSession(session);
+  if (token) cachedAccessToken = token;
+};
+
 export const hydrateAccessTokenFromSession = async (): Promise<string | null> => {
   if (cachedAccessToken) return cachedAccessToken;
+  // Priorité au jeton géré par le serveur (application interne de la
+  // société, renouvelé indéfiniment) ; le jeton de session ne sert que s'il
+  // porte réellement les accès Workspace.
+  const serverToken = await requestServerManagedAccessToken();
+  if (serverToken) {
+    cachedAccessToken = serverToken;
+    return serverToken;
+  }
   try {
     const { data } = await supabase.auth.getSession();
-    const providerToken = data.session?.provider_token;
-    if (providerToken) {
-      cachedAccessToken = providerToken;
-      return providerToken;
+    const token = await jetonWorkspaceDeSession(data.session);
+    if (token) {
+      cachedAccessToken = token;
+      return token;
     }
   } catch {
     /* pas de session exploitable — on laisse l'utilisateur se reconnecter */
@@ -139,7 +185,7 @@ export const requestWorkspaceAccessToken = async (): Promise<string> => {
   const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
 
-  const providerToken = data.session?.provider_token;
+  const providerToken = await jetonWorkspaceDeSession(data.session);
   if (!providerToken) {
     throw new Error(
       "Accès Google Workspace non disponible. Reconnectez votre compte Google pour l'activer."
@@ -280,7 +326,9 @@ export const isGoogleWorkspaceConnected = async (): Promise<boolean> => {
   }
   try {
     const { data } = await supabase.auth.getSession();
-    return !!data.session?.provider_token;
+    const token = await jetonWorkspaceDeSession(data.session);
+    if (token) cachedAccessToken = token;
+    return !!token;
   } catch {
     return false;
   }
