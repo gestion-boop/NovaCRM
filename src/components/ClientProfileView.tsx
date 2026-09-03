@@ -11,6 +11,7 @@ import TransactionChecklistModal, {
   useCurrentStageChecklistCount,
 } from './TransactionChecklistModal';
 import { ClipboardList } from 'lucide-react';
+import { couleurEtapeNovavisio, estAgenceNovavisio } from '@/lib/couleursNovavisio';
 import { ChevronLeft, ChevronDown, Plus, Mail, Phone, Calendar, User, UserCheck, UserPlus, Pencil, Trash2, CheckCircle, Circle, FileEdit, Save, Clock, Check, CheckCheck, Mic, MicOff, Square, Pin, GripVertical, MessageSquare, X, FileText, Upload, Download, Folder, Eye, Lock, Share2, Send, UserX, Smile, Image as ImageIcon, Video as VideoIcon, Paperclip, ClipboardCheck, Landmark, Archive, ArchiveRestore, Copy, Loader2, ShieldCheck, Flame, Sun, Snowflake, MoreVertical } from 'lucide-react';
 
 // Sélecteur Chaud/Tiède/Froid de la fiche client — même logique que la
@@ -500,6 +501,9 @@ export default function ClientProfileView({
   const currentStageIndex = leadStage?.stage_id
     ? stages.findIndex((s: any) => s.id === leadStage.stage_id)
     : -1;
+  // Couleur d'une étape sur la fiche : code de Natacha pour Novavisio, sinon aucune (doré par défaut).
+  const couleurEtapeFiche = (nom: string | undefined): string | null =>
+    estAgenceNovavisio(client.agencyId) ? couleurEtapeNovavisio(nom) : null;
 
   // Demandé le 2 septembre : « quand c'est à facturer, on met le montant ».
   // Même fenêtre que dans le Pipeline, pour le même geste : ici les pastilles
@@ -2305,13 +2309,26 @@ export default function ClientProfileView({
                 {currentStageIndex >= 0 && (
                   <div
                     className="absolute top-[10px] left-2.5 h-0.5 bg-[#F7BC5F] z-0 transition-all"
-                    style={{ width: `calc(${(currentStageIndex / Math.max(stages.length - 1, 1)) * 100}% - 0px)` }}
+                    style={{
+                      width: `calc(${(currentStageIndex / Math.max(stages.length - 1, 1)) * 100}% - 0px)`,
+                      ...(couleurEtapeFiche(stages[currentStageIndex]?.name) ? { backgroundColor: couleurEtapeFiche(stages[currentStageIndex]?.name) as string } : {}),
+                    }}
                   />
                 )}
 
                 {stages.map((stage: any, index: number) => {
                   const isActive = index === currentStageIndex;
                   const isPast = index < currentStageIndex;
+                  // Demande (3 septembre) : sur Novavisio, le ruban de la fiche
+                  // reprend le code couleur de Natacha, comme le pipeline.
+                  const couleur = couleurEtapeFiche(stage.name);
+                  const stylePastille = couleur
+                    ? isActive
+                      ? { borderColor: couleur, backgroundColor: couleur, boxShadow: `0 0 10px ${couleur}80` }
+                      : isPast
+                        ? { borderColor: couleur }
+                        : { borderColor: `${couleur}66` }
+                    : undefined;
 
                   return (
                     <div key={stage.id} className="relative z-10 flex flex-col items-center gap-2 group flex-1 min-w-[68px] px-1">
@@ -2319,16 +2336,20 @@ export default function ClientProfileView({
                         type="button"
                         onClick={() => changeStage(stage.id)}
                         title={stage.name}
+                        style={stylePastille}
                         className={`w-5 h-5 rounded-full border-4 flex items-center justify-center transition-all shrink-0 ${
                           isActive ? 'border-[#F7BC5F] bg-[#F7BC5F] w-6 h-6 shadow-[0_0_10px_rgba(245,158,11,0.5)]' :
                           isPast ? 'border-[#F7BC5F] pipeline-dot-bg' : 'pipeline-dot-border-inactive pipeline-dot-bg hover:border-[#F7BC5F]/60'
                         }`}
                       >
-                        {isPast && <div className="w-1.5 h-1.5 bg-[#F7BC5F] rounded-full" />}
+                        {isPast && <div className="w-1.5 h-1.5 bg-[#F7BC5F] rounded-full" style={couleur ? { backgroundColor: couleur } : undefined} />}
                       </button>
-                      <span className={`text-[10px] font-bold tracking-wide text-center leading-tight whitespace-nowrap ${
-                        isActive ? 'text-[#F7BC5F]' : 'text-slate-500 group-hover:text-slate-300'
-                      }`}>
+                      <span
+                        style={couleur ? { color: isActive ? couleur : `${couleur}b3` } : undefined}
+                        className={`text-[10px] font-bold tracking-wide text-center leading-tight whitespace-nowrap ${
+                          isActive ? 'text-[#F7BC5F]' : 'text-slate-500 group-hover:text-slate-300'
+                        }`}
+                      >
                         {stage.name}
                       </span>
                     </div>
