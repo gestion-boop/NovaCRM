@@ -93,6 +93,26 @@ const premiereValeur = (cles: string[]): string | null => {
   return null;
 };
 
+// Le nom de la variable qui a fourni la valeur, et les autres noms de la
+// même société qui portent une valeur DIFFÉRENTE. Vécu le 3 septembre :
+// Google répond « The OAuth client was not found » (invalid_client) pour
+// ImmoSphera — l'identifiant envoyé n'existe pas chez Google. Comme
+// plusieurs noms sont acceptés pour une même clé, une ancienne valeur
+// laissée sous le premier nom prend le pas sur la bonne, posée sous un
+// autre : le diagnostic doit montrer laquelle est réellement lue.
+const provenance = (cles: string[]): { source: string | null; autresValeurs: string[] } => {
+  let source: string | null = null;
+  let retenue: string | null = null;
+  const autresValeurs: string[] = [];
+  for (const cle of cles) {
+    const valeur = (process.env[cle] || '').trim();
+    if (!valeur) continue;
+    if (retenue === null) { source = cle; retenue = valeur; continue; }
+    if (valeur !== retenue) autresValeurs.push(cle);
+  }
+  return { source, autresValeurs };
+};
+
 const normaliser = (texte: string): string =>
   texte
     .toLowerCase()
@@ -127,12 +147,25 @@ const clientDe = (societe: (typeof SOCIETES)[number]): ClientGoogleSociete | nul
  */
 export function etatConfiguration(): Record<
   EntiteGoogle,
-  { presentes: boolean; inversees: boolean; id: string | null; idValide: boolean; idRessembleAUnSecret: boolean; secretValide: boolean; secretLongueur: number }
+  {
+    presentes: boolean;
+    inversees: boolean;
+    id: string | null;
+    idValide: boolean;
+    idRessembleAUnSecret: boolean;
+    secretValide: boolean;
+    secretLongueur: number;
+    idSource: string | null;
+    secretSource: string | null;
+    autresNomsAvecUneValeurDifferente: string[];
+  }
 > {
   const etat = {} as ReturnType<typeof etatConfiguration>;
   for (const s of SOCIETES) {
     const { clientId: id, clientSecret: secret, inversees } = valeursDe(s);
     const idValide = !!id && ressembleAUnId(id);
+    const provId = provenance(s.clesId);
+    const provSecret = provenance(s.clesSecret);
     etat[s.entite] = {
       presentes: !!id && !!secret,
       // `true` : les deux variables étaient à l'envers, remises d'aplomb ici.
@@ -147,6 +180,11 @@ export function etatConfiguration(): Record<
       idRessembleAUnSecret: !!id && ressembleAUnSecret(id),
       secretValide: !!secret && ressembleAUnSecret(secret),
       secretLongueur: secret ? secret.length : 0,
+      // D'où vient chaque valeur, et les autres noms qui en portent une
+      // différente (à supprimer : seule la première est lue).
+      idSource: provId.source,
+      secretSource: provSecret.source,
+      autresNomsAvecUneValeurDifferente: [...provId.autresValeurs, ...provSecret.autresValeurs],
     };
   }
   return etat;
