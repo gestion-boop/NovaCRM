@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Calendar as CalendarIcon, Plus, Clock, MapPin, User, ChevronLeft, ChevronRight, 
   Video, RefreshCw, Trash2, CheckCircle2, ExternalLink, CalendarDays, CalendarRange, List, Camera
@@ -1260,7 +1261,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
 
       {/* Delete Confirmation Modal */}
       {eventToDelete && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <Superposition><div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
           <div className="bg-[#0E1A20] border border-white/10 rounded-2xl max-w-sm w-full p-6 text-white space-y-4">
             <h3 className="text-base font-bold text-rose-400">Gérer l'événement</h3>
             <p className="text-sm font-semibold">{eventToDelete.title}</p>
@@ -1354,13 +1355,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
               </>
             )}
           </div>
-        </div>
+        </div></Superposition>
       )}
 
       {/* Create Event Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0E1A20] border border-white/10 rounded-2xl max-w-md sm:max-w-2xl w-full max-h-[88vh] overflow-y-auto p-6 text-white custom-scrollbar">
+        <Superposition><div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+          <div className="bg-[#0E1A20] border border-white/10 rounded-2xl max-w-md sm:max-w-2xl w-full max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] sm:max-h-[88vh] overflow-y-auto overscroll-contain p-5 sm:p-6 text-white custom-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
             <h3 className="text-lg font-bold mb-4 text-[#0EA5A5]">
               {editingEvent ? 'Modifier le' : 'Planifier le'} {format(selectedDateForModal, 'd MMM', { locale: fr })} à {selectedTimeForModal}
             </h3>
@@ -1546,9 +1547,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
               </div>
             </form>
           </div>
-        </div>
+        </div></Superposition>
       )}
     </div>
   );
 };
+// Signalé (3 septembre) : « sur mobile, agenda, puis clic sur une case pour
+// créer un RDV, on ne peut pas scroller en bas ». Les fenêtres étaient
+// rendues DANS <main>, qui a son propre contexte d'empilement (z-[1]) : la
+// barre de navigation du bas (z-40, fixe) passait donc au-dessus du bas de la
+// fenêtre et cachait les boutons, et 88vh dépassait la hauteur réellement
+// visible sur téléphone. Rendues dans <body>, hauteur en dvh, marge basse
+// pour la zone sûre.
+const Superposition: React.FC<{ children: React.ReactNode }> = ({ children }) =>
+  typeof document === 'undefined' ? <>{children}</> : createPortal(children, document.body);
+
 export default AgendaView;
