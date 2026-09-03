@@ -2002,8 +2002,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
          onglets plus le bouton « Nouveau » dépassaient la largeur de l'écran.
          Marges resserrées sur mobile uniquement, et la rangée peut défiler
          si elle reste trop large. Rien ne change sur ordinateur. */
-      <div className={`flex items-center justify-between gap-2 ${isMobile ? 'px-2' : 'px-4'} py-3 border-b border-white/20 shrink-0`}>
-        <div className={`flex items-center min-w-0 overflow-x-auto custom-scrollbar ${isMobile ? 'gap-1' : 'gap-2'}`}>
+      /* 3 septembre (capture iPhone de Christophe) : la rangée défilait, le
+         troisième onglet « Partagés » restait caché derrière « Nouveau » et
+         rien n'était aligné. Sur téléphone, les trois onglets se partagent
+         maintenant la largeur à parts égales, sur une seule ligne, et
+         « Nouveau » devient un simple « + » rond à droite. Ordinateur
+         inchangé. */
+      <div className={`flex items-center justify-between gap-2 ${isMobile ? 'px-3' : 'px-4'} py-3 border-b border-white/20 shrink-0`}>
+        <div className={isMobile ? 'flex-1 min-w-0 grid grid-cols-3 gap-1.5' : 'flex items-center min-w-0 overflow-x-auto custom-scrollbar gap-2'}>
           {TABS.map((t) => {
             // Demandé : "un compteur sur conversation" — total des messages
             // non lus toutes conversations confondues, affiché directement
@@ -2016,12 +2022,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`shrink-0 ${isMobile ? 'px-2.5 gap-1.5' : 'px-4 gap-2'} py-2 rounded-xl text-sm font-semibold flex items-center transition-all ${
+                className={`${isMobile ? 'w-full min-w-0 justify-center px-1.5 gap-1 text-[13px]' : 'shrink-0 px-4 gap-2 text-sm'} py-2 rounded-xl font-semibold flex items-center transition-all ${
                   tab === t.id ? 'bg-[#F7BC5F] text-slate-950' : 'text-slate-300 hover:bg-white/5'
                 }`}
               >
-                <t.icon className="w-4 h-4" />
-                {t.label}
+                <t.icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{t.label}</span>
                 {tabUnread > 0 && (
                   <span className={`min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
                     tab === t.id ? 'bg-slate-950 text-[#F7BC5F]' : 'bg-[#F7BC5F] text-slate-950'
@@ -2036,9 +2042,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         {tab === 'conversations' && (
           <button
             onClick={() => { setShowNewConvModal(true); ensureProfilesLoaded(); }}
-            className={`shrink-0 ${isMobile ? 'px-2.5' : 'px-4'} py-2 rounded-xl text-sm font-bold bg-[#F7BC5F] text-slate-950 hover:bg-[#d4a83b] flex items-center gap-1.5`}
+            aria-label="Nouvelle conversation"
+            title="Nouvelle conversation"
+            className={`shrink-0 ${isMobile ? 'w-10 h-10 rounded-full justify-center' : 'px-4 py-2 rounded-xl gap-1.5'} text-sm font-bold bg-[#F7BC5F] text-slate-950 hover:bg-[#d4a83b] flex items-center`}
           >
-            <Plus className="w-4 h-4" /> Nouveau
+            <Plus className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
+            {!isMobile && 'Nouveau'}
           </button>
         )}
       </div>
