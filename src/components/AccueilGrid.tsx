@@ -132,6 +132,11 @@ export interface TileItemNode {
   // de l'accueil — y compris quand elle est rangée dans un dossier, ce qui
   // est justement le cas où on la cherche.
   favorite?: boolean;
+  // 3 septembre : « ils pourront simplement changer la couleur ». Sur une
+  // tuile verrouillée, la couleur est la seule chose que le verrou laisse à
+  // chacun. Ce drapeau dit que l'utilisateur a choisi la sienne : le verrou
+  // n'impose alors plus sa couleur à cette tuile-là (voir applyLocks).
+  couleurPerso?: boolean;
 }
 
 // Ce qu'un verrou du super admin retient d'une tuile (agency_ui_settings
@@ -799,15 +804,14 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
           désormais regroupé dans un unique panneau d'options.
           3 septembre : « les tuiles verrouillées par les admins, ils peuvent
           les déplacer où ils veulent » — le bouton reste sur une tuile
-          verrouillée. Le menu n'y propose alors que les déplacements
-          (dossier, sortie de dossier, favoris) ; l'apparence et le contenu
-          restent imposés (voir le menu d'actions plus bas). */}
+          verrouillée, mais le menu n'y propose que « Changer la couleur » ;
+          le déplacement se fait en glissant (voir le menu d'actions). */}
       {onOpenActionsMenu && (
         <div className="hidden sm:flex absolute top-2 right-2 sm:top-3 sm:right-3 opacity-0 group-hover:opacity-100 transition-opacity z-20">
           <button
             onClick={(e) => { e.stopPropagation(); onOpenActionsMenu(e); }}
             className="p-1 rounded-lg bg-black/60 hover:bg-[#F7BC5F] text-white/80 hover:text-[#20170a] transition-colors border border-white/10 shadow-md cursor-pointer"
-            title={canModify ? 'Options (modifier, couleur, verrouiller, déplacer, supprimer...)' : 'Déplacer (dossier, favoris...)'}
+            title={canModify ? 'Options (modifier, couleur, verrouiller, déplacer, supprimer...)' : 'Changer la couleur'}
           >
             {/* Ticket #223 : "+" remplacé par les 3 petits points — ce
                 bouton n'ajoute rien, il ouvre le panneau d'options
@@ -1004,14 +1008,14 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
 
       {/* Ticket #120 : même simplification que la grille principale — un
           seul bouton "+" regroupant toutes les options. Présent aussi sur
-          une carte verrouillée (3 septembre) : le menu s'y limite aux
-          déplacements et aux favoris. */}
+          une carte verrouillée (3 septembre) : le menu s'y limite à
+          « Changer la couleur », l'ordre se change en glissant. */}
       {onOpenActionsMenu && (
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
           <button
             onClick={(e) => { e.stopPropagation(); onOpenActionsMenu(e); }}
             className="p-1 rounded-lg bg-black/60 hover:bg-[#F7BC5F] text-white/80 hover:text-[#20170a] transition-colors border border-white/10 shadow-md cursor-pointer"
-            title={canModify ? 'Options (modifier, couleur, verrouiller, déplacer, supprimer...)' : 'Déplacer (dossier, favoris...)'}
+            title={canModify ? 'Options (modifier, couleur, verrouiller, déplacer, supprimer...)' : 'Changer la couleur'}
           >
             {/* Ticket #223 : "+" remplacé par les 3 petits points — ce
                 bouton n'ajoute rien, il ouvre le panneau d'options
@@ -1768,28 +1772,37 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       // l'intérieur »), et les cartes qu'il a ajoutées à côté sont laissées
       // en place — les retirer effacerait son travail sans prévenir.
       // `retires` n'est pas une propriété de tuile : on ne la propage pas.
-      const { retires, children: enfantsImposes, ...apparence } = lock;
+      const { retires, children: enfantsImposes, gradient: couleurImposee, ...apparence } = lock;
       const idsRetires = new Set(retires || []);
+      // 3 septembre : la couleur est à chacun dès qu'il l'a choisie
+      // (couleurPerso) ; sinon celle du super admin s'applique, comme avant.
+      const couleur = (u: TileItemNode | undefined, defaut: string) =>
+        u?.couleurPerso && u.gradient ? { gradient: u.gradient, couleurPerso: true } : { gradient: couleurImposee ?? defaut };
       if (enfantsImposes && enfantsImposes.length > 0) {
         const idsImposes = new Set(enfantsImposes.map((c) => c.id));
         const enfantsUtilisateur = withChildren.children || [];
+        const parId = new Map(enfantsUtilisateur.map((c) => [c.id, c] as [string, TileItemNode]));
         const rangDeLUtilisateur = new Map(enfantsUtilisateur.map((c, i) => [c.id, i] as [string, number]));
         // Le favori est à chacun : le verrou ne l'impose ni ne l'efface.
         const favorisUtilisateur = new Set(enfantsUtilisateur.filter((c) => c.favorite).map((c) => c.id));
         // 3 septembre : une carte imposée porte le cadenas, comme son
-        // dossier — son apparence n'est pas modifiable par les membres, et
-        // le menu d'actions le sait (peutModifier). Son ordre dans le
-        // dossier reste libre (glisser), c'est tout ce que le verrou laisse.
+        // dossier. Le verrou lui laisse deux choses : sa couleur (si
+        // l'utilisateur en a choisi une) et son ordre dans le dossier.
         const imposes = [...enfantsImposes]
           .sort((a, b) => (rangDeLUtilisateur.get(a.id) ?? 9999) - (rangDeLUtilisateur.get(b.id) ?? 9999))
-          .map((c) => ({ ...c, locked: true, ...(favorisUtilisateur.has(c.id) ? { favorite: true } : {}) }));
+          .map((c) => ({
+            ...c,
+            ...(parId.get(c.id)?.couleurPerso && parId.get(c.id)?.gradient ? { gradient: parId.get(c.id)!.gradient, couleurPerso: true } : {}),
+            locked: true,
+            ...(favorisUtilisateur.has(c.id) ? { favorite: true } : {}),
+          }));
         // Audit du 2 septembre : une carte que le super admin a RETIRÉE du
         // dossier restait chez ceux qui l'avaient déjà, prise pour un ajout
         // personnel. Le verrou retient maintenant ces retraits.
         const ajoutsPersonnels = enfantsUtilisateur.filter((c) => !idsImposes.has(c.id) && !idsRetires.has(c.id));
-        return { ...withChildren, ...apparence, children: [...imposes, ...ajoutsPersonnels], locked: true };
+        return { ...withChildren, ...apparence, ...couleur(withChildren, withChildren.gradient), children: [...imposes, ...ajoutsPersonnels], locked: true };
       }
-      return { ...withChildren, ...apparence, locked: true };
+      return { ...withChildren, ...apparence, ...couleur(withChildren, withChildren.gradient), locked: true };
     });
 
   // NOTE (1er septembre, au soir) : une version de ce correctif POSAIT sur
@@ -1808,8 +1821,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // calculés à l'affichage (locked).
   const nettoyerPourVerrou = (items: TileItemNode[]): TileItemNode[] =>
     items.map((t) => {
-      const { favorite, locked, ...reste } = t;
-      void favorite; void locked;
+      const { favorite, locked, couleurPerso, ...reste } = t;
+      void favorite; void locked; void couleurPerso;
       return reste.children ? { ...reste, children: nettoyerPourVerrou(reste.children) } : reste;
     });
   const instantaneVerrou = (tile: Partial<TileItemNode>): Verrou => ({
@@ -2349,10 +2362,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   };
 
   const handleUpdateColor = (tileId: string, gradientValue: string) => {
+    // 3 septembre : sur une tuile verrouillée, la couleur est la seule
+    // liberté laissée aux membres. Leur choix est marqué (couleurPerso)
+    // pour que le verrou ne le recouvre plus à l'affichage. Le super admin,
+    // lui, change la couleur du verrou pour tout le monde (synchroniserVerrous).
+    const dansDossierVerrouille =
+      !!activeFolder && ((lockedTiles[activeFolder.id]?.children || []) as TileItemNode[]).some((c) => c.id === tileId);
+    const couleurPerso = !isSuperAdmin && (!!lockedTiles[tileId] || dansDossierVerrouille);
     const updateGradientRecursive = (items: TileItemNode[]): TileItemNode[] => {
       return items.map(item => {
         if (item.id === tileId) {
-          return { ...item, gradient: gradientValue };
+          return { ...item, gradient: gradientValue, ...(couleurPerso ? { couleurPerso: true } : {}) };
         }
         if (item.children) {
           return { ...item, children: updateGradientRecursive(item.children) };
@@ -2361,7 +2381,20 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       });
     };
 
-    const apresCouleur = updateGradientRecursive(tiles);
+    // Une carte imposée par le super admin après coup n'est peut-être pas
+    // encore inscrite dans la grille du membre (elle n'existe qu'à
+    // l'affichage) : on inscrit d'abord le contenu affiché du dossier, pour
+    // que le choix de couleur ait quelque chose sur quoi se poser.
+    let base = tiles;
+    if (activeFolder && !findTileById(tiles, tileId) && (activeFolder.children || []).some((c) => c.id === tileId)) {
+      const inscrire = (items: TileItemNode[]): TileItemNode[] =>
+        items.map((item) => {
+          if (item.id === activeFolder.id) return { ...item, children: activeFolder.children };
+          return item.children ? { ...item, children: inscrire(item.children) } : item;
+        });
+      base = inscrire(tiles);
+    }
+    const apresCouleur = updateGradientRecursive(base);
     setTiles(apresCouleur);
     synchroniserVerrous(apresCouleur);
     setOpenFolderStack((prev) => prev.map((f) => ({ ...f, children: updateGradientRecursive(f.children || []) })));
@@ -3832,12 +3865,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         // carte IMPOSÉE par un dossier verrouillé : elle ne sort pas du
         // dossier (« ils ne pourront pas sortir des dossiers »), elle s'y
         // réordonne en la glissant.
+        // Précisé le même jour : « ça sert à rien de mettre le menu déroulant
+        // entier. On pourrait mettre changer la couleur du dossier, et à
+        // l'intérieur ils pourront simplement changer la couleur ou déplacer
+        // les sous-dossiers. On s'arrête juste à ces éléments-là quand il y a
+        // le cadenas. » Sur une tuile verrouillée, un membre n'a donc que
+        // « Changer la couleur » ; le déplacement se fait en glissant.
         const peutModifier = !menuTile.locked || !!isSuperAdmin;
         const carteImposee =
           !isSuperAdmin
           && !!activeFolder
           && ((lockedTiles[activeFolder.id]?.children || []) as TileItemNode[]).some((c) => c.id === menuTile.id);
-        const peutDeplacer = !carteImposee;
         return (
           <div
             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
@@ -3891,8 +3929,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                       <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                       <span>
                         {carteImposee
-                          ? 'Carte imposée par ce dossier verrouillé : son apparence est fixée par le super admin. Vous pouvez la réordonner en la glissant dans le dossier.'
-                          : 'Verrouillée par le super admin : son apparence est fixée, mais vous pouvez la placer où vous voulez.'}
+                          ? 'Carte imposée par ce dossier verrouillé : vous pouvez changer sa couleur, et la réordonner en la glissant dans le dossier.'
+                          : 'Verrouillée par le super admin : vous pouvez changer sa couleur, et la placer où vous voulez en la glissant.'}
                       </span>
                     </p>
                   )}
@@ -3905,24 +3943,25 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                     </button>
                   )}
                   {/* Ticket #120 : regroupé ici avec le reste des options —
-                      avant, un bouton palette séparé traînait sur la tuile. */}
-                  {peutModifier && (
-                    <button
-                      onClick={() => { setPaletteTileId(menuTile.id); setActionsMenuTileId(null); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
-                    >
-                      <Palette className="w-4 h-4 text-gray-300 shrink-0" /> Changer la couleur
-                    </button>
-                  )}
-                  {/* Demandé le 2 septembre : une étoile de favoris pour
-                      retrouver une tuile plus facilement. */}
+                      avant, un bouton palette séparé traînait sur la tuile.
+                      Seule entrée qui reste sur une tuile verrouillée. */}
                   <button
-                    onClick={() => { toggleTileFavorite(menuTile.id); setActionsMenuTileId(null); }}
+                    onClick={() => { setPaletteTileId(menuTile.id); setActionsMenuTileId(null); }}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
                   >
-                    <Star className={`w-4 h-4 shrink-0 ${menuTile.favorite ? 'text-[#F7BC5F] fill-[#F7BC5F]' : 'text-gray-300'}`} />
-                    {menuTile.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                    <Palette className="w-4 h-4 text-gray-300 shrink-0" /> Changer la couleur
                   </button>
+                  {/* Demandé le 2 septembre : une étoile de favoris pour
+                      retrouver une tuile plus facilement. */}
+                  {peutModifier && (
+                    <button
+                      onClick={() => { toggleTileFavorite(menuTile.id); setActionsMenuTileId(null); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
+                    >
+                      <Star className={`w-4 h-4 shrink-0 ${menuTile.favorite ? 'text-[#F7BC5F] fill-[#F7BC5F]' : 'text-gray-300'}`} />
+                      {menuTile.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                    </button>
+                  )}
                   {isSuperAdmin && (
                     <button
                       onClick={() => { void toggleTileLock(menuTile); setActionsMenuTileId(null); }}
@@ -3935,7 +3974,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                       )}
                     </button>
                   )}
-                  {!menuTile.isFolder && peutDeplacer && (
+                  {!menuTile.isFolder && peutModifier && (
                     <button
                       onClick={() => setShowFolderPickerFor(menuTile.id)}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
@@ -3943,7 +3982,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                       <Folder className="w-4 h-4 text-gray-300 shrink-0" /> Ajouter à un dossier
                     </button>
                   )}
-                  {!menuTile.isFolder && peutDeplacer && (
+                  {!menuTile.isFolder && peutModifier && (
                     <button
                       onClick={() => {
                         setCreateFolderFromTileId(menuTile.id);
@@ -3965,7 +4004,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                       "Dissoudre" (qui vide TOUT le dossier) : ne retire que
                       cette tuile-là, visible seulement si elle est bien
                       dans le dossier actuellement ouvert. */}
-                  {activeFolder && peutDeplacer && (activeFolder.children || []).some((c) => c.id === menuTile.id) && (
+                  {activeFolder && peutModifier && (activeFolder.children || []).some((c) => c.id === menuTile.id) && (
                     <button
                       onClick={() => { handleExtractTileFromFolder(menuTile.id); setActionsMenuTileId(null); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
