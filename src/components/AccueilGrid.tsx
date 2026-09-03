@@ -1995,6 +1995,32 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     await enregistrerVerrous(next, lockedTiles);
   };
 
+  // 3 septembre (« le dossier Communication : les tuiles dedans s'enlèvent,
+  // et quand on le dissout il revient au rafraîchissement ») : des verrous
+  // FANTÔMES — anciens dossiers du même nom, supprimés avant que le verrou ne
+  // parte avec — reposaient un dossier que le super admin venait de
+  // dissoudre, et en retiraient les cartes de la racine. Chez le super
+  // admin, une fois sa grille serveur chargée, un verrou dont le dossier
+  // n'existe ni dans sa grille ni parmi les tuiles fournies est ignoré tout
+  // de suite (verrousEffectifs) et effacé pour toute l'agence.
+  const fantomesVerrous = useMemo<string[]>(() => {
+    if (!isSuperAdmin || !activeAgency?.id || !homeSyncReadyAgencies.has(activeAgency.id)) return [];
+    return Object.keys(lockedTiles).filter((id) => !existsRecursive(tiles, id) && !findInitialTile(id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockedTiles, tiles, isSuperAdmin, activeAgency?.id, syncPrete]);
+  const verrousEffectifs = useMemo<Record<string, Verrou>>(() => {
+    if (fantomesVerrous.length === 0) return lockedTiles;
+    const propres = { ...lockedTiles };
+    fantomesVerrous.forEach((id) => { delete propres[id]; });
+    return propres;
+  }, [lockedTiles, fantomesVerrous]);
+  const clesFantomes = fantomesVerrous.join('|');
+  useEffect(() => {
+    if (!clesFantomes) return;
+    void enregistrerVerrous(verrousEffectifs, lockedTiles);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clesFantomes]);
+
   // Folder Stack state for navigation inside open folders/nested folders
   const [openFolderStack, setOpenFolderStack] = useState<TileItemNode[]>([]);
   // Recherche globale (barre du haut) : « les noms des dossiers » — un
@@ -2778,17 +2804,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // récent l'emporte), les fantômes étant par ailleurs purgés côté super
   // admin (synchroniserVerrous).
   const meilleurParTitre = new Map<string, string>();
-  Object.entries(lockedTiles).forEach(([id, v]) => {
+  Object.entries(verrousEffectifs).forEach(([id, v]) => {
     if (!Array.isArray(v.children)) return;
     const titre = sansCasse(v.title || '');
     if (!titre) return;
     const actuel = meilleurParTitre.get(titre);
     const score = (x: Verrou) => (x.maj || 0) * 1000 + (x.children?.length || 0);
-    if (!actuel || score(v) > score(lockedTiles[actuel])) meilleurParTitre.set(titre, id);
+    if (!actuel || score(v) > score(verrousEffectifs[actuel])) meilleurParTitre.set(titre, id);
   });
 
   const idsImposesParUnDossier = new Set<string>();
-  Object.entries(lockedTiles).forEach(([dossierId, lock]) => {
+  Object.entries(verrousEffectifs).forEach(([dossierId, lock]) => {
     const verrou = lock as TileItemNode;
     const enfants = verrou.children;
     // Seuls les verrous qui décrivent un dossier (même vide : verrouillé
@@ -2852,7 +2878,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       let change = false;
       aPoser.forEach((d) => {
         if (next.includes(d.id)) return;
-        const voulu = lockedTiles[d.id]?.slot;
+        const voulu = verrousEffectifs[d.id]?.slot;
         if (typeof voulu === 'number' && voulu >= 0 && voulu < next.length && next[voulu] === null) {
           next[voulu] = d.id;
           change = true;
