@@ -22,7 +22,16 @@ d'écran d'avertissement, plus de jeton qui expire au bout de sept jours.
 
 Ouvrir `https://app.nova360.space/api/google/connect` dans un navigateur :
 la réponse indique, société par société, si les deux clés sont présentes
-dans cet environnement (`true`/`false`), sans jamais afficher une valeur.
+dans cet environnement, et si elles ont la bonne forme :
+
+- `id` : l'ID client (public, il figure dans l'adresse de chaque écran
+  Google), affiché seulement s'il se termine par
+  `.apps.googleusercontent.com` ;
+- `idRessembleAUnSecret` : `true` quand un secret (`GOCSPX-…`) a été collé
+  dans la variable de l'ID — erreur vécue le 3 septembre sur les trois
+  sociétés, invisible autrement (Google répond « OAuth client not found ») ;
+- `secretValide` : le secret commence par `GOCSPX-` ; sa valeur n'est jamais
+  affichée.
 
 Piège rencontré le 2 septembre : des variables saisies dans l'onglet
 « Shared » (équipe Vercel) ne s'appliquent pas au projet tant qu'elles ne
