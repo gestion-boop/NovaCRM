@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 
 import { supabase } from '@/lib/supabase';
+import { estEtapeSigneeNovavisio } from '@/lib/couleursNovavisio';
 import { toast } from 'sonner';
 import { Deal } from '@/types';
 import { useAuth } from '@/context/AuthContext';
@@ -48,6 +49,7 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
     createdAt: (item.created_at as string) || new Date().toISOString(),
     updatedAt: (item.updated_at as string) || undefined,
     archivedAt: (item.archived_at as string) || null,
+    signedAt: (item.signed_at as string) || null,
   };
 }
 
@@ -276,6 +278,14 @@ export const useDeals = () => {
         .eq('id', id)
         .select()
         .single();
+
+      // Règle Novavisio (Natacha, 3 septembre) : un dossier qui entre dans
+      // une étape « signé » est marqué signé (leads.signed_at) une fois pour
+      // toutes — il reste vert ensuite, même déplacé dans le pipeline
+      // officiel. Jamais écrasé s'il l'était déjà (.is null).
+      if (!sbError && updates.stage !== undefined && /novavisio/i.test(activeAgency?.name || '') && estEtapeSigneeNovavisio(updates.stage)) {
+        await supabase.from('leads').update({ signed_at: new Date().toISOString() } as any).eq('id', id).is('signed_at', null);
+      }
 
       if (sbError) {
         console.error('Erreur Supabase lors de la mise à jour :', sbError);

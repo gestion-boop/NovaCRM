@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, htDepuisTtc, ttcDepuisHt } from '@/lib/utils';
 import { toValidUuidOrNull } from '@/data/teamMembers';
+import { couleurNovavisio } from '@/lib/couleursNovavisio';
 // Ticket #277 (suite) : même détection de mode jour que l'accueil, pour que
 // les colonnes du pipeline suivent la même bascule vers de vraies couleurs
 // claires (au lieu du filtre global qui pâlit juste le bleu canard).
@@ -281,12 +282,14 @@ const PipelineCard = React.memo<{
     id: deal.id,
     data: { type: 'card' as const, stage: deal.stage },
   });
+  const couleur = couleurNovavisio(deal);
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
       onClick={() => { if (contact && onSelectContact) onSelectContact(contact.id); }}
+      style={couleur ? { borderLeft: `5px solid ${couleur}`, backgroundColor: `${couleur}1a` } : undefined}
       className={`p-4 sm:p-3 rounded-xl bg-[#0b1719] border transition-colors duration-150 touch-none select-none ${
         contact ? 'cursor-pointer' : ''
       } ${

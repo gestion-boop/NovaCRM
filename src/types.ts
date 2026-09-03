@@ -29,6 +29,10 @@ export interface Contact {
   // « CA devis à venir » (Novavisio) : montant du devis envoyé, en attente de
   // signature. Colonne `leads.pending_quote_amount`.
   caDevisAVenir?: number;
+  // Devis signé (leads.signed_at) : posé à l'archivage, ou dès qu'un dossier
+  // Novavisio entre dans une étape « signé » (3 septembre). Reste vrai
+  // ensuite, même dans le pipeline officiel.
+  signedAt?: string | null;
   // « Récurrence » : ce qui revient ensuite sur ce client (abonnement,
   // prestation renouvelée). Colonne `leads.recurring_amount`.
   recurrence?: number;
@@ -71,6 +75,10 @@ export interface Deal {
   // « CA devis à venir » (Novavisio) : montant du devis envoyé, en attente de
   // signature. Colonne `leads.pending_quote_amount`.
   caDevisAVenir?: number;
+  // Devis signé (leads.signed_at) : posé à l'archivage, ou dès qu'un dossier
+  // Novavisio entre dans une étape « signé » (3 septembre). Reste vrai
+  // ensuite, même dans le pipeline officiel.
+  signedAt?: string | null;
   // « Récurrence » : ce qui revient ensuite sur ce client.
   recurrence?: number;
   // Ticket #35 : « c'est le conseiller qui va mettre son affaire sur le
