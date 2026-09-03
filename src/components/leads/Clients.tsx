@@ -113,7 +113,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
           .in("id", ids)
           .order("created_at", { ascending: false });
         if (error) throw error;
-        rows = data ?? [];
+        rows = (data ?? []).filter((l: any) => !l.deleted_at);
       } else {
         let q = supabase
           .from("leads")
@@ -137,7 +137,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         if (scope !== "all") q = q.or(`created_by.eq.${user!.uid},assigned_to.eq.${user!.uid}`);
         const { data, error } = await q;
         if (error) throw error;
-        rows = (data ?? []).filter((l: any) => !activeAgency || matchesAgency((l.agency_id as string) || "", activeAgency.id));
+        rows = (data ?? []).filter((l: any) => !l.deleted_at && (!activeAgency || matchesAgency((l.agency_id as string) || "", activeAgency.id)));
       }
 
       const leadIds = rows.map((l: any) => l.id);
@@ -268,17 +268,24 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
     if (scope === "shared") return;
     if (!confirm("Supprimer définitivement ce contact ?")) return;
     try {
-      await Promise.all([
-        supabase.from("client_shares").delete().eq("lead_id", id),
-        supabase.from("reminders").delete().eq("lead_id", id),
-        supabase.from("appointments").delete().eq("lead_id", id),
-        supabase.from("comments").delete().eq("lead_id", id),
-        supabase.from("documents").delete().eq("lead_id", id),
-        supabase.from("revenue_entries").delete().eq("lead_id", id),
-      ]);
-      const { error } = await supabase.from("leads").delete().eq("id", id);
-      if (error) return toast.error(error.message);
-      toast.success("Contact supprimé");
+      // 3 septembre : corbeille au lieu de l'effacement. Rappels, rendez-vous,
+      // documents et commentaires restent attachés à la fiche, pour qu'une
+      // restauration depuis Paramètres → « Corbeille des clients » rende
+      // tout. L'effacement définitif (avec ses dépendances) se fait là-bas.
+      const { data: mises, error } = await supabase
+        .from("leads")
+        .update({ deleted_at: new Date().toISOString(), deleted_by: user?.uid || null } as any)
+        .eq("id", id)
+        .select("id");
+      if (error) {
+        return toast.error(
+          /deleted_at/.test(error.message)
+            ? "La corbeille n'est pas encore installée en base (migration 20260903120000_leads_corbeille_et_journal.sql à appliquer)."
+            : error.message
+        );
+      }
+      if (!mises || mises.length === 0) return toast.error("Mise à la corbeille refusée par la base : votre compte n'a pas le droit de modifier cette fiche.");
+      toast.success("Contact mis à la corbeille (récupérable dans Paramètres)");
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["pipeline"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });

@@ -12,6 +12,8 @@ import { AGENCIES, Agency } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { getAgencyLogo, sortByAgencyOrder } from '@/lib/agency-logos';
 import { reafficherTuile } from '@/lib/tuilesMasquees';
+import { matchesAgency } from '@/hooks/useContacts';
+import { toast } from 'sonner';
 import { requestWorkspaceAccessToken, getCachedAccessToken, reconnectGoogleWorkspace } from '@/lib/workspace';
 import { updateCssAccentVars, updateCssCalendarAccentVars } from '@/utils/theme';
 import { supabase } from '@/lib/supabase';
@@ -27,7 +29,7 @@ interface ParametresViewProps {
 // la gestion des utilisateurs est désormais centralisée dans Équipe (onglet
 // "Gestion des utilisateurs", EquipeView.tsx), suite logique du ticket #153
 // qui avait déjà retiré les boutons de création d'ici.
-type SectionId = 'drive' | 'profile' | 'announcements' | 'notifications' | 'mail' | 'export' | 'event-titles' | 'sidebar-order' | 'contact-types' | 'appearance' | 'home-tiles' | 'automations' | 'pipeline-automations';
+type SectionId = 'drive' | 'profile' | 'announcements' | 'notifications' | 'mail' | 'export' | 'event-titles' | 'sidebar-order' | 'contact-types' | 'appearance' | 'home-tiles' | 'automations' | 'pipeline-automations' | 'corbeille-clients' | 'journal-clients';
 type SectionConfig = { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }>; adminOnly?: boolean };
 
 type UserRow = {
@@ -47,6 +49,10 @@ type UserRow = {
 const DEFAULT_SECTIONS: SectionConfig[] = [
   { id: 'profile', label: 'Mon profil', icon: UserCog },
   { id: 'home-tiles', label: 'Raccourcis masqués (Accueil)', icon: EyeOff },
+  // 3 septembre : deux fiches perdues chez Natacha. Corbeille et journal des
+  // fiches clients (migration 20260903120000_leads_corbeille_et_journal.sql).
+  { id: 'corbeille-clients', label: 'Corbeille des clients', icon: Trash2 },
+  { id: 'journal-clients', label: 'Journal des contacts', icon: ListChecks },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'automations', label: 'Automatisations', icon: Zap },
   // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (14/16) : distinct de
@@ -357,6 +363,85 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
   const visibleSections = useMemo(() => DEFAULT_SECTIONS.filter(s => !s.adminOnly || isAdmin), [isAdmin]);
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(() => readStorage('novasphere:settings-order-v4', computeDefaultSectionOrder(DEFAULT_SECTIONS)));
   const [busy, setBusy] = useState<string | null>(null);
+
+  // ── Corbeille et journal des fiches clients (3 septembre) ────────────
+  type FicheCorbeille = { id: string; full_name?: string | null; email?: string | null; phone?: string | null; agency_id?: string | null; deleted_at: string; deleted_by?: string | null };
+  type LigneJournal = { id: number; lead_id: string; agency_id: string | null; action: string; user_email: string | null; at: string; avant: Record<string, unknown> | null; apres: Record<string, unknown> | null };
+  const [corbeille, setCorbeille] = useState<FicheCorbeille[]>([]);
+  const [corbeilleErreur, setCorbeilleErreur] = useState<string | null>(null);
+  const [journal, setJournal] = useState<LigneJournal[]>([]);
+  const [journalErreur, setJournalErreur] = useState<string | null>(null);
+  const [journalRecherche, setJournalRecherche] = useState('');
+  const dansAgenceActive = (agencyId: string | null | undefined) =>
+    !activeAgency || activeAgency.id === 'all' || matchesAgency(agencyId || '', activeAgency.id);
+  const messageMigration = (msg: string) =>
+    /deleted_at|leads_journal|does not exist|schema cache/i.test(msg)
+      ? "La corbeille et le journal ne sont pas encore installés en base : appliquer la migration 20260903120000_leads_corbeille_et_journal.sql dans Supabase → SQL Editor."
+      : msg;
+  const chargerCorbeille = async () => {
+    setCorbeilleErreur(null);
+    const { data, error } = await supabase.from('leads').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
+    if (error) { setCorbeilleErreur(messageMigration(error.message)); setCorbeille([]); return; }
+    setCorbeille(((data as any[]) || []).filter((l) => dansAgenceActive(l.agency_id)) as FicheCorbeille[]);
+  };
+  const chargerJournal = async () => {
+    setJournalErreur(null);
+    const { data, error } = await (supabase.from('leads_journal' as any) as any).select('*').order('at', { ascending: false }).limit(300);
+    if (error) { setJournalErreur(messageMigration(error.message)); setJournal([]); return; }
+    setJournal(((data as any[]) || []).filter((l) => dansAgenceActive(l.agency_id)) as LigneJournal[]);
+  };
+  useEffect(() => {
+    if (openSection === 'corbeille-clients') void chargerCorbeille();
+    if (openSection === 'journal-clients') void chargerJournal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSection, activeAgency?.id]);
+  const restaurerFiche = async (id: string) => {
+    const { data, error } = await supabase.from('leads').update({ deleted_at: null, deleted_by: null } as any).eq('id', id).select('id');
+    if (error) return toast.error(messageMigration(error.message));
+    if (!data || data.length === 0) return toast.error("Restauration refusée par la base : votre compte n'a pas le droit de modifier cette fiche.");
+    toast.success('Fiche restaurée : elle est de retour dans Clients et dans le pipeline.');
+    void chargerCorbeille();
+  };
+  const effacerDefinitivement = async (fiche: FicheCorbeille) => {
+    if (!window.confirm(`Effacer définitivement « ${fiche.full_name || 'cette fiche'} », avec ses rappels, rendez-vous, documents et commentaires ? Le journal en garde une copie.`)) return;
+    await Promise.all([
+      supabase.from('client_shares').delete().eq('lead_id', fiche.id),
+      supabase.from('reminders').delete().eq('lead_id', fiche.id),
+      supabase.from('appointments').delete().eq('lead_id', fiche.id),
+      supabase.from('comments').delete().eq('lead_id', fiche.id),
+      supabase.from('documents').delete().eq('lead_id', fiche.id),
+      supabase.from('revenue_entries').delete().eq('lead_id', fiche.id),
+    ]);
+    const { data, error } = await supabase.from('leads').delete().eq('id', fiche.id).select('id');
+    if (error) return toast.error(error.message);
+    if (!data || data.length === 0) return toast.error('Effacement refusé par la base : votre compte n\'a pas le droit de supprimer cette fiche.');
+    toast.success('Fiche effacée. Sa dernière version reste dans le journal.');
+    void chargerCorbeille();
+  };
+  // Recréer une fiche effacée depuis sa dernière version connue du journal —
+  // même identifiant, donc les rappels et documents qui y pointaient encore
+  // la retrouvent.
+  const recreerDepuisJournal = async (ligne: LigneJournal) => {
+    const source = (ligne.avant || ligne.apres) as Record<string, unknown> | null;
+    if (!source) return;
+    const { data: existe } = await supabase.from('leads').select('id').eq('id', ligne.lead_id).maybeSingle();
+    if (existe) return toast.error('Cette fiche existe toujours en base : regardez dans Clients ou dans la corbeille.');
+    const fiche = { ...source, deleted_at: null, deleted_by: null, updated_at: new Date().toISOString() };
+    const { error } = await supabase.from('leads').insert(fiche as any);
+    if (error) return toast.error(messageMigration(error.message));
+    toast.success('Fiche recréée depuis le journal.');
+    void chargerJournal();
+  };
+  const libelleAction: Record<string, string> = { creation: 'Création', modification: 'Modification', corbeille: 'Mise à la corbeille', restauration: 'Restauration', suppression: 'Effacement définitif' };
+  const nomFiche = (ligne: LigneJournal) => {
+    const f = (ligne.apres || ligne.avant || {}) as Record<string, unknown>;
+    return (f.full_name as string) || [f.first_name, f.last_name].filter(Boolean).join(' ') || 'Fiche sans nom';
+  };
+  const journalFiltre = journal.filter((l) => {
+    if (!journalRecherche.trim()) return true;
+    const q = journalRecherche.toLowerCase();
+    return nomFiche(l).toLowerCase().includes(q) || (l.user_email || '').toLowerCase().includes(q) || (libelleAction[l.action] || l.action).toLowerCase().includes(q);
+  });
   const [users, setUsers] = useState<UserRow[]>([]);
   const [driveStatus, setDriveStatus] = useState<Record<string, { google_email?: string | null; updated_at?: string | null }>>({});
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -720,7 +805,13 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
 
-  const orderedSections = sectionOrder.map(id => visibleSections.find(s => s.id === id)).filter(Boolean) as SectionConfig[];
+  // Une section ajoutée après coup (corbeille, journal…) n'est pas dans
+  // l'ordre déjà enregistré chez chacun : elle est ajoutée à la fin plutôt
+  // que perdue.
+  const orderedSections = [
+    ...(sectionOrder.map(id => visibleSections.find(s => s.id === id)).filter(Boolean) as SectionConfig[]),
+    ...visibleSections.filter(s => !sectionOrder.includes(s.id)),
+  ];
 
   const handleConnectUserDrive = async () => {
     setBusy('connect-drive');
@@ -1989,6 +2080,73 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                 <button onClick={() => restoreHomeTile(tile.id)} className={goldButton}>
                   <Eye className="w-4 h-4" />Réafficher
                 </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>;
+
+      case 'corbeille-clients': return <div className="space-y-4">
+        <div>
+          <p className="font-semibold text-white">Corbeille des clients</p>
+          <p className="text-xs text-slate-400 mt-1">Depuis le 3 septembre, supprimer une fiche client — depuis Clients ou depuis le pipeline — la met ici au lieu de l'effacer. Ses rappels, rendez-vous et documents restent attachés. Restaurez-la quand vous voulez.</p>
+        </div>
+        {corbeilleErreur ? (
+          <div className="rounded-xl bg-red-900/20 border border-red-500/30 px-4 py-3 text-sm text-red-200">{corbeilleErreur}</div>
+        ) : corbeille.length === 0 ? (
+          <div className="rounded-xl bg-[#071f21] border border-[#1c4448] px-4 py-6 text-center text-sm text-slate-400">La corbeille est vide.</div>
+        ) : (
+          <div className="space-y-2">
+            {corbeille.map((fiche) => (
+              <div key={fiche.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl bg-[#071f21] border border-[#1c4448] px-3 py-2.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white font-semibold truncate">{fiche.full_name || 'Fiche sans nom'}</p>
+                  <p className="text-xs text-slate-400 truncate">
+                    {[fiche.email, fiche.phone].filter(Boolean).join(' · ') || 'Sans coordonnées'} · mise à la corbeille le {new Date(fiche.deleted_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                    {' · '}{AGENCIES.find((a) => matchesAgency(fiche.agency_id || '', a.id))?.name || 'société inconnue'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => restaurerFiche(fiche.id)} className={goldButton}><RotateCcw className="w-4 h-4" />Restaurer</button>
+                  {isAdmin && (
+                    <button onClick={() => effacerDefinitivement(fiche)} className="px-3 py-2 rounded-xl bg-red-900/30 border border-red-500/30 text-red-300 text-xs font-bold flex items-center gap-2 hover:bg-red-900/50" title="Réservé au super admin">
+                      <Trash2 className="w-4 h-4" />Effacer
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>;
+
+      case 'journal-clients': return <div className="space-y-4">
+        <div>
+          <p className="font-semibold text-white">Journal des contacts</p>
+          <p className="text-xs text-slate-400 mt-1">Chaque création, modification, mise à la corbeille, restauration ou effacement d'une fiche client est inscrit ici, avec qui, quand, et la fiche complète avant et après. Une fiche effacée se recrée depuis sa dernière version, sans toucher au reste de la base.</p>
+        </div>
+        <input value={journalRecherche} onChange={(e) => setJournalRecherche(e.target.value)} placeholder="Rechercher un nom, une personne, une action…" className={inputClass} />
+        {journalErreur ? (
+          <div className="rounded-xl bg-red-900/20 border border-red-500/30 px-4 py-3 text-sm text-red-200">{journalErreur}</div>
+        ) : journalFiltre.length === 0 ? (
+          <div className="rounded-xl bg-[#071f21] border border-[#1c4448] px-4 py-6 text-center text-sm text-slate-400">Aucune ligne pour le moment.</div>
+        ) : (
+          <div className="space-y-2">
+            {journalFiltre.map((ligne) => (
+              <div key={ligne.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl bg-[#071f21] border border-[#1c4448] px-3 py-2.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white font-semibold truncate">
+                    <span className={`inline-block mr-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${ligne.action === 'suppression' ? 'bg-red-900/40 text-red-200' : ligne.action === 'corbeille' ? 'bg-amber-900/40 text-amber-200' : ligne.action === 'creation' || ligne.action === 'restauration' ? 'bg-emerald-900/40 text-emerald-200' : 'bg-white/10 text-slate-300'}`}>{libelleAction[ligne.action] || ligne.action}</span>
+                    {nomFiche(ligne)}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate">
+                    {new Date(ligne.at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })} · {ligne.user_email || 'utilisateur inconnu'}
+                    {' · '}{AGENCIES.find((a) => matchesAgency(ligne.agency_id || '', a.id))?.name || 'société inconnue'}
+                  </p>
+                </div>
+                {ligne.action === 'suppression' && (
+                  <button onClick={() => recreerDepuisJournal(ligne)} className={goldButton}><RotateCcw className="w-4 h-4" />Recréer la fiche</button>
+                )}
               </div>
             ))}
           </div>

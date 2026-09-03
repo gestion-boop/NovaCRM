@@ -96,7 +96,8 @@ export const useDeals = () => {
         console.error('Erreur Supabase lors du chargement des opportunités :', sbError);
         throw new Error(sbError.message);
       }
-      return ((data || []) as Record<string, unknown>[]).map((row) => supabaseLeadToDeal(row, stageNameById));
+      // Corbeille (3 septembre) : filtrée côté application, voir useContacts.
+      return ((data || []) as Record<string, unknown>[]).filter((row) => !row.deleted_at).map((row) => supabaseLeadToDeal(row, stageNameById));
     },
   });
 
@@ -338,19 +339,26 @@ export const useDeals = () => {
       // réapparaissait telle quelle, et rien n'expliquait pourquoi. On
       // redemande donc la ligne supprimée : si elle revient vide, c'est un
       // refus de droits, et on le dit clairement au lieu de faire comme si.
+      // 3 septembre : supprimer un dossier depuis le pipeline ne l'efface
+      // plus — la fiche part à la CORBEILLE (Paramètres → « Corbeille des
+      // clients »), et le journal en base garde qui, quand, et la fiche.
       const { data: supprimees, error: sbError } = await supabase
         .from('leads')
-        .delete()
+        .update({ deleted_at: new Date().toISOString(), deleted_by: currentUser.uid } as any)
         .eq('id', id)
         .select('id');
 
       if (sbError) {
-        console.error('Erreur Supabase lors de la suppression :', sbError);
-        throw new Error(sbError.message);
+        console.error('Erreur Supabase lors de la mise à la corbeille :', sbError);
+        throw new Error(
+          /deleted_at/.test(sbError.message)
+            ? 'La corbeille n\'est pas encore installée en base (migration 20260903120000_leads_corbeille_et_journal.sql à appliquer).'
+            : sbError.message
+        );
       }
       if (!supprimees || supprimees.length === 0) {
         throw new Error(
-          "Suppression refusée par la base de données : votre compte n'a pas le droit de supprimer ce dossier. Un super admin doit ouvrir ce droit (politique de sécurité de la table « leads »)."
+          "Mise à la corbeille refusée par la base de données : votre compte n'a pas le droit de modifier ce dossier."
         );
       }
 

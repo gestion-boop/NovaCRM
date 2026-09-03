@@ -1951,10 +1951,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
 
         const { data: leadsData } = await supabase
           .from('leads')
-          .select('stage_id, assigned_to, created_by, archived_at')
+          .select('*')
           .eq('pipeline_id', IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID)
           .eq('agency_id', IMMOSPHERA_AGENCY_ID);
-        const relevant = (leadsData || []).filter(
+        const relevant = ((leadsData || []) as any[]).filter((l) => !l.deleted_at).filter(
           (l: any) =>
             !l.archived_at &&
             (l.assigned_to || l.created_by) &&

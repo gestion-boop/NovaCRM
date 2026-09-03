@@ -177,7 +177,10 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
     const [{ data: leadRows }, { data: stageRows }] = await Promise.all([
       supabase
         .from("leads")
-        .select("id, full_name, phone, email, latitude, longitude, stage_id, temperature, company, updated_at")
+        // `*` et non une liste de colonnes : la corbeille (deleted_at) doit
+        // être lue pour être filtrée, sans casser tant que la migration
+        // 20260903120000 n'est pas appliquée.
+        .select("*")
         .eq("agency_id", activeAgency.id)
         .not("latitude", "is", null)
         .not("longitude", "is", null),
@@ -187,7 +190,8 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
     const stageMap = new Map<string, StageInfo>();
     (stageRows ?? []).forEach((s) => stageMap.set(s.id, s as StageInfo));
     setStages(stageMap);
-    setLeads((leadRows ?? []) as LeadPoint[]);
+    // Corbeille (3 septembre) : une fiche mise de côté ne s'affiche plus sur la carte.
+    setLeads(((leadRows ?? []) as any[]).filter((l) => !l.deleted_at) as LeadPoint[]);
     setLoading(false);
   };
 

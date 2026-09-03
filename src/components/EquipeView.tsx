@@ -1619,10 +1619,10 @@ const ClientsInvitesPanel: React.FC<{ onNavigate?: (nav: string) => void; onOpen
         const orFilter = emails.map((e) => `email.ilike.${e.replace(/,/g, '')}`).join(',');
         const { data: byEmail } = await supabase
           .from('leads')
-          .select('id, first_name, last_name, full_name, email, phone, agency_id, assigned_to')
+          .select('*')
           .or(orFilter);
         const grouped: Record<string, LeadLite[]> = {};
-        (byEmail || []).forEach((l: any) => {
+        ((byEmail || []) as any[]).filter((l) => !l.deleted_at).forEach((l: any) => {
           const key = (l.email || '').trim().toLowerCase();
           if (!key) return;
           (grouped[key] ||= []).push(l);
@@ -1648,10 +1648,11 @@ const ClientsInvitesPanel: React.FC<{ onNavigate?: (nav: string) => void; onOpen
     const t = setTimeout(async () => {
       const { data } = await supabase
         .from('leads')
-        .select('id, first_name, last_name, full_name, email, phone, agency_id, assigned_to')
+        .select('*')
         .or(`full_name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%`)
         .limit(15);
-      if (!cancelled) { setSearchResults((data as LeadLite[]) || []); setSearching(false); }
+      // Corbeille (3 septembre) : une fiche mise de côté ne se propose plus.
+      if (!cancelled) { setSearchResults(((data as any[]) || []).filter((l) => !l.deleted_at) as LeadLite[]); setSearching(false); }
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
   }, [searchQuery]);

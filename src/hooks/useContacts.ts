@@ -88,6 +88,7 @@ export function supabaseLeadToContact(item: Record<string, unknown>): Contact {
     statutLead: (item.temperature as string) || undefined,
     createdAt: (item.created_at as string) || new Date().toISOString(),
     archivedAt: (item.archived_at as string) || null,
+    deletedAt: (item.deleted_at as string) || null,
     ownerUserId: (item.created_by as string) || undefined,
     ownerEmail: undefined,
     sharedWithUserIds: [],
@@ -169,7 +170,10 @@ export const useContacts = () => {
         console.error('Erreur Supabase contacts :', sbError);
         throw new Error(sbError.message);
       }
-      return ((data || []) as Record<string, unknown>[]).map(supabaseLeadToContact);
+      // Corbeille (3 septembre) : filtrée ici et non dans la requête, pour
+      // que les listes restent pleines tant que la migration
+      // 20260903120000 n'est pas appliquée (la colonne n'existe alors pas).
+      return ((data || []) as Record<string, unknown>[]).filter((r) => !r.deleted_at).map(supabaseLeadToContact);
     },
   });
 
@@ -187,7 +191,22 @@ export const useContacts = () => {
         newContact.agencyId ||
         (activeAgency.id === 'all' ? CONSEILS_FINANCES_ID : activeAgency.id);
 
-      const agencyId = toValidUuidOrNull(rawAgencyId) || CONSEILS_FINANCES_ID;
+      // 3 septembre : un identifiant d'agence hérité (« novavisio »,
+      // « agency-2 »…) n'est pas un UUID, et la fiche partait en silence
+      // sous Conseils Finances — invisible pour son agence. On le résout
+      // d'abord vers la vraie agence, comme partout ailleurs (matchesAgency).
+      const resoudreAgence = (brut: string): string | null => {
+        const direct = toValidUuidOrNull(brut);
+        if (direct) return direct;
+        for (const id of [NOVAVISIO_ID, IMMOSPHERA_ID, CONSEILS_FINANCES_ID]) {
+          if (matchesAgency(brut, id)) return id;
+        }
+        return null;
+      };
+      const agencyId =
+        resoudreAgence(rawAgencyId)
+        || (activeAgency.id !== 'all' ? resoudreAgence(activeAgency.id) : null)
+        || CONSEILS_FINANCES_ID;
       const assignedToUuid = getAssignedUserIdAsUuid(newContact.assignedTo);
       const createdByUuid =
         toValidUuidOrNull(currentUser.uid) ||
@@ -449,25 +468,32 @@ export const useContacts = () => {
       // cours en passant par le pipeline » et « il faut que les utilisateurs
       // puissent supprimer des clients avec la poubelle ».
       //
-      // Quand la sécurité de la base (RLS) refuse une suppression, PostgREST
-      // ne renvoie AUCUNE erreur : la requête réussit, simplement zéro ligne
-      // n'est supprimée. Le CRM invalidait alors ses caches, la fiche
-      // réapparaissait telle quelle, et rien n'expliquait pourquoi. On
-      // redemande donc la ligne supprimée : si elle revient vide, c'est un
-      // refus de droits, et on le dit clairement au lieu de faire comme si.
+      // 3 septembre : plus d'effacement définitif depuis le CRM. La fiche
+      // part à la CORBEILLE (leads.deleted_at, migration 20260903120000) et
+      // se restaure depuis Paramètres → « Corbeille des clients ». Le
+      // journal (déclencheur en base) garde qui l'a fait, quand, et la
+      // fiche complète.
+      //
+      // Quand la sécurité de la base (RLS) refuse, PostgREST ne renvoie
+      // AUCUNE erreur : zéro ligne modifiée. On redemande donc la ligne : si
+      // elle revient vide, c'est un refus de droits, et on le dit.
       const { data: supprimees, error: sbError } = await supabase
         .from('leads')
-        .delete()
+        .update({ deleted_at: new Date().toISOString(), deleted_by: toValidUuidOrNull(currentUser.uid) } as any)
         .eq('id', id)
         .select('id');
 
       if (sbError) {
-        console.error('Erreur Supabase lors de la suppression :', sbError);
-        throw new Error(sbError.message);
+        console.error('Erreur Supabase lors de la mise à la corbeille :', sbError);
+        throw new Error(
+          /deleted_at/.test(sbError.message)
+            ? 'La corbeille n\'est pas encore installée en base (migration 20260903120000_leads_corbeille_et_journal.sql à appliquer).'
+            : sbError.message
+        );
       }
       if (!supprimees || supprimees.length === 0) {
         throw new Error(
-          "Suppression refusée par la base de données : votre compte n'a pas le droit de supprimer cette fiche. Un super admin doit ouvrir ce droit (politique de sécurité de la table « leads »)."
+          "Mise à la corbeille refusée par la base de données : votre compte n'a pas le droit de modifier cette fiche."
         );
       }
 

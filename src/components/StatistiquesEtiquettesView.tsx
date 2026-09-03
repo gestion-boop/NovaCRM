@@ -178,7 +178,9 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
 
       const { data: leads } = await supabase
         .from('leads')
-        .select('id, stage_id, assigned_to, created_by, archived_at, signed_at, lead_type, estimated_value, full_name, first_name, last_name, sector, mandate_number')
+        // `*` : la corbeille (deleted_at, 3 septembre) doit être lue pour
+        // être écartée des statistiques.
+        .select('*')
         .eq('pipeline_id', IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID)
         .eq('agency_id', IMMOSPHERA_AGENCY_ID);
 
@@ -212,7 +214,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
         return null;
       };
 
-      const relevant = (leads || []).filter(
+      const relevant = ((leads || []) as any[]).filter((l) => !l.deleted_at).filter(
         (l: any) => (l.assigned_to || l.created_by) && etapeDe(l) !== null
       );
 

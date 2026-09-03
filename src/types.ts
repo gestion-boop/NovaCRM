@@ -47,6 +47,8 @@ export interface Contact {
   mandateNumber?: string;
   notes?: string;
   archivedAt?: string | null;
+  // Corbeille (3 septembre) : date de mise à la corbeille, null sinon.
+  deletedAt?: string | null;
 }
 
 export interface PipelineDef {
@@ -88,6 +90,8 @@ export interface Deal {
   createdAt: string;
   updatedAt?: string;
   archivedAt?: string | null;
+  // Corbeille (3 septembre) : date de mise à la corbeille, null sinon.
+  deletedAt?: string | null;
 }
 
 export interface Task {
@@ -342,6 +346,8 @@ export interface SupportTicket {
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;
+  // Corbeille (3 septembre) : date de mise à la corbeille, null sinon.
+  deletedAt?: string | null;
 }
 
 export interface SupportTicketMessage {
