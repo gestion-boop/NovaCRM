@@ -112,19 +112,23 @@ const clientDe = (societe: (typeof SOCIETES)[number]): ClientGoogleSociete | nul
  */
 export function etatConfiguration(): Record<
   EntiteGoogle,
-  { presentes: boolean; id: string | null; idValide: boolean; secretValide: boolean; secretLongueur: number }
+  { presentes: boolean; id: string | null; idValide: boolean; idRessembleAUnSecret: boolean; secretValide: boolean; secretLongueur: number }
 > {
   const etat = {} as ReturnType<typeof etatConfiguration>;
   for (const s of SOCIETES) {
     const id = premiereValeur(s.clesId);
     const secret = premiereValeur(s.clesSecret);
+    const idValide = !!id && id.endsWith('.apps.googleusercontent.com');
     etat[s.entite] = {
       presentes: !!id && !!secret,
       // L'ID client n'est pas un secret : il figure dans l'adresse de chaque
-      // écran d'autorisation Google. On l'affiche donc tel quel, pour le
-      // comparer à celui de la console. Le secret, lui, reste caché.
-      id,
-      idValide: !!id && id.endsWith('.apps.googleusercontent.com'),
+      // écran d'autorisation Google. On l'affiche pour le comparer à celui
+      // de la console — mais SEULEMENT s'il a la forme d'un ID : le
+      // 3 septembre, un secret collé dans la variable de l'ID s'est retrouvé
+      // affiché ici. Une valeur d'une autre forme n'est jamais montrée.
+      id: idValide ? id : null,
+      idValide,
+      idRessembleAUnSecret: !!id && id.startsWith('GOCSPX-'),
       secretValide: !!secret && secret.startsWith('GOCSPX-'),
       secretLongueur: secret ? secret.length : 0,
     };
