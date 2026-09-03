@@ -135,9 +135,17 @@ const valeursDe = (societe: (typeof SOCIETES)[number]): { clientId: string | nul
   return { clientId: id, clientSecret: secret, inversees: false };
 };
 
+// Vu en production le 3 septembre (diagnostic de Sylvain) : pour ImmoSphera
+// et Conseils Finances, la variable de l'ID contenait un SECRET (GOCSPX-…),
+// et celle du secret aussi — donc pas d'inversion à corriger, et le CRM
+// envoyait un secret comme client_id : « The OAuth client was not found ».
+// Un ID qui n'a pas la forme d'un ID n'est plus utilisé : la société est
+// traitée comme non configurée, le CRM retombe sur l'ancienne connexion
+// et le diagnostic (etatConfiguration) dit quoi corriger.
 const clientDe = (societe: (typeof SOCIETES)[number]): ClientGoogleSociete | null => {
   const { clientId, clientSecret } = valeursDe(societe);
   if (!clientId || !clientSecret) return null;
+  if (!ressembleAUnId(clientId)) return null;
   return { entite: societe.entite, nom: societe.nom, domaine: societe.domaine, clientId, clientSecret };
 };
 
@@ -148,6 +156,7 @@ const clientDe = (societe: (typeof SOCIETES)[number]): ClientGoogleSociete | nul
 export function etatConfiguration(): Record<
   EntiteGoogle,
   {
+    verdict: string;
     presentes: boolean;
     inversees: boolean;
     id: string | null;
@@ -167,6 +176,18 @@ export function etatConfiguration(): Record<
     const provId = provenance(s.clesId);
     const provSecret = provenance(s.clesSecret);
     etat[s.entite] = {
+      // Verdict en clair, pour ne pas avoir à interpréter les booléens.
+      verdict: !id || !secret
+        ? 'Clés absentes : la société utilise l\'ancienne connexion.'
+        : !idValide
+          ? (ressembleAUnSecret(id)
+              ? `La variable ${provId.source} contient un SECRET (GOCSPX-…) au lieu de l\'identifiant client (…apps.googleusercontent.com) : collez-y l\'ID client de la console Google, puis redéployez.`
+              : `La variable ${provId.source} ne contient pas un identifiant client valide (…apps.googleusercontent.com).`)
+          : !ressembleAUnSecret(secret)
+            ? `La variable ${provSecret.source} ne contient pas un secret client valide (GOCSPX-…).`
+            : inversees
+              ? 'OK (ID et secret étaient inversés, remis dans le bon sens automatiquement — à corriger dans Vercel pour la propreté).'
+              : 'OK.',
       presentes: !!id && !!secret,
       // `true` : les deux variables étaient à l'envers, remises d'aplomb ici.
       inversees,
