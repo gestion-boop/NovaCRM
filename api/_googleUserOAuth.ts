@@ -110,9 +110,20 @@ const clientDe = (societe: (typeof SOCIETES)[number]): ClientGoogleSociete | nul
  * Diagnostic : quelles sociétés ont leurs deux clés dans cet environnement.
  * Uniquement des booléens — jamais une valeur.
  */
-export function etatConfiguration(): Record<EntiteGoogle, boolean> {
-  const etat = {} as Record<EntiteGoogle, boolean>;
-  for (const s of SOCIETES) etat[s.entite] = clientDe(s) !== null;
+export function etatConfiguration(): Record<EntiteGoogle, { presentes: boolean; idValide: boolean; secretValide: boolean }> {
+  const etat = {} as Record<EntiteGoogle, { presentes: boolean; idValide: boolean; secretValide: boolean }>;
+  for (const s of SOCIETES) {
+    const id = premiereValeur(s.clesId);
+    const secret = premiereValeur(s.clesSecret);
+    etat[s.entite] = {
+      presentes: !!id && !!secret,
+      // Forme attendue d'un ID client Google : chiffres, tiret, lettres,
+      // puis « .apps.googleusercontent.com ». Un secret collé à la place
+      // (« GOCSPX-… ») ou une copie tronquée se voient ici tout de suite.
+      idValide: !!id && /^\d+-[a-z0-9_-]+\.apps\.googleusercontent\.com$/i.test(id),
+      secretValide: !!secret && /^GOCSPX-[A-Za-z0-9_-]+$/.test(secret),
+    };
+  }
   return etat;
 }
 
