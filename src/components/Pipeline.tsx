@@ -20,6 +20,9 @@ import {
   useDraggable,
   useDroppable,
   closestCenter,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
 } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -1489,6 +1492,29 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
       }
     };
 
+  // Signalé (3 septembre, pipeline Immosphera) : « le drag and drop n'est
+  // pas bon quand on veut basculer sur la colonne de gauche Récolte docs,
+  // c'est presque impossible ». Cause : `closestCenter` compare la carte au
+  // CENTRE de chaque zone de dépôt. Une colonne de 26 dossiers a son centre
+  // très bas ; une carte lâchée en haut de cette colonne est plus proche du
+  // centre de la petite colonne voisine (180 px de haut), qui gagne. On
+  // regarde d'abord la zone SOUS le pointeur, puis celle que la carte
+  // recouvre, et seulement en dernier recours la plus proche. Les colonnes
+  // (réordonnancement) gardent la règle du centre le plus proche.
+  const detecterColonneDeDepot: CollisionDetection = (args) => {
+    const type = args.active.data.current?.type;
+    if (type === 'card') {
+      const zones = args.droppableContainers.filter((c) => c.data.current?.type === 'dropzone');
+      const sousPointeur = pointerWithin({ ...args, droppableContainers: zones });
+      if (sousPointeur.length) return sousPointeur;
+      const recouvertes = rectIntersection({ ...args, droppableContainers: zones });
+      if (recouvertes.length) return recouvertes;
+      return closestCenter({ ...args, droppableContainers: zones });
+    }
+    const colonnes = args.droppableContainers.filter((c) => c.data.current?.type === 'column');
+    return closestCenter({ ...args, droppableContainers: colonnes.length ? colonnes : args.droppableContainers });
+  };
+
   // Ticket #114/#116 (suivi) : `over.id` peut être soit la zone de dépôt
   // d'une colonne (`dropzone-<stage>`, visée en lâchant une carte), soit
   // directement le nom d'une étape (visée en lâchant une colonne sur une
@@ -1933,7 +1959,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={detecterColonneDeDepot}
           onDragStart={handlePipelineDragStart}
           onDragEnd={(event) => void handlePipelineDragEnd(event)}
           // Ticket #114 (suivi) : la ligne des colonnes a un scroll-snap
