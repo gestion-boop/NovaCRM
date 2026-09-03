@@ -29,7 +29,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, htDepuisTtc, ttcDepuisHt } from '@/lib/utils';
 import { toValidUuidOrNull } from '@/data/teamMembers';
-import { couleurNovavisio } from '@/lib/couleursNovavisio';
+import { couleurNovavisio, couleurEtapeNovavisio, estAgenceNovavisio } from '@/lib/couleursNovavisio';
 // Ticket #277 (suite) : même détection de mode jour que l'accueil, pour que
 // les colonnes du pipeline suivent la même bascule vers de vraies couleurs
 // claires (au lieu du filtre global qui pâlit juste le bleu canard).
@@ -1975,7 +1975,11 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                       0
                     )
                   : 0;
-                const accentColor = STAGE_ACCENT_COLORS[stageIndex % STAGE_ACCENT_COLORS.length];
+                // Novavisio : la colonne prend la couleur de Natacha (par son nom)
+                // pour s'accorder avec ses cartes ; sinon la palette cyclique.
+                const accentColor =
+                  (estAgenceNovavisio(currentAgencyId) && couleurEtapeNovavisio(stage)) ||
+                  STAGE_ACCENT_COLORS[stageIndex % STAGE_ACCENT_COLORS.length];
 
                 return (
                   <PipelineColumn

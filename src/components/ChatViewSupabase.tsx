@@ -470,7 +470,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // cliquables/soulignées, le reste du texte inchangé.
   const URL_REGEX = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
   const IS_URL_REGEX = /^(https?:\/\/|www\.)/;
-  const linkifyText = (text: string): React.ReactNode[] => {
+  // Signalé (3 septembre) : dans la bulle jaune de l'expéditeur, un lien
+  // jaune sur fond jaune ne se voyait pas en mode sombre. `surJaune` passe
+  // le lien en encre foncée, soulignée et en gras.
+  const linkifyText = (text: string, surJaune = false): React.ReactNode[] => {
     const parts = text.split(URL_REGEX);
     return parts.map((part, i) => {
       if (!IS_URL_REGEX.test(part)) return part;
@@ -482,7 +485,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="underline underline-offset-2 text-[#F9C977] hover:text-[#FAD592] break-all"
+          className={`underline underline-offset-2 break-all ${
+            surJaune ? 'text-slate-950 font-bold decoration-slate-950/70 hover:text-black' : 'text-[#F9C977] hover:text-[#FAD592]'
+          }`}
         >
           {part}
         </a>
@@ -2329,7 +2334,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                 </div>
                               ) : (
                                 <>
-                                  {m.kind === 'text' && <p className="whitespace-pre-line">{linkifyText(m.body || '')}</p>}
+                                  {m.kind === 'text' && <p className="whitespace-pre-line">{linkifyText(m.body || '', mine)}</p>}
                                   {/* Signalé (30/08/2026, capture à l'appui) : "comme ils sont gros...
                                       divise par exemple par cinq" — une mascotte Nova envoyée comme
                                       message (insertConvMessage('image', ...)) était traitée
@@ -2749,7 +2754,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             )}
                           </div>
                         ) : (
-                          <p className="whitespace-pre-line">{linkifyText(m.data?.body || '')}</p>
+                          <p className="whitespace-pre-line">{linkifyText(m.data?.body || '', mine)}</p>
                         )}
                       </div>
                       {/* Demande explicite (30/08/2026) : "chaque utilisateur qui

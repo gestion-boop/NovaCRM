@@ -14,6 +14,7 @@ import {
   getCachedAccessToken,
   GmailMessageSummary,
   requestWorkspaceAccessToken,
+  reconnectGoogleWorkspace,
   sendGmailMessage,
   modifyGmailMessageLabels,
   trashGmailMessage,
@@ -1363,14 +1364,29 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
         <div className="flex-1 min-w-0 flex flex-col gap-2 sm:gap-4 min-h-0">
       {/* NOTIFICATIONS */}
       {error && (
-        <div className="shrink-0 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="shrink-0 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>{error}</span>
+            <span className="min-w-0">{error}</span>
           </div>
-          <button onClick={() => setError(null)} className="text-rose-400 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Signalé (3 septembre, Pauline / ImmoSphera) : l'erreur d'accès
+                Google restait affichée sans issue. Le bouton relance
+                l'autorisation Google de sa société, là où l'erreur se voit. */}
+            {/google|workspace|authenti|scope|401|403/i.test(error) && (
+              <button
+                type="button"
+                onClick={() => { void reconnectGoogleWorkspace().catch((e: any) => setError(e?.message || String(e))); }}
+                className="px-3 py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-bold text-xs flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Reconnecter Google
+              </button>
+            )}
+            <button onClick={() => setError(null)} className="text-rose-400 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 

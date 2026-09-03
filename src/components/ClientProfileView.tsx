@@ -2466,17 +2466,40 @@ export default function ClientProfileView({
             <div className="pt-4 border-t border-[#143c3f]/50 space-y-4">
               <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Coordonnées</span>
               <div className="space-y-3">
-                <div className="flex items-center gap-3 text-sm text-slate-300">
-                  <div className="w-8 h-8 rounded-full bg-[#143c3f]/40 flex items-center justify-center text-[#F7BC5F]">
+                {/* Demande (3 septembre) : e-mail et téléphone cliquables et
+                    surlignés — un clic ouvre la messagerie ou lance l'appel
+                    (sur téléphone) au lieu d'obliger à recopier. */}
+                <div className="flex items-center gap-3 text-sm text-slate-300 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-[#143c3f]/40 flex items-center justify-center text-[#F7BC5F] shrink-0">
                     <Mail className="w-4 h-4" />
                   </div>
-                  {client.email}
+                  {client.email ? (
+                    <a
+                      href={`mailto:${client.email}`}
+                      title="Écrire un e-mail"
+                      className="text-[#F9C977] underline underline-offset-2 decoration-[#F9C977]/60 hover:text-[#FAD592] hover:decoration-[#FAD592] break-all"
+                    >
+                      {client.email}
+                    </a>
+                  ) : (
+                    <span className="text-slate-500">—</span>
+                  )}
                 </div>
-                <div className="flex items-center gap-3 text-sm text-slate-300">
-                  <div className="w-8 h-8 rounded-full bg-[#143c3f]/40 flex items-center justify-center text-[#F7BC5F]">
+                <div className="flex items-center gap-3 text-sm text-slate-300 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-[#143c3f]/40 flex items-center justify-center text-[#F7BC5F] shrink-0">
                     <Phone className="w-4 h-4" />
                   </div>
-                  {client.phone}
+                  {client.phone ? (
+                    <a
+                      href={`tel:${String(client.phone).replace(/[^+\d]/g, '')}`}
+                      title="Appeler"
+                      className="text-[#F9C977] underline underline-offset-2 decoration-[#F9C977]/60 hover:text-[#FAD592] hover:decoration-[#FAD592]"
+                    >
+                      {client.phone}
+                    </a>
+                  ) : (
+                    <span className="text-slate-500">—</span>
+                  )}
                 </div>
                 {client.type && (
                   <div className="flex items-center gap-3 text-sm text-slate-300">
