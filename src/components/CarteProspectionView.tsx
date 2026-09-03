@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapPin, Loader2, RefreshCw } from "lucide-react";
+import { MapPin, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
-import { couleurEtapeNovavisio, estEtapeSigneeNovavisio } from "@/lib/couleursNovavisio";
+import { couleurEtapeNovavisio, estEtapeSigneeNovavisio, categorieEtapeNovavisio, type CategorieNovavisio } from "@/lib/couleursNovavisio";
 
 // Onglet "Carte" + tuile d'accueil demandés pour Novavisio, remis en place
 // d'après un ancien backup ("mets pour novavisio la carte comme c'est sur le
@@ -176,7 +176,24 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<LeadPoint[]>([]);
   const [stages, setStages] = useState<Map<string, StageInfo>>(new Map());
-  const [filter, setFilter] = useState<"all" | "signed">("all");
+  // Demande de Sylvain pour Natacha (3 septembre) : filtres par couleur en
+  // haut de la carte, pour relancer les clients d'une couleur donnée, et une
+  // recherche qui ne laisse que le pin du client tapé.
+  const [couleursActives, setCouleursActives] = useState<Set<CategorieNovavisio>>(new Set());
+  const [recherche, setRecherche] = useState("");
+  const basculerCouleur = (c: CategorieNovavisio) =>
+    setCouleursActives((prev) => {
+      const suivant = new Set(prev);
+      if (suivant.has(c)) suivant.delete(c); else suivant.add(c);
+      return suivant;
+    });
+  const categorieDe = (lead: LeadPoint): CategorieNovavisio | null => {
+    const nom = stages.get(lead.stage_id ?? "")?.name;
+    if (isSignedStage(nom)) return "signe";
+    return categorieEtapeNovavisio(nom);
+  };
+  const normaliser = (v: string | null | undefined) =>
+    (v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
   const loadData = async () => {
     if (!isNovavisio) return;
@@ -210,10 +227,37 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
     [leads, stages]
   );
 
+  const compteurs = useMemo(() => {
+    const c: Record<CategorieNovavisio, number> = { signe: 0, attente: 0, discussion: 0, contact: 0 };
+    leads.forEach((l) => { const cat = categorieDe(l); if (cat) c[cat]++; });
+    return c;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads, stages]);
+
   const visibleLeads = useMemo(() => {
-    if (filter === "all") return leads;
-    return leads.filter((l) => isSignedStage(stages.get(l.stage_id ?? "")?.name));
-  }, [leads, stages, filter]);
+    const q = normaliser(recherche.trim());
+    return leads.filter((l) => {
+      if (couleursActives.size > 0) {
+        const cat = categorieDe(l);
+        if (!cat || !couleursActives.has(cat)) return false;
+      }
+      if (q) {
+        const texte = normaliser(`${l.full_name} ${l.email ?? ""} ${l.phone ?? ""}`);
+        if (!texte.includes(q)) return false;
+      }
+      return true;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads, stages, couleursActives, recherche]);
+
+  // Recherche : la carte se recentre sur le ou les pins restants, et zoome
+  // sur le client quand il n'en reste qu'un.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !recherche.trim() || visibleLeads.length === 0) return;
+    const bornes = L.latLngBounds(visibleLeads.map((l) => [l.latitude, l.longitude] as [number, number]));
+    map.fitBounds(bornes, { padding: [60, 60], maxZoom: 15 });
+  }, [visibleLeads, recherche]);
 
   // Init carte (identique au pattern déjà utilisé dans
   // src/immosphera/components/PropertyMap.tsx)
@@ -328,28 +372,64 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
           {loading ? "Chargement…" : `${leads.length} adresse${leads.length > 1 ? "s" : ""} localisée${leads.length > 1 ? "s" : ""} · ${signedCount} signé${signedCount > 1 ? "s" : ""}`}
         </span>
 
-        <div className="flex items-center gap-3 text-[11px] text-muted-foreground px-1">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: SIGNED_COLOR }} />Signé</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: WARM_COLOR }} />Attente de signature</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: "#FACC15" }} />En discussion</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: COLD_COLOR }} />Prise de contact</span>
+        {/* Filtres par couleur : un clic allume une couleur, un autre l'éteint ;
+            plusieurs couleurs peuvent être allumées ; aucune = tout. */}
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+          <button
+            type="button"
+            onClick={() => setCouleursActives(new Set())}
+            className={`px-2.5 h-7 rounded-full border transition-colors ${couleursActives.size === 0 ? "bg-card shadow font-semibold border-border" : "border-border/60 text-muted-foreground hover:bg-foreground/5"}`}
+          >
+            Tous
+          </button>
+          {([
+            ["signe", "Signé", SIGNED_COLOR],
+            ["attente", "Attente de signature", WARM_COLOR],
+            ["discussion", "En discussion", "#FACC15"],
+            ["contact", "Prise de contact", COLD_COLOR],
+          ] as [CategorieNovavisio, string, string][]).map(([cat, libelle, couleur]) => {
+            const actif = couleursActives.has(cat);
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => basculerCouleur(cat)}
+                aria-pressed={actif}
+                title={`${actif ? "Masquer" : "Afficher"} : ${libelle}`}
+                style={actif ? { borderColor: couleur, backgroundColor: `${couleur}22` } : undefined}
+                className={`flex items-center gap-1.5 px-2.5 h-7 rounded-full border transition-colors ${actif ? "font-semibold" : "border-border/60 text-muted-foreground hover:bg-foreground/5"}`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: couleur }} />
+                {libelle}
+                <span className="opacity-70">{compteurs[cat]}</span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <div className="flex items-center rounded-full border border-border/60 bg-foreground/5 p-0.5 text-xs">
-            <button
-              onClick={() => setFilter("all")}
-              className={`px-3 h-7 rounded-full transition-colors ${filter === "all" ? "bg-card shadow font-semibold" : "text-muted-foreground"}`}
-            >
-              Tous
-            </button>
-            <button
-              onClick={() => setFilter("signed")}
-              className={`px-3 h-7 rounded-full transition-colors flex items-center gap-1 ${filter === "signed" ? "bg-card shadow font-semibold" : "text-muted-foreground"}`}
-            >
-              <span className="w-2 h-2 rounded-full" style={{ background: SIGNED_COLOR }} />
-              Signés
-            </button>
+          {/* Recherche : ne laisse que le ou les pins dont le nom, l'e-mail ou
+              le téléphone contient ce qui est tapé, et zoome dessus. */}
+          <div className="relative">
+            <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={recherche}
+              onChange={(e) => setRecherche(e.target.value)}
+              placeholder="Un client sur la carte…"
+              aria-label="Rechercher un client sur la carte"
+              className="h-8 w-44 sm:w-56 rounded-full border border-border/60 bg-foreground/5 pl-8 pr-7 text-xs outline-none focus:border-[#F7BC5F]"
+            />
+            {recherche && (
+              <button
+                type="button"
+                onClick={() => setRecherche("")}
+                aria-label="Effacer la recherche"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:bg-foreground/10"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
           <button
             onClick={loadData}
@@ -373,6 +453,11 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
             <p className="text-sm text-muted-foreground max-w-xs">
               Aucune adresse localisée pour l'instant. Renseignez une adresse sur une fiche client pour qu'elle apparaisse ici.
             </p>
+          </div>
+        )}
+        {!loading && leads.length > 0 && visibleLeads.length === 0 && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] px-3 py-1.5 rounded-full bg-card/95 border border-border text-xs shadow">
+            Aucun client ne correspond {recherche.trim() ? `à « ${recherche.trim()} »` : "à ces couleurs"}.
           </div>
         )}
         <div ref={mapContainerRef} className="absolute inset-0" />

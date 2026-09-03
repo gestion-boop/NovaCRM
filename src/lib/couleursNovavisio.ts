@@ -25,6 +25,17 @@ export const couleurEtapeNovavisio = (nomEtape: string | null | undefined): stri
   if (nom.includes('contact') || nom.includes('nouveau')) return COULEURS_NOVAVISIO.bleu;
   return null;
 };
+// Catégorie du code couleur portée par le nom d'une étape — pour les filtres
+// de la carte de prospection (relancer par couleur).
+export type CategorieNovavisio = 'signe' | 'attente' | 'discussion' | 'contact';
+export const categorieEtapeNovavisio = (nomEtape: string | null | undefined): CategorieNovavisio | null => {
+  const nom = sansAccentsMin(nomEtape || '');
+  if (nom.includes('attente')) return 'attente';
+  if (nom.includes('sign')) return 'signe';
+  if (nom.includes('discussion') || nom.includes('negoci') || nom.includes('echange')) return 'discussion';
+  if (nom.includes('contact') || nom.includes('nouveau')) return 'contact';
+  return null;
+};
 export const estAgenceNovavisio = (agencyId: string | null | undefined) => matchesAgency(agencyId || '', NOVAVISIO_AGENCY_ID);
 export const couleurNovavisio = (deal: Pick<Deal, 'agencyId' | 'stage' | 'signedAt'>): string | null => {
   if (!estAgenceNovavisio(deal.agencyId)) return null;
