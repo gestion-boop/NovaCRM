@@ -485,8 +485,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
+          // Couleur posée en style direct : aucune règle de thème ne peut
+          // la repasser en jaune sur la bulle jaune.
+          style={surJaune ? { color: '#0b1719', textDecorationColor: '#0b1719' } : undefined}
           className={`underline underline-offset-2 break-all ${
-            surJaune ? 'text-slate-950 font-bold decoration-slate-950/70 hover:text-black' : 'text-[#F9C977] hover:text-[#FAD592]'
+            surJaune ? 'font-bold hover:opacity-80' : 'text-[#F9C977] hover:text-[#FAD592]'
           }`}
         >
           {part}
