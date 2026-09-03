@@ -12,6 +12,7 @@ import TransactionChecklistModal, {
 } from './TransactionChecklistModal';
 import { ClipboardList } from 'lucide-react';
 import { couleurEtapeNovavisio, estAgenceNovavisio } from '@/lib/couleursNovavisio';
+import { clicMailCrm } from '@/lib/composerMail';
 import { ChevronLeft, ChevronDown, Plus, Mail, Phone, Calendar, User, UserCheck, UserPlus, Pencil, Trash2, CheckCircle, Circle, FileEdit, Save, Clock, Check, CheckCheck, Mic, MicOff, Square, Pin, GripVertical, MessageSquare, X, FileText, Upload, Download, Folder, Eye, Lock, Share2, Send, UserX, Smile, Image as ImageIcon, Video as VideoIcon, Paperclip, ClipboardCheck, Landmark, Archive, ArchiveRestore, Copy, Loader2, ShieldCheck, Flame, Sun, Snowflake, MoreVertical } from 'lucide-react';
 
 // Sélecteur Chaud/Tiède/Froid de la fiche client — même logique que la
@@ -2497,7 +2498,8 @@ export default function ClientProfileView({
                   {client.email ? (
                     <a
                       href={`mailto:${client.email}`}
-                      title="Écrire un e-mail"
+                      onClick={clicMailCrm(client.email)}
+                      title="Écrire depuis la boîte Mail du CRM"
                       className="text-[#F9C977] underline underline-offset-2 decoration-[#F9C977]/60 hover:text-[#FAD592] hover:decoration-[#FAD592] break-all"
                     >
                       {client.email}

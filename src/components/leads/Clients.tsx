@@ -1,4 +1,5 @@
 import { matchesAgency } from "@/hooks/useContacts";
+import { clicMailCrm } from '@/lib/composerMail';
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
@@ -585,8 +586,8 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                       <Mail className="w-4 h-4 shrink-0 text-primary/60" />
                       <a
                         href={`mailto:${l.email}`}
-                        title="Écrire un e-mail"
-                        onClick={(e) => e.stopPropagation()}
+                        title="Écrire depuis la boîte Mail du CRM"
+                        onClick={clicMailCrm(l.email)}
                         className="truncate text-primary underline underline-offset-2 decoration-primary/50 hover:decoration-primary"
                       >
                         {l.email}

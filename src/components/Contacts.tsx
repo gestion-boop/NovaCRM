@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { clicMailCrm } from '@/lib/composerMail';
 import { supabase } from '@/lib/supabase';
 import { Contact, Deal, AGENCIES } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
@@ -561,7 +562,7 @@ export default function Contacts({
                         <div className="text-[10px] text-slate-400 flex flex-wrap gap-x-3 gap-y-1 mt-0.5">
                           {/* Demande (3 septembre) : e-mail et téléphone cliquables et surlignés. */}
                           <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5 text-slate-500" />{' '}
-                            {c.email ? <a href={`mailto:${c.email}`} onClick={(e) => e.stopPropagation()} className="text-[#F9C977] underline underline-offset-2 decoration-[#F9C977]/50 hover:text-[#FAD592]">{c.email}</a> : '—'}
+                            {c.email ? <a href={`mailto:${c.email}`} onClick={clicMailCrm(c.email)} title="Écrire depuis la boîte Mail du CRM" className="text-[#F9C977] underline underline-offset-2 decoration-[#F9C977]/50 hover:text-[#FAD592]">{c.email}</a> : '—'}
                           </span>
                           <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-500" />{' '}
                             {c.phone ? <a href={`tel:${String(c.phone).replace(/[^+\d]/g, '')}`} onClick={(e) => e.stopPropagation()} className="text-[#F9C977] underline underline-offset-2 decoration-[#F9C977]/50 hover:text-[#FAD592]">{c.phone}</a> : '—'}

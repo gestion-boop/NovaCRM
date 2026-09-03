@@ -52,6 +52,7 @@ import MobileBottomNav from './components/MobileBottomNav';
 import PublicQuestionnaire from './components/PublicQuestionnaire';
 import PublicConsentement from './components/PublicConsentement';
 import PublicVisiteImmosphera from './immosphera/pages/TourView';
+import { EVENEMENT_COMPOSER_MAIL } from './lib/composerMail';
 import UpdateBanner from './components/UpdateBanner';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
@@ -649,6 +650,21 @@ function App() {
   const [highlightPulse, setHighlightPulse] = useState(0);
   const [mailFullScreen, setMailFullScreen] = useState(false);
   const [mailComposeTo, setMailComposeTo] = useState<string | null>(null);
+  // Clic sur une adresse e-mail n'importe où dans le CRM : ouvre Mail du
+  // CRM avec le destinataire, jamais l'application mail du poste.
+  useEffect(() => {
+    const ouvrir = (e: Event) => {
+      const email = (e as CustomEvent<{ email?: string }>).detail?.email;
+      if (!email) return;
+      setMailComposeTo(email);
+      setSelectedClientProfileId(null);
+      setSelectedClientProfileTab(undefined);
+      setNovaOpen(false);
+      setCurrentNav('mail');
+    };
+    window.addEventListener(EVENEMENT_COMPOSER_MAIL, ouvrir);
+    return () => window.removeEventListener(EVENEMENT_COMPOSER_MAIL, ouvrir);
+  }, []);
   // Incrémenté par le « + » de la barre du bas (mobile) : ouvre un nouveau
   // message vide dans MailView. Un compteur plutôt qu'un booléen, pour que
   // deux demandes successives se distinguent l'une de l'autre.
