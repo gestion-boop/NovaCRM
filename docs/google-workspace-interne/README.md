@@ -29,3 +29,18 @@ Piège rencontré le 2 septembre : des variables saisies dans l'onglet
 lui sont pas rattachées. Les saisir dans le projet `crm-novasphere-v2`
 (Settings → Environment Variables, onglet « Project »), Production et
 Preview cochés, puis redéployer.
+
+## L'ancienne application (connexion au CRM)
+
+Depuis le 2 septembre, la connexion au CRM (bouton « Se connecter avec
+Google », client réglé dans Supabase → Authentication → Providers → Google)
+ne demande plus que l'identité : `email`, `profile`, `openid`. Elle peut
+donc être publiée sans vérification, ce qui retire l'écran « Google n'a pas
+validé cette application » à la connexion :
+
+1. Google Auth Platform du projet d'origine → « Accès aux données » : ne
+   garder que `email`, `profile`, `openid`.
+2. « Audience » → « Publier l'application » (statut : Production).
+
+Les accès Gmail, Drive et Agenda, eux, passent par l'application interne de
+chaque société (bouton « Reconnecter Google » dans le CRM).
