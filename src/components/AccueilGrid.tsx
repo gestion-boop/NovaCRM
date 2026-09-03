@@ -1488,14 +1488,26 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   const rootSlotsKeyRef = useRef(ROOT_SLOTS_KEY);
   const rootSlotsRef = useRef(rootSlots);
   useEffect(() => { rootSlotsRef.current = rootSlots; }, [rootSlots]);
-  useEffect(() => {
-    if (rootSlotsKeyRef.current === ROOT_SLOTS_KEY) return;
+  // Remontée ici (elle vivait plus bas, juste avant l'effet qui date les
+  // versions) pour que le rechargement ci-dessous, posé pendant le rendu,
+  // puisse déjà s'en servir.
+  const derniersSlotsRef = useRef(JSON.stringify(rootSlots));
+  // 3 septembre : rechargement posé PENDANT LE RENDU, plus dans un effet —
+  // signalé « en changeant de société, les tuiles/logos de l'accueil se
+  // décalent, la nouvelle page n'arrive pas fluide ». Un effet s'exécute
+  // après que le navigateur a déjà peint l'écran : la grille de l'ANCIENNE
+  // société restait donc affichée un instant sous la nouvelle clé, avant de
+  // sauter vers la bonne grille au rendu suivant — d'où le décalage visible.
+  // En comparant la clé ici, un changement de société fait annuler ce rendu
+  // intermédiaire par React, qui repart aussitôt avec la bonne grille sans
+  // jamais peindre celle de l'ancienne société (voir la même technique
+  // juste en dessous pour `tiles`/HOME_TILES_KEY).
+  if (rootSlotsKeyRef.current !== ROOT_SLOTS_KEY) {
     rootSlotsKeyRef.current = ROOT_SLOTS_KEY;
     const recharges = loadRootSlots(ROOT_SLOTS_KEY, tiles);
     derniersSlotsRef.current = JSON.stringify(recharges);
     setRootSlots(recharges);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ROOT_SLOTS_KEY]);
+  }
   // Nouvelle tuile ajoutée à `tiles` après le montage (raccourci créé,
   // dossier créé...) et absente des slots déjà en mémoire : même logique
   // de comblement que loadRootSlots, réappliquée à chaud.
@@ -1515,11 +1527,11 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles]);
-  // Dernière valeur réellement enregistrée (sérialisée) : l'effet ci-dessous
-  // ne date une version que si elle a changé, pas au simple (re)montage —
-  // sinon la grille du navigateur passerait toujours pour plus récente que
-  // celle du serveur, et la synchronisation entre appareils ne jouerait plus.
-  const derniersSlotsRef = useRef(JSON.stringify(rootSlots));
+  // `derniersSlotsRef` (déclaré plus haut, avec le rechargement pendant le
+  // rendu) : l'effet ci-dessous ne date une version que si elle a changé,
+  // pas au simple (re)montage — sinon la grille du navigateur passerait
+  // toujours pour plus récente que celle du serveur, et la synchronisation
+  // entre appareils ne jouerait plus.
   useEffect(() => {
     const serialise = JSON.stringify(rootSlots);
     const change = serialise !== derniersSlotsRef.current;
@@ -1678,16 +1690,26 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // depuis le chargement serveur asynchrone ci-dessus.
   const tilesRef = useRef(tiles);
   const derniersTilesRef = useRef(JSON.stringify(tiles));
-  useEffect(() => {
-    if (homeTilesKeyRef.current === HOME_TILES_KEY) return;
+  // 3 septembre : rechargement posé PENDANT LE RENDU, plus dans un effet —
+  // signalé « en changeant de société, les tuiles/logos de l'accueil se
+  // décalent, la nouvelle page n'arrive pas fluide ». Un effet ne s'exécute
+  // qu'après que le navigateur a déjà peint l'écran : la grille de
+  // l'ANCIENNE société restait donc affichée un instant sous la nouvelle
+  // clé, avant de sauter vers la bonne grille au rendu suivant — exactement
+  // le décalage/saccade signalés. En comparant la clé ici, React annule ce
+  // rendu intermédiaire et repart aussitôt avec la bonne grille, sans
+  // jamais peindre celle de l'ancienne société.
+  // Le `setOpenFolderStack([])` qui vivait ici a été retiré : redondant
+  // avec l'effet dédié un peu plus bas (`[activeAgency?.id]`, « je ne peux
+  // pas cliquer sur les maisons »), qui couvre déjà exactement ce cas —
+  // `HOME_TILES_KEY` change précisément quand `activeAgency?.id` change.
+  if (homeTilesKeyRef.current !== HOME_TILES_KEY) {
     homeTilesKeyRef.current = HOME_TILES_KEY;
     skipNextTilesSaveRef.current = true;
     const rechargees = loadTilesForKey(HOME_TILES_KEY);
     derniersTilesRef.current = JSON.stringify(rechargees);
     setTiles(rechargees);
-    setOpenFolderStack([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [HOME_TILES_KEY]);
+  }
 
   // La tuile Immosphera 360 ne doit apparaître QUE pour les utilisateurs de
   // l'agence Immosphera (tous rôles confondus, admin d'agence inclus) —
