@@ -1235,6 +1235,14 @@ textarea[class]:not([class~="bg-transparent"]) {
   .nova-mascotte { --nova-size: 150px; }
 }
 
+/* Mascotte « fixe » (demande du 3 septembre) : image immobile, sans
+   flottement ni aura animée, quel que soit l'état. */
+.nova-mascotte[data-fixe="true"] .nova-plus__image,
+.nova-mascotte[data-fixe="true"]::before {
+  animation: none !important;
+  transform: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .nova-mascotte *, .nova-mascotte::before { animation: none !important; transition: none !important; }
 }

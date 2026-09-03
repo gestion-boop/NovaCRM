@@ -32,9 +32,12 @@ interface NovaMascotteProps {
   /** État piloté depuis l'extérieur (ex. "thinking" pendant que Nova répond).
    *  Laisser vide pour l'animation d'attente automatique uniquement. */
   state?: NovaState;
+  /** Demande de Sylvain (3 septembre) : « laisse le logo Nova fixe » — pas de
+   *  flottement, pas d'aura qui respire, pas de clignements aléatoires. */
+  fixe?: boolean;
 }
 
-const NovaMascotte = ({ taille = 220, className = '', state: controlledState }: NovaMascotteProps) => {
+const NovaMascotte = ({ taille = 220, className = '', state: controlledState, fixe = false }: NovaMascotteProps) => {
   const [autoState, setAutoState] = useState<NovaState>('idle');
   const [changing, setChanging] = useState(false);
   const idleTimerRef = useRef<number | null>(null);
@@ -43,7 +46,7 @@ const NovaMascotte = ({ taille = 220, className = '', state: controlledState }: 
   // Boucle d'attente naturelle — seulement quand rien n'est piloté depuis
   // l'extérieur (sinon on respecte l'état réel de Nova : réflexion, parole...).
   useEffect(() => {
-    if (controlledState) return;
+    if (controlledState || fixe) return;
     const scheduleNext = () => {
       idleTimerRef.current = window.setTimeout(() => {
         const choice = IDLE_LOOP_CHOICES[Math.floor(Math.random() * IDLE_LOOP_CHOICES.length)];
@@ -57,7 +60,7 @@ const NovaMascotte = ({ taille = 220, className = '', state: controlledState }: 
     return () => {
       if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current);
     };
-  }, [controlledState]);
+  }, [controlledState, fixe]);
 
   const activeState = controlledState || autoState;
   const prevStateRef = useRef(activeState);
@@ -78,6 +81,7 @@ const NovaMascotte = ({ taille = 220, className = '', state: controlledState }: 
       className={`nova-mascotte ${className}`}
       style={{ ['--nova-size' as string]: `${taille}px` }}
       data-state={activeState}
+      data-fixe={fixe ? 'true' : 'false'}
       data-changing={changing ? 'true' : 'false'}
       role="img"
       aria-label="Nova, assistant IA Nova CRM"

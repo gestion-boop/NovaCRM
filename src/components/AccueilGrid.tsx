@@ -3271,8 +3271,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               // Taille doublée (2.25rem -> 4.5rem) + léger mouvement de
               // flottement continu pour attirer l'œil, demandés en plus du
               // tiroir du #59.
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+              // Demande (3 septembre) : « laisse le logo Nova fixe » — plus de
+              // flottement continu ; seuls le survol et l'appui réagissent.
               whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.95 }}
               className="w-[5.5rem] h-[5.5rem] shrink-0 z-10"
@@ -3281,7 +3281,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                   image figée — clignement des yeux et petits gestes
                   automatiques pendant les temps morts. Taille légèrement
                   augmentée (72 → 88) sur demande explicite. */}
-              <NovaMascotte taille={88} />
+              <NovaMascotte taille={88} fixe />
             </motion.button>
             <AnimatePresence>
               {novaBarOpen && (

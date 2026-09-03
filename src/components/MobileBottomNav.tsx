@@ -75,12 +75,14 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         </button>
       )}
 
+      {/* Demande (3 septembre) : logo Nova fixe, taille alignée sur les
+          autres entrées de la barre (icône 32 px + libellé ≈ 60 px). */}
       <button
         onClick={onOpenNova}
         title="Nova"
-        className="flex items-center justify-center active:scale-95 transition-transform"
+        className="flex items-center justify-center h-[60px] w-[60px] active:scale-95 transition-transform"
       >
-        <NovaMascotte taille={56} />
+        <NovaMascotte taille={60} fixe />
       </button>
 
       <button
