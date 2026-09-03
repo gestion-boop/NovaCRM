@@ -1846,14 +1846,29 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       .eq('agency_id', activeAgency.id)
       .maybeSingle();
     const nextHomeLayout = { ...((existing?.home_layout as any) || {}), lockedTiles: next };
-    const { error } = await supabase
+    // 3 septembre : un UPDATE refusé par la sécurité de la base, ou sans
+    // ligne pour cette agence, ne renvoie aucune erreur — zéro ligne
+    // modifiée, et le verrou revenait au rechargement suivant comme si de
+    // rien n'était (« je dissous le dossier, rien ne fonctionne »). On
+    // redemande la ligne écrite ; si elle manque, on la crée ; et si la base
+    // refuse, on le dit au lieu de faire comme si.
+    const { data: ecrites, error } = await supabase
       .from('agency_ui_settings')
       .update({ home_layout: nextHomeLayout, updated_at: new Date().toISOString() })
-      .eq('agency_id', activeAgency.id);
-    if (error) {
-      console.error('Erreur verrouillage tuile :', error);
+      .eq('agency_id', activeAgency.id)
+      .select('agency_id');
+    let echec: string | null = error ? error.message : null;
+    if (!error && (!ecrites || ecrites.length === 0)) {
+      const { error: errInsert } = await supabase
+        .from('agency_ui_settings')
+        .insert({ agency_id: activeAgency.id, home_layout: nextHomeLayout, updated_at: new Date().toISOString() } as any)
+        .select('agency_id');
+      if (errInsert) echec = `réglages de l'agence introuvables et impossibles à créer (${errInsert.message})`;
+    }
+    if (echec) {
+      console.error('Erreur verrouillage tuile :', echec);
       setLockedTiles(precedent);
-      toast.error(`Verrou non enregistré : ${error.message}`);
+      toast.error(`Verrou non enregistré : ${echec}`);
     }
   };
 
@@ -2597,6 +2612,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     setTiles(apresDissolution);
     synchroniserVerrous(apresDissolution, verrousRestants);
     setOpenFolderStack(prev => prev.filter(f => f.id !== folderId));
+    // 3 septembre (Conseils Finances : « je veux dissoudre le dossier, rien
+    // ne fonctionne ») : un dossier FOURNI avec le CRM (Stratégie & Ventes,
+    // Communication & Mails…) dissous disparaît de la grille… et la règle des
+    // « nouveautés » du 2 septembre le reposait aussitôt à l'affichage, avec
+    // ses cartes d'origine, puisqu'il est absent de la grille sans être
+    // masqué. On le retient donc comme masqué : ses cartes restent à
+    // l'accueil, lui ne revient plus, et il reste récupérable dans
+    // Paramètres → Réafficher.
+    if (findInitialTile(folderId)) {
+      void masquerTuile(currentUser?.uid, { ...folderToDissolve, children: [] }).then(() => setVersionMasquees((v) => v + 1));
+    }
   };
 
   // Visibilité d'une tuile selon l'agence active — appliquée RÉCURSIVEMENT
