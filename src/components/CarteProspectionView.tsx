@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import { MapPin, Loader2, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import { couleurEtapeNovavisio, estEtapeSigneeNovavisio } from "@/lib/couleursNovavisio";
 
 // Onglet "Carte" + tuile d'accueil demandés pour Novavisio, remis en place
 // d'après un ancien backup ("mets pour novavisio la carte comme c'est sur le
@@ -45,13 +46,19 @@ interface StageInfo {
   color: string;
 }
 
+// Signalé (3 septembre) : « En attente signature devis » contenait « sign »
+// et passait pour signé — pin vert. La règle est maintenant celle du
+// pipeline de Natacha (src/lib/couleursNovavisio) : signé = vert, attente
+// de signature = orange, en discussion = jaune, prise de contact = bleu.
+// La température ne sert plus que de repli quand l'étape n'a pas de couleur.
 function isSignedStage(name: string | undefined | null): boolean {
-  if (!name) return false;
-  return /sign/i.test(name);
+  return estEtapeSigneeNovavisio(name || "");
 }
 
-function getPinColor(lead: LeadPoint, signed: boolean): string {
+function getPinColor(lead: LeadPoint, signed: boolean, stageName?: string | null): string {
   if (signed) return SIGNED_COLOR;
+  const parEtape = couleurEtapeNovavisio(stageName || undefined);
+  if (parEtape) return parEtape;
   if (lead.temperature === "chaud" || lead.temperature === "tiede") return WARM_COLOR;
   if (lead.temperature === "froid") return COLD_COLOR;
   return DEFAULT_COLOR;
@@ -235,7 +242,7 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
     visibleLeads.forEach((lead) => {
       const stage = stages.get(lead.stage_id ?? "");
       const signed = isSignedStage(stage?.name);
-      const color = getPinColor(lead, signed);
+      const color = getPinColor(lead, signed, stage?.name);
       const marker = L.marker([lead.latitude, lead.longitude], {
         icon: createPinIcon(color, signed),
       });
@@ -243,9 +250,11 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
       const address = addressFromCompany(lead.company);
       const statusLabel = signed
         ? "✔ Signé"
-        : lead.temperature
-          ? TEMPERATURE_LABEL[lead.temperature]
-          : stage?.name || "";
+        : couleurEtapeNovavisio(stage?.name || undefined)
+          ? stage?.name || ""
+          : lead.temperature
+            ? TEMPERATURE_LABEL[lead.temperature]
+            : stage?.name || "";
       // Infobulle au SURVOL plutôt que fenêtre au clic : le clic, lui, ouvre
       // la vraie fiche (voir juste en dessous). Sur mobile, où il n'y a pas
       // de survol, Leaflet l'affiche au premier appui.
@@ -321,8 +330,9 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
 
         <div className="flex items-center gap-3 text-[11px] text-muted-foreground px-1">
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: SIGNED_COLOR }} />Signé</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: WARM_COLOR }} />Tiède / chaud</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: COLD_COLOR }} />Froid</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: WARM_COLOR }} />Attente de signature</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: "#FACC15" }} />En discussion</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: COLD_COLOR }} />Prise de contact</span>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
