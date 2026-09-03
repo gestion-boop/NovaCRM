@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Edit, Inbox, Loader2, Mail, RefreshCw, Reply, ReplyAll, Forward, Search, Send, X,
+  Edit, Inbox, Loader2, Mail, RefreshCw, Reply, ReplyAll, Forward, Send, X,
   Trash2, AlertTriangle, Star, CheckCircle2, ShieldAlert, Archive, Eye, EyeOff,
   CornerUpLeft, SendHorizontal, FileText, ChevronRight, ChevronLeft, Sparkles,
   MailOpen, FolderOpen, ChevronDown,
@@ -1081,7 +1081,13 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
       {/* ONGLETS PRINCIPAUX — remplace l'ancienne barre d'en-tête séparée
           (titre "Mail" + recherche + actions), fusionnée ici pour libérer
           une ligne entière au profit de la lecture du mail. */}
-      <div className="shrink-0 flex items-center gap-2 bg-[#071f21] border border-[#1c4448] p-1.5 rounded-2xl relative overflow-x-auto">
+      {/* Signalé (03/09/2026) : sur ordinateur, cette rangée ne portait plus
+          que la petite recherche Gmail (jugée inutile : elle ne filtrait que
+          les messages déjà chargés) et le bouton Actualiser. Elle est donc
+          masquée sur grand écran tant qu'aucun message n'est ouvert ; la
+          recherche reste dans la liste mobile et Actualiser passe dans la
+          colonne latérale. */}
+      <div className={`${selectedMail ? '' : 'lg:hidden '}shrink-0 flex items-center gap-2 bg-[#071f21] border border-[#1c4448] p-1.5 rounded-2xl relative overflow-x-auto`}>
         {/* Ticket #32 (nouvelle base) : ces onglets restaient affichés même
             en train de lire un message, poussant le bouton "Retour" hors de
             l'écran sur mobile (toute la ligne défilait horizontalement) —
@@ -1162,19 +1168,6 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
           </div>
         )}
 
-        {!selectedMail && (
-          <div className="relative w-full sm:w-56 md:w-72 shrink-0 ml-auto">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Rechercher dans Gmail..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-[#0b292b] border border-[#1c4448] rounded-xl text-xs text-white focus:outline-none focus:border-[#F7BC5F]/60 placeholder:text-slate-500"
-            />
-          </div>
-        )}
-
         {selectedMail && (
           <div className="flex items-center gap-1.5 pl-2 ml-1 border-l border-white/10 shrink-0 flex-wrap">
             <button
@@ -1251,7 +1244,7 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
           </div>
         )}
 
-        <div className="flex items-center gap-2 shrink-0 pl-2 ml-1 border-l border-white/10">
+        <div className="flex items-center gap-2 shrink-0 pl-2 ml-1 border-l border-white/10 ml-auto">
           <button
             onClick={() => void loadMails(activeFolder)}
             disabled={loading}
@@ -1294,6 +1287,15 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
           >
             <Edit className="w-4.5 h-4.5" />
             Nouveau message
+          </button>
+          <button
+            onClick={() => void loadMails(activeFolder)}
+            disabled={loading}
+            title="Actualiser"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#F7BC5F]' : ''}`} />
+            Actualiser
           </button>
 
           <nav className="space-y-0.5">

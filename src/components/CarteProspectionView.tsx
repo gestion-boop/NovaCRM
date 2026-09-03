@@ -397,20 +397,20 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
         }
       `}</style>
 
-      <div className="flex flex-wrap items-center gap-2 px-3 sm:px-6 pt-3 pb-2 border-b border-border">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 px-3 sm:px-6 pt-3 pb-2.5 border-b border-border">
         <MapPin className="h-4 w-4 text-emerald-600" />
-        <h1 className="text-sm font-semibold">Carte de prospection</h1>
-        <span className="text-xs text-muted-foreground">
+        <h1 className="text-sm sm:text-base font-semibold">Carte de prospection</h1>
+        <span className="text-xs sm:text-sm text-muted-foreground">
           {loading ? "Chargement…" : `${leads.length} adresse${leads.length > 1 ? "s" : ""} localisée${leads.length > 1 ? "s" : ""} · ${signedCount} signé${signedCount > 1 ? "s" : ""}`}
         </span>
 
         {/* Filtres par couleur : un clic allume une couleur, un autre l'éteint ;
             plusieurs couleurs peuvent être allumées ; aucune = tout. */}
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[11px] sm:text-sm">
           <button
             type="button"
             onClick={() => setCouleursActives(new Set())}
-            className={`px-2.5 h-7 rounded-full border transition-colors ${couleursActives.size === 0 ? "bg-card shadow font-semibold border-border" : "border-border/60 text-muted-foreground hover:bg-foreground/5"}`}
+            className={`px-2.5 sm:px-4 h-7 sm:h-9 rounded-full border transition-colors ${couleursActives.size === 0 ? "bg-card shadow font-semibold border-border" : "border-border/60 text-muted-foreground hover:bg-foreground/5"}`}
           >
             Tous
           </button>
@@ -429,11 +429,11 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
                 aria-pressed={actif}
                 title={`${actif ? "Masquer" : "Afficher"} : ${libelle}`}
                 style={actif ? { borderColor: couleur, backgroundColor: `${couleur}22` } : undefined}
-                className={`flex items-center gap-1.5 px-2.5 h-7 rounded-full border transition-colors ${actif ? "font-semibold" : "border-border/60 text-muted-foreground hover:bg-foreground/5"}`}
+                className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 h-7 sm:h-9 rounded-full border transition-colors ${actif ? "font-semibold" : "border-border/60 text-muted-foreground hover:bg-foreground/5"}`}
               >
-                <span className="w-2.5 h-2.5 rounded-full" style={{ background: couleur }} />
+                <span className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 rounded-full shadow-[0_0_0_2px_rgba(255,255,255,0.35)]" style={{ background: couleur }} />
                 {libelle}
-                <span className="opacity-70">{compteurs[cat]}</span>
+                <span className="opacity-70 font-semibold">{compteurs[cat]}</span>
               </button>
             );
           })}
@@ -450,7 +450,7 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
               onChange={(e) => setRecherche(e.target.value)}
               placeholder="Un client sur la carte…"
               aria-label="Rechercher un client sur la carte"
-              className="h-8 w-44 sm:w-56 rounded-full border border-border/60 bg-foreground/5 pl-8 pr-7 text-xs outline-none focus:border-[#F7BC5F]"
+              className="h-8 sm:h-9 w-44 sm:w-56 rounded-full border border-border/60 bg-foreground/5 pl-8 pr-7 text-xs sm:text-sm outline-none focus:border-[#F7BC5F]"
             />
             {recherche && (
               <button
@@ -465,7 +465,7 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
           </div>
           <button
             onClick={loadData}
-            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-xs font-semibold border border-border/60 bg-foreground/5 hover:bg-foreground/10 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 sm:px-4 h-8 sm:h-9 rounded-full text-xs sm:text-sm font-semibold border border-border/60 bg-foreground/5 hover:bg-foreground/10 transition-colors"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             Actualiser
