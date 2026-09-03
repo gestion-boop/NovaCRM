@@ -14,12 +14,17 @@ const COULEURS_NOVAVISIO = { vert: '#22C55E', orange: '#F97316', jaune: '#FACC15
 const sansAccentsMin = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 export const couleurNovavisio = (deal: Pick<Deal, 'agencyId' | 'stage' | 'signedAt'>): string | null => {
   if (!matchesAgency(deal.agencyId || '', NOVAVISIO_AGENCY_ID)) return null;
-  if (deal.signedAt) return COULEURS_NOVAVISIO.vert;
+  // Le NOM de l'étape prime : un dossier rangé dans « En attente signature
+  // devis » est orange même s'il a déjà été marqué signé un jour (archivage,
+  // passage par « Signé » puis retour en arrière). Le marqueur signed_at
+  // ne joue que pour les étapes sans mot-clé — celles du pipeline officiel —
+  // afin que la carte y reste verte.
   const nom = sansAccentsMin(deal.stage || '');
   if (nom.includes('attente')) return COULEURS_NOVAVISIO.orange;
   if (nom.includes('sign')) return COULEURS_NOVAVISIO.vert;
   if (nom.includes('discussion') || nom.includes('negoci') || nom.includes('echange')) return COULEURS_NOVAVISIO.jaune;
   if (nom.includes('contact') || nom.includes('nouveau')) return COULEURS_NOVAVISIO.bleu;
+  if (deal.signedAt) return COULEURS_NOVAVISIO.vert;
   return null;
 };
 export const estEtapeSigneeNovavisio = (nomEtape: string) => {
