@@ -99,9 +99,24 @@ const normaliser = (texte: string): string =>
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '');
 
+const ressembleAUnId = (v: string) => v.endsWith('.apps.googleusercontent.com');
+const ressembleAUnSecret = (v: string) => v.startsWith('GOCSPX-');
+
+// Les deux valeurs d'une société, remises dans le bon sens si elles ont été
+// saisies à l'envers (vécu le 3 septembre : l'ID dans la variable du secret
+// et le secret dans celle de l'ID). Une valeur qui n'a la forme ni d'un ID
+// ni d'un secret est laissée telle quelle.
+const valeursDe = (societe: (typeof SOCIETES)[number]): { clientId: string | null; clientSecret: string | null; inversees: boolean } => {
+  const id = premiereValeur(societe.clesId);
+  const secret = premiereValeur(societe.clesSecret);
+  if (id && secret && ressembleAUnSecret(id) && ressembleAUnId(secret)) {
+    return { clientId: secret, clientSecret: id, inversees: true };
+  }
+  return { clientId: id, clientSecret: secret, inversees: false };
+};
+
 const clientDe = (societe: (typeof SOCIETES)[number]): ClientGoogleSociete | null => {
-  const clientId = premiereValeur(societe.clesId);
-  const clientSecret = premiereValeur(societe.clesSecret);
+  const { clientId, clientSecret } = valeursDe(societe);
   if (!clientId || !clientSecret) return null;
   return { entite: societe.entite, nom: societe.nom, domaine: societe.domaine, clientId, clientSecret };
 };
@@ -112,15 +127,16 @@ const clientDe = (societe: (typeof SOCIETES)[number]): ClientGoogleSociete | nul
  */
 export function etatConfiguration(): Record<
   EntiteGoogle,
-  { presentes: boolean; id: string | null; idValide: boolean; idRessembleAUnSecret: boolean; secretValide: boolean; secretLongueur: number }
+  { presentes: boolean; inversees: boolean; id: string | null; idValide: boolean; idRessembleAUnSecret: boolean; secretValide: boolean; secretLongueur: number }
 > {
   const etat = {} as ReturnType<typeof etatConfiguration>;
   for (const s of SOCIETES) {
-    const id = premiereValeur(s.clesId);
-    const secret = premiereValeur(s.clesSecret);
-    const idValide = !!id && id.endsWith('.apps.googleusercontent.com');
+    const { clientId: id, clientSecret: secret, inversees } = valeursDe(s);
+    const idValide = !!id && ressembleAUnId(id);
     etat[s.entite] = {
       presentes: !!id && !!secret,
+      // `true` : les deux variables étaient à l'envers, remises d'aplomb ici.
+      inversees,
       // L'ID client n'est pas un secret : il figure dans l'adresse de chaque
       // écran d'autorisation Google. On l'affiche pour le comparer à celui
       // de la console — mais SEULEMENT s'il a la forme d'un ID : le
@@ -128,8 +144,8 @@ export function etatConfiguration(): Record<
       // affiché ici. Une valeur d'une autre forme n'est jamais montrée.
       id: idValide ? id : null,
       idValide,
-      idRessembleAUnSecret: !!id && id.startsWith('GOCSPX-'),
-      secretValide: !!secret && secret.startsWith('GOCSPX-'),
+      idRessembleAUnSecret: !!id && ressembleAUnSecret(id),
+      secretValide: !!secret && ressembleAUnSecret(secret),
       secretLongueur: secret ? secret.length : 0,
     };
   }
