@@ -147,7 +147,13 @@ export interface TileItemNode {
 // .home_layout.lockedTiles) : son apparence, son contenu, et — audit du
 // 2 septembre — la liste des cartes qu'il a RETIRÉES du dossier depuis, pour
 // qu'elles disparaissent aussi chez les membres qui les avaient déjà.
-type Verrou = Partial<TileItemNode> & { retires?: string[] };
+// 3 septembre (Sylvain : « je crée un dossier ImmoSphera, j'y ajoute des
+// dossiers, je verrouille : il faut que ce dossier apparaisse pour tous les
+// utilisateurs de cette agence… ensuite ils sortent du dossier ou changent
+// de place ») : le verrou retient aussi la CASE du dossier sur la grille du
+// super admin (`slot`), pour qu'il arrive au même endroit chez chacun, et sa
+// date (`maj`), pour départager d'anciens verrous du même nom.
+type Verrou = Partial<TileItemNode> & { retires?: string[]; slot?: number; maj?: number };
 
 export const PRESET_GRADIENTS = [
   { name: 'Rubis Impérial', value: 'from-[#8B1E3F] via-[#63142A] to-[#3B0A18]' },
@@ -1527,6 +1533,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // Même cloisonnement par agence que home_tiles ci-dessous (voir
     // commentaire détaillé plus bas) — même colonne serveur unique par
     // compte, donc même risque d'écrasement inter-agences sans `agencyId`.
+    // Super admin : la case d'un dossier verrouillé suit ses déplacements
+    // (voir Verrou.slot) — sans réécrire les verrous quand rien n'a bougé.
+    if (change && isSuperAdmin && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
+      const suivants: Record<string, Verrou> = { ...lockedTiles };
+      let bouge = false;
+      Object.entries(lockedTiles).forEach(([id, v]) => {
+        const slot = rootSlots.indexOf(id);
+        if (slot >= 0 && v.slot !== slot) { suivants[id] = { ...v, slot, maj: Date.now() }; bouge = true; }
+      });
+      if (bouge) void enregistrerVerrous(suivants, lockedTiles);
+    }
     if (change && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
       ecrireDispositionAgence('home_root_slots', currentUser.uid, activeAgency.id, rootSlots, maj)
         // Signalé : "les tuiles déplacées ne se sauvegardent jamais à la
@@ -1906,16 +1923,34 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     if (!isSuperAdmin || !activeAgency?.id) return;
     const next: Record<string, Verrou> = { ...base };
     let change = false;
+    // La grille du super admin fait foi, mais seulement une fois sa version
+    // serveur chargée : un appareil resté sur une vieille grille ne doit pas
+    // effacer un verrou posé ailleurs.
+    const grilleFiable = homeSyncReadyAgencies.has(activeAgency.id);
     Object.entries(base).forEach(([id, verrou]) => {
       const tuile = findTileRecursive(grille, id);
-      if (!tuile) return;
+      if (!tuile) {
+        // 3 septembre : un verrou dont le dossier n'existe plus chez le super
+        // admin (ni dans les tuiles fournies) est un fantôme — c'est lui qui
+        // faisait réapparaître d'anciens dossiers chez les membres. On le
+        // retire dès que le super admin touche à sa grille.
+        if (grilleFiable && !findInitialTile(id)) { delete next[id]; change = true; }
+        return;
+      }
       const nouveau = instantaneVerrou(tuile);
       const ancien = instantaneVerrou(verrou);
-      if (JSON.stringify(nouveau) === JSON.stringify(ancien)) return;
+      const slot = rootSlotsRef.current.indexOf(id);
+      const slotChange = slot >= 0 && verrou.slot !== slot;
+      if (JSON.stringify(nouveau) === JSON.stringify(ancien) && !slotChange) return;
       const idsApres = new Set((nouveau.children || []).map((c) => c.id));
       const retires = new Set<string>((verrou.retires || []).filter((r) => !idsApres.has(r)));
       (ancien.children || []).forEach((c) => { if (!idsApres.has(c.id)) retires.add(c.id); });
-      next[id] = { ...nouveau, ...(retires.size > 0 ? { retires: Array.from(retires) } : {}) };
+      next[id] = {
+        ...nouveau,
+        ...(retires.size > 0 ? { retires: Array.from(retires) } : {}),
+        ...(slot >= 0 ? { slot } : verrou.slot !== undefined ? { slot: verrou.slot } : {}),
+        maj: Date.now(),
+      };
       change = true;
     });
     if (change) void enregistrerVerrous(next, base);
@@ -1954,7 +1989,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       // des dossiers, il faut que ce soit la même configuration pour tous
       // les autres utilisateurs ». Le verrou retient donc aussi le CONTENU
       // du dossier, pas seulement son apparence.
-      next[tile.id] = instantaneVerrou(tile);
+      const slot = rootSlotsRef.current.indexOf(tile.id);
+      next[tile.id] = { ...instantaneVerrou(tile), ...(slot >= 0 ? { slot } : {}), maj: Date.now() };
     }
     await enregistrerVerrous(next, lockedTiles);
   };
@@ -2731,14 +2767,33 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // réellement un dossier (avec des cartes).
   const sansCasse = (v: string) =>
     v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  const titresPresents = new Set(racineFiltree.map((t) => sansCasse(t.title || '')));
   const dossiersVerrouillesAReposer: TileItemNode[] = [];
+
+  // 3 septembre : le garde-fou « un seul dossier par titre » comparait aussi
+  // aux dossiers PERSONNELS du membre. Un membre qui avait déjà un dossier
+  // « Immosphera » à lui ne recevait jamais celui du super admin — et ses
+  // cartes, retenues comme « imposées », disparaissaient de la racine sans
+  // dossier pour les accueillir : « les tuiles sortent du dossier ». Le
+  // dédoublonnage ne se fait plus qu'ENTRE verrous du même nom (le plus
+  // récent l'emporte), les fantômes étant par ailleurs purgés côté super
+  // admin (synchroniserVerrous).
+  const meilleurParTitre = new Map<string, string>();
+  Object.entries(lockedTiles).forEach(([id, v]) => {
+    if (!Array.isArray(v.children)) return;
+    const titre = sansCasse(v.title || '');
+    if (!titre) return;
+    const actuel = meilleurParTitre.get(titre);
+    const score = (x: Verrou) => (x.maj || 0) * 1000 + (x.children?.length || 0);
+    if (!actuel || score(v) > score(lockedTiles[actuel])) meilleurParTitre.set(titre, id);
+  });
 
   const idsImposesParUnDossier = new Set<string>();
   Object.entries(lockedTiles).forEach(([dossierId, lock]) => {
     const verrou = lock as TileItemNode;
     const enfants = verrou.children;
-    if (!enfants || enfants.length === 0) return;
+    // Seuls les verrous qui décrivent un dossier (même vide : verrouillé
+    // avant d'être rempli) sont reposés.
+    if (!Array.isArray(enfants)) return;
 
     // Présent dans la grille mais masqué par les droits : on n'y touche pas.
     // Le reposer contournerait un filtre de visibilité voulu.
@@ -2748,9 +2803,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
 
     if (!presentDansLaGrille) {
       const titre = sansCasse(verrou.title || '');
-      // Sans titre, ou un dossier du même nom déjà là : on ne repose rien.
-      if (!titre || titresPresents.has(titre)) return;
-      titresPresents.add(titre);
+      if (!titre || meilleurParTitre.get(titre) !== dossierId) return;
       dossiersVerrouillesAReposer.push({
         id: dossierId,
         title: verrou.title || 'Dossier',
@@ -2791,6 +2844,22 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         .filter((d) => !existsRecursive(prev, d.id))
         .map((d) => { const { locked, ...reste } = d; void locked; return reste; }),
     ]);
+    // 3 septembre : le dossier prend la case qu'il occupe chez le super admin
+    // (Verrou.slot) si elle est libre ; sinon la première libre, comme avant.
+    // Une fois posé, il ne bouge plus (la grille du membre est enregistrée).
+    setRootSlots((prev) => {
+      const next = [...prev];
+      let change = false;
+      aPoser.forEach((d) => {
+        if (next.includes(d.id)) return;
+        const voulu = lockedTiles[d.id]?.slot;
+        if (typeof voulu === 'number' && voulu >= 0 && voulu < next.length && next[voulu] === null) {
+          next[voulu] = d.id;
+          change = true;
+        }
+      });
+      return change ? next : prev;
+    });
     aPoser.forEach((d) => { void reafficherTuile(currentUser?.uid, d.id); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idsDossiersAReposer, activeFolder, activeAgency?.id, syncPrete]);
