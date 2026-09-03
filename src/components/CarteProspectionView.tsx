@@ -5,6 +5,7 @@ import { MapPin, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { couleurEtapeNovavisio, estEtapeSigneeNovavisio, categorieEtapeNovavisio, type CategorieNovavisio } from "@/lib/couleursNovavisio";
+import { ficheALocaliser, geolocaliserFiche } from "@/lib/geolocalisationFiches";
 
 // Onglet "Carte" + tuile d'accueil demandés pour Novavisio, remis en place
 // d'après un ancien backup ("mets pour novavisio la carte comme c'est sur le
@@ -195,6 +196,13 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
   const normaliser = (v: string | null | undefined) =>
     (v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
+  // Rattrapage (3 septembre) : fiches avec une adresse mais sans point sur la
+  // carte — l'ancienne géolocalisation n'a jamais fonctionné. Lancé tout seul
+  // au chargement, et à la demande par le bouton « Localiser ».
+  const [aLocaliser, setALocaliser] = useState<any[]>([]);
+  const [localisation, setLocalisation] = useState<{ fait: number; total: number; introuvables: string[] } | null>(null);
+  const localiserRef = useRef(false);
+
   const loadData = async () => {
     if (!isNovavisio) return;
     setLoading(true);
@@ -203,11 +211,10 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
         .from("leads")
         // `*` et non une liste de colonnes : la corbeille (deleted_at) doit
         // être lue pour être filtrée, sans casser tant que la migration
-        // 20260903120000 n'est pas appliquée.
+        // 20260903120000 n'est pas appliquée. Toutes les fiches de l'agence,
+        // pour repérer celles qui ont une adresse sans coordonnées.
         .select("*")
-        .eq("agency_id", activeAgency.id)
-        .not("latitude", "is", null)
-        .not("longitude", "is", null),
+        .eq("agency_id", activeAgency.id),
       supabase.from("pipeline_stages").select("id, name, color").eq("agency_id", activeAgency.id),
     ]);
 
@@ -215,9 +222,34 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
     (stageRows ?? []).forEach((s) => stageMap.set(s.id, s as StageInfo));
     setStages(stageMap);
     // Corbeille (3 septembre) : une fiche mise de côté ne s'affiche plus sur la carte.
-    setLeads(((leadRows ?? []) as any[]).filter((l) => !l.deleted_at) as LeadPoint[]);
+    const vivantes = ((leadRows ?? []) as any[]).filter((l) => !l.deleted_at);
+    setLeads(vivantes.filter((l) => l.latitude != null && l.longitude != null) as LeadPoint[]);
+    setALocaliser(vivantes.filter(ficheALocaliser));
     setLoading(false);
   };
+
+  const localiserManquantes = async () => {
+    if (localiserRef.current || aLocaliser.length === 0) return;
+    localiserRef.current = true;
+    const introuvables: string[] = [];
+    setLocalisation({ fait: 0, total: aLocaliser.length, introuvables });
+    for (let i = 0; i < aLocaliser.length; i++) {
+      const fiche = aLocaliser[i];
+      const point = await geolocaliserFiche(fiche.id, fiche.company);
+      if (!point) introuvables.push(fiche.full_name || fiche.id);
+      setLocalisation({ fait: i + 1, total: aLocaliser.length, introuvables: [...introuvables] });
+      // L'API Adresse demande de rester raisonnable : une requête par 250 ms.
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    localiserRef.current = false;
+    await loadData();
+  };
+
+  // Lancement automatique dès qu'on connaît des fiches à localiser.
+  useEffect(() => {
+    if (aLocaliser.length > 0 && !localiserRef.current) void localiserManquantes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aLocaliser.length]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadData(); }, [activeAgency?.id, isNovavisio]);
@@ -440,6 +472,32 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
           </button>
         </div>
       </div>
+
+      {/* État du rattrapage des adresses sans point. */}
+      {(localisation || aLocaliser.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2 px-3 sm:px-6 py-1.5 text-xs border-b border-border bg-[#F7BC5F]/10">
+          {localisation && localisation.fait < localisation.total ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Localisation des adresses : {localisation.fait}/{localisation.total}…</span>
+            </>
+          ) : localisation ? (
+            <span>
+              {localisation.total - localisation.introuvables.length} adresse{localisation.total - localisation.introuvables.length > 1 ? "s" : ""} placée{localisation.total - localisation.introuvables.length > 1 ? "s" : ""} sur la carte.
+              {localisation.introuvables.length > 0 && (
+                <> Introuvable{localisation.introuvables.length > 1 ? "s" : ""} (adresse à vérifier sur la fiche) : <b>{localisation.introuvables.join(", ")}</b>.</>
+              )}
+            </span>
+          ) : (
+            <>
+              <span>{aLocaliser.length} fiche{aLocaliser.length > 1 ? "s" : ""} avec une adresse mais sans point.</span>
+              <button type="button" onClick={localiserManquantes} className="px-2.5 h-6 rounded-full border border-border/60 bg-card hover:bg-foreground/5 font-semibold">
+                Localiser
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="relative flex-1 min-h-[50vh]">
         {loading && leads.length === 0 && (

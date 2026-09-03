@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { geolocaliserFiche } from '@/lib/geolocalisationFiches';
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
@@ -391,14 +392,12 @@ export const LeadDialog = ({
       const needsInitial = nextAddress && !hadCoords;
       if (addressChanged || needsInitial) {
         const co = payload.company ?? {};
-        const geoBody = {
-          address: co.address ?? null,
-          postal_code: co.postal_code ?? null,
-          city: co.city ?? null,
-        };
         const targetId = lead?.id;
+        // 3 septembre : l'edge function « geocode-lead » n'existe pas dans ce
+        // projet — aucune adresse n'était jamais placée sur la carte. On
+        // géocode directement depuis le CRM (src/lib/geolocalisationFiches).
         if (targetId) {
-          void supabase.functions.invoke("geocode-lead", { body: { lead_id: targetId, ...geoBody } });
+          void geolocaliserFiche(targetId, co).then(() => qc.invalidateQueries({ queryKey: ["leads"] }));
         } else {
           // new lead: fetch id then geocode
           void (async () => {
@@ -411,7 +410,8 @@ export const LeadDialog = ({
               .limit(1)
               .maybeSingle();
             if (data?.id) {
-              void supabase.functions.invoke("geocode-lead", { body: { lead_id: data.id, ...geoBody } });
+              await geolocaliserFiche(data.id, co);
+              qc.invalidateQueries({ queryKey: ["leads"] });
             }
           })();
         }
