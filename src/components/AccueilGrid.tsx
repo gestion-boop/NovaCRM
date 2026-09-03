@@ -2599,8 +2599,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // niveau affiché. Or elle vit DANS UN DOSSIER : l'aperçu 2×2 du dossier
   // rendait `tile.children` sans le moindre filtre, et l'icône Statistiques y
   // restait visible pour toutes les agences.
+  // 3 septembre : « la tuile Réserver caméra pour Conseils Finances ne doit
+  // jamais apparaître, cela ne sert à rien ». Masquée pour cette agence,
+  // partout (racine, dossiers, aperçus), quel que soit le rôle.
   const tuileVisible = (t: TileItemNode) =>
-    (t.id !== 'immosphera360' || canSeeImmosphera)
+    (t.id !== 'reserver-camera' || !canSeeConseilsFinances)
+    && (t.id !== 'immosphera360' || canSeeImmosphera)
     && (!IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
     && (!NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
     && (!CONSEILS_EXTRA_TILE_IDS.includes(t.id) || canSeeConseilsFinances)

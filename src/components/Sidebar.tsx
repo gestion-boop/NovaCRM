@@ -88,14 +88,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Finances — même principe que canSeeNovavisio dans AccueilGrid.tsx.
   const isNovavisioActive = /novavisio/i.test(activeAgency?.name ?? '');
   const isImmospheraActive = /immosphera/i.test(activeAgency?.name ?? '');
+  // 3 septembre : « Réserver caméra pour Conseils Finances ne doit jamais
+  // apparaître » — même règle que la tuile (AccueilGrid, tuileVisible).
+  const isConseilsFinancesActive = /conseil|finance/i.test(activeAgency?.name ?? '');
   const visibleNavItems = useMemo(
     () =>
       NAV_ITEMS.filter(
         (item) =>
           (item.id !== 'carte-novavisio' || isNovavisioActive) &&
-          (item.id !== 'academy' || isImmospheraActive)
+          (item.id !== 'academy' || isImmospheraActive) &&
+          (item.id !== 'reserver-camera' || !isConseilsFinancesActive)
       ),
-    [isNovavisioActive, isImmospheraActive]
+    [isNovavisioActive, isImmospheraActive, isConseilsFinancesActive]
   );
 
   // Filter available agencies according to user rights/profile
