@@ -4,6 +4,7 @@ import {
   Bell,
   HelpCircle,
   Home,
+  Loader2,
   Maximize,
   Menu as MenuIcon,
   Minimize,
@@ -19,6 +20,10 @@ import {
 import {
   useContacts,
 } from '@/hooks/useContacts';
+import {
+  chercherClients, chercherAccueil, chercherADistance, grouper, demanderAgendaAllerA,
+  demanderOuvrirDossierAccueil, type Resultat,
+} from '@/lib/rechercheGlobale';
 
 import {
   useAuth,
@@ -138,11 +143,43 @@ export const Header: React.FC<
       void document.documentElement.requestFullscreen().catch(() => {});
     }
   };
-  const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+  // Recherche globale (3 septembre : « le maximum de mots du CRM : prénoms,
+  // rendez-vous, noms des dossiers… »). Les sources locales (clients déjà
+  // chargés, tuiles et dossiers de l'accueil, écrans) répondent à la frappe ;
+  // les sources distantes (agenda, rappels, documents, projets, notes,
+  // équipe) sont interrogées 250 ms après la dernière touche.
+  const resultatsLocaux = useMemo<Resultat[]>(() => {
+    const q = searchQuery.trim();
     if (!q) return [];
-    return contacts.filter((c: any) => (c.name || '').toLowerCase().includes(q)).slice(0, 8);
-  }, [searchQuery, contacts]);
+    return [...chercherClients(contacts as any, q), ...chercherAccueil(activeAgency?.id, q)];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, contacts, activeAgency?.id]);
+  const [resultatsDistants, setResultatsDistants] = useState<Resultat[]>([]);
+  const [rechercheEnCours, setRechercheEnCours] = useState(false);
+  React.useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) { setResultatsDistants([]); setRechercheEnCours(false); return; }
+    let annule = false;
+    setRechercheEnCours(true);
+    const minuteur = window.setTimeout(() => {
+      chercherADistance(activeAgency?.id, q)
+        .then((r) => { if (!annule) setResultatsDistants(r); })
+        .finally(() => { if (!annule) setRechercheEnCours(false); });
+    }, 250);
+    return () => { annule = true; window.clearTimeout(minuteur); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, activeAgency?.id]);
+  const groupes = useMemo(() => grouper([...resultatsLocaux, ...resultatsDistants]), [resultatsLocaux, resultatsDistants]);
+  const ouvrirResultat = (r: Resultat) => {
+    const a = r.action;
+    if (a.genre === 'client') onSelectContact?.(a.contactId);
+    else if (a.genre === 'nav') onNavigate?.(a.nav);
+    else if (a.genre === 'dossier-accueil') { onNavigate?.('accueil'); demanderOuvrirDossierAccueil(a.dossierId); }
+    else if (a.genre === 'agenda') { onNavigate?.('agenda'); demanderAgendaAllerA(a.date); }
+    else if (a.genre === 'lien') window.open(a.url, '_blank', 'noopener,noreferrer');
+    setSearchQuery('');
+    setSearchFocused(false);
+  };
 
   const displayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'Utilisateur';
   const avatarPhotoUrl =
@@ -235,7 +272,11 @@ export const Header: React.FC<
           onChange={(e) => setSearchQuery(e.target.value)}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-          placeholder="Rechercher un client, un dossier..."
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { setSearchQuery(''); (e.currentTarget as HTMLInputElement).blur(); }
+            if (e.key === 'Enter' && groupes.length > 0) ouvrirResultat(groupes[0].items[0]);
+          }}
+          placeholder="Rechercher : client, rendez-vous, dossier, document…"
           className="w-full bg-[#0b1c1e] border border-white/10 focus:border-[#F7BC5F]/50 rounded-xl pl-10 pr-9 py-2 text-sm text-white placeholder-gray-500 outline-none transition-colors"
         />
         {searchQuery && (
@@ -248,22 +289,34 @@ export const Header: React.FC<
           </button>
         )}
 
-        {searchFocused && searchResults.length > 0 && (
-          <div className="absolute left-0 right-0 top-full mt-2 bg-[#0E1A20] border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 max-h-72 overflow-y-auto custom-scrollbar">
-            {searchResults.map((c: any) => (
-              <button
-                key={c.id}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onSelectContact?.(c.id);
-                  setSearchQuery('');
-                  setSearchFocused(false);
-                }}
-                className="w-full text-left px-3.5 py-2 text-sm text-gray-200 hover:bg-white/5 hover:text-white transition-colors truncate"
-              >
-                {c.name}
-              </button>
+        {searchFocused && searchQuery.trim() && (
+          <div className="absolute left-0 right-0 top-full mt-2 bg-[#0E1A20] border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 max-h-[70vh] overflow-y-auto custom-scrollbar">
+            {groupes.map((g) => (
+              <div key={g.type} className="py-1">
+                <div className="px-3.5 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F]/80">{g.libelle}</div>
+                {g.items.map((r) => (
+                  <button
+                    key={r.cle}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => ouvrirResultat(r)}
+                    className="w-full text-left px-3.5 py-1.5 hover:bg-white/5 transition-colors"
+                  >
+                    <div className="text-sm text-gray-100 truncate">{r.titre}</div>
+                    {r.sousTitre && <div className="text-[11px] text-gray-500 truncate">{r.sousTitre}</div>}
+                  </button>
+                ))}
+              </div>
             ))}
+            {rechercheEnCours && (
+              <div className="px-3.5 py-2 text-[11px] text-gray-500 flex items-center gap-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> Recherche dans l'agenda, les rappels, les documents…
+              </div>
+            )}
+            {!rechercheEnCours && groupes.length === 0 && (
+              <div className="px-3.5 py-2 text-xs text-gray-500">
+                {searchQuery.trim().length < 2 ? 'Tape au moins deux lettres.' : `Aucun résultat pour « ${searchQuery.trim()} ».`}
+              </div>
+            )}
           </div>
         )}
       </div>

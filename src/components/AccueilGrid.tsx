@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import {
   lireDispositionAgence, ecrireDispositionAgence, lireHorodatageLocal, ecrireHorodatageLocal,
 } from '@/lib/dispositionAccueil';
+import { EVENEMENT_OUVRIR_DOSSIER_ACCUEIL, consommerOuvrirDossierAccueil } from '@/lib/rechercheGlobale';
 import agencyImmosphera from '@/assets/agency-immosphera.png';
 import { chargerMasqueesDepuisServeur, masquerTuile, lireMasquees, reafficherTuile } from '@/lib/tuilesMasquees';
 import NovaMascotte from './NovaMascotte';
@@ -1960,6 +1961,21 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
 
   // Folder Stack state for navigation inside open folders/nested folders
   const [openFolderStack, setOpenFolderStack] = useState<TileItemNode[]>([]);
+  // Recherche globale (barre du haut) : « les noms des dossiers » — un
+  // dossier choisi s'ouvre ici. La demande est relue au montage (l'accueil
+  // n'était peut-être pas affiché au clic) et écoutée ensuite.
+  useEffect(() => {
+    const ouvrir = (id: string | undefined) => {
+      if (!id) return;
+      const dossier = findTileRecursive(tilesRef.current, id);
+      if (dossier && dossier.isFolder) setOpenFolderStack([dossier]);
+    };
+    ouvrir(consommerOuvrirDossierAccueil());
+    const onDemande = (e: Event) => ouvrir((e as CustomEvent<{ dossierId?: string }>).detail?.dossierId);
+    window.addEventListener(EVENEMENT_OUVRIR_DOSSIER_ACCUEIL, onDemande);
+    return () => window.removeEventListener(EVENEMENT_OUVRIR_DOSSIER_ACCUEIL, onDemande);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Signalé (3 septembre) : « quand je suis sur cette fenêtre (dossier
   // ouvert), je ne peux pas cliquer sur les maisons » — les logos de société
   // en haut. Le clic passait, la société changeait, mais le dossier de

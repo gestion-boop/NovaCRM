@@ -28,6 +28,7 @@ const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
+import { EVENEMENT_AGENDA_ALLER_A, consommerAgendaAllerA } from '@/lib/rechercheGlobale';
 
 import { TRANSFERRED_CALENDAR_EVENTS } from '@/data/csvDataLoader';
 
@@ -135,6 +136,22 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
   const [viewMode, setViewMode] = useState<ViewMode>(
     () => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'list' : 'week')
   );
+  // Recherche globale (barre du haut) : un rendez-vous choisi ouvre l'agenda
+  // sur son jour. La demande peut arriver avant que l'agenda soit monté (on
+  // la relit au montage) ou pendant qu'il est ouvert (événement).
+  useEffect(() => {
+    const allerA = (iso: string | undefined) => {
+      if (!iso) return;
+      const d = parseISO(iso);
+      if (Number.isNaN(d.getTime())) return;
+      setCurrentDate(d);
+      setViewMode('day');
+    };
+    allerA(consommerAgendaAllerA());
+    const onDemande = (e: Event) => allerA((e as CustomEvent<{ date?: string }>).detail?.date);
+    window.addEventListener(EVENEMENT_AGENDA_ALLER_A, onDemande);
+    return () => window.removeEventListener(EVENEMENT_AGENDA_ALLER_A, onDemande);
+  }, []);
   
   // Modal State
   const [showModal, setShowModal] = useState(false);
