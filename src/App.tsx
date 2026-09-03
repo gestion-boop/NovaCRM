@@ -51,6 +51,7 @@ import NotificationsView from './components/NotificationsView';
 import MobileBottomNav from './components/MobileBottomNav';
 import PublicQuestionnaire from './components/PublicQuestionnaire';
 import PublicConsentement from './components/PublicConsentement';
+import PublicVisiteImmosphera from './immosphera/pages/TourView';
 import UpdateBanner from './components/UpdateBanner';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
@@ -155,7 +156,7 @@ function App() {
   useEffect(() => {
     try {
       const path = window.location.pathname;
-      if (/^\/(questionnaire|consentement|messagerie|espace-client)/.test(path)) return;
+      if (/^\/(questionnaire|consentement|messagerie|espace-client|immosphera\/visite)/.test(path)) return;
       const target = currentNav === 'accueil' ? '/' : `/${currentNav}`;
       if (path !== target) window.history.replaceState(null, '', target);
     } catch { /* noop */ }
@@ -681,6 +682,13 @@ function App() {
   const consentementMatch = window.location.pathname.match(/^\/consentement\/([a-zA-Z0-9]+)/);
   if (consentementMatch) {
     return <PublicConsentement token={consentementMatch[1]} />;
+  }
+
+  // Lien de visite temporaire ImmoSphera360 : le client n'a pas de compte,
+  // la page doit s'ouvrir sans passer par l'écran de connexion Google.
+  const visiteMatch = window.location.pathname.match(/^\/immosphera\/visite\/([a-zA-Z0-9_-]+)/);
+  if (visiteMatch) {
+    return <PublicVisiteImmosphera token={visiteMatch[1]} />;
   }
 
   if (authLoading) {
