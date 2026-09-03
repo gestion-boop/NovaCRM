@@ -23,6 +23,9 @@ import {
 import {
   useAuth,
 } from '@/context/AuthContext';
+import AgencyLogoSwitcher from './AgencyLogoSwitcher';
+import { agencesDisponibles } from '@/lib/agency-logos';
+import { AGENCIES } from '@/types';
 
 import { supabase } from '@/lib/supabase';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
@@ -83,7 +86,12 @@ export const Header: React.FC<
     activeAgency,
     userProfile,
     currentUser,
+    setActiveAgency,
   } = useAuth();
+
+  // Sociétés accessibles, pour la rangée de logos (super admin, ou personne
+  // rattachée à plusieurs sociétés comme Karine).
+  const societesAccessibles = useMemo(() => agencesDisponibles(AGENCIES, userProfile), [userProfile]);
 
 
   const agencyLogoByName: Record<string, string> = {
@@ -201,6 +209,14 @@ export const Header: React.FC<
           <MenuIcon className="w-4 h-4 text-[#F7BC5F]" />
           <span className="hidden sm:inline text-xs font-semibold">Menu</span>
         </button>
+
+        {/* Sélecteur de société par logos : un clic, sans menu déroulant. */}
+        <AgencyLogoSwitcher
+          agencies={societesAccessibles}
+          selectedId={selectedAgencyId || activeAgency.id}
+          onSelect={setActiveAgency}
+          className="shrink-0"
+        />
 
         <div className="hidden lg:flex items-center gap-1 sm:gap-2 overflow-hidden">
           <span className="text-[10px] sm:text-xs bg-[#F7BC5F]/20 text-[#F7BC5F] border border-[#F7BC5F]/40 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full font-bold flex items-center gap-1 shadow-sm shrink-0">

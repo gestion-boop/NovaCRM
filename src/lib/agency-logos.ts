@@ -33,3 +33,19 @@ export function sortByAgencyOrder<T extends { id: string }>(agencies: T[]): T[] 
     return safeA - safeB;
   });
 }
+
+// Sociétés qu'une personne peut choisir : toutes (dont la vue « Toutes les
+// sociétés ») pour un super admin, sinon celles de son profil. Même règle
+// que le sélecteur du menu, partagée avec la barre de logos de l'en-tête.
+export function agencesDisponibles<T extends { id: string }>(
+  agencies: T[],
+  profil: { role?: string; agencyIds?: string[] } | null | undefined,
+): T[] {
+  const base = !profil
+    ? agencies
+    : profil.role === 'super_admin' || profil.agencyIds?.includes('all')
+      ? agencies
+      : agencies.filter((ag) => (ag.id === 'all' ? false : profil.agencyIds?.includes(ag.id)));
+  const triees = sortByAgencyOrder(base);
+  return triees.length > 0 ? triees : agencies.slice(0, 1);
+}

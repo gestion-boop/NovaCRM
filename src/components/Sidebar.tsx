@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { AGENCIES, Agency } from '@/types';
 import { useAuth } from '@/context/AuthContext';
-import { getAgencyLogo, sortByAgencyOrder } from '@/lib/agency-logos';
+import { getAgencyLogo, agencesDisponibles } from '@/lib/agency-logos';
+import AgencyLogoSwitcher from './AgencyLogoSwitcher';
 
 export interface SidebarProps {
   currentNav: string;
@@ -103,20 +104,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   );
 
   // Filter available agencies according to user rights/profile
-  const availableAgencies = useMemo(() => {
-    const baseAgencies = !userProfile
-      ? AGENCIES
-      : userProfile.role === 'super_admin' || userProfile.agencyIds?.includes('all')
-        ? AGENCIES
-        : AGENCIES.filter((ag) =>
-            ag.id === 'all' ? false : userProfile.agencyIds?.includes(ag.id)
-          );
-
-    // Ticket #228 : ordre imposé partout où l'agence se sélectionne.
-    const sorted = sortByAgencyOrder(baseAgencies);
-
-    return sorted.length > 0 ? sorted : [AGENCIES[0]];
-  }, [userProfile]);
+  // Règle partagée avec la rangée de logos de l'en-tête (ordre du ticket #228).
+  const availableAgencies = useMemo(() => agencesDisponibles(AGENCIES, userProfile), [userProfile]);
 
   // Read sidebar order & visibility from localStorage
   const [navOrder, setNavOrder] = useState<string[]>(() => {
@@ -227,7 +216,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Agency Switcher */}
         {(!collapsed || isMobile) && (
-          <div className="p-3 relative">
+          <div className="p-3 relative space-y-2">
+            {/* Rangée de logos : un clic = la société, sans ouvrir le menu. */}
+            <AgencyLogoSwitcher
+              agencies={availableAgencies}
+              selectedId={selectedAgency.id}
+              size="sm"
+              className="justify-center"
+              onSelect={(agency) => {
+                onSelectAgency(agency);
+                setShowAgencyMenu(false);
+              }}
+            />
+            <div className="relative">
             <button
               onClick={() => setShowAgencyMenu(!showAgencyMenu)}
               className="w-full flex items-center justify-between p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-left cursor-pointer"
@@ -248,7 +249,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Dropdown Menu for Agencies */}
             {showAgencyMenu && (
-              <div className="absolute left-3 right-3 top-14 bg-[#0E1A20] border border-white/10 rounded-xl shadow-2xl z-50 p-1 space-y-1 max-h-52 overflow-y-auto custom-scrollbar">
+              <div className="absolute left-0 right-0 top-full mt-1 bg-[#0E1A20] border border-white/10 rounded-xl shadow-2xl z-50 p-1 space-y-1 max-h-52 overflow-y-auto custom-scrollbar">
                 {availableAgencies.map((agency) => (
                   <button
                     key={agency.id}
@@ -274,6 +275,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 ))}
               </div>
             )}
+            </div>
           </div>
         )}
 
