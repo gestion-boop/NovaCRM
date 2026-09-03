@@ -796,13 +796,18 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
       {/* Ticket #120 : un seul bouton "+" en haut à droite (masqué sur
           mobile), au lieu des 4 icônes séparées (cadenas/modifier/couleur/
           autres actions) qui encombraient chaque tuile au survol — tout est
-          désormais regroupé dans un unique panneau d'options. */}
-      {canModify && onOpenActionsMenu && (
+          désormais regroupé dans un unique panneau d'options.
+          3 septembre : « les tuiles verrouillées par les admins, ils peuvent
+          les déplacer où ils veulent » — le bouton reste sur une tuile
+          verrouillée. Le menu n'y propose alors que les déplacements
+          (dossier, sortie de dossier, favoris) ; l'apparence et le contenu
+          restent imposés (voir le menu d'actions plus bas). */}
+      {onOpenActionsMenu && (
         <div className="hidden sm:flex absolute top-2 right-2 sm:top-3 sm:right-3 opacity-0 group-hover:opacity-100 transition-opacity z-20">
           <button
             onClick={(e) => { e.stopPropagation(); onOpenActionsMenu(e); }}
             className="p-1 rounded-lg bg-black/60 hover:bg-[#F7BC5F] text-white/80 hover:text-[#20170a] transition-colors border border-white/10 shadow-md cursor-pointer"
-            title="Options (modifier, couleur, verrouiller, déplacer, supprimer...)"
+            title={canModify ? 'Options (modifier, couleur, verrouiller, déplacer, supprimer...)' : 'Déplacer (dossier, favoris...)'}
           >
             {/* Ticket #223 : "+" remplacé par les 3 petits points — ce
                 bouton n'ajoute rien, il ouvre le panneau d'options
@@ -998,13 +1003,15 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
       )}
 
       {/* Ticket #120 : même simplification que la grille principale — un
-          seul bouton "+" regroupant toutes les options. */}
-      {canModify && onOpenActionsMenu && (
+          seul bouton "+" regroupant toutes les options. Présent aussi sur
+          une carte verrouillée (3 septembre) : le menu s'y limite aux
+          déplacements et aux favoris. */}
+      {onOpenActionsMenu && (
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
           <button
             onClick={(e) => { e.stopPropagation(); onOpenActionsMenu(e); }}
             className="p-1 rounded-lg bg-black/60 hover:bg-[#F7BC5F] text-white/80 hover:text-[#20170a] transition-colors border border-white/10 shadow-md cursor-pointer"
-            title="Options (modifier, couleur, verrouiller, déplacer, supprimer...)"
+            title={canModify ? 'Options (modifier, couleur, verrouiller, déplacer, supprimer...)' : 'Déplacer (dossier, favoris...)'}
           >
             {/* Ticket #223 : "+" remplacé par les 3 petits points — ce
                 bouton n'ajoute rien, il ouvre le panneau d'options
@@ -1769,9 +1776,13 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         const rangDeLUtilisateur = new Map(enfantsUtilisateur.map((c, i) => [c.id, i] as [string, number]));
         // Le favori est à chacun : le verrou ne l'impose ni ne l'efface.
         const favorisUtilisateur = new Set(enfantsUtilisateur.filter((c) => c.favorite).map((c) => c.id));
+        // 3 septembre : une carte imposée porte le cadenas, comme son
+        // dossier — son apparence n'est pas modifiable par les membres, et
+        // le menu d'actions le sait (peutModifier). Son ordre dans le
+        // dossier reste libre (glisser), c'est tout ce que le verrou laisse.
         const imposes = [...enfantsImposes]
           .sort((a, b) => (rangDeLUtilisateur.get(a.id) ?? 9999) - (rangDeLUtilisateur.get(b.id) ?? 9999))
-          .map((c) => (favorisUtilisateur.has(c.id) ? { ...c, favorite: true } : c));
+          .map((c) => ({ ...c, locked: true, ...(favorisUtilisateur.has(c.id) ? { favorite: true } : {}) }));
         // Audit du 2 septembre : une carte que le super admin a RETIRÉE du
         // dossier restait chez ceux qui l'avaient déjà, prise pour un ajout
         // personnel. Le verrou retient maintenant ces retraits.
@@ -3812,6 +3823,21 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           findInitialTile(actionsMenuTileId);
         if (!menuTile) return null;
         const folders = tiles.filter((t) => t.isFolder && t.id !== menuTile.id);
+        // 3 septembre : « concernant les tuiles verrouillées par les admins,
+        // ils peuvent les déplacer où ils veulent ». Le verrou impose
+        // l'apparence et le contenu, jamais l'emplacement : sur une tuile
+        // verrouillée, un membre garde les déplacements (glisser, dossier,
+        // sortie de dossier) et ses favoris ; renommer, recolorer, masquer et
+        // supprimer restent réservés au super admin. Seule exception, une
+        // carte IMPOSÉE par un dossier verrouillé : elle ne sort pas du
+        // dossier (« ils ne pourront pas sortir des dossiers »), elle s'y
+        // réordonne en la glissant.
+        const peutModifier = !menuTile.locked || !!isSuperAdmin;
+        const carteImposee =
+          !isSuperAdmin
+          && !!activeFolder
+          && ((lockedTiles[activeFolder.id]?.children || []) as TileItemNode[]).some((c) => c.id === menuTile.id);
+        const peutDeplacer = !carteImposee;
         return (
           <div
             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
@@ -3860,20 +3886,34 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <button
-                    onClick={() => { openEditShortcut(menuTile); setActionsMenuTileId(null); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
-                  >
-                    <FileEdit className="w-4 h-4 text-gray-300 shrink-0" /> Renommer / modifier
-                  </button>
+                  {!peutModifier && (
+                    <p className="flex items-start gap-2 px-3 py-2 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/30 text-xs text-[#FAD592] leading-snug">
+                      <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      <span>
+                        {carteImposee
+                          ? 'Carte imposée par ce dossier verrouillé : son apparence est fixée par le super admin. Vous pouvez la réordonner en la glissant dans le dossier.'
+                          : 'Verrouillée par le super admin : son apparence est fixée, mais vous pouvez la placer où vous voulez.'}
+                      </span>
+                    </p>
+                  )}
+                  {peutModifier && (
+                    <button
+                      onClick={() => { openEditShortcut(menuTile); setActionsMenuTileId(null); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
+                    >
+                      <FileEdit className="w-4 h-4 text-gray-300 shrink-0" /> Renommer / modifier
+                    </button>
+                  )}
                   {/* Ticket #120 : regroupé ici avec le reste des options —
                       avant, un bouton palette séparé traînait sur la tuile. */}
-                  <button
-                    onClick={() => { setPaletteTileId(menuTile.id); setActionsMenuTileId(null); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
-                  >
-                    <Palette className="w-4 h-4 text-gray-300 shrink-0" /> Changer la couleur
-                  </button>
+                  {peutModifier && (
+                    <button
+                      onClick={() => { setPaletteTileId(menuTile.id); setActionsMenuTileId(null); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
+                    >
+                      <Palette className="w-4 h-4 text-gray-300 shrink-0" /> Changer la couleur
+                    </button>
+                  )}
                   {/* Demandé le 2 septembre : une étoile de favoris pour
                       retrouver une tuile plus facilement. */}
                   <button
@@ -3895,7 +3935,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                       )}
                     </button>
                   )}
-                  {!menuTile.isFolder && (
+                  {!menuTile.isFolder && peutDeplacer && (
                     <button
                       onClick={() => setShowFolderPickerFor(menuTile.id)}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
@@ -3903,7 +3943,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                       <Folder className="w-4 h-4 text-gray-300 shrink-0" /> Ajouter à un dossier
                     </button>
                   )}
-                  {!menuTile.isFolder && (
+                  {!menuTile.isFolder && peutDeplacer && (
                     <button
                       onClick={() => {
                         setCreateFolderFromTileId(menuTile.id);
@@ -3925,7 +3965,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                       "Dissoudre" (qui vide TOUT le dossier) : ne retire que
                       cette tuile-là, visible seulement si elle est bien
                       dans le dossier actuellement ouvert. */}
-                  {activeFolder && (activeFolder.children || []).some((c) => c.id === menuTile.id) && (
+                  {activeFolder && peutDeplacer && (activeFolder.children || []).some((c) => c.id === menuTile.id) && (
                     <button
                       onClick={() => { handleExtractTileFromFolder(menuTile.id); setActionsMenuTileId(null); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
@@ -3933,17 +3973,19 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                       <ExternalLink className="w-4 h-4 text-gray-300 shrink-0 rotate-180" /> Sortir du dossier
                     </button>
                   )}
-                  <button
-                    onClick={() => { handleDeleteTile(menuTile.id); setActionsMenuTileId(null); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
-                  >
-                    <EyeOff className="w-4 h-4 text-gray-300 shrink-0" /> Masquer (récupérable dans Paramètres)
-                  </button>
+                  {peutModifier && (
+                    <button
+                      onClick={() => { handleDeleteTile(menuTile.id); setActionsMenuTileId(null); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"
+                    >
+                      <EyeOff className="w-4 h-4 text-gray-300 shrink-0" /> Masquer (récupérable dans Paramètres)
+                    </button>
+                  )}
                   {/* Ticket #121 : réservé aux tuiles/dossiers créés par
                       l'utilisateur — les tuiles fournies par défaut avec le
                       CRM ne peuvent être que masquées (juste au-dessus),
                       jamais supprimées définitivement. */}
-                  {!DEFAULT_TILE_IDS.has(menuTile.id) && (
+                  {peutModifier && !DEFAULT_TILE_IDS.has(menuTile.id) && (
                     <button
                       onClick={() => {
                         if (window.confirm(`Supprimer définitivement "${menuTile.title}" ? Impossible à annuler.`)) {
