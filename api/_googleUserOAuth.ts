@@ -110,18 +110,23 @@ const clientDe = (societe: (typeof SOCIETES)[number]): ClientGoogleSociete | nul
  * Diagnostic : quelles sociétés ont leurs deux clés dans cet environnement.
  * Uniquement des booléens — jamais une valeur.
  */
-export function etatConfiguration(): Record<EntiteGoogle, { presentes: boolean; idValide: boolean; secretValide: boolean }> {
-  const etat = {} as Record<EntiteGoogle, { presentes: boolean; idValide: boolean; secretValide: boolean }>;
+export function etatConfiguration(): Record<
+  EntiteGoogle,
+  { presentes: boolean; id: string | null; idValide: boolean; secretValide: boolean; secretLongueur: number }
+> {
+  const etat = {} as ReturnType<typeof etatConfiguration>;
   for (const s of SOCIETES) {
     const id = premiereValeur(s.clesId);
     const secret = premiereValeur(s.clesSecret);
     etat[s.entite] = {
       presentes: !!id && !!secret,
-      // Forme attendue d'un ID client Google : chiffres, tiret, lettres,
-      // puis « .apps.googleusercontent.com ». Un secret collé à la place
-      // (« GOCSPX-… ») ou une copie tronquée se voient ici tout de suite.
-      idValide: !!id && /^\d+-[a-z0-9_-]+\.apps\.googleusercontent\.com$/i.test(id),
-      secretValide: !!secret && /^GOCSPX-[A-Za-z0-9_-]+$/.test(secret),
+      // L'ID client n'est pas un secret : il figure dans l'adresse de chaque
+      // écran d'autorisation Google. On l'affiche donc tel quel, pour le
+      // comparer à celui de la console. Le secret, lui, reste caché.
+      id,
+      idValide: !!id && id.endsWith('.apps.googleusercontent.com'),
+      secretValide: !!secret && secret.startsWith('GOCSPX-'),
+      secretLongueur: secret ? secret.length : 0,
     };
   }
   return etat;
