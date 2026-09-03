@@ -1,3 +1,4 @@
+import { matchesAgency } from "@/hooks/useContacts";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
@@ -123,13 +124,20 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         // (enabled: !!activeAgency) — plus aucun client ne s'affichait.
         // On ne filtre par agence que si une agence précise est choisie ;
         // "Toutes les sociétés" doit vraiment tout remonter.
-        if (activeAgency) q = q.eq("agency_id", activeAgency.id);
+        //
+        // Urgence du 3 septembre : « Natacha n'a pas ses clients ». Le filtre
+        // d'agence se faisait ici en base, sur l'UUID exact. Or beaucoup de
+        // fiches Novavisio portent encore un identifiant d'agence hérité
+        // (« novavisio », « agency-2 »…, voir matchesAgency) : ces fiches
+        // n'apparaissaient jamais sur cet écran, alors que le pipeline et
+        // les contacts, qui passent par matchesAgency, les montrent. Même
+        // règle partout maintenant : on filtre côté application.
         // Tous les utilisateurs voient leurs propres clients par défaut
         // Le sélecteur "Tous" permet de voir tous les contacts de l'agence
         if (scope !== "all") q = q.or(`created_by.eq.${user!.uid},assigned_to.eq.${user!.uid}`);
         const { data, error } = await q;
         if (error) throw error;
-        rows = data ?? [];
+        rows = (data ?? []).filter((l: any) => !activeAgency || matchesAgency((l.agency_id as string) || "", activeAgency.id));
       }
 
       const leadIds = rows.map((l: any) => l.id);
