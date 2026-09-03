@@ -73,28 +73,52 @@ export const useTaskMessages = (taskId: string | null) => {
   const send = useMutation({
     mutationFn: async (payload: { userId: string; kind: TaskMessage['kind']; body?: string; attachmentUrl?: string; attachmentMime?: string; attachmentDuration?: number }) => {
       if (!taskId) throw new Error('Aucune tâche sélectionnée.');
-      const { error } = await supabase.from('messages').insert({
-        task_id: taskId,
-        user_id: payload.userId,
-        kind: payload.kind,
-        body: payload.body || null,
-        attachment_url: payload.attachmentUrl || null,
-        attachment_mime: payload.attachmentMime || null,
-        attachment_duration: payload.attachmentDuration ?? null,
-      } as any);
+      const { data: inserted, error } = await supabase
+        .from('messages')
+        .insert({
+          task_id: taskId,
+          user_id: payload.userId,
+          kind: payload.kind,
+          body: payload.body || null,
+          attachment_url: payload.attachmentUrl || null,
+          attachment_mime: payload.attachmentMime || null,
+          attachment_duration: payload.attachmentDuration ?? null,
+        } as any)
+        .select('id')
+        .single();
       if (error) throw new Error(error.message);
+      const messageId = (inserted as { id?: string } | null)?.id || null;
 
       // Bug nº 6 (consigne du 1er septembre) : un message posté sur une tâche
       // de projet interne ne prévenait personne. On passe par la notification
       // déjà en place partout ailleurs (RPC `create_notification`, qui gère
-      // aussi le push) — pas de second système. Destinataires : le
-      // responsable de la tâche et ses collaborateurs, sauf l'auteur.
+      // aussi le push) — pas de second système.
+      //
+      // Signalé le 3 septembre (« très important ») : « la personne ne reçoit
+      // pas la notification sur son téléphone ». Deux causes dans ce code :
+      //
+      // 1. La notification portait l'identifiant de la TÂCHE, le même pour
+      //    tous les messages de la carte. Or `create_notification` n'accepte
+      //    qu'une notification par (personne, type, entité) : le deuxième
+      //    message ne fait que réécrire la première, et une fois celle-ci
+      //    retirée par la personne (dismissed_at), plus rien ne passe — ni
+      //    clochette, ni push — pour tous les messages suivants de la carte.
+      //    Chaque message porte maintenant SON identifiant, comme les
+      //    conversations directes : une notification par message, toujours.
+      //
+      // 2. Seuls le responsable et les personnes assignées étaient prévenus.
+      //    Quelqu'un qui a déjà écrit dans le chat de la carte sans y être
+      //    assigné ne recevait jamais les réponses. Les auteurs des messages
+      //    précédents sont ajoutés aux destinataires (l'auteur exclu).
       try {
-        const { data: tache } = await supabase
-          .from('internal_project_tasks')
-          .select('title, agency_id, created_by, collaborator_ids')
-          .eq('id', taskId)
-          .single();
+        const [{ data: tache }, { data: auteurs }] = await Promise.all([
+          supabase
+            .from('internal_project_tasks')
+            .select('title, agency_id, created_by, collaborator_ids')
+            .eq('id', taskId)
+            .single(),
+          supabase.from('messages').select('user_id').eq('task_id', taskId),
+        ]);
 
         if (tache) {
           const t = tache as unknown as {
@@ -105,9 +129,11 @@ export const useTaskMessages = (taskId: string | null) => {
           };
           const destinataires = Array.from(
             new Set(
-              [t.created_by, ...(t.collaborator_ids || [])].filter(
-                (id): id is string => Boolean(id) && id !== payload.userId
-              )
+              [
+                t.created_by,
+                ...(t.collaborator_ids || []),
+                ...(((auteurs as { user_id: string | null }[] | null) || []).map((m) => m.user_id)),
+              ].filter((id): id is string => Boolean(id) && id !== payload.userId)
             )
           );
           const apercu =
@@ -121,12 +147,14 @@ export const useTaskMessages = (taskId: string | null) => {
               supabase.rpc('create_notification', {
                 _user_id: userId,
                 _type: 'internal_task_message',
-                _title: '💬 Nouveau message sur une tâche',
-                _message: `${t.title} — ${apercu}`,
-                _entity_type: 'internal_task',
-                _entity_id: taskId,
+                _title: `💬 ${t.title}`,
+                _message: apercu || 'Nouveau message sur cette carte',
+                // L'entité est le MESSAGE (voir le point 1 ci-dessus) ; la
+                // carte reste connue par les métadonnées.
+                _entity_type: messageId ? 'internal_task_message' : 'internal_task',
+                _entity_id: messageId || taskId,
                 _agency_id: t.agency_id,
-                _metadata: { url: '/projets-internes' },
+                _metadata: { url: '/projets-internes', task_id: taskId },
               })
             )
           );

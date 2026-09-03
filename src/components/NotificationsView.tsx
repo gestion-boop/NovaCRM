@@ -440,7 +440,7 @@ export const NotificationsView: React.FC<
     if (link.startsWith('/reserver-camera')) return 'reserver-camera';
 
     // Pas de lien exploitable (ou absent) : on retombe sur le type/entity_type.
-    if (n.entity_type === 'internal_task') return 'projets-internes';
+    if (n.entity_type === 'internal_task' || n.entity_type === 'internal_task_message') return 'projets-internes';
     if (n.entity_type === 'lead' || n.entity_type === 'comment' || n.entity_type === 'lead_chat') return 'clients';
     if (n.entity_type === 'note') return 'notes';
     if (n.entity_type === 'support_ticket' || n.type.startsWith('support_ticket')) return 'support';

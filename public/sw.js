@@ -190,6 +190,11 @@ self.addEventListener("push", (event) => {
           // seule cible possible par chemin, ex. /rappels) — jamais pour
           // /messagerie, qui héberge N'IMPORTE QUELLE conversation sur le
           // même chemin sans que l'URL ne bouge quand on en change.
+          // Même chose pour /projets-internes (3 septembre) : tous les
+          // projets et toutes les cartes vivent sur ce seul chemin. Avoir
+          // l'écran des projets ouvert faisait taire la bannière d'un
+          // message posté sur N'IMPORTE QUELLE carte.
+          if (targetUrl.pathname.startsWith("/messagerie") || targetUrl.pathname.startsWith("/projets-internes")) return false;
           if (!data.conversation_id && !data.lead_id) return u.pathname === targetUrl.pathname;
           return false;
         } catch {
