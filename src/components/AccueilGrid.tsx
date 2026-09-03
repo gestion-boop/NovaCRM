@@ -3,6 +3,9 @@ import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import {
+  lireDispositionAgence, ecrireDispositionAgence, lireHorodatageLocal, ecrireHorodatageLocal,
+} from '@/lib/dispositionAccueil';
 import agencyImmosphera from '@/assets/agency-immosphera.png';
 import { chargerMasqueesDepuisServeur, masquerTuile, lireMasquees, reafficherTuile } from '@/lib/tuilesMasquees';
 import NovaMascotte from './NovaMascotte';
@@ -1238,50 +1241,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // On range maintenant un dictionnaire `{ [agencyId]: items }` : toutes les
   // agences coexistent. Les deux anciens formats restent lus (voir
   // `lireDispositionAgence`), donc rien n'est perdu à la mise à jour.
-  const lireDispositionAgence = (colonne: unknown, agencyId: string): unknown[] | null => {
-    if (!colonne) return null;
-    // Format actuel : { [agencyId]: [...] }
-    if (!Array.isArray(colonne) && typeof colonne === 'object') {
-      const obj = colonne as Record<string, unknown>;
-      // Ancien format : { agencyId, items }
-      if (typeof obj.agencyId === 'string' && Array.isArray(obj.items)) {
-        return obj.agencyId === agencyId ? (obj.items as unknown[]) : null;
-      }
-      const pour = obj[agencyId];
-      if (Array.isArray(pour)) return pour as unknown[];
-    }
-    // Format d'origine : un tableau brut, sans agence — trop ambigu pour être
-    // appliqué à une agence en particulier.
-    return null;
-  };
-
-  // Écriture : on relit la colonne juste avant, pour ajouter l'agence
-  // courante SANS effacer les autres.
-  const ecrireDispositionAgence = async (
-    colonne: 'home_tiles' | 'home_root_slots',
-    userId: string,
-    agencyId: string,
-    valeur: unknown,
-  ) => {
-    const { data } = await supabase
-      .from('user_ui_settings')
-      .select(colonne)
-      .eq('user_id', userId)
-      .maybeSingle();
-    const actuel = (data as Record<string, unknown> | null)?.[colonne];
-    const base: Record<string, unknown> =
-      actuel && !Array.isArray(actuel) && typeof actuel === 'object'
-        ? { ...(actuel as Record<string, unknown>) }
-        : {};
-    // Purge de l'ancien format au passage : ses deux clés parasiteraient le
-    // dictionnaire.
-    delete base.agencyId;
-    delete base.items;
-    base[agencyId] = valeur;
-    return supabase
-      .from('user_ui_settings')
-      .upsert({ user_id: userId, [colonne]: base } as any, { onConflict: 'user_id' });
-  };
+  // Lecture/écriture serveur : voir src/lib/dispositionAccueil.ts (une seule
+  // écriture à la fois, dernière valeur seulement, chaque version datée).
 
   // Réconciliation d'une grille déjà enregistrée (localStorage OU serveur)
   // avec la définition actuelle des tuiles : ajout des modules apparus
@@ -1518,10 +1479,14 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   const [syncPrete, setSyncPrete] = useState(0);
   const [rootSlots, setRootSlots] = useState<(string | null)[]>(() => loadRootSlots(ROOT_SLOTS_KEY, tiles));
   const rootSlotsKeyRef = useRef(ROOT_SLOTS_KEY);
+  const rootSlotsRef = useRef(rootSlots);
+  useEffect(() => { rootSlotsRef.current = rootSlots; }, [rootSlots]);
   useEffect(() => {
     if (rootSlotsKeyRef.current === ROOT_SLOTS_KEY) return;
     rootSlotsKeyRef.current = ROOT_SLOTS_KEY;
-    setRootSlots(loadRootSlots(ROOT_SLOTS_KEY, tiles));
+    const recharges = loadRootSlots(ROOT_SLOTS_KEY, tiles);
+    derniersSlotsRef.current = JSON.stringify(recharges);
+    setRootSlots(recharges);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ROOT_SLOTS_KEY]);
   // Nouvelle tuile ajoutée à `tiles` après le montage (raccourci créé,
@@ -1543,13 +1508,26 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles]);
+  // Dernière valeur réellement enregistrée (sérialisée) : l'effet ci-dessous
+  // ne date une version que si elle a changé, pas au simple (re)montage —
+  // sinon la grille du navigateur passerait toujours pour plus récente que
+  // celle du serveur, et la synchronisation entre appareils ne jouerait plus.
+  const derniersSlotsRef = useRef(JSON.stringify(rootSlots));
   useEffect(() => {
-    try { localStorage.setItem(ROOT_SLOTS_KEY, JSON.stringify(rootSlots)); } catch { /* ignore */ }
+    const serialise = JSON.stringify(rootSlots);
+    const change = serialise !== derniersSlotsRef.current;
+    derniersSlotsRef.current = serialise;
+    try { localStorage.setItem(ROOT_SLOTS_KEY, serialise); } catch { /* ignore */ }
+    let maj = lireHorodatageLocal(ROOT_SLOTS_KEY) ?? 0;
+    if (change) {
+      maj = Date.now();
+      ecrireHorodatageLocal(ROOT_SLOTS_KEY, maj);
+    }
     // Même cloisonnement par agence que home_tiles ci-dessous (voir
     // commentaire détaillé plus bas) — même colonne serveur unique par
     // compte, donc même risque d'écrasement inter-agences sans `agencyId`.
-    if (currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
-      ecrireDispositionAgence('home_root_slots', currentUser.uid, activeAgency.id, rootSlots)
+    if (change && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
+      ecrireDispositionAgence('home_root_slots', currentUser.uid, activeAgency.id, rootSlots, maj)
         // Signalé : "les tuiles déplacées ne se sauvegardent jamais à la
         // même place" — cette écriture serveur échouait en silence (erreur
         // avalée). Diagnostic temporaire : la journaliser au lieu de
@@ -1607,9 +1585,33 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           .select('home_tiles, home_root_slots')
           .eq('user_id', currentUser.uid)
           .maybeSingle();
-        const tuilesServeur = lireDispositionAgence((data as any)?.home_tiles, agencyId);
-        if (tuilesServeur && tuilesServeur.length > 0) {
+        // 3 septembre : la version la plus RÉCENTE gagne, celle du navigateur
+        // comme celle du serveur. Avant, le serveur l'emportait toujours —
+        // même en retard d'une écriture (dossier créé, tuiles pas encore
+        // parties), même sans date. Une grille locale datée et plus fraîche
+        // est gardée et poussée au serveur ; à dates égales ou inconnues,
+        // le serveur reste la référence (synchronisation entre appareils).
+        // Clés du navigateur pour CETTE agence (celle du chargement), et non
+        // l'agence active du moment : un super admin peut avoir changé
+        // d'agence pendant la lecture.
+        const cleTuiles = `novasphere_home_tiles_v3_${agencyId}`;
+        const cleSlots = `novasphere_home_slots_v1_${agencyId}`;
+        const toujoursActive = () => homeTilesKeyRef.current === cleTuiles;
+        const lectureTuiles = lireDispositionAgence((data as any)?.home_tiles, agencyId);
+        const tuilesServeur = lectureTuiles.items;
+        const majLocaleTuiles = lireHorodatageLocal(cleTuiles) ?? 0;
+        const localeTuilesPlusFraiche = majLocaleTuiles > (lectureTuiles.maj ?? 0);
+        if (localeTuilesPlusFraiche) {
+          homeSyncReadyAgencies.add(agencyId);
+          const locales = toujoursActive() ? tilesRef.current : JSON.parse(localStorage.getItem(cleTuiles) || '[]');
+          void ecrireDispositionAgence('home_tiles', currentUser.uid, agencyId, locales, majLocaleTuiles);
+        } else if (tuilesServeur && tuilesServeur.length > 0) {
+          const normalisees = (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t));
+          try { localStorage.setItem(cleTuiles, JSON.stringify(normalisees)); } catch { /* ignore */ }
+          if (lectureTuiles.maj) ecrireHorodatageLocal(cleTuiles, lectureTuiles.maj);
+          if (!toujoursActive()) return;
           skipNextTilesSaveRef.current = true;
+          derniersTilesRef.current = JSON.stringify(normalisees);
           // ATTENTION — ne pas repasser cette grille par reconcilierGrille.
           // Essayé le 2 septembre, pour que les nouveaux modules
           // apparaissent aussi sur les grilles synchronisées : les tuiles
@@ -1619,11 +1621,22 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           // agency_ui_settings) : la réconciliation ne les trouve donc pas,
           // les croit disparues, et les repose à la racine. Même piège que
           // les « cinq Immosphera » du 1er septembre.
-          setTiles((tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t)));
+          setTiles(normalisees);
         }
-        const slotsServeur = lireDispositionAgence((data as any)?.home_root_slots, agencyId);
-        if (slotsServeur) {
-          setRootSlots(slotsServeur as (string | null)[]);
+        const lectureSlots = lireDispositionAgence((data as any)?.home_root_slots, agencyId);
+        const slotsServeur = lectureSlots.items;
+        const majLocaleSlots = lireHorodatageLocal(cleSlots) ?? 0;
+        if (majLocaleSlots > (lectureSlots.maj ?? 0)) {
+          homeSyncReadyAgencies.add(agencyId);
+          const locaux = toujoursActive() ? rootSlotsRef.current : JSON.parse(localStorage.getItem(cleSlots) || '[]');
+          void ecrireDispositionAgence('home_root_slots', currentUser.uid, agencyId, locaux, majLocaleSlots);
+        } else if (slotsServeur) {
+          const valeur = slotsServeur as (string | null)[];
+          try { localStorage.setItem(cleSlots, JSON.stringify(valeur)); } catch { /* ignore */ }
+          if (lectureSlots.maj) ecrireHorodatageLocal(cleSlots, lectureSlots.maj);
+          if (!toujoursActive()) return;
+          derniersSlotsRef.current = JSON.stringify(valeur);
+          setRootSlots(valeur);
         }
       } catch {
         /* best-effort — le navigateur reste la source si le serveur échoue */
@@ -1643,11 +1656,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // ce qui écraserait la grille déjà enregistrée de l'agence qu'on vient
   // d'ouvrir avant que le rechargement ci-dessus n'ait fini de s'appliquer.
   const skipNextTilesSaveRef = useRef(false);
+  // Grille courante et dernière valeur enregistrée (sérialisée), lisibles
+  // depuis le chargement serveur asynchrone ci-dessus.
+  const tilesRef = useRef(tiles);
+  const derniersTilesRef = useRef(JSON.stringify(tiles));
   useEffect(() => {
     if (homeTilesKeyRef.current === HOME_TILES_KEY) return;
     homeTilesKeyRef.current = HOME_TILES_KEY;
     skipNextTilesSaveRef.current = true;
-    setTiles(loadTilesForKey(HOME_TILES_KEY));
+    const rechargees = loadTilesForKey(HOME_TILES_KEY);
+    derniersTilesRef.current = JSON.stringify(rechargees);
+    setTiles(rechargees);
     setOpenFolderStack([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [HOME_TILES_KEY]);
@@ -2213,10 +2232,20 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // plus haut) pour ne jamais écraser la grille d'une AUTRE agence de ce
   // même compte au prochain chargement.
   useEffect(() => {
+    tilesRef.current = tiles;
     if (skipNextTilesSaveRef.current) { skipNextTilesSaveRef.current = false; return; }
-    localStorage.setItem(HOME_TILES_KEY, JSON.stringify(tiles));
-    if (currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
-      ecrireDispositionAgence('home_tiles', currentUser.uid, activeAgency.id, tiles)
+    const serialise = JSON.stringify(tiles);
+    // Une version n'est datée que si elle a changé (voir derniersSlotsRef).
+    const change = serialise !== derniersTilesRef.current;
+    derniersTilesRef.current = serialise;
+    localStorage.setItem(HOME_TILES_KEY, serialise);
+    let maj = lireHorodatageLocal(HOME_TILES_KEY) ?? 0;
+    if (change) {
+      maj = Date.now();
+      ecrireHorodatageLocal(HOME_TILES_KEY, maj);
+    }
+    if (change && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
+      ecrireDispositionAgence('home_tiles', currentUser.uid, activeAgency.id, tiles, maj)
         // Diagnostic temporaire (même raison que home_root_slots juste
         // au-dessus) : journaliser l'erreur réelle au lieu de l'avaler, et
         // la remonter en toast pour ne pas dépendre de la console navigateur.
