@@ -5,6 +5,10 @@ import { Contact, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { matchesAgency } from '@/hooks/useContacts';
 import { formatVille } from '@/lib/utils';
+import {
+  ChampsSociete, ChampsConjoint, SOCIETE_VIDE, CONJOINT_VIDE, societeRenseignee,
+  societeVersContact, conjointVersTexte, conjointRenseigne, type Societe, type Conjoint,
+} from '@/components/leads/ChampsCommunsFiche';
 
 interface NouveauLeadModalProps {
   isOpen: boolean;
@@ -127,18 +131,16 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
 
   // Collapsible sections
   const [showCoContact, setShowCoContact] = useState(false);
-  const [coFirstName, setCoFirstName] = useState('');
-  const [coLastName, setCoLastName] = useState('');
-  const [coEmail, setCoEmail] = useState('');
-  const [coPhone, setCoPhone] = useState('');
+  const [conjoint, setConjoint] = useState<Conjoint>({ ...CONJOINT_VIDE });
 
+  // Société / professionnel : mêmes champs qu'à la modification (voir
+  // leads/ChampsCommunsFiche). Le bloc s'ouvre de lui-même quand le type de
+  // contact est « Professionnel », et reste ajoutable pour un particulier.
   const [showCompany, setShowCompany] = useState(false);
-  const [companyName, setCompanyName] = useState('');
-  const [siret, setSiret] = useState('');
-  const [companyRole, setCompanyRole] = useState('');
-  const [companyAddress, setCompanyAddress] = useState('');
-  const [companyZip, setCompanyZip] = useState('');
-  const [companyCity, setCompanyCity] = useState('');
+  const [societe, setSociete] = useState<Societe>({ ...SOCIETE_VIDE });
+  // « CA devis à venir » (Novavisio) : existait à la modification, pas à la
+  // création.
+  const [caDevis, setCaDevis] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Novavisio, demandé le 2 septembre : « quand on crée le client aussi il
@@ -174,17 +176,10 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
     setAssignedTo('');
     setComments('');
     setShowCoContact(false);
-    setCoFirstName('');
-    setCoLastName('');
-    setCoEmail('');
-    setCoPhone('');
+    setConjoint({ ...CONJOINT_VIDE });
     setShowCompany(false);
-    setCompanyName('');
-    setSiret('');
-    setCompanyRole('');
-    setCompanyAddress('');
-    setCompanyZip('');
-    setCompanyCity('');
+    setSociete({ ...SOCIETE_VIDE });
+    setCaDevis('');
     setSubmitting(false);
   }, [isOpen]);
 
@@ -210,21 +205,8 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
     const formattedFirstName = formatFirstName(firstName.trim());
     const formattedLastName = formatLastName(lastName.trim());
 
-    // Build coBorrower string if filled
-    let coBorrowerInfo = '';
-    if (coFirstName.trim() || coLastName.trim()) {
-      const fCoFirst = formatFirstName(coFirstName.trim());
-      const fCoLast = formatLastName(coLastName.trim());
-      coBorrowerInfo = `${fCoFirst} ${fCoLast}`.trim();
-      if (coPhone) coBorrowerInfo += ` (${coPhone})`;
-      if (coEmail) coBorrowerInfo += ` [${coEmail}]`;
-    }
-
-    // Append company info to comments if provided
-    let companyComments = '';
-    if (showCompany && companyName.trim()) {
-      companyComments = `\n[Société]: ${companyName.trim()}${siret ? ` (SIRET: ${siret})` : ''}${companyRole ? ` - Poste: ${companyRole}` : ''}${companyAddress ? ` - Adresse: ${companyAddress} ${companyZip} ${companyCity}` : ''}`;
-    }
+    const coBorrowerInfo = conjointRenseigne(conjoint) ? conjointVersTexte(conjoint) : '';
+    const societeAEnregistrer = societeRenseignee(societe) ? societeVersContact(societe) : {};
 
     setSubmitting(true);
     try {
@@ -245,14 +227,12 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         honoraires: honoraires === '' ? 0 : Math.round((Number(honoraires) / 1.2) * 100) / 100,
         advisorCommissionTtc: advisorCommission === '' ? undefined : Number(advisorCommission),
         mandateNumber: mandateNumber.trim() || undefined,
-        comments: (comments.trim() + companyComments).trim(),
+        comments: comments.trim(),
         // Signalé le 2 septembre : l'identité du professionnel doit être
-        // visible dans le panneau Gestion des clients. Elle n'était écrite
-        // que dans les commentaires, en texte libre — invisible partout
-        // ailleurs. Elle part maintenant aussi dans la colonne dédiée.
-        companyName: companyName.trim() || undefined,
-        companyAddress:
-          [companyAddress.trim(), companyZip.trim(), companyCity.trim()].filter(Boolean).join(' ') || undefined,
+        // visible dans le panneau Gestion des clients. Colonne JSON dédiée
+        // (nom, SIRET, fonction, adresse, code postal, ville).
+        ...societeAEnregistrer,
+        caDevisAVenir: caDevis.trim() === '' ? undefined : Number(caDevis.trim().replace(',', '.')),
         coBorrower: coBorrowerInfo || undefined,
         assignedTo: assignedTo || undefined,
       });
@@ -411,27 +391,6 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                   </div>
-                  {/* « Quand on choisit Professionnel, juste en dessous on
-                      puisse mettre l'identité du professionnel avec
-                      l'adresse. » */}
-                  {contactType === 'Professionnel' && (
-                    <div className="space-y-1.5 pt-1">
-                      <input
-                        type="text"
-                        placeholder="Identité du professionnel (raison sociale)"
-                        value={companyName}
-                        onChange={(e) => setCompanyName(e.target.value)}
-                        className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Adresse du professionnel"
-                        value={companyAddress}
-                        onChange={(e) => setCompanyAddress(e.target.value)}
-                        className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
-                      />
-                    </div>
-                  )}
                 </div>
 
                 {/* Pipeline */}
@@ -565,6 +524,22 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                   />
                 </div>
                 )}
+
+                {/* CA devis à venir (Novavisio) — même case qu'à la modification. */}
+                {estNovavisio && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-200">CA devis à venir (€)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Montant du devis envoyé, en attente de signature"
+                    value={caDevis}
+                    onChange={(e) => setCaDevis(e.target.value)}
+                    className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
+                  />
+                  <p className="text-[10px] text-slate-500">Repris dans la tuile « CA devis à venir » du Tableau de bord.</p>
+                </div>
+                )}
               </div>
             </div>
 
@@ -641,145 +616,59 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                 </button>
 
                 {showCoContact && (
-                  <div className="p-3.5 border-t border-[#153c3f] bg-[#07191b]/50 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 animate-fade-in">
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-slate-200">Prénom conjoint</label>
-                      <input
-                        type="text"
-                        placeholder="ex: Marie"
-                        value={coFirstName}
-                        onChange={(e) => setCoFirstName(formatFirstName(e.target.value))}
-                        className="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-slate-200">Nom conjoint</label>
-                      <input
-                        type="text"
-                        placeholder="ex: DUPONT"
-                        value={coLastName}
-                        onChange={(e) => setCoLastName(formatLastName(e.target.value))}
-                        className="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white font-bold focus:outline-none focus:border-[#F7BC5F] uppercase"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-slate-200">Email conjoint</label>
-                      <input
-                        type="email"
-                        placeholder="conjoint@exemple.fr"
-                        value={coEmail}
-                        onChange={(e) => setCoEmail(e.target.value)}
-                        className="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-slate-200">Téléphone conjoint</label>
-                      <input
-                        type="tel"
-                        placeholder="06 00 00 00 00"
-                        value={coPhone}
-                        onChange={(e) => setCoPhone(e.target.value)}
-                        className="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F] font-mono"
-                      />
-                    </div>
+                  <div className="p-3.5 border-t border-[#153c3f] bg-[#07191b]/50 animate-fade-in">
+                    <ChampsConjoint
+                      valeur={conjoint}
+                      onChange={setConjoint}
+                      field="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+                      label="block text-xs font-semibold text-slate-200 mb-1.5"
+                    />
                   </div>
                 )}
               </div>
               )}
 
-              {/* Toggle 2: Société (professionnel) — remplacé sur Novavisio
-                  par les deux champs posés sous « Type de contact ». */}
-              {!estNovavisio && (
+              {/* Société / professionnel : ouvert d'office pour un
+                  « Professionnel », ajoutable pour un particulier (SCI,
+                  investisseur…). Mêmes champs qu'à la modification. */}
+              {(() => {
+                const ouvert = contactType === 'Professionnel' || showCompany;
+                return (
               <div className="bg-[#030d0f] border border-[#153c3f] rounded-xl overflow-hidden transition-all">
                 <button
                   type="button"
-                  onClick={() => setShowCompany(!showCompany)}
-                  className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-bold text-slate-200 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                  onClick={() => setShowCompany(!ouvert)}
+                  disabled={contactType === 'Professionnel'}
+                  className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-bold text-slate-200 hover:text-white hover:bg-white/5 transition-colors cursor-pointer disabled:cursor-default"
                 >
                   <div className="flex items-center gap-2">
                     <Building className="w-4 h-4 text-[#F7BC5F]" />
-                    <span>Société (professionnel)</span>
+                    <span>Société / professionnel</span>
                   </div>
-                  <span className="text-[11px] text-[#F9C977] font-semibold flex items-center gap-1">
-                    {showCompany ? (
-                      <>Masquer <ChevronUp className="w-3.5 h-3.5" /></>
-                    ) : (
-                      <>+ Ajouter <ChevronDown className="w-3.5 h-3.5" /></>
-                    )}
-                  </span>
+                  {contactType !== 'Professionnel' && (
+                    <span className="text-[11px] text-[#F9C977] font-semibold flex items-center gap-1">
+                      {ouvert ? (
+                        <>Masquer <ChevronUp className="w-3.5 h-3.5" /></>
+                      ) : (
+                        <>+ Ajouter <ChevronDown className="w-3.5 h-3.5" /></>
+                      )}
+                    </span>
+                  )}
                 </button>
 
-                {showCompany && (
-                  <div className="p-3.5 border-t border-[#153c3f] bg-[#07191b]/50 space-y-3 animate-fade-in">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-semibold text-slate-200">Nom de la société</label>
-                        <input
-                          type="text"
-                          placeholder="Nom entreprise"
-                          value={companyName}
-                          onChange={(e) => setCompanyName(e.target.value)}
-                          className="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-semibold text-slate-200">SIRET</label>
-                        <input
-                          type="text"
-                          placeholder="123 456 789 00012"
-                          value={siret}
-                          onChange={(e) => setSiret(e.target.value)}
-                          className="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F] font-mono"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-semibold text-slate-200">Fonction / poste</label>
-                        <input
-                          type="text"
-                          placeholder="ex: Gérant"
-                          value={companyRole}
-                          onChange={(e) => setCompanyRole(e.target.value)}
-                          className="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
-                      <div className="sm:col-span-6 space-y-1.5">
-                        <label className="block text-xs font-semibold text-slate-200">Adresse (rue, n°)</label>
-                        <input
-                          type="text"
-                          placeholder="12 rue de la République"
-                          value={companyAddress}
-                          onChange={(e) => setCompanyAddress(e.target.value)}
-                          className="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                        />
-                      </div>
-                      <div className="sm:col-span-3 space-y-1.5">
-                        <label className="block text-xs font-semibold text-slate-200">Code postal</label>
-                        <input
-                          type="text"
-                          placeholder="11100"
-                          value={companyZip}
-                          onChange={(e) => setCompanyZip(e.target.value)}
-                          className="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F] font-mono"
-                        />
-                      </div>
-                      <div className="sm:col-span-3 space-y-1.5">
-                        <label className="block text-xs font-semibold text-slate-200">Ville</label>
-                        <input
-                          type="text"
-                          placeholder="Narbonne"
-                          value={companyCity}
-                          onChange={(e) => setCompanyCity(e.target.value)}
-                          className="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                        />
-                      </div>
-                    </div>
+                {ouvert && (
+                  <div className="p-3.5 border-t border-[#153c3f] bg-[#07191b]/50 animate-fade-in">
+                    <ChampsSociete
+                      valeur={societe}
+                      onChange={setSociete}
+                      field="w-full bg-[#030d0f] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+                      label="block text-xs font-semibold text-slate-200 mb-1.5"
+                    />
                   </div>
                 )}
               </div>
-              )}
+                );
+              })()}
 
             </div>
 

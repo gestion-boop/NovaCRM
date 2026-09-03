@@ -123,6 +123,10 @@ export function supabaseLeadToContact(item: Record<string, unknown>): Contact {
         : Number(item.recurring_amount),
     companyName: ((item.company as Record<string, unknown> | null)?.name as string) || undefined,
     companyAddress: ((item.company as Record<string, unknown> | null)?.address as string) || undefined,
+    companySiret: ((item.company as Record<string, unknown> | null)?.siret as string) || undefined,
+    companyRole: ((item.company as Record<string, unknown> | null)?.role as string) || undefined,
+    companyZip: ((item.company as Record<string, unknown> | null)?.postal_code as string) || undefined,
+    companyCity: ((item.company as Record<string, unknown> | null)?.city as string) || undefined,
   };
 }
 
@@ -282,12 +286,21 @@ export const useContacts = () => {
         // l'information n'apparaît nulle part ailleurs (panneau Gestion des
         // clients, fiche, exports).
         company:
-          newContact.companyName?.trim() || newContact.companyAddress?.trim()
+          [newContact.companyName, newContact.companyAddress, newContact.companySiret,
+           newContact.companyRole, newContact.companyZip, newContact.companyCity].some((v) => v?.trim())
             ? {
                 name: newContact.companyName?.trim() || null,
+                // `address` / `postal_code` / `city` : les clés que lit la
+                // géolocalisation (lib/geolocalisationFiches) — l'adresse
+                // saisie à la création place donc le point sur la carte.
                 address: newContact.companyAddress?.trim() || null,
+                postal_code: newContact.companyZip?.trim() || null,
+                city: newContact.companyCity?.trim() || null,
+                siret: newContact.companySiret?.trim() || null,
+                role: newContact.companyRole?.trim() || null,
               }
             : null,
+        pending_quote_amount: newContact.caDevisAVenir ?? null,
       };
 
       const { data, error: sbError } = await supabase
@@ -390,18 +403,26 @@ export const useContacts = () => {
       // Colonne JSON : on la réécrit entière, en conservant ce qu'elle
       // contient déjà (SIRET, ville... saisis à la création) — sans quoi
       // modifier l'adresse effacerait le reste.
-      if (updates.companyName !== undefined || updates.companyAddress !== undefined) {
+      const clesSociete: [keyof Contact, string][] = [
+        ['companyName', 'name'],
+        ['companyAddress', 'address'],
+        ['companyZip', 'postal_code'],
+        ['companyCity', 'city'],
+        ['companySiret', 'siret'],
+        ['companyRole', 'role'],
+      ];
+      if (clesSociete.some(([champ]) => updates[champ] !== undefined)) {
         const { data: ligne } = await supabase
           .from('leads')
           .select('company')
           .eq('id', id)
           .maybeSingle();
         const existant = ((ligne as { company: Record<string, unknown> | null } | null)?.company) || {};
-        patch.company = {
-          ...existant,
-          ...(updates.companyName !== undefined ? { name: updates.companyName } : {}),
-          ...(updates.companyAddress !== undefined ? { address: updates.companyAddress } : {}),
-        };
+        const fusion: Record<string, unknown> = { ...existant };
+        for (const [champ, cle] of clesSociete) {
+          if (updates[champ] !== undefined) fusion[cle] = (updates[champ] as string) || null;
+        }
+        patch.company = fusion;
       }
 
       if (updates.clientType !== undefined) {

@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { X, Save, Pencil } from 'lucide-react';
+import { X, Save, Pencil, Building, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  ChampsSociete, ChampsConjoint, societeDepuisContact, societeRenseignee, societeVersContact,
+  conjointDepuisTexte, conjointVersTexte, conjointRenseigne, type Societe, type Conjoint,
+} from '@/components/leads/ChampsCommunsFiche';
 import { Contact, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { htDepuisTtc, ttcDepuisHt, formatVille } from '@/lib/utils';
@@ -54,11 +58,14 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
   const [secteur, setSecteur] = useState(client.secteur || '');
   const [typeBien, setTypeBien] = useState(client.typeBien || client.projectType || '');
   const [assignedTo, setAssignedTo] = useState(client.assignedTo || '');
-  const [coBorrower, setCoBorrower] = useState(client.coBorrower || '');
-  // Novavisio, demandé le 2 septembre : l'identité et l'adresse du
-  // professionnel, saisies juste sous le choix « Professionnel ».
-  const [companyName, setCompanyName] = useState(client.companyName || '');
-  const [companyAddress, setCompanyAddress] = useState(client.companyAddress || '');
+  // Deuxième personne : mêmes quatre champs qu'à la création (prénom, nom,
+  // e-mail, téléphone), relus depuis le texte enregistré.
+  const [conjoint, setConjoint] = useState<Conjoint>(() => conjointDepuisTexte(client.coBorrower));
+  const [showCoContact, setShowCoContact] = useState(() => conjointRenseigne(conjointDepuisTexte(client.coBorrower)));
+  // Société / professionnel : identité, SIRET, fonction, adresse, code
+  // postal, ville — identiques à la création (leads/ChampsCommunsFiche).
+  const [societe, setSociete] = useState<Societe>(() => societeDepuisContact(client));
+  const [showCompany, setShowCompany] = useState(() => societeRenseignee(societeDepuisContact(client)));
   // « Dans la fiche client, tu devras créer juste une petite case CA devis à
   // venir pour marquer le montant » — c'est cette case qui alimente la tuile
   // du même nom sur le Tableau de bord.
@@ -117,9 +124,8 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
         secteur: formatVille(secteur.trim()),
         typeBien: typeBien.trim(),
         assignedTo,
-        coBorrower: coBorrower.trim(),
-        companyName: companyName.trim(),
-        companyAddress: companyAddress.trim(),
+        coBorrower: conjointRenseigne(conjoint) ? conjointVersTexte(conjoint) : '',
+        ...societeVersContact(societe),
         caDevisAVenir: caDevis.trim() === '' ? undefined : Number(caDevis.trim().replace(',', '.')),
         comments: comments.trim(),
       });
@@ -219,29 +225,38 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
                 <option value="Professionnel">Professionnel</option>
               </select>
             </div>
-            {contactType === 'Professionnel' && (
-              <>
-                <div>
-                  <label className={label}>Identité du professionnel</label>
-                  <input
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="Raison sociale"
-                    className={`${field} placeholder-slate-500`}
-                  />
-                </div>
-                <div>
-                  <label className={label}>Adresse du professionnel</label>
-                  <input
-                    value={companyAddress}
-                    onChange={(e) => setCompanyAddress(e.target.value)}
-                    placeholder="N°, rue, code postal, ville"
-                    className={`${field} placeholder-slate-500`}
-                  />
-                </div>
-              </>
-            )}
           </div>
+
+          {/* Société / professionnel : ouvert d'office pour un
+              « Professionnel », ajoutable pour un particulier. */}
+          {(() => {
+            const ouvert = contactType === 'Professionnel' || showCompany;
+            return (
+              <div className="bg-[#030d0f] border border-[#153c3f] rounded-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowCompany(!ouvert)}
+                  disabled={contactType === 'Professionnel'}
+                  className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-bold text-slate-200 hover:text-white hover:bg-white/5 transition-colors disabled:cursor-default"
+                >
+                  <span className="flex items-center gap-2">
+                    <Building className="w-4 h-4 text-[#F7BC5F]" />
+                    Société / professionnel
+                  </span>
+                  {contactType !== 'Professionnel' && (
+                    <span className="text-[11px] text-[#F9C977] font-semibold flex items-center gap-1">
+                      {ouvert ? <>Masquer <ChevronUp className="w-3.5 h-3.5" /></> : <>+ Ajouter <ChevronDown className="w-3.5 h-3.5" /></>}
+                    </span>
+                  )}
+                </button>
+                {ouvert && (
+                  <div className="p-3.5 border-t border-[#153c3f] bg-[#07191b]/50">
+                    <ChampsSociete valeur={societe} onChange={setSociete} field={`${field} placeholder-slate-500`} label={label} />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -334,14 +349,22 @@ export default function EditClientModal({ client, onClose, onSave }: Props) {
           )}
 
           {!estNovavisio && (
-            <div>
-              <label className={label}>Deuxième personne (conjoint, co-contact)</label>
-              <input
-                value={coBorrower}
-                onChange={(e) => setCoBorrower(e.target.value)}
-                placeholder="Nom, téléphone, e-mail…"
-                className={`${field} placeholder-slate-500`}
-              />
+            <div className="bg-[#030d0f] border border-[#153c3f] rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowCoContact((v) => !v)}
+                className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-bold text-slate-200 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <span>Deuxième personne (conjoint, co-contact)</span>
+                <span className="text-[11px] text-[#F9C977] font-semibold flex items-center gap-1">
+                  {showCoContact ? <>Masquer <ChevronUp className="w-3.5 h-3.5" /></> : <>+ Ajouter <ChevronDown className="w-3.5 h-3.5" /></>}
+                </span>
+              </button>
+              {showCoContact && (
+                <div className="p-3.5 border-t border-[#153c3f] bg-[#07191b]/50">
+                  <ChampsConjoint valeur={conjoint} onChange={setConjoint} field={`${field} placeholder-slate-500`} label={label} />
+                </div>
+              )}
             </div>
           )}
 

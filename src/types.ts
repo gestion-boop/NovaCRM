@@ -26,6 +26,13 @@ export interface Contact {
   // colonne JSON `leads.company`, déjà prévue pour ça.
   companyName?: string;
   companyAddress?: string;
+  // Même colonne JSON `leads.company` : SIRET, fonction, code postal et
+  // ville, pour que la fiche modifiée reprenne exactement ce que la création
+  // propose (demande du 3 septembre : « les mêmes infos pour rectifier »).
+  companySiret?: string;
+  companyRole?: string;
+  companyZip?: string;
+  companyCity?: string;
   // « CA devis à venir » (Novavisio) : montant du devis envoyé, en attente de
   // signature. Colonne `leads.pending_quote_amount`.
   caDevisAVenir?: number;
