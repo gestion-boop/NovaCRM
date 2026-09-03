@@ -5,7 +5,9 @@ import { getAgencyLogo } from '@/lib/agency-logos';
 // Demande de Sylvain (3 septembre) : « mettre les 3 logos en haut pour bien
 // sélectionner les sociétés », pour le super admin et les personnes à deux
 // sociétés comme Karine — le menu déroulant était trop pénible. Une rangée
-// de logos, un clic = la société. Ne s'affiche que s'il y a un choix.
+// de logos bien éclairés (retour de Sylvain : « trop sombre avant la
+// sélection »), le logo actif cerclé d'or ; un clic = la société.
+// Ne s'affiche que s'il y a un choix.
 interface Props {
   agencies: Agency[];
   selectedId: string;
@@ -37,8 +39,8 @@ const AgencyLogoSwitcher: React.FC<Props> = ({ agencies, selectedId, onSelect, s
             onClick={() => onSelect(agency)}
             className={`${dim} shrink-0 rounded-lg flex items-center justify-center p-1 transition-all ${
               active
-                ? 'bg-[#F7BC5F]/20 ring-2 ring-[#F7BC5F] opacity-100'
-                : 'bg-white/5 opacity-50 hover:opacity-100 hover:bg-white/10'
+                ? 'bg-[#F7BC5F]/25 ring-2 ring-[#F7BC5F] opacity-100'
+                : 'bg-white/15 opacity-95 hover:opacity-100 hover:bg-white/25'
             }`}
           >
             <img src={getAgencyLogo(agency.id === 'all' ? null : agency.name)} alt="" className="w-full h-full object-contain" draggable={false} />
