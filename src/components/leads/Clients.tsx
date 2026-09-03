@@ -577,16 +577,33 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
 
                 {/* ── Contact ── */}
                 <div className="space-y-1.5 text-[13px] mb-3">
+                  {/* Demande (3 septembre) : e-mail et téléphone cliquables et
+                      surlignés. stopPropagation : le clic ne doit pas aussi
+                      ouvrir la fiche. */}
                   {l.email && (
                     <p className="flex items-center gap-2.5 text-muted-foreground">
                       <Mail className="w-4 h-4 shrink-0 text-primary/60" />
-                      <span className="truncate">{l.email}</span>
+                      <a
+                        href={`mailto:${l.email}`}
+                        title="Écrire un e-mail"
+                        onClick={(e) => e.stopPropagation()}
+                        className="truncate text-primary underline underline-offset-2 decoration-primary/50 hover:decoration-primary"
+                      >
+                        {l.email}
+                      </a>
                     </p>
                   )}
                   {l.phone && (
                     <p className="flex items-center gap-2.5 text-muted-foreground">
                       <Phone className="w-4 h-4 shrink-0 text-primary/60" />
-                      {l.phone}
+                      <a
+                        href={`tel:${String(l.phone).replace(/[^+\d]/g, '')}`}
+                        title="Appeler"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-primary underline underline-offset-2 decoration-primary/50 hover:decoration-primary"
+                      >
+                        {l.phone}
+                      </a>
                     </p>
                   )}
                   {/* Demandé le 2 septembre pour Novavisio : « cette
