@@ -1941,6 +1941,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
 
   // Folder Stack state for navigation inside open folders/nested folders
   const [openFolderStack, setOpenFolderStack] = useState<TileItemNode[]>([]);
+  // Signalé (3 septembre) : « quand je suis sur cette fenêtre (dossier
+  // ouvert), je ne peux pas cliquer sur les maisons » — les logos de société
+  // en haut. Le clic passait, la société changeait, mais le dossier de
+  // l'ancienne société restait ouvert par-dessus : rien ne semblait bouger.
+  // Un changement de société referme le dossier.
+  useEffect(() => {
+    setOpenFolderStack([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAgency?.id]);
   const activeFolder = openFolderStack.length > 0 ? openFolderStack[openFolderStack.length - 1] : null;
 
   // Selected tile for palette or options
@@ -3327,7 +3336,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-xl z-50 flex items-center justify-center p-4 sm:p-8"
+            // Sur ordinateur, le voile s'arrête sous la barre du haut : les
+            // logos de société restent visibles et cliquables pendant qu'un
+            // dossier est ouvert.
+            className="fixed inset-x-0 bottom-0 top-0 md:top-[calc(4rem+env(safe-area-inset-top,0px))] bg-black/80 backdrop-blur-xl z-50 flex items-center justify-center p-4 sm:p-8"
           >
             <motion.div
               initial={{ scale: 0.8, opacity: 0, y: 20 }}
