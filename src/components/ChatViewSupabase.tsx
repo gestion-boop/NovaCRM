@@ -1161,6 +1161,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // les trois boutons restent exactement où ils sont.
   const [showChannelPlus, setShowChannelPlus] = useState(false);
   const [showConvPlus, setShowConvPlus] = useState(false);
+  // Message dont les outils (réagir / modifier / supprimer) sont ouverts sur
+  // écran tactile — voir classesOutilsMessage / gestesMessage plus bas.
+  const [messageOutilsFor, setMessageOutilsFor] = useState<string | null>(null);
+  const appuiMessageRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const channelPlusRef = useRef<HTMLDivElement | null>(null);
   const convPlusRef = useRef<HTMLDivElement | null>(null);
   // Prise de photo directe : même chemin que la photothèque (le fichier
@@ -2468,11 +2472,44 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // messages qu'elle met dans le chat". Les boutons existaient bien, mais en
   // `opacity-0 group-hover:opacity-100` : ils n'apparaissent qu'au SURVOL de
   // la souris. Sur un écran tactile il n'y a pas de survol — ils restaient
-  // donc invisibles et inatteignables. On les laisse affichés en permanence
-  // dès qu'il n'y a pas de pointeur fin.
-  const actionsMessage = (isMobile || isCoarsePointer)
-    ? 'opacity-100'
-    : 'opacity-0 group-hover:opacity-100';
+  // donc invisibles et inatteignables. Ils ont donc été affichés en
+  // permanence dès qu'il n'y a pas de pointeur fin.
+  // Suite (4 septembre) : « ne mets pas toujours le crayon et la poubelle à
+  // côté des messages, ça ne sert à rien ». Sur écran tactile ils ne sont
+  // plus permanents : un appui BREF sur le message les fait apparaître (un
+  // second appui, ou l'appui sur un autre message, les referme). Un appui
+  // LONG n'ouvre rien — il laisse le navigateur faire sa sélection de texte
+  // native, donc « copier le texte ou une partie du texte ». Un appui qui se
+  // déplace est un défilement : rien non plus. Sur ordinateur, le survol
+  // reste exactement le comportement d'origine.
+  const pointeurTactile = isMobile || isCoarsePointer;
+  const classesOutilsMessage = (id: string) =>
+    pointeurTactile
+      ? (messageOutilsFor === id ? 'opacity-100' : 'hidden')
+      : 'opacity-0 group-hover:opacity-100';
+  const gestesMessage = (id: string) =>
+    !pointeurTactile
+      ? {}
+      : {
+          onPointerDown: (e: React.PointerEvent) => {
+            appuiMessageRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+          },
+          onPointerUp: (e: React.PointerEvent) => {
+            const depart = appuiMessageRef.current;
+            appuiMessageRef.current = null;
+            if (!depart) return;
+            // Un appui sur un bouton, un lien ou un lecteur média garde son
+            // propre rôle (agrandir la photo, ouvrir le lien, écouter le vocal).
+            if ((e.target as HTMLElement).closest('button, a, audio, video, input, textarea')) return;
+            // 400 ms : au-delà, c'est un appui long (sélection de texte).
+            if (Date.now() - depart.t > 400) return;
+            // 10 px : au-delà, le doigt a fait défiler la conversation.
+            if (Math.abs(e.clientX - depart.x) > 10 || Math.abs(e.clientY - depart.y) > 10) return;
+            // Une sélection de texte en cours ne doit pas être balayée.
+            if ((window.getSelection()?.toString() || '').length > 0) return;
+            setMessageOutilsFor((v) => (v === id ? null : id));
+          },
+        };
   const mobileShowingConversation = tab === 'conversations' ? !!activeConversationId : !!activeChannel;
   const goBackToList = () => {
     if (tab === 'conversations') setActiveConversationId(null);
@@ -2796,7 +2833,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               perdue qui écrase le texte en colonne étroite.
                               92 % sur téléphone, la valeur d'avant à partir du
                               format tablette : sur ordinateur, rien ne bouge. */}
-                          <div className={`flex items-end gap-1.5 max-w-[92%] sm:max-w-[80%] ${mine ? 'flex-row-reverse' : ''}`}>
+                          <div className={`flex items-end gap-1.5 max-w-[92%] sm:max-w-[80%] ${mine ? 'flex-row-reverse' : ''}`} {...gestesMessage(m.id)}>
                             <div className={`px-3.5 py-2 rounded-2xl text-sm ${
                               mine ? 'bg-[#F7BC5F] text-slate-950 font-medium' : 'bg-[#0b1c1e] border border-[#153c3f] text-white'
                             }`}>
@@ -2859,7 +2896,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             </div>
 
                             {!isEditing && (
-                              <div className={`${actionsMessage} transition-opacity flex items-center gap-0.5 shrink-0`}>
+                              <div className={`${classesOutilsMessage(m.id)} transition-opacity flex items-center gap-0.5 shrink-0`}>
                                 <div className="relative">
                                   <button
                                     type="button"
@@ -3029,7 +3066,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     les autres icônes) — padding réduit et micro remis à une
                     taille cohérente avec les autres boutons, sans toucher
                     aux autres icônes (image/emoji/envoyer). */}
-                <div className="p-3 border-t border-white/20 space-y-2.5">
+                <div className="relative p-3 max-sm:pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5">
                   <input ref={convImageInputRef} type="file" accept="image/*" hidden onChange={handleConvImageSelected} />
                   <input ref={convCameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleConvImageSelected} />
 
@@ -3130,19 +3167,19 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           boutons restent dans le document (leurs sélecteurs
                           emoji/Nova s'y ancrent) mais sont masqués sous le
                           format tablette — sur ordinateur, rien ne change. */}
-                      <div className="relative sm:hidden" ref={convPlusRef}>
+                      <div className="sm:hidden" ref={convPlusRef}>
                         <button
                           type="button"
                           onClick={() => setShowConvPlus((v) => !v)}
                           disabled={uploadingConvMedia || isRecordingConv}
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                          className="w-11 h-11 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
                           title="Ajouter"
                           aria-label="Ajouter une photo, un émoji ou un Novadji"
                         >
-                          <Plus className="w-5 h-5" />
+                          <Plus className="w-6 h-6 sm:w-5 sm:h-5" />
                         </button>
                         {showConvPlus && (
-                          <div className="absolute z-30 bottom-full mb-2 left-0 w-[min(20rem,calc(100vw-1.5rem))] bg-[#0b1c1e] border border-white/20 rounded-2xl p-2 shadow-xl">
+                          <div className="absolute z-30 bottom-full mb-2 left-0 right-0 bg-[#0b1c1e] border border-white/20 rounded-2xl p-2 shadow-xl">
                             <button
                               type="button"
                               onClick={() => { setShowConvPlus(false); convCameraInputRef.current?.click(); }}
@@ -3183,7 +3220,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       >
                         <ImageIcon className="w-5 h-5" />
                       </button>
-                      <div className="relative" ref={convEmojiRef}>
+                      <div className="sm:relative" ref={convEmojiRef}>
                         <button
                           type="button"
                           onClick={() => setShowConvEmoji((v) => !v)}
@@ -3193,7 +3230,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <Smile className="w-5 h-5" />
                         </button>
                         {showConvEmoji && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[min(440px,calc(100vw-1.5rem))] max-h-[340px] overflow-y-auto custom-scrollbar">
+                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center max-w-[min(440px,calc(100vw-1.5rem))] max-sm:max-w-none max-h-[340px] overflow-y-auto custom-scrollbar">
                             {QUICK_EMOJIS.map((e) => (
                               <button
                                 key={e}
@@ -3207,7 +3244,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           </div>
                         )}
                       </div>
-                      <div className="relative" ref={convNovaPickerRef}>
+                      <div className="sm:relative" ref={convNovaPickerRef}>
                         <button
                           type="button"
                           onClick={() => setShowConvNovaPicker((v) => !v)}
@@ -3217,7 +3254,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-6 h-6 object-contain" />
                         </button>
                         {showConvNovaPicker && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max">
+                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center">
                             {NOVA_QUICK_REACTIONS.map((src) => (
                               <button
                                 key={src}
@@ -3237,10 +3274,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       type="button"
                       onClick={() => (isRecordingConv ? void handleStopRecordingConv(false) : void handleStartRecordingConv())}
                       disabled={uploadingConvMedia || !!convVocalPret}
-                      className="justify-self-center w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-rose-500/30 transition-transform hover:scale-105 disabled:opacity-40 bg-rose-500/90 hover:bg-rose-500 text-white"
+                      className="justify-self-center w-14 h-14 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shadow-lg shadow-rose-500/30 transition-transform hover:scale-105 disabled:opacity-40 bg-rose-500/90 hover:bg-rose-500 text-white"
                       title="Message vocal"
                     >
-                      <Mic className="w-5 h-5" />
+                      <Mic className="w-6 h-6 sm:w-5 sm:h-5" />
                     </button>
 
                     <div className="flex items-center gap-2 justify-self-end">
@@ -3258,10 +3295,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         <button
                           type="button"
                           onClick={() => setShowConvSchedule((v) => !v)}
-                          className="relative w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                          className="relative w-11 h-11 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                           title="Programmer l'envoi"
                         >
-                          <Clock className="w-5 h-5" />
+                          <Clock className="w-6 h-6 sm:w-5 sm:h-5" />
                           {convScheduled.length > 0 && (
                             <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#F7BC5F] text-slate-950 text-[10px] font-bold flex items-center justify-center">
                               {convScheduled.length}
@@ -3315,9 +3352,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       <button
                         onClick={sendConvMessage}
                         disabled={!convDraft.trim() || isRecordingConv}
-                        className="w-10 h-10 rounded-full flex items-center justify-center bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-30 text-slate-950"
+                        className="w-11 h-11 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-30 text-slate-950"
                       >
-                        <Send className="w-4 h-4" />
+                        <Send className="w-5 h-5 sm:w-4 sm:h-4" />
                       </button>
                     </div>
                   </div>
@@ -3359,7 +3396,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       {/* Même correctif de largeur que côté conversations
                           directes (voir le commentaire là-haut) — les canaux
                           étaient encore plus étroits : 70 %. */}
-                      <div className={`flex items-end gap-1.5 max-w-[92%] sm:max-w-[70%] ${mine ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex items-end gap-1.5 max-w-[92%] sm:max-w-[70%] ${mine ? 'flex-row-reverse' : ''}`} {...gestesMessage(m.id)}>
                       <div className={`px-3.5 py-2 rounded-2xl text-sm ${
                         mine
                           ? 'bg-[#F7BC5F] text-slate-950 font-medium'
@@ -3418,7 +3455,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           ouvert à l'auteur ET à isAdmin (super_admin ou admin,
                           voir la définition en haut du composant). */}
                       {!isEditing && (mine || isAdmin) && (
-                        <div className={`${actionsMessage} transition-opacity flex items-center gap-0.5 shrink-0`}>
+                        <div className={`${classesOutilsMessage(m.id)} transition-opacity flex items-center gap-0.5 shrink-0`}>
                           {mine && !isNova && (
                             <button
                               type="button"
@@ -3452,7 +3489,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   directes (bloc `space-y-2.5` plus haut). Tant qu'aucun vocal
                   n'attend, ce conteneur n'a qu'un enfant : rendu identique à
                   avant, aucune classe des boutons n'a bougé. */}
-              <div className="p-4 border-t border-white/20 space-y-2.5">
+              <div className="relative p-4 max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5">
                 {channelVocalPret && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/20">
                     <audio
@@ -3490,7 +3527,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     Nova, photo) et libère la largeur de la barre de saisie.
                     Sur ordinateur il disparaît, les trois boutons reprennent
                     leur place d'origine. */}
-                <div className="relative sm:hidden" ref={channelPlusRef}>
+                <div className="sm:hidden" ref={channelPlusRef}>
                   <button
                     type="button"
                     onClick={() => setShowChannelPlus((v) => !v)}
@@ -3502,7 +3539,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <Plus className="w-5 h-5" />
                   </button>
                   {showChannelPlus && (
-                    <div className="absolute z-30 bottom-full mb-2 left-0 w-[min(20rem,calc(100vw-1.5rem))] bg-[#0b1c1e] border border-white/20 rounded-2xl p-2 shadow-xl">
+                    <div className="absolute z-30 bottom-full mb-2 left-0 right-0 bg-[#0b1c1e] border border-white/20 rounded-2xl p-2 shadow-xl">
                       <button
                         type="button"
                         onClick={() => { setShowChannelPlus(false); channelCameraInputRef.current?.click(); }}
@@ -3534,7 +3571,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </div>
                   )}
                 </div>
-                <div className="relative" ref={channelEmojiRef}>
+                <div className="sm:relative" ref={channelEmojiRef}>
                   <button
                     type="button"
                     onClick={() => setShowChannelEmoji((v) => !v)}
@@ -3544,7 +3581,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <Smile className="w-5 h-5" />
                   </button>
                   {showChannelEmoji && (
-                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[min(440px,calc(100vw-1.5rem))] max-h-[340px] overflow-y-auto custom-scrollbar">
+                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center max-w-[min(440px,calc(100vw-1.5rem))] max-sm:max-w-none max-h-[340px] overflow-y-auto custom-scrollbar">
                       {QUICK_EMOJIS.map((e) => (
                         <button
                           key={e}
@@ -3558,7 +3595,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </div>
                   )}
                 </div>
-                <div className="relative" ref={channelNovaPickerRef}>
+                <div className="sm:relative" ref={channelNovaPickerRef}>
                   <button
                     type="button"
                     onClick={() => setShowChannelNovaPicker((v) => !v)}
@@ -3568,7 +3605,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-6 h-6 object-contain" />
                   </button>
                   {showChannelNovaPicker && (
-                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max">
+                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center">
                       {NOVA_QUICK_REACTIONS.map((src) => (
                         <button
                           key={src}
