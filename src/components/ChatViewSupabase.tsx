@@ -1205,6 +1205,126 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (!activeConversationId) { setConvScheduled([]); return; }
     void chargerMessagesProgrammes('conversation_id', activeConversationId).then(setConvScheduled);
   }, [activeConversationId]);
+
+  /**
+   * Livraison des messages programmés arrivés à échéance, depuis l'application
+   * elle-même.
+   *
+   * Signalé trois fois : « le message différé ne part pas ». La livraison
+   * d'origine dépendait d'un service EXTERNE censé appeler Supabase toutes les
+   * 15 minutes, que rien dans le dépôt ne configure et dont on ne peut pas
+   * vérifier l'existence depuis l'application. Une migration SQL remet cette
+   * livraison dans la base (voir 20260904160000), mais elle demande une action
+   * manuelle : tant qu'elle n'est pas passée, rien ne part.
+   *
+   * Ici, aucune installation n'est nécessaire : dès que le chat est ouvert, on
+   * envoie ses PROPRES messages dus. Chaque ligne est d'abord réservée par une
+   * mise à jour conditionnelle (`status` encore à `pending`) : si une autre
+   * fenêtre, un autre appareil ou le passage en base l'a déjà prise, la mise à
+   * jour ne renvoie rien et on passe — donc jamais deux fois le même message.
+   * Si l'insertion échoue ensuite, la ligne est remise en attente avec sa
+   * raison : rien n'est perdu, le passage suivant réessaie.
+   *
+   * Limite assumée : ça ne part que si quelqu'un a le chat ouvert. La migration
+   * SQL reste le moyen de le rendre complètement autonome.
+   */
+  const livrerMesMessagesProgrammes = async () => {
+    if (!currentUser) return;
+    const { data: dues } = await supabase
+      .from('scheduled_messages' as any)
+      .select('id, body, channel_id, conversation_id')
+      .eq('user_id', currentUser.uid)
+      .eq('status', 'pending')
+      .lte('scheduled_at', new Date().toISOString());
+
+    const lignes = (dues as any[]) || [];
+    if (lignes.length === 0) return;
+
+    let livres = 0;
+    for (const ligne of lignes) {
+      const { data: prise } = await supabase
+        .from('scheduled_messages' as any)
+        .update({ status: 'sent', sent_at: new Date().toISOString() })
+        .eq('id', ligne.id)
+        .eq('status', 'pending')
+        .select('id');
+      if (!prise || (prise as any[]).length === 0) continue;
+
+      let erreur: string | null = null;
+
+      if (ligne.conversation_id) {
+        const { error } = await supabase.from('messages').insert({
+          conversation_id: ligne.conversation_id,
+          user_id: currentUser.uid,
+          kind: 'text',
+          body: ligne.body,
+        } as any);
+        erreur = error?.message ?? null;
+        if (!erreur) {
+          await supabase.from('conversations')
+            .update({ last_message_at: new Date().toISOString() })
+            .eq('id', ligne.conversation_id);
+        }
+      } else if (ligne.channel_id) {
+        const { error } = await supabase.from('chat_messages').insert({
+          id: crypto.randomUUID(),
+          channel: ligne.channel_id,
+          sender_id: currentUser.uid,
+          is_deleted: false,
+          read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
+          data: {
+            body: ligne.body,
+            sender_id: currentUser.uid,
+            sender_name: displayName,
+            created_at: new Date().toISOString(),
+          },
+        } as any);
+        erreur = error?.message ?? null;
+        if (!erreur) {
+          await supabase.from('chat_channels')
+            .update({ last_message_at: new Date().toISOString() })
+            .eq('id', ligne.channel_id);
+          // Même notification que pour un message envoyé à la main : aucun
+          // déclencheur n'existe sur `chat_messages`, contrairement à
+          // `messages` (conversations directes), où la base s'en charge.
+          const { data: canal } = await supabase
+            .from('chat_channels').select('*').eq('id', ligne.channel_id).maybeSingle();
+          if (canal) await notifierMembresDuDossier(canal as ChatChannel, ligne.body);
+        }
+      } else {
+        erreur = 'Ni canal ni conversation.';
+      }
+
+      if (erreur) {
+        await supabase.from('scheduled_messages' as any)
+          .update({ status: 'pending', sent_at: null, error: erreur })
+          .eq('id', ligne.id);
+      } else {
+        livres++;
+      }
+    }
+
+    if (livres > 0) {
+      toast.success(livres > 1 ? `${livres} messages programmés envoyés.` : 'Message programmé envoyé.');
+      if (activeChannel?.id) setChannelScheduled(await chargerMessagesProgrammes('channel_id', activeChannel.id));
+      if (activeConversationId) setConvScheduled(await chargerMessagesProgrammes('conversation_id', activeConversationId));
+      loadConversations(true);
+      if (activeConversationId) loadConvMessages(activeConversationId);
+      if (activeChannel?.id) loadMessages(activeChannel.id);
+    }
+  };
+
+  // Le minuteur appelle toujours la dernière version de la fonction : sans
+  // cette référence, il resterait figé sur la conversation ouverte au moment
+  // où il a démarré, et le rafraîchissement d'écran viserait à côté.
+  const livrerRef = useRef(livrerMesMessagesProgrammes);
+  useEffect(() => { livrerRef.current = livrerMesMessagesProgrammes; });
+  useEffect(() => {
+    const passage = () => { void livrerRef.current(); };
+    passage();
+    const minuteur = setInterval(passage, 60000);
+    return () => clearInterval(minuteur);
+  }, []);
   // Combine les deux champs (date + heure) du popover en horodatage ISO —
   // null si incomplet ou déjà passé (le serveur n'enverrait de toute façon
   // jamais un message "programmé" dans le passé).
@@ -2607,7 +2727,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             highlightedMessageId === m.id ? 'message-highlight-flash rounded-2xl' : ''
                           }`}
                         >
-                          <div className={`flex items-end gap-1.5 max-w-[80%] ${mine ? 'flex-row-reverse' : ''}`}>
+                          {/* Signalé (4 septembre, captures mobile) : « les
+                              messages envoyés sont trop concentrés sur la
+                              droite, ils ne prennent pas toute la largeur ».
+                              80 % d'un écran de téléphone laisse une marge
+                              perdue qui écrase le texte en colonne étroite.
+                              92 % sur téléphone, la valeur d'avant à partir du
+                              format tablette : sur ordinateur, rien ne bouge. */}
+                          <div className={`flex items-end gap-1.5 max-w-[92%] sm:max-w-[80%] ${mine ? 'flex-row-reverse' : ''}`}>
                             <div className={`px-3.5 py-2 rounded-2xl text-sm ${
                               mine ? 'bg-[#F7BC5F] text-slate-950 font-medium' : 'bg-[#0b1c1e] border border-[#153c3f] text-white'
                             }`}>
@@ -3104,7 +3231,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     const isEditing = editingChannelMsgId === m.id;
                     return (
                     <div key={m.id} className={`group flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
-                      <div className={`flex items-end gap-1.5 max-w-[70%] ${mine ? 'flex-row-reverse' : ''}`}>
+                      {/* Même correctif de largeur que côté conversations
+                          directes (voir le commentaire là-haut) — les canaux
+                          étaient encore plus étroits : 70 %. */}
+                      <div className={`flex items-end gap-1.5 max-w-[92%] sm:max-w-[70%] ${mine ? 'flex-row-reverse' : ''}`}>
                       <div className={`px-3.5 py-2 rounded-2xl text-sm ${
                         mine
                           ? 'bg-[#F7BC5F] text-slate-950 font-medium'
@@ -3291,7 +3421,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     void sendMessage();
                   }}
                   placeholder="Écrire un message..."
-                  className="flex-1 bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
+                  /* `min-w-0` : signalé (4 septembre, capture du canal « Comm
+                     générale » sur téléphone) — le bouton d'envoi, le micro et
+                     l'horloge étaient absents de l'écran. Un champ de saisie
+                     est un élément flex qui, par défaut, refuse de descendre
+                     sous sa largeur naturelle (une vingtaine de caractères) :
+                     sur un écran étroit, la rangée débordait et poussait les
+                     trois derniers boutons hors du cadre, sans barre de
+                     défilement pour les rattraper. Avec `min-w-0`, le champ
+                     accepte de rétrécir et tous les boutons restent visibles.
+                     Sur ordinateur, rien ne change : la place ne manquait pas. */
+                  className="flex-1 min-w-0 bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
                 />
                 {/* Image et vocal dans les canaux (31/08/2026) — les
                     conversations directes les avaient depuis toujours, les
