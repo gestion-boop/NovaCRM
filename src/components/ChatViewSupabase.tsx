@@ -2516,8 +2516,61 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     else setActiveChannel(null);
   };
 
+  // Signalé (4 septembre, deux captures) : « quand je clique dans le message
+  // pour écrire et que j'abaisse le clavier, j'ai un écart tout en bas, ce
+  // n'est pas figé » et « le clavier monte trop haut ».
+  //
+  // Sur iPhone, le clavier ne rétrécit PAS la page : il se pose par-dessus.
+  // La racine de l'application est haute de 100dvh (App.tsx), donc son bas
+  // se retrouve caché sous le clavier — et pour garder le champ de saisie
+  // visible, iOS fait défiler la PAGE entière vers le haut. D'où les deux
+  // symptômes : pendant la frappe, tout le chat remonte bien plus haut que
+  // nécessaire (le composeur flotte loin au-dessus du clavier) ; et à la
+  // fermeture du clavier, ce défilement de page ne revient pas toujours à
+  // zéro, ce qui laisse une bande vide en bas.
+  //
+  // Le viewport VISUEL, lui, connaît la hauteur réellement visible, clavier
+  // déduit. On y cale la hauteur du chat et on annule le défilement de page
+  // devenu inutile : le composeur se pose alors exactement sur le clavier,
+  // et rien ne dépasse à sa fermeture. Uniquement sur téléphone et
+  // uniquement quand le chat est à l'écran ; ailleurs, `h-full` reprend la
+  // main comme avant (précédent identique dans AssistantIAView.tsx pour la
+  // fenêtre de Nova, déjà en production).
+  const [hauteurVisible, setHauteurVisible] = useState<number | null>(null);
+  // Clavier ouvert : le rembourrage bas de la barre de saisie, calé sur la
+  // zone sûre de l'écran (barre gestuelle), n'a plus lieu d'être — c'est le
+  // clavier qui occupe cette place. Sans ça, le composeur flotterait une
+  // cinquantaine de pixels au-dessus des touches.
+  const [clavierOuvert, setClavierOuvert] = useState(false);
+  const rembourrageBarre = clavierOuvert ? { paddingBottom: '0.75rem' } : undefined;
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv || !isMobile || !isActive) {
+      setHauteurVisible(null);
+      setClavierOuvert(false);
+      return;
+    }
+    const appliquer = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      setHauteurVisible(Math.round(vv.height));
+      // Un clavier prend au moins un cinquième de l'écran ; en dessous, ce
+      // n'est qu'une variation de barre système, pas un clavier.
+      setClavierOuvert(window.innerHeight - vv.height > window.innerHeight * 0.2);
+    };
+    appliquer();
+    vv.addEventListener('resize', appliquer);
+    vv.addEventListener('scroll', appliquer);
+    return () => {
+      vv.removeEventListener('resize', appliquer);
+      vv.removeEventListener('scroll', appliquer);
+    };
+  }, [isMobile, isActive]);
+
   return (
-    <div className="h-full flex flex-col bg-[#050f11] text-white">
+    <div
+      className="h-full flex flex-col bg-[#050f11] text-white"
+      style={hauteurVisible ? { height: `${hauteurVisible}px` } : undefined}
+    >
       {/* Barre de retour mobile — le chat prend tout l'écran sur mobile (la
           barre de navigation du bas est masquée par App.tsx), ce bouton est
           donc le seul moyen de "sortir" et de faire réapparaître la barre du
@@ -3066,7 +3119,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     les autres icônes) — padding réduit et micro remis à une
                     taille cohérente avec les autres boutons, sans toucher
                     aux autres icônes (image/emoji/envoyer). */}
-                <div className="relative p-3 max-sm:pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5">
+                <div className="relative p-3 max-sm:pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
                   <input ref={convImageInputRef} type="file" accept="image/*" hidden onChange={handleConvImageSelected} />
                   <input ref={convCameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleConvImageSelected} />
 
@@ -3489,7 +3542,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   directes (bloc `space-y-2.5` plus haut). Tant qu'aucun vocal
                   n'attend, ce conteneur n'a qu'un enfant : rendu identique à
                   avant, aucune classe des boutons n'a bougé. */}
-              <div className="relative p-4 max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5">
+              <div className="relative p-4 max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
                 {channelVocalPret && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/20">
                     <audio
