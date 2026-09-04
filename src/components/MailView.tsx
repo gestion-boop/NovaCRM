@@ -1608,6 +1608,41 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
               </button>
             </div>
 
+            {/* Signalé (4 septembre) : « j'appuie sur envoyer, ça ne
+                fonctionne pas » — l'envoi échouait bien (jeton Google
+                Workspace expiré, le cas le plus fréquent vu la mécanique de
+                renouvellement plus haut dans workspace.ts), `error` était
+                bien renseigné, mais son affichage (plus bas dans cet écran,
+                z-index normal) restait entièrement caché DERRIÈRE ce panneau
+                (portail plein écran, fond opaque, z-[100]) — le formulaire
+                restait ouvert sans le moindre signe visible de ce qui
+                clochait, exactement comme si le bouton ne faisait rien.
+                Répété ici, à l'intérieur du panneau, pour rester visible
+                pendant que l'utilisateur compose. */}
+            {error && (
+              <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs flex items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span className="min-w-0">{error}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {/google|workspace|authenti|scope|401|403/i.test(error) && (
+                    <button
+                      type="button"
+                      onClick={() => { void reconnectGoogleWorkspace().catch((e: any) => setError(e?.message || String(e))); }}
+                      className="px-3 py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-bold text-xs flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Reconnecter Google
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setError(null)} className="text-rose-400 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSend} className="p-6 space-y-4">
               {/* Ticket #16 (nouvelle base, correctif) : labels à largeur fixe
                   (w-24) à côté du champ — sur un écran de téléphone, ça ne
