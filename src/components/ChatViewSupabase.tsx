@@ -1165,8 +1165,22 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // écran tactile — voir classesOutilsMessage / gestesMessage plus bas.
   const [messageOutilsFor, setMessageOutilsFor] = useState<string | null>(null);
   const appuiMessageRef = useRef<{ x: number; y: number; t: number } | null>(null);
-  const channelPlusRef = useRef<HTMLDivElement | null>(null);
-  const convPlusRef = useRef<HTMLDivElement | null>(null);
+  // Fermeture animée de la feuille du « + » : on laisse l'animation de
+  // sortie se jouer avant de retirer la feuille du document. Une seule à la
+  // fois (canal OU conversation, jamais les deux à l'écran), d'où un seul
+  // indicateur partagé.
+  const [feuilleQuitte, setFeuilleQuitte] = useState(false);
+  const minuteurFeuille = useRef<number | null>(null);
+  const fermerFeuille = (fermer: () => void) => {
+    setFeuilleQuitte(true);
+    if (minuteurFeuille.current) window.clearTimeout(minuteurFeuille.current);
+    minuteurFeuille.current = window.setTimeout(() => {
+      fermer();
+      setFeuilleQuitte(false);
+      minuteurFeuille.current = null;
+    }, 200);
+  };
+  useEffect(() => () => { if (minuteurFeuille.current) window.clearTimeout(minuteurFeuille.current); }, []);
   // Prise de photo directe : même chemin que la photothèque (le fichier
   // choisi passe par le même gestionnaire), seul l'attribut `capture` change,
   // qui demande au téléphone d'ouvrir l'appareil photo plutôt que la galerie.
@@ -1207,7 +1221,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [channelScheduled, setChannelScheduled] = useState<MessageProgramme[]>([]);
   const [convScheduled, setConvScheduled] = useState<MessageProgramme[]>([]);
   useEffect(() => {
-    if (!showChannelEmoji && !showChannelNovaPicker && !showConvEmoji && !showConvNovaPicker && !showChannelSchedule && !showConvSchedule && !showChannelPlus && !showConvPlus) return;
+    if (!showChannelEmoji && !showChannelNovaPicker && !showConvEmoji && !showConvNovaPicker && !showChannelSchedule && !showConvSchedule) return;
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as Node;
       if (showChannelEmoji && channelEmojiRef.current && !channelEmojiRef.current.contains(target)) setShowChannelEmoji(false);
@@ -1216,12 +1230,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       if (showConvNovaPicker && convNovaPickerRef.current && !convNovaPickerRef.current.contains(target)) setShowConvNovaPicker(false);
       if (showChannelSchedule && channelScheduleRef.current && !channelScheduleRef.current.contains(target)) setShowChannelSchedule(false);
       if (showConvSchedule && convScheduleRef.current && !convScheduleRef.current.contains(target)) setShowConvSchedule(false);
-      if (showChannelPlus && channelPlusRef.current && !channelPlusRef.current.contains(target)) setShowChannelPlus(false);
-      if (showConvPlus && convPlusRef.current && !convPlusRef.current.contains(target)) setShowConvPlus(false);
     };
     document.addEventListener('mousedown', handleOutsideClick, true);
     return () => document.removeEventListener('mousedown', handleOutsideClick, true);
-  }, [showChannelEmoji, showChannelNovaPicker, showConvEmoji, showConvNovaPicker, showChannelSchedule, showConvSchedule, showChannelPlus, showConvPlus]);
+  }, [showChannelEmoji, showChannelNovaPicker, showConvEmoji, showConvNovaPicker, showChannelSchedule, showConvSchedule]);
   // Recharge la liste des messages en attente à chaque changement de canal
   // ou de conversation active (et après programmation/annulation, voir plus
   // bas) — jamais partagée entre les deux, comme le reste de cet écran.
@@ -3220,7 +3232,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           boutons restent dans le document (leurs sélecteurs
                           emoji/Nova s'y ancrent) mais sont masqués sous le
                           format tablette — sur ordinateur, rien ne change. */}
-                      <div className="sm:hidden" ref={convPlusRef}>
+                      <div className="sm:hidden">
                         <button
                           type="button"
                           onClick={() => setShowConvPlus((v) => !v)}
@@ -3231,37 +3243,59 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         >
                           <Plus className="w-6 h-6 sm:w-5 sm:h-5" />
                         </button>
-                        {showConvPlus && (
-                          <div className="absolute z-30 bottom-full mb-2 left-0 right-0 bg-[#0b1c1e] border border-white/20 rounded-2xl p-2 shadow-xl">
+                        {/* Demandé (4 septembre) : « quand on appuie sur le
+                            Plus, une animation pour la fenêtre qui monte vers
+                            le haut, qui prenne toute la largeur du téléphone ».
+                            La liste devient donc une feuille qui glisse depuis
+                            le bas de l'écran, bord à bord, avec un voile
+                            derrière qui la referme d'un appui.
+                            Portail vers document.body : même raison que la
+                            visionneuse de photos plus bas — un `position:
+                            fixed` imbriqué dans un ancêtre animé perd son
+                            repère (la fenêtre) et se recale sur cet ancêtre.
+                            Les entrées gardent exactement leurs classes
+                            d'avant : seul le cadre change. */}
+                        {showConvPlus && createPortal(
+                          <div className="fixed inset-0 z-[70] flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Ajouter à votre message">
                             <button
                               type="button"
-                              onClick={() => { setShowConvPlus(false); convCameraInputRef.current?.click(); }}
-                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                            >
-                              <Camera className="w-5 h-5 text-[#F7BC5F]" /> Prendre une photo
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setShowConvPlus(false); convImageInputRef.current?.click(); }}
-                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                            >
-                              <ImageIcon className="w-5 h-5 text-[#F7BC5F]" /> Photo de la galerie
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setShowConvPlus(false); setShowConvEmoji(true); }}
-                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                            >
-                              <Smile className="w-5 h-5 text-[#F7BC5F]" /> Émoticônes
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setShowConvPlus(false); setShowConvNovaPicker(true); }}
-                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                            >
-                              <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
-                            </button>
-                          </div>
+                              aria-label="Fermer"
+                              onClick={() => fermerFeuille(() => setShowConvPlus(false))}
+                              className={`absolute inset-0 bg-black/60 backdrop-blur-sm duration-200 ${feuilleQuitte ? 'animate-out fade-out-0 fill-mode-forwards' : 'animate-in fade-in-0'}`}
+                            />
+                            <div className={`relative bg-[#0b1c1e] border-t border-white/20 rounded-t-3xl p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-xl ease-out ${feuilleQuitte ? 'animate-out slide-out-to-bottom-full fill-mode-forwards duration-200' : 'animate-in slide-in-from-bottom-full duration-300'}`}>
+                              <div className="mx-auto mt-1 mb-2 h-1 w-10 rounded-full bg-white/20" />
+                              <button
+                                type="button"
+                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convCameraInputRef.current?.click(); }}
+                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                              >
+                                <Camera className="w-5 h-5 text-[#F7BC5F]" /> Prendre une photo
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convImageInputRef.current?.click(); }}
+                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                              >
+                                <ImageIcon className="w-5 h-5 text-[#F7BC5F]" /> Photo de la galerie
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvEmoji(true); }}
+                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                              >
+                                <Smile className="w-5 h-5 text-[#F7BC5F]" /> Émoticônes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvNovaPicker(true); }}
+                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                              >
+                                <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
+                              </button>
+                            </div>
+                          </div>,
+                          document.body
                         )}
                       </div>
                       <button
@@ -3580,7 +3614,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     Nova, photo) et libère la largeur de la barre de saisie.
                     Sur ordinateur il disparaît, les trois boutons reprennent
                     leur place d'origine. */}
-                <div className="sm:hidden" ref={channelPlusRef}>
+                <div className="sm:hidden">
                   <button
                     type="button"
                     onClick={() => setShowChannelPlus((v) => !v)}
@@ -3591,37 +3625,49 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   >
                     <Plus className="w-5 h-5" />
                   </button>
-                  {showChannelPlus && (
-                    <div className="absolute z-30 bottom-full mb-2 left-0 right-0 bg-[#0b1c1e] border border-white/20 rounded-2xl p-2 shadow-xl">
+                  {/* Même feuille que côté conversation directe — voir le
+                      commentaire détaillé là-bas. */}
+                  {showChannelPlus && createPortal(
+                    <div className="fixed inset-0 z-[70] flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Ajouter à votre message">
                       <button
                         type="button"
-                        onClick={() => { setShowChannelPlus(false); channelCameraInputRef.current?.click(); }}
-                        className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                      >
-                        <Camera className="w-5 h-5 text-[#F7BC5F]" /> Prendre une photo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowChannelPlus(false); channelImageInputRef.current?.click(); }}
-                        className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                      >
-                        <ImageIcon className="w-5 h-5 text-[#F7BC5F]" /> Photo de la galerie
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowChannelPlus(false); setShowChannelEmoji(true); }}
-                        className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                      >
-                        <Smile className="w-5 h-5 text-[#F7BC5F]" /> Émoticônes
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowChannelPlus(false); setShowChannelNovaPicker(true); }}
-                        className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                      >
-                        <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
-                      </button>
-                    </div>
+                        aria-label="Fermer"
+                        onClick={() => fermerFeuille(() => setShowChannelPlus(false))}
+                        className={`absolute inset-0 bg-black/60 backdrop-blur-sm duration-200 ${feuilleQuitte ? 'animate-out fade-out-0 fill-mode-forwards' : 'animate-in fade-in-0'}`}
+                      />
+                      <div className={`relative bg-[#0b1c1e] border-t border-white/20 rounded-t-3xl p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-xl ease-out ${feuilleQuitte ? 'animate-out slide-out-to-bottom-full fill-mode-forwards duration-200' : 'animate-in slide-in-from-bottom-full duration-300'}`}>
+                        <div className="mx-auto mt-1 mb-2 h-1 w-10 rounded-full bg-white/20" />
+                        <button
+                          type="button"
+                          onClick={() => { fermerFeuille(() => setShowChannelPlus(false)); channelCameraInputRef.current?.click(); }}
+                          className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                        >
+                          <Camera className="w-5 h-5 text-[#F7BC5F]" /> Prendre une photo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { fermerFeuille(() => setShowChannelPlus(false)); channelImageInputRef.current?.click(); }}
+                          className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                        >
+                          <ImageIcon className="w-5 h-5 text-[#F7BC5F]" /> Photo de la galerie
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { fermerFeuille(() => setShowChannelPlus(false)); setShowChannelEmoji(true); }}
+                          className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                        >
+                          <Smile className="w-5 h-5 text-[#F7BC5F]" /> Émoticônes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { fermerFeuille(() => setShowChannelPlus(false)); setShowChannelNovaPicker(true); }}
+                          className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                        >
+                          <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
+                        </button>
+                      </div>
+                    </div>,
+                    document.body
                   )}
                 </div>
                 <div className="sm:relative" ref={channelEmojiRef}>
