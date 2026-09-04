@@ -4,7 +4,7 @@ import {
   Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown, ChevronRight,
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Square, Eye, ArrowLeft, Check, CheckCheck,
-  Clock,
+  Clock, Camera,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -1153,6 +1153,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const channelNovaPickerRef = useRef<HTMLDivElement | null>(null);
   const convEmojiRef = useRef<HTMLDivElement | null>(null);
   const convNovaPickerRef = useRef<HTMLDivElement | null>(null);
+  // Bouton « + » du téléphone — demandé (4 septembre) : « comme sur les
+  // téléphones, une barre beaucoup plus grande, et un + qui ouvre une fenêtre
+  // pour choisir des options ». Sur téléphone, les trois boutons de gauche
+  // (photo, émoticônes, Nova) laissent la place à ce seul bouton, ce qui
+  // dégage la barre de saisie ; sur ordinateur, où la place ne manque pas,
+  // les trois boutons restent exactement où ils sont.
+  const [showChannelPlus, setShowChannelPlus] = useState(false);
+  const [showConvPlus, setShowConvPlus] = useState(false);
+  const channelPlusRef = useRef<HTMLDivElement | null>(null);
+  const convPlusRef = useRef<HTMLDivElement | null>(null);
+  // Prise de photo directe : même chemin que la photothèque (le fichier
+  // choisi passe par le même gestionnaire), seul l'attribut `capture` change,
+  // qui demande au téléphone d'ouvrir l'appareil photo plutôt que la galerie.
+  const channelCameraInputRef = useRef<HTMLInputElement>(null);
+  const convCameraInputRef = useRef<HTMLInputElement>(null);
   // Envoi différé — demande explicite : pouvoir programmer un message pour
   // plus tard au lieu de l'envoyer tout de suite, dans un canal comme dans
   // une conversation directe. Même mécanisme de popover (fermeture au clic
@@ -1172,7 +1187,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [channelScheduled, setChannelScheduled] = useState<MessageProgramme[]>([]);
   const [convScheduled, setConvScheduled] = useState<MessageProgramme[]>([]);
   useEffect(() => {
-    if (!showChannelEmoji && !showChannelNovaPicker && !showConvEmoji && !showConvNovaPicker && !showChannelSchedule && !showConvSchedule) return;
+    if (!showChannelEmoji && !showChannelNovaPicker && !showConvEmoji && !showConvNovaPicker && !showChannelSchedule && !showConvSchedule && !showChannelPlus && !showConvPlus) return;
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as Node;
       if (showChannelEmoji && channelEmojiRef.current && !channelEmojiRef.current.contains(target)) setShowChannelEmoji(false);
@@ -1181,10 +1196,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       if (showConvNovaPicker && convNovaPickerRef.current && !convNovaPickerRef.current.contains(target)) setShowConvNovaPicker(false);
       if (showChannelSchedule && channelScheduleRef.current && !channelScheduleRef.current.contains(target)) setShowChannelSchedule(false);
       if (showConvSchedule && convScheduleRef.current && !convScheduleRef.current.contains(target)) setShowConvSchedule(false);
+      if (showChannelPlus && channelPlusRef.current && !channelPlusRef.current.contains(target)) setShowChannelPlus(false);
+      if (showConvPlus && convPlusRef.current && !convPlusRef.current.contains(target)) setShowConvPlus(false);
     };
     document.addEventListener('mousedown', handleOutsideClick, true);
     return () => document.removeEventListener('mousedown', handleOutsideClick, true);
-  }, [showChannelEmoji, showChannelNovaPicker, showConvEmoji, showConvNovaPicker, showChannelSchedule, showConvSchedule]);
+  }, [showChannelEmoji, showChannelNovaPicker, showConvEmoji, showConvNovaPicker, showChannelSchedule, showConvSchedule, showChannelPlus, showConvPlus]);
   // Recharge la liste des messages en attente à chaque changement de canal
   // ou de conversation active (et après programmation/annulation, voir plus
   // bas) — jamais partagée entre les deux, comme le reste de cet écran.
@@ -2998,6 +3015,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     aux autres icônes (image/emoji/envoyer). */}
                 <div className="p-3 border-t border-white/20 space-y-2.5">
                   <input ref={convImageInputRef} type="file" accept="image/*" hidden onChange={handleConvImageSelected} />
+                  <input ref={convCameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleConvImageSelected} />
 
                   {isRecordingConv && (
                     <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30">
@@ -3078,11 +3096,60 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
                   <div className="grid grid-cols-3 items-center">
                     <div className="flex items-center gap-2 justify-self-start">
+                      {/* Téléphone : un seul « + » à la place des trois
+                          boutons, qui ouvre la liste des options. Les trois
+                          boutons restent dans le document (leurs sélecteurs
+                          emoji/Nova s'y ancrent) mais sont masqués sous le
+                          format tablette — sur ordinateur, rien ne change. */}
+                      <div className="relative sm:hidden" ref={convPlusRef}>
+                        <button
+                          type="button"
+                          onClick={() => setShowConvPlus((v) => !v)}
+                          disabled={uploadingConvMedia || isRecordingConv}
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                          title="Ajouter"
+                          aria-label="Ajouter une photo, un émoji ou un Novadji"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                        {showConvPlus && (
+                          <div className="absolute z-30 bottom-full mb-2 left-0 w-56 bg-[#0b1c1e] border border-white/20 rounded-xl p-1.5 shadow-xl">
+                            <button
+                              type="button"
+                              onClick={() => { setShowConvPlus(false); convCameraInputRef.current?.click(); }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                            >
+                              <Camera className="w-4 h-4 text-[#F7BC5F]" /> Prendre une photo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setShowConvPlus(false); convImageInputRef.current?.click(); }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                            >
+                              <ImageIcon className="w-4 h-4 text-[#F7BC5F]" /> Photo de la galerie
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setShowConvPlus(false); setShowConvEmoji(true); }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                            >
+                              <Smile className="w-4 h-4 text-[#F7BC5F]" /> Émoticônes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setShowConvPlus(false); setShowConvNovaPicker(true); }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                            >
+                              <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-4 h-4 object-contain" /> Novadji
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={() => convImageInputRef.current?.click()}
                         disabled={uploadingConvMedia || isRecordingConv}
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                        className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
                         title="Envoyer une image"
                       >
                         <ImageIcon className="w-5 h-5" />
@@ -3091,7 +3158,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         <button
                           type="button"
                           onClick={() => setShowConvEmoji((v) => !v)}
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                          className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                           title="Emoji"
                         >
                           <Smile className="w-5 h-5" />
@@ -3115,7 +3182,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         <button
                           type="button"
                           onClick={() => setShowConvNovaPicker((v) => !v)}
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                          className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                           title="Envoyer une mascotte Nova"
                         >
                           <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-6 h-6 object-contain" />
@@ -3390,11 +3457,59 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     n'avait aucun accès emoji — ajout d'un picker au même
                     endroit et avec la même palette élargie que côté messages
                     directs. */}
+                {/* Téléphone : le « + » remplace les trois boutons (émoji,
+                    Nova, photo) et libère la largeur de la barre de saisie.
+                    Sur ordinateur il disparaît, les trois boutons reprennent
+                    leur place d'origine. */}
+                <div className="relative sm:hidden" ref={channelPlusRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowChannelPlus((v) => !v)}
+                    disabled={uploadingChannelMedia || isRecordingChannel}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                    title="Ajouter"
+                    aria-label="Ajouter une photo, un émoji ou un Novadji"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                  {showChannelPlus && (
+                    <div className="absolute z-30 bottom-full mb-2 left-0 w-56 bg-[#0b1c1e] border border-white/20 rounded-xl p-1.5 shadow-xl">
+                      <button
+                        type="button"
+                        onClick={() => { setShowChannelPlus(false); channelCameraInputRef.current?.click(); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                      >
+                        <Camera className="w-4 h-4 text-[#F7BC5F]" /> Prendre une photo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowChannelPlus(false); channelImageInputRef.current?.click(); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                      >
+                        <ImageIcon className="w-4 h-4 text-[#F7BC5F]" /> Photo de la galerie
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowChannelPlus(false); setShowChannelEmoji(true); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                      >
+                        <Smile className="w-4 h-4 text-[#F7BC5F]" /> Émoticônes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowChannelPlus(false); setShowChannelNovaPicker(true); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                      >
+                        <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-4 h-4 object-contain" /> Novadji
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className="relative" ref={channelEmojiRef}>
                   <button
                     type="button"
                     onClick={() => setShowChannelEmoji((v) => !v)}
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                    className="w-10 h-10 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                     title="Emoji"
                   >
                     <Smile className="w-5 h-5" />
@@ -3418,7 +3533,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   <button
                     type="button"
                     onClick={() => setShowChannelNovaPicker((v) => !v)}
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                    className="w-10 h-10 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                     title="Envoyer une mascotte Nova"
                   >
                     <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-6 h-6 object-contain" />
@@ -3472,12 +3587,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   className="hidden"
                   onChange={(e) => void handleChannelImagePick(e.target.files?.[0] || null)}
                 />
+                <input
+                  ref={channelCameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => void handleChannelImagePick(e.target.files?.[0] || null)}
+                />
                 <button
                   type="button"
                   onClick={() => channelImageInputRef.current?.click()}
                   disabled={uploadingChannelMedia || isRecordingChannel}
                   title="Envoyer une image"
-                  className="p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                  className="p-2.5 rounded-xl hidden sm:block text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
                 >
                   <ImageIcon className="w-4 h-4" />
                 </button>
