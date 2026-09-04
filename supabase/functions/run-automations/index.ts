@@ -150,6 +150,119 @@ async function runMailDigest(admin: any, userId: string) {
   return "ok";
 }
 
+// Envoi différé (Chat Équipe) : traite les lignes `scheduled_messages` dues
+// à chaque déclenchement de cette fonction (~15 min). Table créée
+// directement en base pour cette fonctionnalité, jamais branchée à aucun
+// code jusqu'ici (migration 20260904090000 pour la sécurité RLS) — voir
+// `ChatViewSupabase.tsx` pour les deux chemins qu'elle imite :
+//   - `channel_id` renseigné → reproduit `sendMessage()` (table
+//     `chat_messages`, un canal de dossier/projet).
+//   - `conversation_id` renseigné → reproduit `sendConvMessage()` (table
+//     `messages`, une conversation directe).
+// `messages.channel_id` existe dans le schéma mais n'est écrit par aucun
+// code applicatif (chemin mort) : on n'y touche jamais ici.
+async function runScheduledMessages(admin: any): Promise<number> {
+  const { data: dues } = await admin
+    .from("scheduled_messages")
+    .select("*")
+    .eq("status", "pending")
+    .lte("scheduled_at", new Date().toISOString());
+
+  let sent = 0;
+  for (const row of dues ?? []) {
+    try {
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", row.user_id)
+        .maybeSingle();
+      const senderName = profile?.full_name || profile?.email || "Utilisateur";
+
+      let sentMessageId: string | null = null;
+
+      if (row.channel_id) {
+        const { data: channel } = await admin
+          .from("chat_channels")
+          .select("id, name, project_id")
+          .eq("id", row.channel_id)
+          .maybeSingle();
+        if (!channel) throw new Error("Canal introuvable (supprimé depuis la programmation ?).");
+
+        sentMessageId = crypto.randomUUID();
+        const { error: insertError } = await admin.from("chat_messages").insert({
+          id: sentMessageId,
+          channel: channel.id,
+          data: { body: row.body, sender_id: row.user_id, sender_name: senderName, created_at: new Date().toISOString() },
+          sender_id: row.user_id,
+          is_deleted: false,
+          read_by: [{ userId: row.user_id, userName: senderName, readAt: new Date().toISOString() }],
+        });
+        if (insertError) throw insertError;
+
+        await admin.from("chat_channels").update({ last_message_at: new Date().toISOString() }).eq("id", channel.id);
+
+        // Notification des membres du projet, sur le modèle de
+        // `notifierMembresDuDossier` (aucun déclencheur base n'existe sur
+        // `chat_messages`, contrairement à `messages` ci-dessous).
+        const { data: chatProject } = await admin
+          .from("chat_projects")
+          .select("name, agency_id")
+          .eq("id", channel.project_id)
+          .maybeSingle();
+        const { data: membres } = await admin
+          .from("chat_project_members")
+          .select("user_id")
+          .eq("project_id", channel.project_id);
+        const destinataires = Array.from(
+          new Set(((membres ?? []) as { user_id: string }[]).map((m) => m.user_id).filter((uid) => uid && uid !== row.user_id))
+        );
+        await Promise.all(
+          destinataires.map((uid) =>
+            admin.rpc("create_notification", {
+              _user_id: uid,
+              _type: "message",
+              _title: `💬 ${chatProject?.name || "Projet interne"} · ${channel.name}`,
+              _message: `${senderName} : ${row.body}`.slice(0, 180),
+              _entity_type: "chat_channel",
+              _entity_id: channel.id,
+              _agency_id: chatProject?.agency_id ?? null,
+              _metadata: { url: "/messagerie" },
+            })
+          )
+        );
+      } else if (row.conversation_id) {
+        const { data: inserted, error: insertError } = await admin
+          .from("messages")
+          .insert({ conversation_id: row.conversation_id, user_id: row.user_id, kind: "text", body: row.body })
+          .select("id")
+          .single();
+        if (insertError) throw insertError;
+        sentMessageId = inserted?.id ?? null;
+
+        await admin.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", row.conversation_id);
+        // Pas de notification à dupliquer ici : un déclencheur base existant
+        // s'en charge déjà pour tout insert dans `messages` (voir
+        // `sendConvMessage` dans ChatViewSupabase.tsx).
+      } else {
+        throw new Error("Ni channel_id ni conversation_id renseigné.");
+      }
+
+      await admin
+        .from("scheduled_messages")
+        .update({ status: "sent", sent_at: new Date().toISOString(), sent_message_id: sentMessageId })
+        .eq("id", row.id);
+      sent++;
+    } catch (e) {
+      console.error("scheduled message failed", row.id, e);
+      await admin
+        .from("scheduled_messages")
+        .update({ status: "failed", error: (e as { message?: string })?.message || String(e) })
+        .eq("id", row.id);
+    }
+  }
+  return sent;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -189,5 +302,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ ok: true, checked: automations?.length ?? 0, fired, slotId });
+  const sentMessages = await runScheduledMessages(admin);
+
+  return json({ ok: true, checked: automations?.length ?? 0, fired, slotId, sentMessages });
 });

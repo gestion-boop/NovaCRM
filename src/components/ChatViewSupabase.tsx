@@ -4,7 +4,9 @@ import {
   Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown,
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Square, Eye, ArrowLeft, Check, CheckCheck,
+  Clock,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
@@ -60,6 +62,15 @@ interface ChatMessageRow {
   sender_id?: string | null;
   is_deleted?: boolean;
   read_by?: { userId: string; userName?: string; readAt?: string }[];
+}
+
+// Envoi différé : ligne de `scheduled_messages` en attente (id/corps/date
+// suffisent à l'affichage — voir programmerMessageCanal/Conversation et la
+// livraison réelle dans supabase/functions/run-automations/index.ts).
+interface MessageProgramme {
+  id: string;
+  body: string;
+  scheduled_at: string;
 }
 
 interface ConversationRow {
@@ -1127,18 +1138,107 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const channelNovaPickerRef = useRef<HTMLDivElement | null>(null);
   const convEmojiRef = useRef<HTMLDivElement | null>(null);
   const convNovaPickerRef = useRef<HTMLDivElement | null>(null);
+  // Envoi différé — demande explicite : pouvoir programmer un message pour
+  // plus tard au lieu de l'envoyer tout de suite, dans un canal comme dans
+  // une conversation directe. Même mécanisme de popover (fermeture au clic
+  // extérieur) que les sélecteurs Nova/emoji juste au-dessus. La table
+  // `scheduled_messages` existait déjà en base (jamais utilisée par aucun
+  // code) ; la livraison réelle se fait côté serveur, voir
+  // supabase/functions/run-automations/index.ts (runScheduledMessages,
+  // ~toutes les 15 min).
+  const [showChannelSchedule, setShowChannelSchedule] = useState(false);
+  const [showConvSchedule, setShowConvSchedule] = useState(false);
+  const channelScheduleRef = useRef<HTMLDivElement | null>(null);
+  const convScheduleRef = useRef<HTMLDivElement | null>(null);
+  const [channelScheduleDate, setChannelScheduleDate] = useState('');
+  const [channelScheduleTime, setChannelScheduleTime] = useState('');
+  const [convScheduleDate, setConvScheduleDate] = useState('');
+  const [convScheduleTime, setConvScheduleTime] = useState('');
+  const [channelScheduled, setChannelScheduled] = useState<MessageProgramme[]>([]);
+  const [convScheduled, setConvScheduled] = useState<MessageProgramme[]>([]);
   useEffect(() => {
-    if (!showChannelEmoji && !showChannelNovaPicker && !showConvEmoji && !showConvNovaPicker) return;
+    if (!showChannelEmoji && !showChannelNovaPicker && !showConvEmoji && !showConvNovaPicker && !showChannelSchedule && !showConvSchedule) return;
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as Node;
       if (showChannelEmoji && channelEmojiRef.current && !channelEmojiRef.current.contains(target)) setShowChannelEmoji(false);
       if (showChannelNovaPicker && channelNovaPickerRef.current && !channelNovaPickerRef.current.contains(target)) setShowChannelNovaPicker(false);
       if (showConvEmoji && convEmojiRef.current && !convEmojiRef.current.contains(target)) setShowConvEmoji(false);
       if (showConvNovaPicker && convNovaPickerRef.current && !convNovaPickerRef.current.contains(target)) setShowConvNovaPicker(false);
+      if (showChannelSchedule && channelScheduleRef.current && !channelScheduleRef.current.contains(target)) setShowChannelSchedule(false);
+      if (showConvSchedule && convScheduleRef.current && !convScheduleRef.current.contains(target)) setShowConvSchedule(false);
     };
     document.addEventListener('mousedown', handleOutsideClick, true);
     return () => document.removeEventListener('mousedown', handleOutsideClick, true);
-  }, [showChannelEmoji, showChannelNovaPicker, showConvEmoji, showConvNovaPicker]);
+  }, [showChannelEmoji, showChannelNovaPicker, showConvEmoji, showConvNovaPicker, showChannelSchedule, showConvSchedule]);
+  // Recharge la liste des messages en attente à chaque changement de canal
+  // ou de conversation active (et après programmation/annulation, voir plus
+  // bas) — jamais partagée entre les deux, comme le reste de cet écran.
+  const chargerMessagesProgrammes = async (colonne: 'channel_id' | 'conversation_id', id: string): Promise<MessageProgramme[]> => {
+    const { data } = await supabase
+      .from('scheduled_messages' as any)
+      .select('id, body, scheduled_at')
+      .eq(colonne, id)
+      .eq('status', 'pending')
+      .order('scheduled_at', { ascending: true });
+    return (data as MessageProgramme[] | null) || [];
+  };
+  useEffect(() => {
+    if (!activeChannel?.id) { setChannelScheduled([]); return; }
+    void chargerMessagesProgrammes('channel_id', activeChannel.id).then(setChannelScheduled);
+  }, [activeChannel?.id]);
+  useEffect(() => {
+    if (!activeConversationId) { setConvScheduled([]); return; }
+    void chargerMessagesProgrammes('conversation_id', activeConversationId).then(setConvScheduled);
+  }, [activeConversationId]);
+  // Combine les deux champs (date + heure) du popover en horodatage ISO —
+  // null si incomplet ou déjà passé (le serveur n'enverrait de toute façon
+  // jamais un message "programmé" dans le passé).
+  const combinerDateHeure = (date: string, heure: string): string | null => {
+    if (!date || !heure) return null;
+    const iso = new Date(`${date}T${heure}:00`);
+    if (Number.isNaN(iso.getTime()) || iso.getTime() <= Date.now()) return null;
+    return iso.toISOString();
+  };
+  const formaterEcheance = (iso: string) =>
+    new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const annulerMessageProgramme = async (id: string, contexte: 'channel' | 'conversation') => {
+    await supabase.from('scheduled_messages' as any).delete().eq('id', id);
+    if (contexte === 'channel') setChannelScheduled((prev) => prev.filter((m) => m.id !== id));
+    else setConvScheduled((prev) => prev.filter((m) => m.id !== id));
+    toast.info('Message programmé annulé.');
+  };
+  const programmerMessageCanal = async () => {
+    if (!draft.trim() || !activeChannel || !currentUser) return;
+    const scheduledAt = combinerDateHeure(channelScheduleDate, channelScheduleTime);
+    if (!scheduledAt) { toast.error('Choisissez une date et une heure dans le futur.'); return; }
+    const body = draft.trim();
+    const { error } = await supabase
+      .from('scheduled_messages' as any)
+      .insert({ user_id: currentUser.uid, channel_id: activeChannel.id, body, scheduled_at: scheduledAt });
+    if (error) { toast.error(`Programmation impossible : ${error.message}`); return; }
+    setDraft('');
+    setShowChannelSchedule(false);
+    setChannelScheduleDate('');
+    setChannelScheduleTime('');
+    setChannelScheduled(await chargerMessagesProgrammes('channel_id', activeChannel.id));
+    toast.success(`Message programmé pour le ${formaterEcheance(scheduledAt)}.`);
+  };
+  const programmerMessageConversation = async () => {
+    const body = convDraft.trim();
+    if (!body || !activeConversationId || !currentUser) return;
+    const scheduledAt = combinerDateHeure(convScheduleDate, convScheduleTime);
+    if (!scheduledAt) { toast.error('Choisissez une date et une heure dans le futur.'); return; }
+    const { error } = await supabase
+      .from('scheduled_messages' as any)
+      .insert({ user_id: currentUser.uid, conversation_id: activeConversationId, body, scheduled_at: scheduledAt });
+    if (error) { toast.error(`Programmation impossible : ${error.message}`); return; }
+    setConvDraft('');
+    setShowConvSchedule(false);
+    setConvScheduleDate('');
+    setConvScheduleTime('');
+    setConvScheduled(await chargerMessagesProgrammes('conversation_id', activeConversationId));
+    toast.success(`Message programmé pour le ${formaterEcheance(scheduledAt)}.`);
+  };
   const [isRecordingConv, setIsRecordingConv] = useState(false);
   const [recordingConvSeconds, setRecordingConvSeconds] = useState(0);
   const [uploadingConvMedia, setUploadingConvMedia] = useState(false);
@@ -2652,6 +2752,66 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           </div>
                         )}
                       </div>
+                      {/* Envoi différé — voir le commentaire détaillé sur les
+                          états showConvSchedule/convScheduled plus haut. */}
+                      <div className="relative" ref={convScheduleRef}>
+                        <button
+                          type="button"
+                          onClick={() => setShowConvSchedule((v) => !v)}
+                          className="relative w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                          title="Programmer l'envoi"
+                        >
+                          <Clock className="w-5 h-5" />
+                          {convScheduled.length > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#F7BC5F] text-slate-950 text-[10px] font-bold flex items-center justify-center">
+                              {convScheduled.length}
+                            </span>
+                          )}
+                        </button>
+                        {showConvSchedule && (
+                          <div className="absolute z-20 bottom-full mb-2 left-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-72 space-y-3">
+                            {convScheduled.length > 0 && (
+                              <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+                                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmés</p>
+                                {convScheduled.map((m) => (
+                                  <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg px-2 py-1.5">
+                                    <span className="truncate flex-1" title={m.body}>{formaterEcheance(m.scheduled_at)} — {m.body}</span>
+                                    <button type="button" onClick={() => void annulerMessageProgramme(m.id, 'conversation')} className="text-slate-400 hover:text-white shrink-0" title="Annuler">
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="space-y-2">
+                              <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmer ce message</p>
+                              <div className="flex gap-2">
+                                <input
+                                  type="date"
+                                  value={convScheduleDate}
+                                  onChange={(e) => setConvScheduleDate(e.target.value)}
+                                  min={new Date().toISOString().slice(0, 10)}
+                                  className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                                />
+                                <input
+                                  type="time"
+                                  value={convScheduleTime}
+                                  onChange={(e) => setConvScheduleTime(e.target.value)}
+                                  className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void programmerMessageConversation()}
+                                disabled={!convDraft.trim()}
+                                className="w-full py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-semibold"
+                              >
+                                Programmer
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <button
@@ -2846,6 +3006,66 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <img src={src} alt="Nova" className="w-full h-full object-contain" />
                         </button>
                       ))}
+                    </div>
+                  )}
+                </div>
+                {/* Envoi différé — voir le commentaire détaillé sur les états
+                    showChannelSchedule/channelScheduled plus haut. */}
+                <div className="relative" ref={channelScheduleRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowChannelSchedule((v) => !v)}
+                    className="relative w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                    title="Programmer l'envoi"
+                  >
+                    <Clock className="w-5 h-5" />
+                    {channelScheduled.length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#F7BC5F] text-slate-950 text-[10px] font-bold flex items-center justify-center">
+                        {channelScheduled.length}
+                      </span>
+                    )}
+                  </button>
+                  {showChannelSchedule && (
+                    <div className="absolute z-20 bottom-full mb-2 left-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-72 space-y-3">
+                      {channelScheduled.length > 0 && (
+                        <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+                          <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmés</p>
+                          {channelScheduled.map((m) => (
+                            <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg px-2 py-1.5">
+                              <span className="truncate flex-1" title={m.body}>{formaterEcheance(m.scheduled_at)} — {m.body}</span>
+                              <button type="button" onClick={() => void annulerMessageProgramme(m.id, 'channel')} className="text-slate-400 hover:text-white shrink-0" title="Annuler">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="space-y-2">
+                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmer ce message</p>
+                        <div className="flex gap-2">
+                          <input
+                            type="date"
+                            value={channelScheduleDate}
+                            onChange={(e) => setChannelScheduleDate(e.target.value)}
+                            min={new Date().toISOString().slice(0, 10)}
+                            className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                          />
+                          <input
+                            type="time"
+                            value={channelScheduleTime}
+                            onChange={(e) => setChannelScheduleTime(e.target.value)}
+                            className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void programmerMessageCanal()}
+                          disabled={!draft.trim()}
+                          className="w-full py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-semibold"
+                        >
+                          Programmer
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
