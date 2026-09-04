@@ -172,6 +172,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const channelRecordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isRecordingChannel, setIsRecordingChannel] = useState(false);
   const [recordingChannelSeconds, setRecordingChannelSeconds] = useState(0);
+  // Demandé (4 septembre) : « pour les envois vocaux, je voudrais avoir un
+  // bouton d'envoi et de réécoute avant envoi ». Jusqu'ici, arrêter
+  // l'enregistrement l'envoyait aussitôt : aucun moyen de se réécouter, ni de
+  // renoncer une fois le doigt levé. Le vocal terminé attend désormais ici,
+  // et n'est inséré que sur un clic explicite.
+  const [channelVocalPret, setChannelVocalPret] = useState<{ dataUrl: string; duree: number } | null>(null);
   const [uploadingChannelMedia, setUploadingChannelMedia] = useState(false);
   const [newChannelFor, setNewChannelFor] = useState<string | null>(null);
   const [newChannelName, setNewChannelName] = useState('');
@@ -1249,24 +1255,35 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
   const [isRecordingConv, setIsRecordingConv] = useState(false);
   const [recordingConvSeconds, setRecordingConvSeconds] = useState(0);
+  // Même attente avant envoi que côté canal — voir le commentaire sur
+  // `channelVocalPret` plus haut.
+  const [convVocalPret, setConvVocalPret] = useState<{ dataUrl: string; duree: number } | null>(null);
   const [uploadingConvMedia, setUploadingConvMedia] = useState(false);
   const convImageInputRef = useRef<HTMLInputElement>(null);
   const convMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const convAudioChunksRef = useRef<Blob[]>([]);
   const convRecordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const insertConvMessage = async (kind: 'image' | 'voice', attachmentUrl: string, attachmentDuration?: number) => {
-    if (!activeConversationId || !currentUser) return;
-    await supabase.from('messages').insert({
+  /**
+   * Renvoie `null` si l'insertion a réussi, sinon le message d'erreur de la
+   * base. Les appelants historiques (image, Novadji) ignorent ce retour et se
+   * comportent comme avant ; l'envoi d'un vocal, lui, s'en sert pour prévenir
+   * plutôt que de perdre l'enregistrement en silence.
+   */
+  const insertConvMessage = async (kind: 'image' | 'voice', attachmentUrl: string, attachmentDuration?: number): Promise<string | null> => {
+    if (!activeConversationId || !currentUser) return 'Conversation introuvable.';
+    const { error } = await supabase.from('messages').insert({
       conversation_id: activeConversationId,
       user_id: currentUser.uid,
       kind,
       attachment_url: attachmentUrl,
       attachment_duration: attachmentDuration ?? null,
     } as any);
+    if (error) return error.message;
     await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', activeConversationId);
     loadConversations(true);
     if (activeConversationId) loadConvMessages(activeConversationId);
+    return null;
   };
 
   const handleConvImageSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1295,9 +1312,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
    * colonnes dédiées. On range donc le média dans ce même objet `data`, à
    * côté du corps du message, sans migration de schéma.
    */
-  const insertChannelMedia = async (kind: 'image' | 'voice', attachmentUrl: string, attachmentDuration?: number) => {
-    if (!activeChannel || !currentUser) return;
-    await supabase.from('chat_messages').insert({
+  const insertChannelMedia = async (kind: 'image' | 'voice', attachmentUrl: string, attachmentDuration?: number): Promise<string | null> => {
+    if (!activeChannel || !currentUser) return 'Canal introuvable.';
+    const { error } = await supabase.from('chat_messages').insert({
       id: crypto.randomUUID(),
       channel: activeChannel.id,
       sender_id: currentUser.uid,
@@ -1313,7 +1330,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         created_at: new Date().toISOString(),
       },
     } as any);
+    if (error) return error.message;
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
+    return null;
   };
 
   const handleChannelImagePick = async (file: File | null) => {
@@ -1368,17 +1387,30 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       recorder.stream.getTracks().forEach((t) => t.stop());
       const blob = new Blob(channelAudioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
       const reader = new FileReader();
-      reader.onloadend = async () => {
-        setUploadingChannelMedia(true);
-        try {
-          await insertChannelMedia('voice', reader.result as string, duration);
-        } finally {
-          setUploadingChannelMedia(false);
-        }
+      reader.onloadend = () => {
+        // On ne poste plus directement : le vocal se met en attente de
+        // réécoute, l'envoi se fait au clic (voir `envoyerVocalChannel`).
+        setChannelVocalPret({ dataUrl: reader.result as string, duree: duration });
       };
       reader.readAsDataURL(blob);
     };
     recorder.stop();
+  };
+
+  const envoyerVocalChannel = async () => {
+    if (!channelVocalPret) return;
+    setUploadingChannelMedia(true);
+    try {
+      const erreur = await insertChannelMedia('voice', channelVocalPret.dataUrl, channelVocalPret.duree);
+      if (erreur) {
+        // L'enregistrement est conservé : on peut réessayer sans le refaire.
+        toast.error(`Vocal non envoyé : ${erreur}`);
+        return;
+      }
+      setChannelVocalPret(null);
+    } finally {
+      setUploadingChannelMedia(false);
+    }
   };
 
   const handleStartRecordingConv = async () => {
@@ -1418,18 +1450,29 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       recorder.stream.getTracks().forEach((t) => t.stop());
       const blob = new Blob(convAudioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
       const reader = new FileReader();
-      reader.onloadend = async () => {
-        const dataUrl = reader.result as string;
-        setUploadingConvMedia(true);
-        try {
-          await insertConvMessage('voice', dataUrl, duration);
-        } finally {
-          setUploadingConvMedia(false);
-        }
+      reader.onloadend = () => {
+        // Mise en attente de réécoute, pas d'envoi direct — voir
+        // `envoyerVocalConv` et le commentaire sur `channelVocalPret`.
+        setConvVocalPret({ dataUrl: reader.result as string, duree: duration });
       };
       reader.readAsDataURL(blob);
     };
     recorder.stop();
+  };
+
+  const envoyerVocalConv = async () => {
+    if (!convVocalPret) return;
+    setUploadingConvMedia(true);
+    try {
+      const erreur = await insertConvMessage('voice', convVocalPret.dataUrl, convVocalPret.duree);
+      if (erreur) {
+        toast.error(`Vocal non envoyé : ${erreur}`);
+        return;
+      }
+      setConvVocalPret(null);
+    } finally {
+      setUploadingConvMedia(false);
+    }
   };
 
   // Signalé : "chaque entité doit être cloisonné, SAUF pour les chats, où
@@ -2779,8 +2822,43 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       <button type="button" onClick={() => void handleStopRecordingConv(true)} className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300" title="Annuler">
                         <X className="w-4 h-4" />
                       </button>
-                      <button type="button" onClick={() => void handleStopRecordingConv(false)} className="p-1.5 rounded-lg bg-rose-500 text-white" title="Envoyer">
+                      <button type="button" onClick={() => void handleStopRecordingConv(false)} className="p-1.5 rounded-lg bg-rose-500 text-white" title="Arrêter et réécouter">
                         <Square className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Vocal terminé : réécoute puis envoi. Même gabarit que la
+                      barre d'enregistrement juste au-dessus, en liseré neutre
+                      (border-white/20, déjà celui du champ de saisie) pour
+                      qu'on voie tout de suite qu'on n'enregistre plus. Le
+                      lecteur est celui du navigateur : lecture, pause et
+                      déplacement dans la bande, sans rien à réécrire. */}
+                  {convVocalPret && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/20">
+                      <audio
+                        src={convVocalPret.dataUrl}
+                        controls
+                        className="flex-1 h-9 min-w-0"
+                        aria-label="Réécouter le message vocal"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setConvVocalPret(null)}
+                        disabled={uploadingConvMedia}
+                        className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 disabled:opacity-40"
+                        title="Supprimer et recommencer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void envoyerVocalConv()}
+                        disabled={uploadingConvMedia}
+                        className="w-10 h-10 rounded-full flex items-center justify-center bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-30 text-slate-950"
+                        title={`Envoyer le vocal (${convVocalPret.duree}s)`}
+                      >
+                        <Send className="w-4 h-4" />
                       </button>
                     </div>
                   )}
@@ -2873,7 +2951,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <button
                       type="button"
                       onClick={() => (isRecordingConv ? void handleStopRecordingConv(false) : void handleStartRecordingConv())}
-                      disabled={uploadingConvMedia}
+                      disabled={uploadingConvMedia || !!convVocalPret}
                       className="justify-self-center w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-rose-500/30 transition-transform hover:scale-105 disabled:opacity-40 bg-rose-500/90 hover:bg-rose-500 text-white"
                       title="Message vocal"
                     >
@@ -3080,7 +3158,42 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 )}
               </div>
 
-              <div className="p-4 border-t border-white/20 flex items-center gap-2">
+              {/* La rangée d'icônes est désormais enveloppée, pour pouvoir
+                  poser au-dessus la barre de réécoute du vocal — exactement
+                  le même agencement que le composeur des conversations
+                  directes (bloc `space-y-2.5` plus haut). Tant qu'aucun vocal
+                  n'attend, ce conteneur n'a qu'un enfant : rendu identique à
+                  avant, aucune classe des boutons n'a bougé. */}
+              <div className="p-4 border-t border-white/20 space-y-2.5">
+                {channelVocalPret && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/20">
+                    <audio
+                      src={channelVocalPret.dataUrl}
+                      controls
+                      className="flex-1 h-9 min-w-0"
+                      aria-label="Réécouter le message vocal"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setChannelVocalPret(null)}
+                      disabled={uploadingChannelMedia}
+                      className="p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                      title="Supprimer et recommencer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void envoyerVocalChannel()}
+                      disabled={uploadingChannelMedia}
+                      className="p-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-30 text-slate-950"
+                      title={`Envoyer le vocal (${channelVocalPret.duree}s)`}
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
                 {/* Ticket #10 (nouvelle base) : le composer des canaux d'équipe
                     n'avait aucun accès emoji — ajout d'un picker au même
                     endroit et avec la même palette élargie que côté messages
@@ -3179,7 +3292,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <button
                       type="button"
                       onClick={() => void handleStopRecordingChannel(false)}
-                      title={`Envoyer (${recordingChannelSeconds}s)`}
+                      title={`Arrêter et réécouter (${recordingChannelSeconds}s)`}
                       className="p-2.5 rounded-xl bg-rose-500 text-white"
                     >
                       <Square className="w-4 h-4 fill-current" />
@@ -3189,7 +3302,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   <button
                     type="button"
                     onClick={() => void handleStartRecordingChannel()}
-                    disabled={uploadingChannelMedia}
+                    disabled={uploadingChannelMedia || !!channelVocalPret}
                     title="Message vocal"
                     className="p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
                   >
@@ -3270,6 +3383,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 >
                   <Send className="w-4 h-4" />
                 </button>
+                </div>
               </div>
             </>
           ) : (
