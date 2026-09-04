@@ -1168,6 +1168,22 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // qui demande au téléphone d'ouvrir l'appareil photo plutôt que la galerie.
   const channelCameraInputRef = useRef<HTMLInputElement>(null);
   const convCameraInputRef = useRef<HTMLInputElement>(null);
+  // Zones de saisie qui grandissent avec le texte : la hauteur est remise à
+  // zéro puis recalée sur le contenu à chaque frappe (une zone de texte ne
+  // sait pas le faire seule), plafonnée pour ne pas manger l'écran — au-delà,
+  // elle défile. Remis à une ligne quand le message part, sinon la zone
+  // resterait haute et vide.
+  const convTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const channelTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const HAUTEUR_MAX_SAISIE = 132;
+  const ajusterHauteur = (zone: HTMLTextAreaElement | null) => {
+    if (!zone) return;
+    zone.style.height = 'auto';
+    zone.style.height = `${Math.min(zone.scrollHeight, HAUTEUR_MAX_SAISIE)}px`;
+    zone.style.overflowY = zone.scrollHeight > HAUTEUR_MAX_SAISIE ? 'auto' : 'hidden';
+  };
+  useEffect(() => { ajusterHauteur(convTextareaRef.current); }, [convDraft]);
+  useEffect(() => { ajusterHauteur(channelTextareaRef.current); }, [draft]);
   // Envoi différé — demande explicite : pouvoir programmer un message pour
   // plus tard au lieu de l'envoyer tout de suite, dans un canal comme dans
   // une conversation directe. Même mécanisme de popover (fermeture au clic
@@ -2916,13 +2932,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                           <div className="fixed inset-0 z-20 flex items-center justify-center p-6">
                                             <div
                                               ref={reactionPickerRef}
-                                              className="grid grid-cols-5 gap-2.5 bg-[#0b1c1e] border border-[#153c3f] rounded-2xl p-4 shadow-xl w-full max-w-[440px] max-h-[70vh] overflow-y-auto custom-scrollbar"
+                                              className="grid grid-cols-5 gap-2.5 bg-[#0b1c1e] border border-[#153c3f] rounded-2xl p-4 shadow-xl w-full max-w-[min(440px,calc(100vw-1.5rem))] max-h-[70vh] overflow-y-auto custom-scrollbar"
                                             >
                                               {pickerItems}
                                             </div>
                                           </div>
                                         ) : (
-                                          <div ref={reactionPickerRef} className={`absolute z-20 ${convReactionPickerUp ? 'bottom-full mb-1' : 'top-full mt-1'} grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-[#153c3f] rounded-xl p-3 shadow-xl w-max max-w-[440px] max-h-[340px] overflow-y-auto custom-scrollbar ${mine ? 'right-0' : 'left-0'}`}>
+                                          <div ref={reactionPickerRef} className={`absolute z-20 ${convReactionPickerUp ? 'bottom-full mb-1' : 'top-full mt-1'} grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-[#153c3f] rounded-xl p-3 shadow-xl w-max max-w-[min(440px,calc(100vw-1.5rem))] max-h-[340px] overflow-y-auto custom-scrollbar ${mine ? 'right-0' : 'left-0'}`}>
                                             {pickerItems}
                                           </div>
                                         )}
@@ -3078,20 +3094,33 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       déjà couvert par le remap mode jour existant
                       (index.css, [class*="border-[#144447"]). Le doré au
                       focus (déjà présent) est inchangé. */}
-                  <input
+                  {/* Demandé (4 septembre) : « quand on va à droite en tapant
+                      du texte, la hauteur augmente pour voir le message en
+                      entier et faire les corrections, comme sur un téléphone ».
+                      D'où le passage d'un champ à une ligne à une zone de texte
+                      qui grandit : le texte revient à la ligne au lieu de
+                      défiler hors du cadre, et la zone s'étire jusqu'à six
+                      lignes environ avant de défiler à son tour. Entrée envoie
+                      toujours ; Maj+Entrée fait un retour à la ligne. Le coin
+                      arrondi passe de `rounded-full` à `rounded-3xl` : un
+                      arrondi total sur plusieurs lignes rognerait le texte. */}
+                  <textarea
+                    ref={convTextareaRef}
+                    rows={1}
                     value={convDraft}
                     onChange={(e) => setConvDraft(e.target.value)}
                     onKeyDown={(e) => {
                       // `isComposing` : sur clavier mobile et en saisie
                       // accentuée, Entrée peut arriver deux fois pour une
                       // seule frappe. `repeat` : touche maintenue enfoncée.
-                      if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.repeat) return;
+                      // `shiftKey` : retour à la ligne volontaire.
+                      if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.repeat) return;
                       e.preventDefault();
                       void sendConvMessage();
                     }}
                     placeholder="Écrire un message..."
                     disabled={isRecordingConv}
-                    className="w-full bg-[#0b1c1e] border border-white/20 rounded-full px-5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] disabled:opacity-40"
+                    className="w-full resize-none bg-[#0b1c1e] border border-white/20 rounded-3xl px-5 py-2.5 text-sm text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F] disabled:opacity-40"
                   />
 
                   <div className="grid grid-cols-3 items-center">
@@ -3113,34 +3142,34 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <Plus className="w-5 h-5" />
                         </button>
                         {showConvPlus && (
-                          <div className="absolute z-30 bottom-full mb-2 left-0 w-56 bg-[#0b1c1e] border border-white/20 rounded-xl p-1.5 shadow-xl">
+                          <div className="absolute z-30 bottom-full mb-2 left-0 w-[min(20rem,calc(100vw-1.5rem))] bg-[#0b1c1e] border border-white/20 rounded-2xl p-2 shadow-xl">
                             <button
                               type="button"
                               onClick={() => { setShowConvPlus(false); convCameraInputRef.current?.click(); }}
-                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                             >
-                              <Camera className="w-4 h-4 text-[#F7BC5F]" /> Prendre une photo
+                              <Camera className="w-5 h-5 text-[#F7BC5F]" /> Prendre une photo
                             </button>
                             <button
                               type="button"
                               onClick={() => { setShowConvPlus(false); convImageInputRef.current?.click(); }}
-                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                             >
-                              <ImageIcon className="w-4 h-4 text-[#F7BC5F]" /> Photo de la galerie
+                              <ImageIcon className="w-5 h-5 text-[#F7BC5F]" /> Photo de la galerie
                             </button>
                             <button
                               type="button"
                               onClick={() => { setShowConvPlus(false); setShowConvEmoji(true); }}
-                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                             >
-                              <Smile className="w-4 h-4 text-[#F7BC5F]" /> Émoticônes
+                              <Smile className="w-5 h-5 text-[#F7BC5F]" /> Émoticônes
                             </button>
                             <button
                               type="button"
                               onClick={() => { setShowConvPlus(false); setShowConvNovaPicker(true); }}
-                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                             >
-                              <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-4 h-4 object-contain" /> Novadji
+                              <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
                             </button>
                           </div>
                         )}
@@ -3164,7 +3193,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <Smile className="w-5 h-5" />
                         </button>
                         {showConvEmoji && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[440px] max-h-[340px] overflow-y-auto custom-scrollbar">
+                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[min(440px,calc(100vw-1.5rem))] max-h-[340px] overflow-y-auto custom-scrollbar">
                             {QUICK_EMOJIS.map((e) => (
                               <button
                                 key={e}
@@ -3473,34 +3502,34 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <Plus className="w-5 h-5" />
                   </button>
                   {showChannelPlus && (
-                    <div className="absolute z-30 bottom-full mb-2 left-0 w-56 bg-[#0b1c1e] border border-white/20 rounded-xl p-1.5 shadow-xl">
+                    <div className="absolute z-30 bottom-full mb-2 left-0 w-[min(20rem,calc(100vw-1.5rem))] bg-[#0b1c1e] border border-white/20 rounded-2xl p-2 shadow-xl">
                       <button
                         type="button"
                         onClick={() => { setShowChannelPlus(false); channelCameraInputRef.current?.click(); }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                        className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                       >
-                        <Camera className="w-4 h-4 text-[#F7BC5F]" /> Prendre une photo
+                        <Camera className="w-5 h-5 text-[#F7BC5F]" /> Prendre une photo
                       </button>
                       <button
                         type="button"
                         onClick={() => { setShowChannelPlus(false); channelImageInputRef.current?.click(); }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                        className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                       >
-                        <ImageIcon className="w-4 h-4 text-[#F7BC5F]" /> Photo de la galerie
+                        <ImageIcon className="w-5 h-5 text-[#F7BC5F]" /> Photo de la galerie
                       </button>
                       <button
                         type="button"
                         onClick={() => { setShowChannelPlus(false); setShowChannelEmoji(true); }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                        className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                       >
-                        <Smile className="w-4 h-4 text-[#F7BC5F]" /> Émoticônes
+                        <Smile className="w-5 h-5 text-[#F7BC5F]" /> Émoticônes
                       </button>
                       <button
                         type="button"
                         onClick={() => { setShowChannelPlus(false); setShowChannelNovaPicker(true); }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-200 hover:bg-white/10"
+                        className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                       >
-                        <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-4 h-4 object-contain" /> Novadji
+                        <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
                       </button>
                     </div>
                   )}
@@ -3515,7 +3544,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <Smile className="w-5 h-5" />
                   </button>
                   {showChannelEmoji && (
-                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[440px] max-h-[340px] overflow-y-auto custom-scrollbar">
+                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-w-[min(440px,calc(100vw-1.5rem))] max-h-[340px] overflow-y-auto custom-scrollbar">
                       {QUICK_EMOJIS.map((e) => (
                         <button
                           key={e}
@@ -3555,12 +3584,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 </div>
                 {/* Voir commentaire équivalent côté conversations directes
                     plus haut — même correctif de liseré. */}
-                <input
+                <textarea
+                  ref={channelTextareaRef}
+                  rows={1}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => {
                     // Voir commentaire équivalent côté conversations directes.
-                    if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.repeat) return;
+                    if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.repeat) return;
                     e.preventDefault();
                     void sendMessage();
                   }}
@@ -3575,7 +3606,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                      défilement pour les rattraper. Avec `min-w-0`, le champ
                      accepte de rétrécir et tous les boutons restent visibles.
                      Sur ordinateur, rien ne change : la place ne manquait pas. */
-                  className="flex-1 min-w-0 bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
+                  className="flex-1 min-w-0 resize-none bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F]"
                 />
                 {/* Image et vocal dans les canaux (31/08/2026) — les
                     conversations directes les avaient depuis toujours, les
