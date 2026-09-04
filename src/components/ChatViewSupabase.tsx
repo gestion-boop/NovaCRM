@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { AGENCIES } from '@/types';
+import { agencesDisponibles } from '@/lib/agency-logos';
 import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { NOVA_QUICK_REACTIONS, renderEmojiOrNova, isNovaReaction } from '@/lib/novaReactions';
 
@@ -1686,6 +1687,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // filtre ci-dessous l'excluait complètement. On charge donc aussi, en
   // plus, tout dossier dont il est déjà membre (chat_project_members),
   // quelle que soit l'agence du dossier.
+  // Les sociétés que cette personne peut atteindre par le sélecteur du haut
+  // (toutes, pour un super admin). Sert au cloisonnement ci-dessous.
+  const agencesJoignables = useMemo(
+    () => new Set(agencesDisponibles(AGENCIES, userProfile).map((a) => a.id)),
+    [userProfile],
+  );
+
   const loadProjectsAndChannels = async () => {
     const [{ data: projectRows }, { data: memberProjectRows }] = await Promise.all([
       supabase
@@ -1699,9 +1707,23 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     ]);
 
     const parAgence = (projectRows as ChatProject[]) || [];
-    const parAppartenance = ((memberProjectRows as any[]) || [])
+    // Signalé (4 septembre) : « tu m'as mélangé tous les projets de toutes les
+    // agences, tu ne m'as pas cloisonné le tout ». La requête d'appartenance
+    // ci-dessus ne filtre sur AUCUNE agence : pour quelqu'un qui est membre de
+    // dossiers dans les trois sociétés (le super admin en tête), elle les
+    // ramenait donc tous à la fois, quelle que soit la société sélectionnée —
+    // le cloisonnement sautait.
+    //
+    // Elle n'existe que pour un cas précis : la personne invitée dans le
+    // dossier d'une société qu'elle n'a PAS dans son sélecteur, et qui n'a donc
+    // aucun autre moyen de le voir. On s'y tient : un dossier d'une société
+    // atteignable autrement passe par la règle d'agence normale, comme avant.
+    // Pour un super admin, toutes les sociétés étant atteignables, ce filet ne
+    // laisse rien passer : cloisonnement strictement identique à l'origine.
+    const parAppartenance = (((memberProjectRows as any[]) || [])
       .map((r) => r.chat_projects)
-      .filter(Boolean) as ChatProject[];
+      .filter(Boolean) as ChatProject[])
+      .filter((p) => p.agency_id && !agencesJoignables.has(p.agency_id));
     const dejaVus = new Set<string>();
     const list = [...parAgence, ...parAppartenance]
       .filter((p) => (dejaVus.has(p.id) ? false : (dejaVus.add(p.id), true)))
