@@ -654,13 +654,23 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     ) ||
     pipelines[0];
 
-  // Pipeline par défaut choisi par l'utilisateur (par société), restauré à
+  // Pipeline par défaut choisi par l'utilisateur, par agence — restauré à
   // chaque ouverture de l'onglet Pipeline au lieu du premier de la liste.
-  const defaultPipelineStorageKey = currentUser
-    ? `novasphere_default_pipeline_${currentUser.uid}_${currentAgencyId}`
-    : null;
-
-  const [defaultPipelineId, setDefaultPipelineId] = useState<string | null>(null);
+  //
+  // Signalé : « quand on met par défaut, souvent cela ne s'enregistre pas ».
+  // Ça s'enregistrait en réalité toujours — mais uniquement dans le
+  // localStorage du NAVIGATEUR (novasphere_default_pipeline_<uid>_<agencyId>)
+  // : jamais restauré sur un autre appareil/navigateur, perdu en navigation
+  // privée ou si les données du site sont effacées — vécu comme « ça ne
+  // s'enregistre pas ». Même cause, même remède que les tuiles masquées de
+  // l'accueil (migration 20260902210000) : la préférence rejoint les
+  // réglages du compte (user_ui_settings.default_pipelines), en
+  // dictionnaire par agence — peuplé dans loadPipelines() ci-dessous (pas
+  // un effet séparé : les deux chargements sont asynchrones et rien ne
+  // garantit qu'un effet à part ait fini avant que loadPipelines() n'en ait
+  // besoin pour choisir le pipeline à restaurer).
+  const [defaultPipelinesByAgency, setDefaultPipelinesByAgency] = useState<Record<string, string>>({});
+  const defaultPipelineId = defaultPipelinesByAgency[currentAgencyId] ?? null;
 
   // Ticket #105 : colonne visée depuis le tableau de bord — surbrillance
   // temporaire le temps que l'utilisateur la repère, puis s'efface seule.
@@ -690,20 +700,27 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialStage, activePipeline]);
 
-  useEffect(() => {
-    if (!defaultPipelineStorageKey) {
-      setDefaultPipelineId(null);
-      return;
-    }
-    setDefaultPipelineId(localStorage.getItem(defaultPipelineStorageKey));
-  }, [defaultPipelineStorageKey]);
-
   const isActivePipelineDefault = !!activePipeline && defaultPipelineId === activePipeline.id;
 
-  const setPipelineAsDefault = () => {
-    if (!defaultPipelineStorageKey || !activePipeline) return;
-    localStorage.setItem(defaultPipelineStorageKey, activePipeline.id);
-    setDefaultPipelineId(activePipeline.id);
+  const setPipelineAsDefault = async () => {
+    if (!currentUser || !activePipeline) return;
+    const precedent = defaultPipelinesByAgency;
+    // Optimiste : affiché tout de suite, annulé si l'écriture échoue.
+    setDefaultPipelinesByAgency((prev) => ({ ...prev, [currentAgencyId]: activePipeline.id }));
+    const { data: existing } = await supabase
+      .from('user_ui_settings')
+      .select('default_pipelines')
+      .eq('user_id', currentUser.uid)
+      .maybeSingle();
+    const base = (existing as { default_pipelines?: Record<string, string> } | null)?.default_pipelines;
+    const merge = { ...(base && typeof base === 'object' ? base : {}), [currentAgencyId]: activePipeline.id };
+    const { error } = await supabase
+      .from('user_ui_settings')
+      .upsert({ user_id: currentUser.uid, default_pipelines: merge } as any, { onConflict: 'user_id' });
+    if (error) {
+      setDefaultPipelinesByAgency(precedent);
+      toast.error(`Pipeline par défaut non enregistré : ${error.message}`);
+    }
   };
 
   // On filtre `allDeals` (NON scopé par l'agence active du sélecteur en
@@ -878,16 +895,39 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           };
         });
 
+        // Pipeline par défaut : serveur d'abord (voir le commentaire détaillé
+        // sur defaultPipelinesByAgency plus haut), repli sur l'ancienne clé
+        // localStorage pour ne pas perdre un choix déjà fait avant ce
+        // correctif — migré vers le serveur dès qu'il sert une fois ici.
+        const { data: uiSettings } = await supabase
+          .from('user_ui_settings')
+          .select('default_pipelines')
+          .eq('user_id', currentUser.uid)
+          .maybeSingle();
+        const dictServeur = (uiSettings as { default_pipelines?: Record<string, string> } | null)?.default_pipelines;
+        const dict = dictServeur && typeof dictServeur === 'object' ? dictServeur : {};
+        if (isMounted) setDefaultPipelinesByAgency(dict);
+
         if (isMounted) {
           setPipelines(loadedPipelines);
           if (loadedPipelines.length > 0) {
-            const storedDefaultId = currentUser
-              ? localStorage.getItem(`novasphere_default_pipeline_${currentUser.uid}_${currentAgencyId}`)
-              : null;
+            const legacyDefaultId = localStorage.getItem(`novasphere_default_pipeline_${currentUser.uid}_${currentAgencyId}`);
+            const candidatId = dict[currentAgencyId] || legacyDefaultId;
             const preferredId =
-              storedDefaultId && loadedPipelines.some((lp) => lp.id === storedDefaultId)
-                ? storedDefaultId
+              candidatId && loadedPipelines.some((lp) => lp.id === candidatId)
+                ? candidatId
                 : loadedPipelines[0].id;
+
+            // Ancienne préférence trouvée uniquement en localStorage : migrée
+            // vers le compte pour de bon, sans attendre que l'utilisateur
+            // reclique sur l'étoile.
+            if (!dict[currentAgencyId] && legacyDefaultId && loadedPipelines.some((lp) => lp.id === legacyDefaultId)) {
+              const migre = { ...dict, [currentAgencyId]: legacyDefaultId };
+              setDefaultPipelinesByAgency(migre);
+              void supabase
+                .from('user_ui_settings')
+                .upsert({ user_id: currentUser.uid, default_pipelines: migre } as any, { onConflict: 'user_id' });
+            }
 
             setActivePipelineId((prev) =>
               loadedPipelines.some((lp) => lp.id === prev) ? prev : preferredId
