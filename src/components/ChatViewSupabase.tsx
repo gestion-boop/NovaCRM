@@ -1218,12 +1218,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
    * manuelle : tant qu'elle n'est pas passée, rien ne part.
    *
    * Ici, aucune installation n'est nécessaire : dès que le chat est ouvert, on
-   * envoie ses PROPRES messages dus. Chaque ligne est d'abord réservée par une
-   * mise à jour conditionnelle (`status` encore à `pending`) : si une autre
-   * fenêtre, un autre appareil ou le passage en base l'a déjà prise, la mise à
-   * jour ne renvoie rien et on passe — donc jamais deux fois le même message.
-   * Si l'insertion échoue ensuite, la ligne est remise en attente avec sa
-   * raison : rien n'est perdu, le passage suivant réessaie.
+   * envoie ses PROPRES messages dus. Chaque ligne est d'abord réservée en la
+   * supprimant (voir le détail plus bas : c'est la seule écriture que les
+   * règles d'accès autorisent au client) ; celui qui reçoit la ligne effacée
+   * est le seul à l'avoir prise, donc jamais deux fois le même message, même
+   * avec le téléphone et l'ordinateur ouverts en même temps. Si l'envoi échoue
+   * ensuite, la ligne est réinscrite à l'identique avec sa raison : rien n'est
+   * perdu, le passage suivant réessaie.
    *
    * Limite assumée : ça ne part que si quelqu'un a le chat ouvert. La migration
    * SQL reste le moyen de le rendre complètement autonome.
@@ -1242,13 +1243,29 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
     let livres = 0;
     for (const ligne of lignes) {
+      // Réservation par SUPPRESSION, et non par passage à « envoyé ».
+      //
+      // La règle d'accès écrite ce matin (migration 20260904090000) interdit
+      // explicitement au client de faire passer un message programmé de
+      // `pending` à `sent` — sa clause `with check` exige que la ligne reste
+      // `pending` après écriture. C'était volontaire : seule la fonction
+      // serveur devait faire cette transition. Une réservation par mise à jour
+      // serait donc refusée, et en silence.
+      //
+      // Supprimer une de ses propres lignes en attente, en revanche, est
+      // permis (c'est ce que fait déjà le bouton « annuler »). La suppression
+      // renvoie la ligne effacée : celui qui la reçoit est le seul à l'avoir
+      // prise, ce qui donne exactement la réservation atomique recherchée.
+      // Compatible avec la livraison en base : elle verrouille la ligne, donc
+      // les deux ne peuvent pas la traiter ensemble.
       const { data: prise } = await supabase
         .from('scheduled_messages' as any)
-        .update({ status: 'sent', sent_at: new Date().toISOString() })
+        .delete()
         .eq('id', ligne.id)
         .eq('status', 'pending')
-        .select('id');
-      if (!prise || (prise as any[]).length === 0) continue;
+        .select('id, body, channel_id, conversation_id, user_id, scheduled_at, kind');
+      const reservee = ((prise as any[]) || [])[0];
+      if (!reservee) continue;
 
       let erreur: string | null = null;
 
@@ -1296,9 +1313,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       }
 
       if (erreur) {
-        await supabase.from('scheduled_messages' as any)
-          .update({ status: 'pending', sent_at: null, error: erreur })
-          .eq('id', ligne.id);
+        // L'envoi a échoué après la réservation : on remet la ligne telle
+        // qu'elle était, pour que rien ne soit perdu et que le passage suivant
+        // réessaie. Et on le dit, au lieu d'échouer en silence.
+        await supabase.from('scheduled_messages' as any).insert({
+          id: reservee.id,
+          user_id: reservee.user_id,
+          channel_id: reservee.channel_id,
+          conversation_id: reservee.conversation_id,
+          body: reservee.body,
+          kind: reservee.kind ?? 'text',
+          scheduled_at: reservee.scheduled_at,
+          status: 'pending',
+          error: erreur,
+        });
+        toast.error(`Message programmé non envoyé : ${erreur}`);
       } else {
         livres++;
       }
