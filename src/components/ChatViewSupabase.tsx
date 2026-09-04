@@ -1693,6 +1693,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     () => new Set(agencesDisponibles(AGENCIES, userProfile).map((a) => a.id)),
     [userProfile],
   );
+  // Clé stable de cet ensemble : tant que le profil n'est pas chargé,
+  // `agencesDisponibles` répond « toutes les sociétés », donc le filet
+  // ci-dessous ne laisse rien passer — sans danger (on cloisonne plutôt
+  // trop), mais un dossier d'une autre société resterait invisible pour la
+  // personne invitée jusqu'au rechargement suivant. On relit donc la liste
+  // dès que le profil arrive. Chaîne plutôt que l'objet `userProfile` :
+  // une nouvelle identité d'objet au même contenu ne déclenche rien.
+  const cleAgencesJoignables = useMemo(
+    () => [...agencesJoignables].sort().join(','),
+    [agencesJoignables],
+  );
 
   const loadProjectsAndChannels = async () => {
     const [{ data: projectRows }, { data: memberProjectRows }] = await Promise.all([
@@ -1748,7 +1759,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   useEffect(() => {
     loadProjectsAndChannels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeAgency.id]);
+  }, [activeAgency.id, cleAgencesJoignables]);
 
   // ── Messages du canal actif, avec synchro temps réel ─────────────────────
   const loadMessages = async (channelId: string) => {
