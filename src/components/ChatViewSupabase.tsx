@@ -2752,8 +2752,29 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           </div>
                         )}
                       </div>
-                      {/* Envoi différé — voir le commentaire détaillé sur les
-                          états showConvSchedule/convScheduled plus haut. */}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => (isRecordingConv ? void handleStopRecordingConv(false) : void handleStartRecordingConv())}
+                      disabled={uploadingConvMedia}
+                      className="justify-self-center w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-rose-500/30 transition-transform hover:scale-105 disabled:opacity-40 bg-rose-500/90 hover:bg-rose-500 text-white"
+                      title="Message vocal"
+                    >
+                      <Mic className="w-5 h-5" />
+                    </button>
+
+                    <div className="flex items-center gap-2 justify-self-end">
+                      {/* Envoi différé — placé à côté du bouton d'envoi plutôt
+                          que dans le groupe emoji/nova/image ci-dessus :
+                          signalé (4 septembre) que ce groupe, déjà tassé,
+                          débordait sur le micro en mobile (icônes superposées)
+                          une fois un 4e bouton ajouté — grille à trois
+                          colonnes ÉGALES (voir plus haut), qui ne laisse
+                          aucune marge pour grandir. Ce groupe-ci n'avait
+                          jusqu'ici qu'un seul bouton (Envoyer) : il a la place.
+                          Voir le commentaire détaillé sur les états
+                          showConvSchedule/convScheduled plus haut. */}
                       <div className="relative" ref={convScheduleRef}>
                         <button
                           type="button"
@@ -2769,7 +2790,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           )}
                         </button>
                         {showConvSchedule && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-72 space-y-3">
+                          <div className="absolute z-20 bottom-full mb-2 right-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-72 space-y-3">
                             {convScheduled.length > 0 && (
                               <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
                                 <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmés</p>
@@ -2812,19 +2833,6 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           </div>
                         )}
                       </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => (isRecordingConv ? void handleStopRecordingConv(false) : void handleStartRecordingConv())}
-                      disabled={uploadingConvMedia}
-                      className="justify-self-center w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-rose-500/30 transition-transform hover:scale-105 disabled:opacity-40 bg-rose-500/90 hover:bg-rose-500 text-white"
-                      title="Message vocal"
-                    >
-                      <Mic className="w-5 h-5" />
-                    </button>
-
-                    <div className="flex items-center gap-2 justify-self-end">
                       <button
                         onClick={sendConvMessage}
                         disabled={!convDraft.trim() || isRecordingConv}
@@ -3009,66 +3017,6 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </div>
                   )}
                 </div>
-                {/* Envoi différé — voir le commentaire détaillé sur les états
-                    showChannelSchedule/channelScheduled plus haut. */}
-                <div className="relative" ref={channelScheduleRef}>
-                  <button
-                    type="button"
-                    onClick={() => setShowChannelSchedule((v) => !v)}
-                    className="relative w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-                    title="Programmer l'envoi"
-                  >
-                    <Clock className="w-5 h-5" />
-                    {channelScheduled.length > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#F7BC5F] text-slate-950 text-[10px] font-bold flex items-center justify-center">
-                        {channelScheduled.length}
-                      </span>
-                    )}
-                  </button>
-                  {showChannelSchedule && (
-                    <div className="absolute z-20 bottom-full mb-2 left-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-72 space-y-3">
-                      {channelScheduled.length > 0 && (
-                        <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
-                          <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmés</p>
-                          {channelScheduled.map((m) => (
-                            <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg px-2 py-1.5">
-                              <span className="truncate flex-1" title={m.body}>{formaterEcheance(m.scheduled_at)} — {m.body}</span>
-                              <button type="button" onClick={() => void annulerMessageProgramme(m.id, 'channel')} className="text-slate-400 hover:text-white shrink-0" title="Annuler">
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div className="space-y-2">
-                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmer ce message</p>
-                        <div className="flex gap-2">
-                          <input
-                            type="date"
-                            value={channelScheduleDate}
-                            onChange={(e) => setChannelScheduleDate(e.target.value)}
-                            min={new Date().toISOString().slice(0, 10)}
-                            className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                          />
-                          <input
-                            type="time"
-                            value={channelScheduleTime}
-                            onChange={(e) => setChannelScheduleTime(e.target.value)}
-                            className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => void programmerMessageCanal()}
-                          disabled={!draft.trim()}
-                          className="w-full py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-semibold"
-                        >
-                          Programmer
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
                 {/* Voir commentaire équivalent côté conversations directes
                     plus haut — même correctif de liseré. */}
                 <input
@@ -3132,6 +3080,74 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <Mic className="w-4 h-4" />
                   </button>
                 )}
+                {/* Envoi différé — placé juste avant le bouton d'envoi
+                    plutôt qu'entre les icônes emoji/Nova et le champ de
+                    saisie, pour rester cohérent avec la conversation
+                    directe (voir le correctif du 4 septembre là-bas : un
+                    groupe déjà tassé débordait sur le micro en mobile).
+                    Ici la rangée est en flex (le champ de saisie absorbe
+                    l'espace restant), donc pas de superposition possible,
+                    mais autant garder le même emplacement des deux côtés.
+                    Voir le commentaire détaillé sur les états
+                    showChannelSchedule/channelScheduled plus haut. */}
+                <div className="relative" ref={channelScheduleRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowChannelSchedule((v) => !v)}
+                    className="relative p-2.5 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                    title="Programmer l'envoi"
+                  >
+                    <Clock className="w-4 h-4" />
+                    {channelScheduled.length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#F7BC5F] text-slate-950 text-[10px] font-bold flex items-center justify-center">
+                        {channelScheduled.length}
+                      </span>
+                    )}
+                  </button>
+                  {showChannelSchedule && (
+                    <div className="absolute z-20 bottom-full mb-2 right-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-72 space-y-3">
+                      {channelScheduled.length > 0 && (
+                        <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+                          <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmés</p>
+                          {channelScheduled.map((m) => (
+                            <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg px-2 py-1.5">
+                              <span className="truncate flex-1" title={m.body}>{formaterEcheance(m.scheduled_at)} — {m.body}</span>
+                              <button type="button" onClick={() => void annulerMessageProgramme(m.id, 'channel')} className="text-slate-400 hover:text-white shrink-0" title="Annuler">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="space-y-2">
+                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmer ce message</p>
+                        <div className="flex gap-2">
+                          <input
+                            type="date"
+                            value={channelScheduleDate}
+                            onChange={(e) => setChannelScheduleDate(e.target.value)}
+                            min={new Date().toISOString().slice(0, 10)}
+                            className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                          />
+                          <input
+                            type="time"
+                            value={channelScheduleTime}
+                            onChange={(e) => setChannelScheduleTime(e.target.value)}
+                            className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void programmerMessageCanal()}
+                          disabled={!draft.trim()}
+                          className="w-full py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-semibold"
+                        >
+                          Programmer
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={sendMessage}
                   className="p-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950"
