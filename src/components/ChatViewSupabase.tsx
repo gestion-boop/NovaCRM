@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown,
+  Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown, ChevronRight,
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Square, Eye, ArrowLeft, Check, CheckCheck,
   Clock,
@@ -41,6 +41,10 @@ interface ChatChannel {
   project_id: string;
   name: string;
   position: number;
+  // Sous-dossiers : un canal peut être imbriqué dans un autre canal (voir
+  // migration 20260904130000). `null`/`undefined` pour un canal racine —
+  // rendu et comportement strictement inchangés dans ce cas.
+  parent_channel_id?: string | null;
 }
 
 interface ChatMessageRow {
@@ -171,6 +175,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [uploadingChannelMedia, setUploadingChannelMedia] = useState(false);
   const [newChannelFor, setNewChannelFor] = useState<string | null>(null);
   const [newChannelName, setNewChannelName] = useState('');
+  // Sous-dossiers — même mécanique que `expanded`/`newChannelFor`, mais au
+  // niveau d'un canal plutôt que d'un dossier (voir renderCanal plus bas).
+  const [expandedChannels, setExpandedChannels] = useState<Record<string, boolean>>({});
+  const [newSubChannelFor, setNewSubChannelFor] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // ── Gestion des membres par projet (table chat_project_members) ─────────
@@ -1628,14 +1636,33 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   // ── Charger dossiers + canaux (agence active + espace "3 entités") ──────
+  // Signalé (4 septembre) : un membre invité par le super admin dans un
+  // dossier d'une AUTRE agence que la sienne (voir migration
+  // 20260904130000_chat_dossiers_multi_agences) ne le voyait jamais tant
+  // que son agence active ne correspondait pas à celle du dossier — le
+  // filtre ci-dessous l'excluait complètement. On charge donc aussi, en
+  // plus, tout dossier dont il est déjà membre (chat_project_members),
+  // quelle que soit l'agence du dossier.
   const loadProjectsAndChannels = async () => {
-    const { data: projectRows } = await supabase
-      .from('chat_projects')
-      .select('*')
-      .or(`agency_id.is.null,agency_id.eq.${activeAgency.id}`)
-      .order('position');
+    const [{ data: projectRows }, { data: memberProjectRows }] = await Promise.all([
+      supabase
+        .from('chat_projects')
+        .select('*')
+        .or(`agency_id.is.null,agency_id.eq.${activeAgency.id}`)
+        .order('position'),
+      currentUser
+        ? supabase.from('chat_project_members').select('chat_projects(*)').eq('user_id', currentUser.uid)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
 
-    const list = (projectRows as ChatProject[]) || [];
+    const parAgence = (projectRows as ChatProject[]) || [];
+    const parAppartenance = ((memberProjectRows as any[]) || [])
+      .map((r) => r.chat_projects)
+      .filter(Boolean) as ChatProject[];
+    const dejaVus = new Set<string>();
+    const list = [...parAgence, ...parAppartenance]
+      .filter((p) => (dejaVus.has(p.id) ? false : (dejaVus.add(p.id), true)))
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     setProjects(list);
 
     if (list.length > 0) {
@@ -1862,15 +1889,30 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   // ── Gestion des canaux (admin uniquement) ─────────────────────────────
-  const addChannel = async (projectId: string) => {
+  // `parentChannelId` optionnel : sous-dossier imbriqué dans un canal
+  // existant plutôt qu'un canal racine du dossier (voir migration
+  // 20260904130000_chat_dossiers_multi_agences, colonne parent_channel_id).
+  const addChannel = async (projectId: string, parentChannelId?: string) => {
     const name = newChannelName.trim();
     if (!name || !currentUser) return;
     const existing = channelsByProject[projectId] || [];
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('chat_channels')
-      .insert({ project_id: projectId, name, position: existing.length, created_by: currentUser.uid })
+      .insert({
+        project_id: projectId,
+        name,
+        position: existing.length,
+        created_by: currentUser.uid,
+        ...(parentChannelId ? { parent_channel_id: parentChannelId } : {}),
+      } as any)
       .select()
       .single();
+    if (error) {
+      // Signalé : cet échec restait avalé en silence, indiscernable d'un
+      // bouton qui ne fait rien — même correctif que createProject.
+      toast.error(`Canal non créé : ${error.message}`);
+      return;
+    }
     if (data) {
       setChannelsByProject((prev) => ({ ...prev, [projectId]: [...(prev[projectId] || []), data as ChatChannel] }));
     }
@@ -1888,15 +1930,100 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (activeChannel?.id === channel.id) setActiveChannel(null);
   };
 
+  // Sous-dossiers : ne réordonne qu'entre FRÈRES (même parent, racine ou
+  // sous-dossier) — sans quoi monter/descendre un sous-dossier le mêlerait
+  // aux canaux racine d'un tout autre niveau. Pour un canal racine (cas
+  // d'aujourd'hui, aucun canal n'a encore de parent), la fratrie EST déjà
+  // la liste complète : comportement strictement inchangé.
   const moveChannel = async (channel: ChatChannel, direction: -1 | 1) => {
-    const list = [...(channelsByProject[channel.project_id] || [])];
-    const idx = list.findIndex((c) => c.id === channel.id);
+    const tous = channelsByProject[channel.project_id] || [];
+    const fratrie = tous.filter((c) => (c.parent_channel_id || null) === (channel.parent_channel_id || null));
+    const idx = fratrie.findIndex((c) => c.id === channel.id);
     const swapIdx = idx + direction;
-    if (idx < 0 || swapIdx < 0 || swapIdx >= list.length) return;
-    [list[idx], list[swapIdx]] = [list[swapIdx], list[idx]];
-    list.forEach((c, i) => { c.position = i; });
-    setChannelsByProject((prev) => ({ ...prev, [channel.project_id]: list }));
-    await Promise.all(list.map((c) => supabase.from('chat_channels').update({ position: c.position }).eq('id', c.id)));
+    if (idx < 0 || swapIdx < 0 || swapIdx >= fratrie.length) return;
+    [fratrie[idx], fratrie[swapIdx]] = [fratrie[swapIdx], fratrie[idx]];
+    fratrie.forEach((c, i) => { c.position = i; });
+    const majParId = new Map(fratrie.map((c) => [c.id, c] as [string, ChatChannel]));
+    const nouvelleListe = tous.map((c) => majParId.get(c.id) || c);
+    setChannelsByProject((prev) => ({ ...prev, [channel.project_id]: nouvelleListe }));
+    await Promise.all(fratrie.map((c) => supabase.from('chat_channels').update({ position: c.position }).eq('id', c.id)));
+  };
+
+  // Sous-dossiers (4 septembre) : un canal peut désormais en contenir
+  // d'autres (parent_channel_id, migration 20260904130000). Rendu
+  // récursif — un canal qui a des enfants prend l'icône Folder (au lieu de
+  // Hash) et un chevron d'expansion, EXACTEMENT le même principe que la
+  // ligne d'un dossier juste au-dessus dans l'arbre ; un canal SANS enfant
+  // garde très exactement son rendu d'avant (aucun changement visuel pour
+  // l'existant, aucun canal n'ayant de parent avant cette fonctionnalité).
+  // Cliquer sur le canal reste l'ouvrir (ses messages) qu'il ait des
+  // enfants ou non — seul le chevron, séparé, replie/déplie ses
+  // sous-dossiers, sans quoi un dossier-canal deviendrait impossible à
+  // consulter lui-même.
+  const renderCanal = (c: ChatChannel, fratrie: ChatChannel[], i: number): React.ReactNode => {
+    const enfants = (channelsByProject[c.project_id] || []).filter((e) => e.parent_channel_id === c.id);
+    const aDesEnfants = enfants.length > 0;
+    return (
+      <div key={c.id} className="space-y-1">
+        <div className="group flex items-center gap-1">
+          {aDesEnfants && (
+            <button
+              onClick={() => setExpandedChannels((p) => ({ ...p, [c.id]: !p[c.id] }))}
+              className="p-1 text-slate-400 hover:text-white shrink-0"
+              title={expandedChannels[c.id] ? 'Replier' : 'Déplier'}
+            >
+              {expandedChannels[c.id] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            </button>
+          )}
+          <button
+            onClick={() => setActiveChannel(c)}
+            className={`flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-left truncate ${
+              activeChannel?.id === c.id ? 'bg-[#F7BC5F]/20 text-[#F7BC5F]' : 'text-slate-300 hover:bg-white/5'
+            }`}
+          >
+            {aDesEnfants ? <Folder className="w-3.5 h-3.5 shrink-0" /> : <Hash className="w-3.5 h-3.5 shrink-0" />}
+            <span className="truncate">{c.name}</span>
+          </button>
+          {isSuperAdmin && (
+            <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+              <button onClick={() => moveChannel(c, -1)} disabled={i === 0} className="p-1 text-slate-500 hover:text-white disabled:opacity-20">
+                <ChevronUp className="w-3 h-3" />
+              </button>
+              <button onClick={() => moveChannel(c, 1)} disabled={i === fratrie.length - 1} className="p-1 text-slate-500 hover:text-white disabled:opacity-20">
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              <button onClick={() => setNewSubChannelFor(c.id)} className="p-1 text-slate-500 hover:text-[#F7BC5F]" title="Ajouter un sous-dossier">
+                <FolderPlus className="w-3 h-3" />
+              </button>
+              <button onClick={() => deleteChannel(c)} className="p-1 text-slate-500 hover:text-rose-400">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {isSuperAdmin && newSubChannelFor === c.id && (
+          <div className="flex items-center gap-1 px-1 pl-4">
+            <input
+              autoFocus
+              value={newChannelName}
+              onChange={(e) => setNewChannelName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addChannel(c.project_id, c.id)}
+              placeholder="Nom du sous-dossier"
+              className="flex-1 bg-[#030d0f] border border-[#153c3f] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+            />
+            <button onClick={() => addChannel(c.project_id, c.id)} className="p-1 text-[#F7BC5F]"><Plus className="w-3.5 h-3.5" /></button>
+            <button onClick={() => setNewSubChannelFor(null)} className="p-1 text-slate-500"><X className="w-3.5 h-3.5" /></button>
+          </div>
+        )}
+
+        {aDesEnfants && expandedChannels[c.id] && (
+          <div className="pl-4 space-y-1">
+            {enfants.map((enfant, j) => renderCanal(enfant, enfants, j))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   // Ouvre le modal "Membres" d'un projet et charge la liste
@@ -2035,7 +2162,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       .insert({ project_id: projectId, user_id: userId, added_by: currentUser.uid })
       .select()
       .single();
-    if (!error && data) {
+    if (error) {
+      // Signalé (4 septembre, Immosphera) : « je ne peux pas inviter les
+      // autres équipes » — l'ajout d'un membre d'une autre agence était
+      // refusé côté serveur (RLS), mais cet échec restait avalé en
+      // silence : rien ne distinguait ça d'un bouton qui ne fait rien. Le
+      // super admin peut désormais inviter n'importe qui (voir migration
+      // 20260904130000) ; pour toute AUTRE cause de refus, l'erreur est au
+      // moins visible maintenant.
+      toast.error(`Participant non ajouté : ${error.message}`);
+      return;
+    }
+    if (data) {
       setProjectMembers((prev) => [...prev, data as ChatProjectMember]);
       // Même règle qu'à la création : on prévient la personne qu'on vient de
       // l'ajouter, sinon elle découvre le dossier par hasard.
@@ -2221,32 +2359,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
                 {expanded[project.id] && (
                   <div className="pl-3 space-y-1">
-                    {(channelsByProject[project.id] || []).map((c, i, arr) => (
-                      <div key={c.id} className="group flex items-center gap-1">
-                        <button
-                          onClick={() => setActiveChannel(c)}
-                          className={`flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-left truncate ${
-                            activeChannel?.id === c.id ? 'bg-[#F7BC5F]/20 text-[#F7BC5F]' : 'text-slate-300 hover:bg-white/5'
-                          }`}
-                        >
-                          <Hash className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">{c.name}</span>
-                        </button>
-                        {isSuperAdmin && (
-                          <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                            <button onClick={() => moveChannel(c, -1)} disabled={i === 0} className="p-1 text-slate-500 hover:text-white disabled:opacity-20">
-                              <ChevronUp className="w-3 h-3" />
-                            </button>
-                            <button onClick={() => moveChannel(c, 1)} disabled={i === arr.length - 1} className="p-1 text-slate-500 hover:text-white disabled:opacity-20">
-                              <ChevronDown className="w-3 h-3" />
-                            </button>
-                            <button onClick={() => deleteChannel(c)} className="p-1 text-slate-500 hover:text-rose-400">
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {(() => {
+                      const racines = (channelsByProject[project.id] || []).filter((c) => !c.parent_channel_id);
+                      return racines.map((c, i) => renderCanal(c, racines, i));
+                    })()}
 
                     {isSuperAdmin && (
                       newChannelFor === project.id ? (
