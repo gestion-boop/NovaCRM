@@ -49,6 +49,8 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 import { supabase } from '@/lib/supabase';
+import { assemblerDictee } from '@/lib/dictee';
+import { creerNote } from '@/lib/novaQuickActions';
 import { IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID, IMMOSPHERA_AGENCY_ID } from './TransactionChecklistModal';
 import { useAuth } from '@/context/AuthContext';
 import { useContacts } from '@/hooks/useContacts';
@@ -422,7 +424,7 @@ const NEBULA_SPARKS = Array.from({ length: 16 }, (_, i) => {
 export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt, onInitialPromptConsumed, onFoundProperties, onClose, onOpenContact, currentClientId, prefillPrompt, onPrefillPromptConsumed, autoVoiceMode, onAutoVoiceModeConsumed, startFresh }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const { allContacts = [], addContact } = useContacts();
-  const { tasks = [], addTask } = useTasks();
+  const { tasks = [], addTask, updateTask } = useTasks();
   const { deals = [] } = useDeals();
   // Réutilisé plus bas : (1) compacter l'en-tête Nova sur mobile pour ne
   // plus recouvrir le bouton retour, (2) désactiver l'écoute-micro du
@@ -1624,6 +1626,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   const ACTION_LABELS: Record<string, string> = {
     create_contact: 'Création du contact',
     create_task: 'Création de la tâche',
+    update_task: "Modification d'une tâche",
     create_note: 'Création de la note',
     create_appointment: 'Création du rendez-vous',
     create_support_ticket: 'Création du ticket support',
@@ -1731,6 +1734,59 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         };
       }
 
+      // Demande explicite : Nova sait créer une tâche mais pas en modifier
+      // une existante (reporter, marquer faite...). Même résolution par NOM
+      // que move_lead_stage plus bas (Nova ne connaît jamais un identifiant
+      // de tâche) — recherche parmi `tasks`, déjà chargées côté client.
+      if (name === 'update_task') {
+        const taskNameQuery = typeof args.taskName === 'string' ? args.taskName.trim() : '';
+        if (!taskNameQuery) {
+          return { success: false, label, reason: 'Nom de la tâche manquant.' };
+        }
+        const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const needle = normalize(taskNameQuery);
+        const matches = tasks.filter((t) => normalize(t.title).includes(needle));
+        if (matches.length === 0) {
+          return { success: false, label, reason: `Aucune tâche trouvée pour "${taskNameQuery}".` };
+        }
+        if (matches.length > 1) {
+          return {
+            success: false,
+            label,
+            reason: `Plusieurs tâches correspondent à "${taskNameQuery}" (${matches.map((t) => t.title).join(', ')}) — précisez laquelle.`,
+          };
+        }
+        const targetTask = matches[0];
+
+        const updates: Partial<Task> = {};
+        if (typeof args.newDueDate === 'string' && args.newDueDate) updates.dueDate = args.newDueDate;
+        if (typeof args.completed === 'boolean') updates.completed = args.completed;
+        if (typeof args.priority === 'string') updates.priority = args.priority as Task['priority'];
+        if (typeof args.type === 'string') updates.type = args.type as Task['type'];
+        if (typeof args.newTitle === 'string' && args.newTitle) updates.title = args.newTitle;
+        if (Object.keys(updates).length === 0) {
+          return { success: false, label, reason: "Aucune modification précisée pour cette tâche." };
+        }
+
+        await updateTask.mutateAsync({ id: targetTask.id, updates });
+        const detailsParts = [
+          updates.title ? `Titre : ${updates.title}` : null,
+          updates.dueDate ? `Échéance : ${updates.dueDate}` : null,
+          updates.completed !== undefined ? (updates.completed ? 'Marquée faite' : 'Remise à faire') : null,
+          updates.priority ? `Priorité : ${updates.priority}` : null,
+          updates.type ? `Type : ${updates.type}` : null,
+        ].filter(Boolean);
+        return {
+          success: true,
+          action: {
+            type: 'task',
+            title: `Tâche modifiée : ${updates.title || targetTask.title}`,
+            details: detailsParts.join(' • '),
+            contactId: targetTask.contactId,
+          },
+        };
+      }
+
       if (name === 'create_note') {
         const title = typeof args.title === 'string' ? args.title : 'Note de suivi';
         const content = typeof args.content === 'string' ? args.content : '';
@@ -1740,43 +1796,27 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         // réellement à un contact connu du CRM (jamais un id halluciné).
         const matchedContact = rawContactId ? allContacts.find((c) => c.id === rawContactId) : undefined;
 
-        // Écriture dans l'agenda Supabase —
-        // toute écriture y restait bloquée indéfiniment ("chargement qui
-        // tourne dans le vide").
-        if (matchedContact) {
-          // Note liée à un client précis : ce sont les lignes de la table
-          // `comments` (liée par lead_id) qui apparaissent sur sa fiche —
-          // PAS le Bloc-notes général (`notes`), qui n'a aucun lien client.
-          const body = title && title !== 'Note de suivi' ? `**${title}**\n${content}` : content;
-          const { error: commentErr } = await supabase.from('comments').insert({
-            lead_id: matchedContact.id,
-            body,
-            user_id: currentUser?.uid,
-          });
-          if (commentErr) throw new Error(commentErr.message);
-        } else {
-          // Sinon, note générale : Bloc-notes (table `notes`, sans lien
-          // client) — on garde le nom cité en tête de note pour ne pas
-          // perdre l'information si le contact n'a pas été retrouvé.
-          const body = contactName ? `Client : ${contactName}\n\n${content}` : content;
-          const { error: noteErr } = await supabase.from('notes').insert({
-            agency_id: activeAgency.id,
-            user_id: currentUser?.uid,
-            title,
-            body,
-          });
-          if (noteErr) throw new Error(noteErr.message);
-        }
+        // Écriture partagée avec NovaSearchBar.tsx (Immosphera 360) — voir
+        // src/lib/novaQuickActions.ts, pour que les deux se comportent
+        // identiquement.
+        const resultat = await creerNote({
+          userId: currentUser?.uid,
+          agencyId: activeAgency.id,
+          title,
+          content,
+          matchedContactId: matchedContact?.id,
+          matchedContactName: matchedContact?.name,
+          contactName,
+        });
+        if (!resultat.success) throw new Error(resultat.error || 'Écriture refusée.');
 
         return {
           success: true,
           action: {
             type: 'note',
-            title: `Note enregistrée : ${title}`,
-            details: matchedContact
-              ? `Liée au client ${matchedContact.name} • ${content.slice(0, 60)}${content.length > 60 ? '...' : ''}`
-              : `${content.slice(0, 80)}${content.length > 80 ? '...' : ''}`,
-            contactId: matchedContact?.id,
+            title: resultat.title,
+            details: resultat.details,
+            contactId: resultat.contactId,
           }
         };
       }
@@ -2458,7 +2498,6 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   // base + texte déjà confirmé + texte en cours de reconnaissance (même
   // non final), jamais seulement au moment où un segment devient final.
   const heroBaseTextRef = useRef('');
-  const heroFinalSoFarRef = useRef('');
   const toggleHeroVoiceInput = () => {
     const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognitionCtor) {
@@ -2475,32 +2514,20 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     recognition.continuous = true;
     recognition.interimResults = true;
     heroBaseTextRef.current = promptInput.trim();
-    heroFinalSoFarRef.current = '';
     // CORRECTIF (31/08/2026) — signalé sur le téléphone de Natacha : la dictée
     // écrivait « écris-moi une tâche écris-moi une tâche écris-moi une… » en
-    // boucle, rendant Nova inutilisable.
-    //
-    // La version précédente ACCUMULAIT : `heroFinalSoFarRef += chunk` à chaque
-    // segment devenu final, en parcourant depuis `e.resultIndex`. Or Android
-    // Chrome renvoie très souvent TOUT l'historique des résultats à chaque
-    // événement, avec resultIndex à 0 — chaque passage réajoutait donc ce qui
-    // était déjà enregistré, d'où la répétition qui enflait à chaque mot.
-    //
-    // On reconstruit désormais la phrase entière à partir de `e.results` à
-    // chaque fois, sans rien accumuler entre les événements. L'opération
-    // devient idempotente : que le navigateur renvoie un segment ou cent, le
-    // résultat est le même.
+    // boucle. Un premier correctif a arrêté d'ACCUMULER entre deux événements
+    // `onresult`, mais reconstruisait toujours la phrase en concaténant TOUS
+    // les segments `isFinal` d'un même événement — or Android Chrome marque
+    // souvent plusieurs segments `isFinal` qui se PROLONGENT l'un l'autre
+    // ("j'ai", "j'ai vu", "j'ai vu le"...) plutôt qu'un seul par bout de
+    // phrase : les concaténer tous reconstruit exactement la répétition
+    // observée (signalé à nouveau le 4 septembre, Clémence). `assemblerDictee`
+    // (src/lib/dictee.ts) corrige déjà ce cas précis, en production depuis le
+    // 2 septembre pour la fiche client — réutilisée ici plutôt que
+    // réinventée.
     recognition.onresult = (e: any) => {
-      let final = '';
-      let interim = '';
-      for (let i = 0; i < e.results.length; i++) {
-        const chunk = e.results[i][0].transcript;
-        if (e.results[i].isFinal) final += `${chunk} `;
-        else interim += chunk;
-      }
-      heroFinalSoFarRef.current = final;
-      const combined = `${heroBaseTextRef.current} ${final} ${interim}`.replace(/\s+/g, ' ').trim();
-      setPromptInput(combined);
+      setPromptInput(assemblerDictee(e.results, heroBaseTextRef.current));
     };
     recognition.onend = () => setHeroListening(false);
     recognition.onerror = () => setHeroListening(false);

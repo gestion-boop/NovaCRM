@@ -247,6 +247,36 @@ const TOOLS = [
       required: ['leadName', 'stageName'],
     },
   },
+  // Demande explicite : Nova sait déjà créer une tâche (create_task) mais
+  // pas en modifier une existante (reporter, marquer faite, changer sa
+  // priorité...) — même principe de résolution par NOM que move_lead_stage
+  // ci-dessus : Nova ne connaît jamais l'identifiant d'une tâche, seulement
+  // son titre tel que cité par l'utilisateur. Exécuté côté client
+  // (AssistantIAView.tsx), qui recherche parmi les tâches déjà chargées.
+  {
+    name: 'update_task',
+    description: "Modifie une tâche/rappel déjà existant : reporter son échéance, la marquer faite/à faire, changer sa priorité ou son type, la renommer. Utilise cet outil dès que l'utilisateur parle d'une tâche qui existe déjà (\"déplace la tâche relance Dupont à vendredi\", \"marque comme faite la tâche d'appel de Martin\") — jamais pour en créer une nouvelle (create_task).",
+    input_schema: {
+      type: 'object',
+      properties: {
+        taskName: { type: 'string', description: "Nom (ou fragment de titre) de la tâche à modifier, tel que cité par l'utilisateur — jamais un identifiant, la résolution se fait par nom." },
+        newDueDate: { type: 'string', description: "Nouvelle date d'échéance au format AAAA-MM-JJ, si l'utilisateur demande de reporter/avancer la tâche. Calcule-la à partir de la date du jour si elle est donnée de façon relative (demain, vendredi prochain...)." },
+        completed: { type: 'boolean', description: "true pour marquer la tâche comme faite, false pour la remettre à faire." },
+        priority: {
+          type: 'string',
+          enum: ['Basse', 'Moyenne', 'Haute', 'Urgent'],
+          description: 'Nouvelle priorité de la tâche, si demandée.',
+        },
+        type: {
+          type: 'string',
+          enum: ['Appel', 'Rendez-vous', 'Relance', 'Document', 'Tâche'],
+          description: 'Nouveau type de tâche, si demandé.',
+        },
+        newTitle: { type: 'string', description: 'Nouveau titre de la tâche, si un renommage est demandé.' },
+      },
+      required: ['taskName'],
+    },
+  },
   {
     name: 'get_pipeline_stats',
     description: "Statistiques en direct du pipeline Transactions V2 d'ImmoSphera : nombre de dossiers par agent et par étape (Offre d'achat, Compromis, Signature). Utilise cet outil pour toute question sur le nombre de dossiers, la répartition par agent, ou l'avancement du pipeline commercial ImmoSphera.",

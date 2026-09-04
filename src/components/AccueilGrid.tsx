@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { assemblerDictee } from '@/lib/dictee';
 import {
   lireDispositionAgence, ecrireDispositionAgence, lireHorodatageLocal, ecrireHorodatageLocal,
 } from '@/lib/dispositionAccueil';
@@ -1195,9 +1196,14 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     recognition.lang = 'fr-FR';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
+    // Signalé (dictée répétée par endroits dans le CRM) : cet handler ne
+    // relisait jamais que `e.results[0]`, jamais le dernier segment reconnu
+    // — même défaut de fond que Nova/l'accueil, corrigé partout avec le même
+    // remède. `assemblerDictee` (src/lib/dictee.ts) reconstruit correctement
+    // la dictée, y compris le cas Android où plusieurs segments `isFinal` se
+    // prolongent l'un l'autre.
     recognition.onresult = (e: any) => {
-      const transcript = e.results?.[0]?.[0]?.transcript;
-      if (transcript) setNovaInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      setNovaInput((prev) => assemblerDictee(e.results, prev));
     };
     recognition.onend = () => setListening(false);
     recognition.onerror = () => setListening(false);

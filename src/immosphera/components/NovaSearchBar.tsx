@@ -1,6 +1,11 @@
 import { useState, useRef } from "react";
 import { Mic, Search, Square, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { assemblerDictee } from "@/lib/dictee";
+import { useTasks } from "@/hooks/useTasks";
+import { useContacts } from "@/hooks/useContacts";
+import { creerNote } from "@/lib/novaQuickActions";
 
 /**
  * Demande explicite (28/08/2026) : "je veux que tu intègres Nova dans
@@ -10,13 +15,25 @@ import { useAuth } from "@/contexts/AuthContext";
  * actionner l'action."
  *
  * Volontairement minimal, PAS le chat complet ni la mini-popup (App.tsx) :
- * une simple barre texte + micro, dédiée à la recherche de biens
- * (search_properties, déjà l'outil Nova le plus pertinent ici). Résultat
- * transmis via `onResults`, qui alimente le MÊME mécanisme déjà prévu (mais
- * jamais branché) dans Immosphera.tsx/Index.tsx (aiResultIds/aiQueryText).
+ * une simple barre texte + micro. Recherche de biens (search_properties)
+ * en priorité — résultat transmis via `onResults`, qui alimente le MÊME
+ * mécanisme déjà prévu dans Immosphera.tsx/Index.tsx (aiResultIds/
+ * aiQueryText).
+ *
+ * Demande explicite (4 septembre) : « retrouver tâches/notes/contacts
+ * depuis Immosphera 360 » — cette barre ignorait jusqu'ici silencieusement
+ * toute réponse de Nova qui n'était pas une recherche de biens (seul
+ * `data.properties` était lu). `useTasks()`/`useContacts()` sont les MÊMES
+ * hooks que AssistantIAView.tsx (le chat complet) : create_task/
+ * create_contact passent par leurs mutations existantes plutôt que d'être
+ * réécrits ici — pas de seconde version de la résolution agence/utilisateur
+ * en UUID à maintenir. create_note, plus simple, est partagé via
+ * src/lib/novaQuickActions.ts.
  */
 export function NovaSearchBar({ onResults }: { onResults: (ids: string[], queryText: string) => void }) {
   const { currentUser, activeAgency } = useAuth() as any;
+  const { addTask } = useTasks();
+  const { addContact, allContacts } = useContacts();
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,15 +52,13 @@ export function NovaSearchBar({ onResults }: { onResults: (ids: string[], queryT
     recognition.lang = "fr-FR";
     recognition.continuous = false;
     recognition.interimResults = true;
-    let finalText = "";
+    // Même correctif que Nova (AssistantIAView.tsx) et l'accueil : Android
+    // Chrome marque parfois plusieurs segments `isFinal` qui se prolongent
+    // l'un l'autre ("j'ai", "j'ai vu"...) — les concaténer tous (comme le
+    // faisait ce handler, résultat + interim depuis resultIndex) répète la
+    // phrase. `assemblerDictee` (src/lib/dictee.ts) gère déjà ce cas.
     recognition.onresult = (e: any) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const chunk = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalText += chunk;
-        else interim += chunk;
-      }
-      setQuery((finalText + " " + interim).trim());
+      setQuery(assemblerDictee(e.results));
     };
     recognition.onend = () => setListening(false);
     recognition.onerror = () => setListening(false);
@@ -70,6 +85,59 @@ export function NovaSearchBar({ onResults }: { onResults: (ids: string[], queryT
         }),
       });
       const data = await res.json().catch(() => ({}));
+
+      // Nova a choisi une action tâche/note/contact plutôt qu'une recherche
+      // de biens : on l'exécute et on confirme par un toast, sans toucher à
+      // la liste de biens affichée (une réponse vide serait trompeuse — ce
+      // n'était pas une recherche).
+      const calls: { name: string; args: Record<string, any> }[] = Array.isArray(data.functionCalls) ? data.functionCalls : [];
+      const quickAction = calls.find((c) => ["create_task", "create_note", "create_contact"].includes(c.name));
+      if (quickAction) {
+        const { name, args } = quickAction;
+        try {
+          if (name === "create_contact") {
+            const contactName = typeof args.name === "string" ? args.name : "Nouveau Contact";
+            await addContact.mutateAsync({
+              name: contactName,
+              email: typeof args.email === "string" ? args.email : "",
+              phone: typeof args.phone === "string" ? args.phone : "",
+              clientType: (typeof args.clientType === "string" ? args.clientType : "other") as any,
+              notes: typeof args.notes === "string" ? args.notes : "",
+              agencyId: activeAgency?.id,
+            } as any);
+            toast.success(`Contact créé : ${contactName}`);
+          } else if (name === "create_task") {
+            const title = typeof args.title === "string" ? args.title : "Nouvelle tâche";
+            await addTask.mutateAsync({
+              title,
+              dueDate: typeof args.dueDate === "string" ? args.dueDate : new Date().toISOString().slice(0, 10),
+              completed: false,
+              priority: (typeof args.priority === "string" ? args.priority : "Moyenne") as any,
+              type: (typeof args.type === "string" ? args.type : "Tâche") as any,
+              contactId: typeof args.contactId === "string" ? args.contactId : undefined,
+            });
+            toast.success(`Tâche ajoutée : ${title}`);
+          } else {
+            const rawContactId = typeof args.contactId === "string" ? args.contactId : "";
+            const matched = rawContactId ? allContacts.find((c: any) => c.id === rawContactId) : undefined;
+            const resultat = await creerNote({
+              userId: currentUser?.uid,
+              agencyId: activeAgency?.id || "",
+              title: typeof args.title === "string" ? args.title : undefined,
+              content: typeof args.content === "string" ? args.content : "",
+              matchedContactId: matched?.id,
+              matchedContactName: matched?.name,
+              contactName: typeof args.contactName === "string" ? args.contactName : undefined,
+            });
+            if (!resultat.success) throw new Error(resultat.error || "Écriture refusée.");
+            toast.success(resultat.title);
+          }
+        } catch (e: any) {
+          toast.error(e?.message || "Nova n'a pas pu réaliser cette action.");
+        }
+        return;
+      }
+
       if (Array.isArray(data.properties) && data.properties.length > 0) {
         onResults(data.properties.map((p: any) => p.id), text);
       } else {
