@@ -320,7 +320,7 @@ const INITIAL_TILES: TileItemNode[] = [
       },
       {
         id: 'mail',
-        title: 'Messagerie Mail',
+        title: 'Mail',
         iconName: 'Mail',
         gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]',
         badgeCount: 1,
@@ -1348,6 +1348,24 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         .filter((t) => t.id !== 'assistant-ia')
         .map((t) => (t.children ? { ...t, children: removeAssistantIaTile(t.children) } : t));
     base = removeAssistantIaTile(base);
+    // Demandé (5 septembre) : « le mail est encore messagerie mail, à la
+    // limite supprime les tuiles de rappels, chat, mail et agenda vu
+    // qu'elles sont sur la barre du haut » — ces quatre tuiles sont déjà
+    // dans le bandeau "Ma journée / Priorités" au-dessus (voir
+    // ORDRE_BARRE_HAUT), qui les lit dans INITIAL_TILES indépendamment de
+    // cette grille : les retirer d'ici ne retire rien à ce bandeau, ni au
+    // reste de l'application (le menu latéral, entre autres, garde ses
+    // propres entrées Chat/Mail/Agenda/Rappels). Même principe que
+    // removeAssistantIaTile juste au-dessus : retrait forcé y compris dans
+    // les grilles déjà personnalisées/enregistrées, à n'importe quel niveau
+    // (racine ou dossier, "chat" et "mail" vivant dans "Communication &
+    // Mails").
+    const QUICK_BAR_DUPLICATE_IDS = new Set(['rappels', 'chat', 'mail', 'agenda']);
+    const removeQuickBarDuplicates = (items: TileItemNode[]): TileItemNode[] =>
+      items
+        .filter((t) => !QUICK_BAR_DUPLICATE_IDS.has(t.id))
+        .map((t) => (t.children ? { ...t, children: removeQuickBarDuplicates(t.children) } : t));
+    base = removeQuickBarDuplicates(base);
     if (!existsRecursive(base, 'annonce')) {
       const annonceTile = INITIAL_TILES.find((t) => t.id === 'annonce');
       if (annonceTile) base = [...base, annonceTile];
@@ -3916,7 +3934,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                     <option value="reserver-camera">Réserver Caméra</option>
                     <option value="projets-internes">Projets internes</option>
                     <option value="chat">Chat Équipe</option>
-                    <option value="mail">Messagerie Mail</option>
+                    <option value="mail">Mail</option>
                   </select>
                 </div>
               )}
