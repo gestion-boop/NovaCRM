@@ -3046,7 +3046,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
             !idsMasques.has(t.id) &&
             // Un dossier verrouillé absent est déjà reposé juste au-dessus :
             // sans ce garde-fou, il apparaîtrait deux fois.
-            !dejaReposes.has(t.id)
+            !dejaReposes.has(t.id) &&
+            // Signalé (5 septembre) : Rappels & Alertes et Agenda & RDV
+            // (racine de INITIAL_TILES, donc candidats de CE filtre — "mail"
+            // et "tableau-de-bord" vivent eux dans un dossier, jamais
+            // itérés ici) revenaient malgré leur retrait de `tiles` : ce
+            // garde-fou "nouveauté" les reposait aussitôt à l'affichage,
+            // les prenant pour un module tout juste ajouté au CRM. Exclu ici
+            // au même titre qu'un dossier verrouillé déjà reposé.
+            !QUICK_BAR_DUPLICATE_IDS.has(t.id)
         )
       );
 
