@@ -59,7 +59,9 @@ interface SpaceDef {
   badge?: number;
 }
 
-const DEFAULT_VISIBLE = ['clients', 'pipeline', 'documents', 'mail', 'tableau-de-bord', 'support'];
+// « mail » retiré d'ici le 5 septembre (voir plus bas, ALL_SPACES) : la
+// tuile Mails du dock du haut suffit, plus besoin de la doubler ici.
+const DEFAULT_VISIBLE = ['clients', 'pipeline', 'documents', 'tableau-de-bord', 'support'];
 const STORAGE_KEY = 'novasphere_mobile_spaces_v1';
 
 // Ticket #18/#21 : ordre des 6 premières tuiles identique au desktop tant
@@ -191,15 +193,6 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     // Ticket #32 (nouvelle base) : la tuile Mail ouvrait toujours la boîte
     // de réception complète, jamais "Non lus" (contrairement à la tuile
     // équivalente sur desktop) — même cible que AccueilGrid.
-    // Signalé (5 septembre, capture de l'accueil mobile) : « nous avons le logo
-    // Mail qui est différent de Messagerie, il faut que les deux s'appellent
-    // Mail et prennent par défaut le logo de la barre du haut ». Puis précisé :
-    // « pour le nom de la messagerie, ne mets pas Messagerie Mail, mais
-    // uniquement Mails ». C'était bien la MÊME destination (nav: 'mail-unread')
-    // sous deux noms et deux couleurs différents — d'où l'impression de deux
-    // fonctions distinctes. Le dégradé est aligné sur la tuile Mails du dock
-    // (voir dockItems plus bas) ; l'icône était déjà la même.
-    { id: 'mail', label: 'Mails', icon: Mail, nav: 'mail-unread', gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]', badge: unreadMailCount },
     { id: 'tableau-de-bord', label: 'Tableau de bord', icon: BarChart2, nav: 'tableau-de-bord', gradient: 'from-[#0d9488] to-[#065f46]' },
     { id: 'support', label: 'Support', icon: Headphones, nav: 'support', gradient: 'from-[#4338ca] to-[#312e81]' },
     { id: 'agenda', label: 'Agenda', icon: Calendar, nav: 'agenda', gradient: 'from-[#0f766e] to-[#134e4a]' },
@@ -213,7 +206,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     ...(userProfile?.role === 'super_admin'
       ? [{ id: 'annonce', label: 'Annonce', icon: Megaphone, nav: 'parametres', gradient: 'from-[#F7BC5F] to-[#78350F]' }]
       : []),
-  ], [unreadMailCount, unreadMessagesCount, unreadRemindersCount, userProfile?.role]);
+  ], [unreadMessagesCount, unreadRemindersCount, userProfile?.role]);
 
   // Grille à positions libres (façon écran d'accueil iPhone) : chaque case
   // contient soit un id de tuile, soit `null` (case vide) — contrairement à
@@ -379,6 +372,13 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const dockItems = [
     { id: 'rappels', label: 'Rappels', count: unreadRemindersCount, icon: Bell, nav: 'rappels', gradient: 'from-[#8B1E3F] via-[#63142A] to-[#3B0A18]' },
     { id: 'chat', label: 'Chat', count: unreadMessagesCount, icon: MessageSquare, nav: 'chat', gradient: 'from-[#00B4DB] via-[#0083B0] to-[#005C8A]' },
+    // Signalé (5 septembre) : « Messagerie » et « Mail » étaient deux tuiles
+    // distinctes (celle-ci, et une seconde dans ALL_SPACES ci-dessus) menant
+    // pourtant au même endroit — renommées « Mails » les deux, puis, sur
+    // remarque suivante (« comme les deux tuiles font la même chose, il ne
+    // doit en rester qu'une seule »), la seconde a été retirée d'ALL_SPACES.
+    // Celle-ci, toujours visible en haut de l'accueil mobile, est désormais
+    // le seul accès à la messagerie depuis cet écran.
     { id: 'mail', label: 'Mails', count: unreadMailCount, icon: Mail, nav: 'mail-unread', gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]' },
     { id: 'agenda', label: 'Rendez-vous', count: todaysEvents || 0, icon: Calendar, nav: 'agenda', gradient: 'from-[#059669] via-[#047857] to-[#064E3B]' },
   ];

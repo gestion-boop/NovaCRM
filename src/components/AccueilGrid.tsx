@@ -2684,15 +2684,29 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       setTiles([newFolder, ...baseTiles]);
       setRootSlots((prev) => {
         if (prev.includes(newFolder.id)) return prev;
-        const next = [...prev];
         // On retire la première case vide pour la récupérer en tête : ce qui
         // est avant elle décale d'un cran, ce qui est après ne bouge pas, et
         // la grille garde exactement sa taille.
-        const libre = next.indexOf(null);
-        if (libre >= 0) next.splice(libre, 1);
-        // Grille entièrement pleine (36 tuiles) : la dernière bascule dans
-        // « Voir plus » plutôt que d'empêcher le dossier de se poser.
-        else next.pop();
+        const libre = prev.indexOf(null);
+        if (libre < 0) {
+          // Grille entièrement pleine (36 cases) : signalé par Sylvain
+          // (« le dossier est apparu beaucoup plus bas ») — cause trouvée en
+          // relisant ce correctif avant de le pousser plus loin. `pop()`
+          // retirait alors la DERNIÈRE case, qui est presque toujours une
+          // vraie tuile (rien ne libère jamais une case ailleurs : masquer,
+          // supprimer ou ranger une tuile dans un dossier laisse son
+          // identifiant en place ici). Cette tuile perdait sa position
+          // enregistrée sans qu'on l'ait touchée, retombait ailleurs à
+          // l'affichage sans plus pouvoir être glissée nulle part, et
+          // c'était écrit tel quel sur le compte. On renonce donc à imposer
+          // la première case dans ce seul cas : le dossier reste posé par
+          // `tiles` (déjà mis à jour ci-dessus) et se pose tout seul, à
+          // l'affichage, dans la première case VISIBLE encore libre — sans
+          // jamais faire disparaître la position de quiconque.
+          return prev;
+        }
+        const next = [...prev];
+        next.splice(libre, 1);
         next.unshift(newFolder.id);
         return next;
       });
