@@ -2659,15 +2659,27 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       let seedTile: TileItemNode | null = null;
       let baseTiles = tiles;
       if (createFolderFromTileId) {
+        // Signalé (5 septembre, « j'ai créé un dossier, il a pris la place de
+        // Blocs/Notes ») : quand la tuile visée par "Créer un dossier avec
+        // cette tuile" est elle-même un DOSSIER, ce filtre la retirait quand
+        // même de `tiles` (le test "jamais de dossier dans un dossier"
+        // n'arrivait qu'APRÈS, une fois l'extraction déjà faite) — le
+        // dossier d'origine disparaissait purement et simplement, avec tout
+        // son contenu, sans jamais être réinséré nulle part. Le filtre
+        // laisse maintenant un dossier tranquille dès ce premier passage :
+        // il n'est ni retiré, ni utilisé comme graine.
         const extractRecursive = (items: TileItemNode[]): TileItemNode[] =>
           items
             .filter((item) => {
-              if (item.id === createFolderFromTileId) { seedTile = item; return false; }
+              if (item.id === createFolderFromTileId) {
+                if (item.isFolder) return true; // jamais de dossier dans un dossier : on ne l'extrait même pas
+                seedTile = item;
+                return false;
+              }
               return true;
             })
             .map((item) => (item.children ? { ...item, children: extractRecursive(item.children) } : item));
         baseTiles = extractRecursive(tiles);
-        if (seedTile && (seedTile as TileItemNode).isFolder) seedTile = null; // jamais de dossier dans un dossier
       }
 
       const newFolder: TileItemNode = {
