@@ -193,12 +193,13 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     // équivalente sur desktop) — même cible que AccueilGrid.
     // Signalé (5 septembre, capture de l'accueil mobile) : « nous avons le logo
     // Mail qui est différent de Messagerie, il faut que les deux s'appellent
-    // Mail et prennent par défaut le logo de la barre du haut ». C'était bien
-    // la MÊME destination (nav: 'mail-unread') sous deux noms et deux couleurs
-    // différents — d'où l'impression de deux fonctions distinctes. Le nom et le
-    // dégradé sont alignés sur la tuile Mail du dock (voir dockItems plus bas) ;
-    // l'icône était déjà la même.
-    { id: 'mail', label: 'Mail', icon: Mail, nav: 'mail-unread', gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]', badge: unreadMailCount },
+    // Mail et prennent par défaut le logo de la barre du haut ». Puis précisé :
+    // « pour le nom de la messagerie, ne mets pas Messagerie Mail, mais
+    // uniquement Mails ». C'était bien la MÊME destination (nav: 'mail-unread')
+    // sous deux noms et deux couleurs différents — d'où l'impression de deux
+    // fonctions distinctes. Le dégradé est aligné sur la tuile Mails du dock
+    // (voir dockItems plus bas) ; l'icône était déjà la même.
+    { id: 'mail', label: 'Mails', icon: Mail, nav: 'mail-unread', gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]', badge: unreadMailCount },
     { id: 'tableau-de-bord', label: 'Tableau de bord', icon: BarChart2, nav: 'tableau-de-bord', gradient: 'from-[#0d9488] to-[#065f46]' },
     { id: 'support', label: 'Support', icon: Headphones, nav: 'support', gradient: 'from-[#4338ca] to-[#312e81]' },
     { id: 'agenda', label: 'Agenda', icon: Calendar, nav: 'agenda', gradient: 'from-[#0f766e] to-[#134e4a]' },
@@ -378,7 +379,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const dockItems = [
     { id: 'rappels', label: 'Rappels', count: unreadRemindersCount, icon: Bell, nav: 'rappels', gradient: 'from-[#8B1E3F] via-[#63142A] to-[#3B0A18]' },
     { id: 'chat', label: 'Chat', count: unreadMessagesCount, icon: MessageSquare, nav: 'chat', gradient: 'from-[#00B4DB] via-[#0083B0] to-[#005C8A]' },
-    { id: 'mail', label: 'Mail', count: unreadMailCount, icon: Mail, nav: 'mail-unread', gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]' },
+    { id: 'mail', label: 'Mails', count: unreadMailCount, icon: Mail, nav: 'mail-unread', gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]' },
     { id: 'agenda', label: 'Rendez-vous', count: todaysEvents || 0, icon: Calendar, nav: 'agenda', gradient: 'from-[#059669] via-[#047857] to-[#064E3B]' },
   ];
 
