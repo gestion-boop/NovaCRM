@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
   Settings, HardDrive, UserCog, Users, Megaphone, Bell, Mail, Sparkles, Download,
@@ -6,7 +7,8 @@ import {
   GripVertical, Save, Plus, Trash2, ArrowUp, ArrowDown, RotateCcw, Camera,
   Image as ImageIcon, Code2, Volume2, Smartphone, CalendarClock, LogOut, CheckCircle2,
   Loader2, Building2, RefreshCw, X, Eye, EyeOff, Copy, ExternalLink, Link, Check,
-  Sliders, Upload, Layers, Send, Power, PowerOff, Clock, Ban, UserPlus, MailCheck, Zap, Mic, Search
+  Sliders, Upload, Layers, Send, Power, PowerOff, Clock, Ban, UserPlus, MailCheck, Zap, Mic, Search,
+  Menu as MenuIcon
 } from 'lucide-react';
 import { AGENCIES, Agency } from '@/types';
 import { useAuth } from '@/context/AuthContext';
@@ -278,6 +280,15 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
   const isAdmin = userProfile?.role === 'super_admin';
   const uid = currentUser?.uid;
   const [openSection, setOpenSection] = useState<SectionId | null>(null);
+  // Signalé (5 septembre) : « sur mobile, paramètres, peux-tu faire une
+  // refonte plus simple ? [...] ne peut-on pas mettre une barre latérale qui
+  // apparaît avec les autres onglets ? » — sur téléphone, la liste des
+  // sections tenait dans une rangée qui défile horizontalement, tassée en
+  // haut de l'écran, contrairement à la vraie barre latérale verticale de
+  // l'ordinateur. Elle s'ouvre maintenant en feuille verticale (même liste,
+  // mêmes icônes, un tapotement pour choisir puis elle se referme) — sans
+  // rien changer à la barre latérale de l'ordinateur/tablette.
+  const [mobileSectionsOpen, setMobileSectionsOpen] = useState(false);
   const [driveOAuthError, setDriveOAuthError] = useState<string | null>(null);
   // Signalé (30/08/2026) : depuis la tuile "Annonce" de l'accueil, la barre
   // latérale des réglages (13 sections, sans rapport avec l'annonce qu'on
@@ -2546,25 +2557,61 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
         // plupart des libellés ("Raccourcis masq...", "Titres des
         // tâches...", capture à l'appui). Élargi à w-80 (320px).
         <nav className="w-full md:w-80 md:shrink-0 md:sticky md:top-4">
-          {/* Mobile : menu simple tactile, défilement horizontal, pas de glisser-déposer. */}
-          <div className="flex md:hidden gap-2 overflow-x-auto pb-1 -mx-1 px-1 custom-scrollbar overscroll-contain">
-            {orderedSections.map((section) => {
-              const Icon = section.icon;
-              const active = activeSection?.id === section.id;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => setOpenSection(section.id)}
-                  className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
-                    active ? 'bg-[#F7BC5F] text-slate-950' : 'bg-[#0b292b] text-slate-300 border border-[#173d40]'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" /> {section.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* Mobile : un bouton qui ouvre la liste des sections en feuille
+              verticale (comme la barre latérale de l'ordinateur), plutôt
+              qu'une rangée tassée qui défile horizontalement. */}
+          <button
+            type="button"
+            onClick={() => setMobileSectionsOpen(true)}
+            className="flex md:hidden w-full items-center gap-3 px-4 py-3 rounded-2xl bg-[#0b292b]/90 border border-[#173d40] text-left"
+          >
+            <MenuIcon className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+            <span className="flex-1 min-w-0 flex items-center gap-2 text-sm font-bold text-white">
+              {ActiveIcon && <ActiveIcon className="w-4 h-4 text-[#F7BC5F] shrink-0" />}
+              <span className="truncate">{activeSection?.label || 'Choisir une section'}</span>
+            </span>
+            <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+          </button>
+
+          {mobileSectionsOpen && createPortal(
+            <div className="md:hidden fixed inset-0 z-[70] flex flex-col justify-end" role="dialog" aria-modal="true">
+              <button
+                type="button"
+                aria-label="Fermer"
+                onClick={() => setMobileSectionsOpen(false)}
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+              />
+              <div className="relative bg-[#0b292b] border-t border-[#1c4448] rounded-t-3xl max-h-[75vh] flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,.4)] animate-in slide-in-from-bottom-full duration-300">
+                <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-[#173d40] shrink-0">
+                  <span className="w-10 h-1 rounded-full bg-white/20 absolute left-1/2 -translate-x-1/2 top-2" />
+                  <h3 className="font-bold text-white text-sm">Paramètres</h3>
+                  <button type="button" onClick={() => setMobileSectionsOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="overflow-y-auto custom-scrollbar p-2 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+                  {orderedSections.map((section) => {
+                    const Icon = section.icon;
+                    const active = activeSection?.id === section.id;
+                    return (
+                      <button
+                        key={section.id}
+                        type="button"
+                        onClick={() => { setOpenSection(section.id); setMobileSectionsOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-left transition-colors ${
+                          active ? 'bg-[#F7BC5F] text-slate-950' : 'text-slate-300 hover:bg-white/5'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span className="flex-1 min-w-0 truncate">{section.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
 
           {/* Ordinateur/tablette : panneau avec fond visible, liste
               verticale réordonnable par glisser-déposer fluide (même
@@ -2632,7 +2679,14 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
         </nav>
         )}
 
-        <div className="flex-1 min-w-0 w-full rounded-2xl border border-[#173d40] bg-[#0b292b]/90 shadow-[0_10px_30px_rgba(0,0,0,.12)] p-5 sm:p-6 overscroll-contain">
+        {/* Signalé (5 septembre) : « on ne peut pas scroller tout en bas » —
+            marge de respiration ajoutée en bas SUR TÉLÉPHONE seulement
+            (pb-24 au lieu de p-5 partout) : la fin du contenu (ex. le texte
+            sous la réglette d'opacité de l'image de fond) se retrouvait
+            juste au ras de la barre de navigation du bas, sans marge de
+            sécurité. Rien ne change à partir du format tablette (sm:p-6,
+            comme avant). */}
+        <div className="flex-1 min-w-0 w-full rounded-2xl border border-[#173d40] bg-[#0b292b]/90 shadow-[0_10px_30px_rgba(0,0,0,.12)] p-5 pb-24 sm:p-6 overscroll-contain">
           {activeSection && ActiveIcon ? (
             <>
               {/* Demandé (30/08/2026) : "supprime tous les réglages, ça ne
