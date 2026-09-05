@@ -61,8 +61,8 @@ export interface Contact {
   // Corbeille (3 septembre) : date de mise à la corbeille, null sinon.
   deletedAt?: string | null;
   // Demandé le 5 septembre (Conseils Finances). Honoraires courtier : calculé
-  // automatiquement (80 % Eric Escourrou, 70 % Coralia Ortega/Lucie Perree/
-  // Karine Brebion) à partir de `honoraires` — modifiable si besoin.
+  // automatiquement à partir de `honoraires` (Sylvain 100 %, Eric Escourrou
+  // 80 %, tous les autres 70 %) — modifiable si besoin.
   honorairesCourtier?: number;
   // Montant du crédit du client, base du calcul de Com banques.
   montantCredit?: number;

@@ -60,21 +60,19 @@ const formatLastName = (text: string) => {
 };
 
 // ── Conseils Finances, demandé le 5 septembre : courtage et banque ──────────
-// « Honoraires courtier : le courtier ne mettra rien, cela sera calculé
-// comme tel : 80 % pour Eric Escourrou, 70 % pour Coralia, Lucie Perree et
-// Karine Brebion » — sur les Honoraires agence de la même fiche. Le courtier
-// est la personne à qui la fiche est attribuée ; on le reconnaît à son nom
-// de famille plutôt qu'à un identifiant écrit en dur, qui deviendrait faux
-// au premier changement de compte (même choix que « Natacha » sur le
-// Tableau de bord).
-const TAUX_COURTIER: { motif: RegExp; taux: number }[] = [
-  { motif: /escourrou/i, taux: 0.8 },
-  { motif: /ortega/i, taux: 0.7 },
-  { motif: /perr[ée]e/i, taux: 0.7 },
-  { motif: /brebion/i, taux: 0.7 },
-];
-const tauxCourtierPour = (nom: string): number | null =>
-  TAUX_COURTIER.find((t) => t.motif.test(nom))?.taux ?? null;
+// « Honoraires courtier : le courtier ne mettra rien, cela sera calculé »
+// — sur les Honoraires agence de la même fiche. Règle rappelée ensuite :
+// « profil Sylvain : 100 % des honoraires du mandat, Eric 80 % et le reste
+// 70 % ». Le courtier est la personne à qui la fiche est attribuée ; on le
+// reconnaît à son nom plutôt qu'à un identifiant écrit en dur, qui
+// deviendrait faux au premier changement de compte (même choix que
+// « Natacha » sur le Tableau de bord). Personne d'attribué : pas de calcul.
+const tauxCourtierPour = (nom: string): number | null => {
+  if (!nom.trim()) return null;
+  if (/grazia|sylvain/i.test(nom)) return 1;
+  if (/escourrou/i.test(nom)) return 0.8;
+  return 0.7;
+};
 
 // « Com banques : en fonction de la banque choisie », en pourcentage du
 // montant du crédit du client. Taux donnés le 5 septembre : Caisse

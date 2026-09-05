@@ -5,10 +5,9 @@
 -- 1. Quatre champs sur la fiche client (Conseils Finances) :
 --
 --    `honoraires_courtier` : la commission du courtier, calculée
---    automatiquement (80 % pour Eric Escourrou, 70 % pour Coralia Ortega,
---    Lucie Perree et Karine Brebion) à partir des Honoraires agence
---    (`estimated_value`) — modifiable si besoin, comme les autres montants
---    de la fiche.
+--    automatiquement à partir des Honoraires agence (`estimated_value`) —
+--    Sylvain 100 %, Eric Escourrou 80 %, tous les autres 70 % — modifiable
+--    si besoin, comme les autres montants de la fiche.
 --
 --    `montant_credit` : montant du crédit du client, base du calcul de Com
 --    banques.
@@ -41,7 +40,7 @@ alter table public.leads
   add column if not exists com_banque numeric;
 
 comment on column public.leads.honoraires_courtier is
-  'Honoraires courtier (Conseils Finances) : calculé automatiquement à partir des Honoraires agence (80 %/70 % selon le courtier), modifiable.';
+  'Honoraires courtier (Conseils Finances) : calculé automatiquement à partir des Honoraires agence (Sylvain 100 %, Eric 80 %, les autres 70 %), modifiable.';
 comment on column public.leads.montant_credit is
   'Montant du crédit du client (Conseils Finances), base du calcul de Com banques.';
 comment on column public.leads.banque_choisie is
