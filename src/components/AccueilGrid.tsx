@@ -3277,8 +3277,14 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
 
       {/* Top Breadcrumb & Reset Controls — masqués sur mobile : la barre du
           bas (Accueil / Chat / IA / Alertes / Menu) remplace ce repère, et
-          "Réinitialiser l'accueil" n'a pas sa place sur petit écran. */}
-      <div className="hidden sm:flex max-w-7xl mx-auto w-full mb-2 items-center justify-between z-10 rounded-2xl bg-[#2b2b2b]/80 backdrop-blur-xl px-3 py-2 border border-black/40">
+          "Réinitialiser l'accueil" n'a pas sa place sur petit écran.
+          Signalé (ticket #50, KO) : « ne mets pas un fond sur la longueur
+          pour les deux onglets ajouter un dossier, et masquer le bandeau »
+          — le fond gris/le liseré/le padding qui habillaient toute la
+          largeur de cette ligne sont retirés ; chaque bouton (Ajouter,
+          Masquer le bandeau) garde son propre fond, seulement autour de
+          son texte, comme demandé. */}
+      <div className="hidden sm:flex max-w-7xl mx-auto w-full mb-2 items-center justify-between z-10">
         <div className="flex items-center gap-2 text-sm text-gray-300">
           {/* Demande explicite (30/08/2026) : "supprime le texte, mon
               espace ou mes espaces, cela ne sert à rien" — retiré
