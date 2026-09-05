@@ -3151,6 +3151,22 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       {/* Dynamic Background Glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-900/10 via-transparent to-transparent pointer-events-none" />
 
+      {/* Demandé (5 septembre) : « figer ces éléments, et quand on monte le
+          tableau les tuiles peuvent disparaître quand elles sont en dessous
+          de cette barre » — le bandeau du haut (priorités + fil d'Ariane/
+          Ajouter/Masquer) défilait avec le reste ; il flotte maintenant en
+          `sticky` au-dessus de la grille, qui défile SOUS lui plutôt qu'À
+          CÔTÉ de lui. Un seul conteneur sticky pour les deux blocs, pour
+          qu'ils restent groupés et scrollent (ou se figent) ensemble.
+          `z-30` : au-dessus de la grille des tuiles (`z-10`, voir plus bas)
+          — sans quoi, les deux étant égaux, l'ordre du document aurait fait
+          gagner les tuiles, qui seraient passées PAR-DESSUS le bandeau au
+          lieu de disparaître dessous. Pas de fond posé ici : la page n'a pas
+          de couleur unie (le fond réel est le papier peint de l'agence,
+          rendu par un ancêtre) — c'est le fond translucide flouté déjà
+          présent sur chacun des deux blocs (voir plus bas) qui masque les
+          tuiles défilant dessous. */}
+      <div className="hidden sm:block sticky top-0 z-30">
       {/* "Ma journée" / "Priorités" — masqués sur mobile (MobileHome a sa
           propre version de ces blocs) ; uniquement pour l'accueil desktop,
           alignés sur la même hauteur, avec des données 100% dynamiques. */}
@@ -3244,7 +3260,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       {/* Top Breadcrumb & Reset Controls — masqués sur mobile : la barre du
           bas (Accueil / Chat / IA / Alertes / Menu) remplace ce repère, et
           "Réinitialiser l'accueil" n'a pas sa place sur petit écran. */}
-      <div className="hidden sm:flex max-w-7xl mx-auto w-full mb-2 items-center justify-between z-10">
+      <div className="hidden sm:flex max-w-7xl mx-auto w-full mb-2 items-center justify-between z-10 rounded-2xl bg-[#2b2b2b]/80 backdrop-blur-xl px-3 py-2 border border-black/40">
         <div className="flex items-center gap-2 text-sm text-gray-300">
           {/* Demande explicite (30/08/2026) : "supprime le texte, mon
               espace ou mes espaces, cela ne sert à rien" — retiré
@@ -3315,6 +3331,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
             {showTopPanel ? 'Masquer le bandeau' : 'Bandeau masqué'}
           </button>
         </div>
+      </div>
       </div>
 
       {/* Ticket #213 : "Personnaliser" et "Réinitialiser l'accueil" retirés
