@@ -217,17 +217,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Agency Switcher */}
         {(!collapsed || isMobile) && (
           <div className="p-3 relative space-y-2">
-            {/* Rangée de logos : un clic = la société, sans ouvrir le menu. */}
+            {/* Rangée de logos : un clic = la société, sans ouvrir le menu.
+                Demandé le 5 septembre : « supprime le sélecteur vertical des
+                agences, augmente les icônes en haut pour améliorer le
+                visuel ». Dès qu'il y a un choix, la rangée seule, en grand ;
+                le menu déroulant qui la doublait juste en dessous disparaît.
+                Une personne à une seule société n'a pas de rangée (rien à
+                choisir) : elle garde la ligne qui nomme sa société, comme
+                avant. */}
             <AgencyLogoSwitcher
               agencies={availableAgencies}
               selectedId={selectedAgency.id}
-              size="sm"
+              size="lg"
               className="justify-center"
               onSelect={(agency) => {
                 onSelectAgency(agency);
                 setShowAgencyMenu(false);
               }}
             />
+            {availableAgencies.length < 2 && (
             <div className="relative">
             <button
               onClick={() => setShowAgencyMenu(!showAgencyMenu)}
@@ -276,6 +284,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
             </div>
+            )}
           </div>
         )}
 

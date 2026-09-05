@@ -12,18 +12,20 @@ interface Props {
   agencies: Agency[];
   selectedId: string;
   onSelect: (agency: Agency) => void;
-  size?: 'sm' | 'md';
+  // 'lg' : la rangée du menu (5 septembre, « augmente les icônes en haut »).
+  size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
 
 const AgencyLogoSwitcher: React.FC<Props> = ({ agencies, selectedId, onSelect, size = 'md', className = '' }) => {
   if (agencies.length < 2) return null;
-  const dim = size === 'sm' ? 'w-8 h-8' : 'w-9 h-9 sm:w-10 sm:h-10';
+  const dim = size === 'sm' ? 'w-8 h-8' : size === 'lg' ? 'w-12 h-12' : 'w-9 h-9 sm:w-10 sm:h-10';
+  const espace = size === 'lg' ? 'gap-2 p-1.5' : 'gap-1.5 p-1';
   return (
     <div
       role="radiogroup"
       aria-label="Société active"
-      className={`flex items-center gap-1.5 rounded-xl bg-[#0b1c1e] border border-white/10 p-1 ${className}`}
+      className={`flex items-center rounded-xl bg-[#0b1c1e] border border-white/10 ${espace} ${className}`}
     >
       {agencies.map((agency) => {
         const active = agency.id === selectedId;
