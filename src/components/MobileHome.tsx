@@ -191,7 +191,14 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     // Ticket #32 (nouvelle base) : la tuile Mail ouvrait toujours la boîte
     // de réception complète, jamais "Non lus" (contrairement à la tuile
     // équivalente sur desktop) — même cible que AccueilGrid.
-    { id: 'mail', label: 'Messagerie', icon: Mail, nav: 'mail-unread', gradient: 'from-[#0369a1] to-[#075985]', badge: unreadMailCount },
+    // Signalé (5 septembre, capture de l'accueil mobile) : « nous avons le logo
+    // Mail qui est différent de Messagerie, il faut que les deux s'appellent
+    // Mail et prennent par défaut le logo de la barre du haut ». C'était bien
+    // la MÊME destination (nav: 'mail-unread') sous deux noms et deux couleurs
+    // différents — d'où l'impression de deux fonctions distinctes. Le nom et le
+    // dégradé sont alignés sur la tuile Mail du dock (voir dockItems plus bas) ;
+    // l'icône était déjà la même.
+    { id: 'mail', label: 'Mail', icon: Mail, nav: 'mail-unread', gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]', badge: unreadMailCount },
     { id: 'tableau-de-bord', label: 'Tableau de bord', icon: BarChart2, nav: 'tableau-de-bord', gradient: 'from-[#0d9488] to-[#065f46]' },
     { id: 'support', label: 'Support', icon: Headphones, nav: 'support', gradient: 'from-[#4338ca] to-[#312e81]' },
     { id: 'agenda', label: 'Agenda', icon: Calendar, nav: 'agenda', gradient: 'from-[#0f766e] to-[#134e4a]' },
