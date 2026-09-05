@@ -276,9 +276,20 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
                           // survol — un second signal visuel indépendant du
                           // shadow, garanti visible même si l'ombre seule ne
                           // suffisait pas à se voir sur ce fond très sombre.
-                          className={`p-4 rounded-2xl bg-[#07191b] border-l-4 ${borderLeftClass} border-t border-r border-b border-[#144447]/60 flex items-start justify-between gap-4 cursor-pointer hover:bg-[#123336] hover:border-t-[#F7BC5F]/70 hover:border-r-[#F7BC5F]/70 hover:border-b-[#F7BC5F]/70 hover:shadow-[0_0_28px_6px_rgba(247,188,95,0.5)] transition-all group ${snapshot.isDragging ? 'shadow-2xl opacity-90 scale-[1.02] border-[#F7BC5F]/50 z-50 bg-[#0a1e20]' : 'shadow-md'}`}
+                          // Signalé (ticket #53, capture mobile) : sur téléphone,
+                          // cette carte gardait sa disposition HORIZONTALE de
+                          // bureau (case à cocher + texte à gauche, priorité +
+                          // actions à droite, sur une seule ligne) — sur un écran
+                          // étroit, les deux blocs se compressaient l'un contre
+                          // l'autre, forçant le titre et la date à passer sur
+                          // plusieurs lignes tassées. Elle s'empile maintenant
+                          // verticalement sous `sm` (texte, puis priorité/actions
+                          // en dessous, pleine largeur) ; à partir du format
+                          // tablette, la disposition d'origine (une seule ligne)
+                          // est inchangée.
+                          className={`p-4 rounded-2xl bg-[#07191b] border-l-4 ${borderLeftClass} border-t border-r border-b border-[#144447]/60 flex flex-col sm:flex-row items-stretch sm:items-start justify-start sm:justify-between gap-3 sm:gap-4 cursor-pointer hover:bg-[#123336] hover:border-t-[#F7BC5F]/70 hover:border-r-[#F7BC5F]/70 hover:border-b-[#F7BC5F]/70 hover:shadow-[0_0_28px_6px_rgba(247,188,95,0.5)] transition-all group ${snapshot.isDragging ? 'shadow-2xl opacity-90 scale-[1.02] border-[#F7BC5F]/50 z-50 bg-[#0a1e20]' : 'shadow-md'}`}
                         >
-                          <div className="flex items-start gap-4 min-w-0 flex-1">
+                          <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
                             <div 
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -326,16 +337,37 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
                                   </span>
                                 </div>
                               </div>
-                              <p className="text-sm text-slate-400">{task.type !== 'Appel' && task.type !== 'Rendez-vous' ? task.title : 'Détails de la tâche...'}</p>
+                              {/* Signalé (ticket #53) : cette ligne réaffichait
+                                  le titre une seconde fois pour une tâche
+                                  normale (déjà montré juste au-dessus dans le
+                                  <h3>) — la condition était inversée par
+                                  rapport à son intention réelle : montrer le
+                                  VRAI titre en dessous quand le <h3> ne porte
+                                  qu'un intitulé générique ("Appel",
+                                  "Rendez-vous"), et ne rien répéter sinon.
+                                  N'affiche donc plus rien pour une tâche
+                                  normale ; pour un appel/rendez-vous, montre
+                                  maintenant son vrai titre (au lieu du texte
+                                  générique "Détails de la tâche..." qui ne
+                                  disait rien de réel). */}
+                              {(task.type === 'Appel' || task.type === 'Rendez-vous') && (
+                                <p className="text-sm text-slate-400">{task.title}</p>
+                              )}
                             </div>
                           </div>
-                          
-                          <div className="flex items-center gap-3 shrink-0">
+
+                          <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 w-full sm:w-auto">
                             <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${dateStatus.badgeClass}`}>
                               {task.priority || 'Normal'}
                             </span>
-                            
-                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+
+                            {/* Les boutons n'apparaissaient qu'au survol
+                                (`group-hover`), un geste qui n'existe pas au
+                                doigt : sur téléphone, ils restaient invisibles
+                                en permanence. Visibles en permanence sous
+                                `sm`, toujours réservés au survol à partir de
+                                la tablette (comportement bureau inchangé). */}
+                            <div className="flex items-center gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
