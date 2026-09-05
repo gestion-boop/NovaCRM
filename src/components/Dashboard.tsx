@@ -243,7 +243,7 @@ export default function Dashboard({
         nomsConnus: pipelinesData.map((p) => p.name).slice(0, 6),
         devis: 0, devisNb: 0, recurrence: 0, recurrenceNb: 0,
         parConseiller: new Map<string, number>(), commissionParConseiller: new Map<string, number>(),
-        parConseillerAnnee: new Map<string, number>(),
+        parConseillerAnnee: new Map<string, number>(), parConseillerAVenir: new Map<string, number>(),
       };
     }
 
@@ -279,6 +279,19 @@ export default function Dashboard({
     // L'étape, elle, sait toujours à quel pipeline elle appartient.
     const pipelineParEtape = new Map<string, string>();
     stagesWithPosition.forEach((s) => { pipelineParEtape.set(s.id, s.pipeline_id); });
+    // Conseils Finances (5 septembre) : « pour l'instant uniquement : CA à
+    // venir, à partir des dossiers mis dans Accord banque / Rendez-vous ».
+    // Position de cette étape dans chaque pipeline, et position de chaque
+    // étape — même lecture que la tuile Volume financier plus haut.
+    const seuilAccordBanque = new Map<string, number>();
+    const positionEtape = new Map<string, number>();
+    stagesWithPosition.forEach((s) => {
+      positionEtape.set(`${s.pipeline_id}::${s.name}`, s.position);
+      if (/accord\s*banque/i.test(s.name)) {
+        const actuel = seuilAccordBanque.get(s.pipeline_id);
+        if (actuel === undefined || s.position < actuel) seuilAccordBanque.set(s.pipeline_id, s.position);
+      }
+    });
 
     // Demandé le 1er septembre : « mets le chiffre facturé, et tout ce qui
     // n'est pas encore facturé — donc archivé avec un prix confirmé — sera en
@@ -338,6 +351,10 @@ export default function Dashboard({
     // l'agence plus bas.
     const anneeCourante = new Date().getFullYear();
     const parConseillerAnnee = new Map<string, number>();
+    // « CA à venir » conseiller par conseiller — sur Conseils Finances, les
+    // dossiers à partir d'Accord banque : « ceux qui appartiennent aux
+    // courtiers, Sylvain compris, une case en haut du tableau de bord ».
+    const parConseillerAVenir = new Map<string, number>();
     // Demandé le 2 septembre : « quand je clique dans la colonne chiffre
     // d'affaires d'agence, je voudrais un tableau avec le nom et prénom des
     // clients, le numéro de mandat et le chiffre, et pouvoir modifier le
@@ -360,6 +377,14 @@ export default function Dashboard({
       if (estNovavisio && !d.archivedAt) {
         const etape = sansAccents(d.stage || '');
         if (!etape.includes('factur') && !etape.includes('regler')) return;
+      }
+      // Conseils Finances : un dossier vivant du pipeline n'entre dans le
+      // « CA à venir » qu'à partir de l'étape Accord banque / Rendez-vous ;
+      // avant, il ne compte nulle part.
+      if (estConseilsFinances && !d.archivedAt) {
+        const seuil = seuilAccordBanque.get(pipelineReel);
+        const position = positionEtape.get(`${pipelineReel}::${d.stage}`);
+        if (seuil === undefined || position === undefined || position < seuil) return;
       }
       dansLePipeline += 1;
       if (montant <= 0) {
@@ -410,6 +435,9 @@ export default function Dashboard({
         comptessAVenir += 1;
         const etape = d.stage || 'Sans étape';
         parEtapeAVenir.set(etape, (parEtapeAVenir.get(etape) || 0) + montant);
+        if (d.advisorId) {
+          parConseillerAVenir.set(d.advisorId, (parConseillerAVenir.get(d.advisorId) || 0) + montant);
+        }
       }
     });
     const repartitionAVenir = Array.from(parEtapeAVenir.entries())
@@ -419,13 +447,13 @@ export default function Dashboard({
       total, comptees, aVenir, comptessAVenir, sansMontant,
       pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [],
       repartitionAVenir, horsPipelineMontant, horsPipelineNb, devis, devisNb,
-      recurrence, recurrenceNb, parConseiller, commissionParConseiller, parConseillerAnnee,
+      recurrence, recurrenceNb, parConseiller, commissionParConseiller, parConseillerAnnee, parConseillerAVenir,
       // Archivés d'abord — c'est ce qui est déjà compté — puis par montant.
       lignes: lignes.sort(
         (a, b) => Number(b.archive) - Number(a.archive) || b.montant - a.montant || a.nom.localeCompare(b.nom, 'fr')
       ),
     };
-  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, isSuperAdmin, currentUser?.uid, estNovavisio, parPipelinePrincipal]);
+  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, isSuperAdmin, currentUser?.uid, estNovavisio, estConseilsFinances, parPipelinePrincipal]);
 
   // « Rajoute sur le tableau de bord une autre case avec CA de Natacha » —
   // repérée par son prénom dans la liste des collaborateurs de l'agence
@@ -440,15 +468,26 @@ export default function Dashboard({
     ? chiffreAffairesAgence.commissionParConseiller.get(natacha.id) || 0
     : 0;
 
-  // Demandé le 5 septembre (Conseils Finances) : « CA Sylvain, qui sera le CA
-  // terminé, facturé, et archivé aussi » — son chiffre à lui, compté comme
-  // celui de n'importe quel collaborateur : ses dossiers archivés et
-  // confirmés. Repéré par son prénom, comme Natacha.
-  const sylvain = useMemo(
-    () => collaborateurs.find((u) => /sylvain/i.test(u.name || '')),
-    [collaborateurs]
-  );
-  const caSylvain = sylvain ? chiffreAffairesAgence.parConseiller.get(sylvain.id) || 0 : 0;
+  // Demandé le 5 septembre (Conseils Finances), pour les super admins : « ceux
+  // qui appartiennent aux courtiers, Sylvain Grazia compris : rajouter une
+  // case en haut du tableau de bord, CA Sylvain, ou le nom du courtier ». Une
+  // case par personne de l'agence : ses dossiers archivés et confirmés, plus
+  // ses dossiers à partir d'Accord banque / Rendez-vous — la même règle que le
+  // CA de l'agence. Une personne sans compte dans la liste mais qui porte des
+  // dossiers apparaît quand même, plutôt que de perdre son chiffre.
+  const caParCourtier = useMemo(() => {
+    const ids = new Set<string>(collaborateurs.map((u) => u.id));
+    chiffreAffairesAgence.parConseiller.forEach((_v, id) => ids.add(id));
+    chiffreAffairesAgence.parConseillerAVenir.forEach((_v, id) => ids.add(id));
+    return Array.from(ids)
+      .map((id) => {
+        const nom = collaborateurs.find((u) => u.id === id)?.name || 'Collaborateur sans compte';
+        const archive = chiffreAffairesAgence.parConseiller.get(id) || 0;
+        const aVenir = chiffreAffairesAgence.parConseillerAVenir.get(id) || 0;
+        return { id, nom, prenom: nom.split(' ')[0], archive, aVenir, total: archive + aVenir };
+      })
+      .sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'));
+  }, [collaborateurs, chiffreAffairesAgence]);
 
 
   // On ne considère que les agences réellement affichées (l'agence active,
@@ -858,10 +897,11 @@ export default function Dashboard({
           s'alignent, quelle que soit la longueur du commentaire en dessous.
           La grille, elle, garde des cartes de même hauteur : les caler en haut
           les aurait rendues inégales, ce qui aurait été pire. */}
-      {/* Conseils Finances (5 septembre) : un super admin y a quatre cases
-          (CA de l'agence, CA Sylvain, CA à venir, Objectif de l'année), un
-          collaborateur trois (les siennes). */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${estNovavisio || (estConseilsFinances && isSuperAdmin) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+      {/* Conseils Finances (5 septembre) : trois cases pour un super admin
+          (CA de l'agence, CA à venir, Objectif de l'année), puis une rangée
+          « CA par courtier » ; trois cases aussi pour un collaborateur (les
+          siennes). */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${estNovavisio ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         {/* Ticket #34 — Chiffre d'affaires de l'agence, super admins seulement.
             Pipeline « Transaction V2 », montants HT (commission agence).
             Y entrent les dossiers ARCHIVÉS dont le montant a été confirmé au
@@ -877,8 +917,13 @@ export default function Dashboard({
             className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Chiffre d'affaires de l'agence</span>
+              {/* Conseils Finances (5 septembre) : « CA à venir, à partir des
+                  dossiers mis dans Accord banque / Rendez-vous, à prendre en
+                  compte dans le CA agence ». Le chiffre additionne donc les
+                  dossiers archivés et ceux arrivés à cette étape ; ailleurs,
+                  les archivés seulement, comme avant. */}
               <div className="text-2xl font-black text-[#F9C977] tracking-tight">
-                {formatCurrency(chiffreAffairesAgence.total)}
+                {formatCurrency(estConseilsFinances ? chiffreAffairesAgence.total + chiffreAffairesAgence.aVenir : chiffreAffairesAgence.total)}
               </div>
               {/* Une tuile qui affiche zéro sans dire pourquoi fait perdre une
                   soirée. Elle explique donc ce qu'elle a trouvé, et où ça
@@ -895,6 +940,15 @@ export default function Dashboard({
                       </span>
                     )}
                   </span>
+                ) : estConseilsFinances ? (
+                  <>
+                    {chiffreAffairesAgence.comptees} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)})
+                    {' + '}{chiffreAffairesAgence.comptessAVenir} à partir d'Accord banque / Rendez-vous ({formatCurrency(chiffreAffairesAgence.aVenir)})
+                    <span className="text-slate-500 font-normal block mt-0.5">
+                      Honoraires agence HT, {dansPipelineVise}
+                      {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans montant`}
+                    </span>
+                  </>
                 ) : (
                   <>
                     {chiffreAffairesAgence.comptees} affaire{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivée{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et confirmée{chiffreAffairesAgence.comptees > 1 ? 's' : ''}
@@ -979,8 +1033,8 @@ export default function Dashboard({
               </div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.comptessAVenir === 0
-                  ? `Aucun de vos dossiers en attente ${dansPipelineVise}`
-                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers encore ${dansPipelineVise}, honoraires agence HT`}
+                  ? "Aucun de vos dossiers à partir de l'étape Accord banque / Rendez-vous"
+                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Accord banque / Rendez-vous, honoraires agence HT`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300">
@@ -1027,46 +1081,29 @@ export default function Dashboard({
           </div>
         )}
 
-        {/* Super admins de Conseils Finances (5 septembre) : « CA Sylvain » à
-            côté du CA de l'agence — même mécanique que « Commission Natacha »
-            sur Novavisio, mais sur le chiffre d'affaires (ses dossiers
-            archivés), pas sur une commission saisie à part. */}
+        {/* « CA à venir qui sera le CA à partir de Accord banque » : les
+            dossiers du pipeline Conseils Finances arrivés à l'étape Accord
+            banque / Rendez-vous ou au-delà (règle posée dans le calcul plus
+            haut, la même que le cercle et la fenêtre de détail). Pour les
+            super admins de Conseils Finances, la tuile ImmoSphera (tout ce
+            qui est dans le pipeline) ne s'affiche donc pas. */}
         {isSuperAdmin && estConseilsFinances && (
-          <div className="dash-card p-6 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group">
-            <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">
-                CA {sylvain?.name?.split(' ')[0] || 'Sylvain'}
-              </span>
-              <div className="text-2xl font-black text-sky-300 tracking-tight">{formatCurrency(caSylvain)}</div>
-              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
-                {sylvain
-                  ? "Ses dossiers archivés et confirmés, honoraires agence HT — compris dans le CA de l'agence"
-                  : 'Aucun collaborateur nommé Sylvain dans cette agence'}
-              </span>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300 group-hover:scale-105 transition-transform">
-              <TrendingUp className="w-6 h-6" />
-            </div>
-          </div>
-        )}
-
-        {/* « CA à venir qui sera le CA à partir de Accord banque » : la somme
-            des dossiers du pipeline arrivés à l'étape Accord banque ou
-            au-delà — le même calcul que la tuile Volume financier plus bas,
-            mis en tête pour les super admins de Conseils Finances. Pour eux,
-            la tuile ImmoSphera (tout ce qui est dans le pipeline, avant
-            Accord banque compris) ne s'affiche donc pas. */}
-        {isSuperAdmin && estConseilsFinances && (
-          <div className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setDetailCa('avenir')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('avenir'); } }}
+            title="Voir le détail des dossiers à venir, ligne par ligne"
+            className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">CA à venir</span>
               <div className="text-2xl font-black text-white tracking-tight">
-                {formatCurrency(accordBanque.total)}
+                {formatCurrency(chiffreAffairesAgence.aVenir)}
               </div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
-                {accordBanque.nb === 0
-                  ? "Aucun dossier à partir de l'étape Accord banque"
-                  : `${accordBanque.nb} dossier${accordBanque.nb > 1 ? 's' : ''} à partir de l'étape Accord banque, honoraires agence HT`}
+                {chiffreAffairesAgence.comptessAVenir === 0
+                  ? "Aucun dossier à partir de l'étape Accord banque / Rendez-vous"
+                  : `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Accord banque / Rendez-vous, honoraires agence HT — compris dans le CA de l'agence`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
@@ -1265,6 +1302,39 @@ export default function Dashboard({
           </div>
         )}
       </div>
+
+      {/* Conseils Finances (5 septembre), super admins : « ceux qui
+          appartiennent aux courtiers, Sylvain Grazia compris : rajouter une
+          case en haut du tableau de bord, CA Sylvain, ou le nom du courtier ».
+          Une case par personne, même règle que le CA de l'agence (archivés +
+          à partir d'Accord banque / Rendez-vous), la plus grosse en premier. */}
+      {isSuperAdmin && estConseilsFinances && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">CA par courtier</h3>
+          {caParCourtier.length === 0 ? (
+            <p className="text-xs text-slate-500 px-1">Aucun collaborateur rattaché à cette agence.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {caParCourtier.map((c) => (
+                <div key={c.id} className="dash-card p-5 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 flex items-start justify-between gap-3 group">
+                  <div className="space-y-1 min-w-0">
+                    <span className="text-xs text-slate-400 font-medium tracking-wide block truncate" title={c.nom}>CA {c.prenom}</span>
+                    <div className="text-xl font-black text-sky-300 tracking-tight">{formatCurrency(c.total)}</div>
+                    <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                      {c.total === 0
+                        ? 'Aucun dossier archivé ni à partir d\'Accord banque'
+                        : `${formatCurrency(c.archive)} archivé + ${formatCurrency(c.aVenir)} à partir d'Accord banque`}
+                    </span>
+                  </div>
+                  <div className="w-10 h-10 shrink-0 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300">
+                    <TrendingUp className="w-5 h-5" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Conseils Finances (5 septembre) : les objectifs de l'année, un par
           collaborateur, réglés ici par les super admins — chaque personne
@@ -1472,7 +1542,11 @@ export default function Dashboard({
         <div className="dash-card p-6 rounded-2xl border border-[#144447]/60 hover:border-[#1e5d61] shadow-xl hover:shadow-teal-500/5 transition-all duration-300 flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-sm text-white">CA à venir</h3>
-            <p className="text-xs text-slate-400">Commission agence HT encore {dansPipelineVise}, par colonne.</p>
+            <p className="text-xs text-slate-400">
+              {estConseilsFinances
+                ? "Honoraires agence HT des dossiers à partir d'Accord banque / Rendez-vous, par colonne."
+                : `Commission agence HT encore ${dansPipelineVise}, par colonne.`}
+            </p>
           </div>
           <div
             role="button"
@@ -1621,7 +1695,12 @@ export default function Dashboard({
           ailleurs (leads.estimated_value) : le total se recalcule aussitôt. */}
       {detailCa && (() => {
         const realise = detailCa === 'realise';
-        const lignesVisibles = chiffreAffairesAgence.lignes.filter((l) => l.archive === realise);
+        // Conseils Finances : le CA de l'agence additionne archivés et
+        // dossiers à partir d'Accord banque — la fenêtre du réalisé montre
+        // donc les deux, comme la tuile.
+        const lignesVisibles = chiffreAffairesAgence.lignes.filter((l) =>
+          realise ? (l.archive || estConseilsFinances) : !l.archive
+        );
         const totalVisible = lignesVisibles.reduce((somme, l) => somme + l.montant, 0);
         return (
         <div
