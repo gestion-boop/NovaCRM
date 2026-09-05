@@ -121,6 +121,20 @@ export function supabaseLeadToContact(item: Record<string, unknown>): Contact {
       item.recurring_amount === null || item.recurring_amount === undefined
         ? undefined
         : Number(item.recurring_amount),
+    // Conseils Finances (5 septembre) : courtage et banque, voir types.ts.
+    honorairesCourtier:
+      item.honoraires_courtier === null || item.honoraires_courtier === undefined
+        ? undefined
+        : Number(item.honoraires_courtier),
+    montantCredit:
+      item.montant_credit === null || item.montant_credit === undefined
+        ? undefined
+        : Number(item.montant_credit),
+    banqueChoisie: (item.banque_choisie as string) || undefined,
+    comBanque:
+      item.com_banque === null || item.com_banque === undefined
+        ? undefined
+        : Number(item.com_banque),
     companyName: ((item.company as Record<string, unknown> | null)?.name as string) || undefined,
     companyAddress: ((item.company as Record<string, unknown> | null)?.address as string) || undefined,
     companySiret: ((item.company as Record<string, unknown> | null)?.siret as string) || undefined,
@@ -301,6 +315,13 @@ export const useContacts = () => {
               }
             : null,
         pending_quote_amount: newContact.caDevisAVenir ?? null,
+        // Courtage et banque (Conseils Finances, 5 septembre) : colonnes
+        // écrites seulement quand le formulaire les envoie — une fiche sans
+        // ces montants ne les touche pas.
+        ...(newContact.honorairesCourtier !== undefined ? { honoraires_courtier: newContact.honorairesCourtier } : {}),
+        ...(newContact.montantCredit !== undefined ? { montant_credit: newContact.montantCredit } : {}),
+        ...(newContact.banqueChoisie !== undefined ? { banque_choisie: newContact.banqueChoisie?.trim() || null } : {}),
+        ...(newContact.comBanque !== undefined ? { com_banque: newContact.comBanque } : {}),
       };
 
       const { data, error: sbError } = await supabase
@@ -455,6 +476,23 @@ export const useContacts = () => {
 
       if (updates.mandateNumber !== undefined) {
         patch.mandate_number = updates.mandateNumber?.trim() || null;
+      }
+
+      // Conseils Finances (5 septembre) : courtage et banque.
+      if (updates.honorairesCourtier !== undefined) {
+        patch.honoraires_courtier = updates.honorairesCourtier;
+      }
+
+      if (updates.montantCredit !== undefined) {
+        patch.montant_credit = updates.montantCredit;
+      }
+
+      if (updates.banqueChoisie !== undefined) {
+        patch.banque_choisie = updates.banqueChoisie?.trim() || null;
+      }
+
+      if (updates.comBanque !== undefined) {
+        patch.com_banque = updates.comBanque;
       }
 
       if (updates.secteur !== undefined) {

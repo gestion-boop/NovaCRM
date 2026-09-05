@@ -60,6 +60,18 @@ export interface Contact {
   archivedAt?: string | null;
   // Corbeille (3 septembre) : date de mise à la corbeille, null sinon.
   deletedAt?: string | null;
+  // Demandé le 5 septembre (Conseils Finances). Honoraires courtier : calculé
+  // automatiquement (80 % Eric Escourrou, 70 % Coralia Ortega/Lucie Perree/
+  // Karine Brebion) à partir de `honoraires` — modifiable si besoin.
+  honorairesCourtier?: number;
+  // Montant du crédit du client, base du calcul de Com banques.
+  montantCredit?: number;
+  // Banque retenue pour le crédit : Caisse d'Épargne, Banque Populaire,
+  // Banque postale ou Société Générale.
+  banqueChoisie?: string;
+  // Com banques : calculée automatiquement à partir de montantCredit et du
+  // taux de banqueChoisie — modifiable.
+  comBanque?: number;
 }
 
 export interface PipelineDef {

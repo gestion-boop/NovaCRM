@@ -36,6 +36,52 @@ const CHART_TOOLTIP_STYLE = {
   color: 'var(--ink-1)',
 } as const;
 
+// Camembert d'un objectif (réalisé / reste à faire), le même dessin que la
+// case « Objectif de l'année » de l'agence — repris tel quel pour les
+// objectifs par collaborateur (Conseils Finances, 5 septembre) sans dupliquer
+// trente lignes à chaque case. Une part vide n'est pas dessinée : à zéro
+// réalisé le cercle est tout gris, objectif atteint il est tout doré.
+function CamembertObjectif({ realise, cible }: { realise: number; cible: number }) {
+  const parts = [
+    { name: 'Réalisé', value: realise },
+    { name: 'Reste à faire', value: Math.max(0, cible - realise) },
+  ].filter((part) => part.value > 0);
+  const pourcent = cible > 0 ? Math.round((realise / cible) * 100) : 0;
+  return (
+    <div className="relative w-24 h-24 shrink-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={parts}
+            cx="50%"
+            cy="50%"
+            innerRadius={30}
+            outerRadius={46}
+            paddingAngle={parts.length > 1 ? 2 : 0}
+            startAngle={90}
+            endAngle={-270}
+            dataKey="value"
+            stroke="none"
+            isAnimationActive={false}
+          >
+            {parts.map((part) => (
+              <Cell key={part.name} fill={part.name === 'Réalisé' ? '#F7BC5F' : '#3d3d3d'} />
+            ))}
+          </Pie>
+          <Tooltip
+            formatter={(value: unknown, name: unknown) => [formatCurrency(Number(value) || 0), String(name)]}
+            contentStyle={{ ...CHART_TOOLTIP_STYLE, fontSize: '11px' }}
+            itemStyle={{ color: 'var(--ink-1)' }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <span className="text-sm font-black text-white">{pourcent} %</span>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard({
   onNavigate,
   onNavigateToStage,
@@ -80,7 +126,11 @@ export default function Dashboard({
   // avoir un ordre/nommage différent). Les opportunités dont le pipeline ne
   // comporte aucune étape "Accord banque" ne sont pas comptabilisées ici :
   // cet indicateur est spécifique au processus de financement.
-  const totalDealValue = useMemo(() => {
+  // Demandé le 5 septembre (Conseils Finances) : la tuile « CA à venir » des
+  // super admins est « le CA à partir de Accord banque » — exactement ce
+  // chiffre. On garde aussi le nombre de dossiers, pour le dire sous le
+  // montant.
+  const accordBanque = useMemo(() => {
     const accordBanquePositionByPipeline = new Map<string, number>();
     stagesWithPosition.forEach((s) => {
       if (/accord\s*banque/i.test(s.name)) {
@@ -96,15 +146,16 @@ export default function Dashboard({
       positionByPipelineAndStage.set(`${s.pipeline_id}::${s.name}`, s.position);
     });
 
-    return deals.reduce((sum, d) => {
-      if (!d.pipelineId) return sum;
+    return deals.reduce((acc, d) => {
+      if (!d.pipelineId) return acc;
       const threshold = accordBanquePositionByPipeline.get(d.pipelineId);
-      if (threshold === undefined) return sum; // pipeline sans étape "Accord banque"
+      if (threshold === undefined) return acc; // pipeline sans étape "Accord banque"
       const dealPosition = positionByPipelineAndStage.get(`${d.pipelineId}::${d.stage}`);
-      if (dealPosition === undefined || dealPosition < threshold) return sum;
-      return sum + d.amount;
-    }, 0);
+      if (dealPosition === undefined || dealPosition < threshold) return acc;
+      return { total: acc.total + d.amount, nb: acc.nb + 1 };
+    }, { total: 0, nb: 0 });
   }, [deals, stagesWithPosition]);
+  const totalDealValue = accordBanque.total;
 
   const completedTasks = tasks.filter(t => t.completed).length;
   const pendingTasks = tasks.length - completedTasks;
@@ -142,6 +193,18 @@ export default function Dashboard({
   // ImmoSphera compte sur « Transaction V2 », Novavisio sur son pipeline
   // principal, et seulement à partir des étapes de facturation.
   const estNovavisio = /novavisio/i.test(activeAgency?.name || '');
+  // Demandé le 5 septembre : « la pipeline Conseils Finances sera la base des
+  // remontées des chiffres ». Même mécanisme que Novavisio — le pipeline
+  // principal (ou par défaut) de l'agence — au lieu de « Transaction V2 »,
+  // qui n'existe que chez ImmoSphera : c'est pour ça que toutes les tuiles
+  // restaient à zéro sur Conseils Finances.
+  const estConseilsFinances = /conseils?\s*finances?/i.test(activeAgency?.name || '');
+  const parPipelinePrincipal = estNovavisio || estConseilsFinances;
+  // Le pipeline suivi, nommé dans les libellés des tuiles.
+  const nomPipelineVise = estConseilsFinances
+    ? 'pipeline Conseils Finances'
+    : estNovavisio ? 'pipeline principal' : 'Transaction V2';
+  const dansPipelineVise = parPipelinePrincipal ? `dans le ${nomPipelineVise}` : 'dans Transaction V2';
 
   const chiffreAffairesAgence = useMemo(() => {
     const pipelinesAgence = pipelinesData.filter((p) =>
@@ -157,7 +220,7 @@ export default function Dashboard({
         ? parLeNom
         : pipelinesAgence.filter((p) => (p as { is_default?: boolean }).is_default);
     const pipelinesVises = new Set(
-      (estNovavisio
+      (parPipelinePrincipal
         ? // Le « principal » = celui marqué par défaut ; si aucun ne l'est,
           // on prend tous ceux de l'agence plutôt que de ne rien compter.
           (principalNovavisio.length > 0 ? principalNovavisio : pipelinesAgence)
@@ -180,6 +243,7 @@ export default function Dashboard({
         nomsConnus: pipelinesData.map((p) => p.name).slice(0, 6),
         devis: 0, devisNb: 0, recurrence: 0, recurrenceNb: 0,
         parConseiller: new Map<string, number>(), commissionParConseiller: new Map<string, number>(),
+        parConseillerAnnee: new Map<string, number>(),
       };
     }
 
@@ -268,6 +332,12 @@ export default function Dashboard({
     // chiffre d'affaires de l'agence. Les deux ne se déduisent pas l'un de
     // l'autre — on les compte séparément.
     const commissionParConseiller = new Map<string, number>();
+    // Réalisé de l'année en cours, conseiller par conseiller : c'est ce qui
+    // remplit l'objectif de l'année de chaque collaborateur (Conseils
+    // Finances, 5 septembre). Daté par l'archivage, comme le réalisé de
+    // l'agence plus bas.
+    const anneeCourante = new Date().getFullYear();
+    const parConseillerAnnee = new Map<string, number>();
     // Demandé le 2 septembre : « quand je clique dans la colonne chiffre
     // d'affaires d'agence, je voudrais un tableau avec le nom et prénom des
     // clients, le numéro de mandat et le chiffre, et pouvoir modifier le
@@ -323,6 +393,9 @@ export default function Dashboard({
         comptees += 1;
         if (d.advisorId) {
           parConseiller.set(d.advisorId, (parConseiller.get(d.advisorId) || 0) + montant);
+          if (new Date(d.archivedAt).getFullYear() === anneeCourante) {
+            parConseillerAnnee.set(d.advisorId, (parConseillerAnnee.get(d.advisorId) || 0) + montant);
+          }
           const commission = Number(d.advisorCommissionTtc) || 0;
           if (commission > 0) {
             commissionParConseiller.set(
@@ -346,13 +419,13 @@ export default function Dashboard({
       total, comptees, aVenir, comptessAVenir, sansMontant,
       pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [],
       repartitionAVenir, horsPipelineMontant, horsPipelineNb, devis, devisNb,
-      recurrence, recurrenceNb, parConseiller, commissionParConseiller,
+      recurrence, recurrenceNb, parConseiller, commissionParConseiller, parConseillerAnnee,
       // Archivés d'abord — c'est ce qui est déjà compté — puis par montant.
       lignes: lignes.sort(
         (a, b) => Number(b.archive) - Number(a.archive) || b.montant - a.montant || a.nom.localeCompare(b.nom, 'fr')
       ),
     };
-  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, isSuperAdmin, currentUser?.uid, estNovavisio]);
+  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, isSuperAdmin, currentUser?.uid, estNovavisio, parPipelinePrincipal]);
 
   // « Rajoute sur le tableau de bord une autre case avec CA de Natacha » —
   // repérée par son prénom dans la liste des collaborateurs de l'agence
@@ -366,6 +439,16 @@ export default function Dashboard({
   const commissionNatacha = natacha
     ? chiffreAffairesAgence.commissionParConseiller.get(natacha.id) || 0
     : 0;
+
+  // Demandé le 5 septembre (Conseils Finances) : « CA Sylvain, qui sera le CA
+  // terminé, facturé, et archivé aussi » — son chiffre à lui, compté comme
+  // celui de n'importe quel collaborateur : ses dossiers archivés et
+  // confirmés. Repéré par son prénom, comme Natacha.
+  const sylvain = useMemo(
+    () => collaborateurs.find((u) => /sylvain/i.test(u.name || '')),
+    [collaborateurs]
+  );
+  const caSylvain = sylvain ? chiffreAffairesAgence.parConseiller.get(sylvain.id) || 0 : 0;
 
 
   // On ne considère que les agences réellement affichées (l'agence active,
@@ -587,6 +670,60 @@ export default function Dashboard({
     }
   };
 
+  // ── Objectif de l'année PAR COLLABORATEUR (Conseils Finances, 5 septembre) ──
+  // « Quand le dossier sera archivé, il remontera aussi dans la case objectif
+  // de l'année des collaborateurs, tout en haut. » Un objectif par personne,
+  // réglé individuellement par les super admins : table
+  // collaborator_annual_goals (migration 20260905130000), sur le modèle de
+  // annual_goals. Le collaborateur lit le sien (la base ne lui rend que
+  // celui-là) ; les super admins lisent et règlent ceux de toute l'agence.
+  const { data: objectifsCollaborateurs = [], error: erreurObjectifsCollab } = useQuery({
+    queryKey: ['collaborator-annual-goals', goalAgencyId, currentYear],
+    enabled: !!goalAgencyId && estConseilsFinances,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('collaborator_annual_goals' as any)
+        .select('id, user_id, target_amount')
+        .eq('agency_id', goalAgencyId as string)
+        .eq('year', currentYear);
+      if (error) throw error;
+      return (data as { id: string; user_id: string; target_amount: number }[] | null) ?? [];
+    },
+  });
+  const objectifDe = (userId: string) =>
+    Number(objectifsCollaborateurs.find((g) => g.user_id === userId)?.target_amount) || 0;
+  const monObjectifAnnee = currentUser?.uid ? objectifDe(currentUser.uid) : 0;
+  const [collabEnEdition, setCollabEnEdition] = useState<string | null>(null);
+  const [saisieObjectifCollab, setSaisieObjectifCollab] = useState('');
+  const [enregistrementObjectifCollab, setEnregistrementObjectifCollab] = useState(false);
+
+  const enregistrerObjectifCollab = async (userId: string) => {
+    if (!goalAgencyId) return;
+    const montant = parseFloat(saisieObjectifCollab.replace(/\s/g, '').replace(',', '.'));
+    if (Number.isNaN(montant) || montant < 0) {
+      toast.error("Ce montant n'est pas un nombre valide.");
+      return;
+    }
+    setEnregistrementObjectifCollab(true);
+    try {
+      const { error } = await supabase
+        .from('collaborator_annual_goals' as any)
+        .upsert(
+          { user_id: userId, agency_id: goalAgencyId, year: currentYear, target_amount: montant, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id,agency_id,year' }
+        );
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['collaborator-annual-goals', goalAgencyId, currentYear] });
+      setCollabEnEdition(null);
+      toast.success(`Objectif ${currentYear} enregistré : ${formatCurrency(montant)}`);
+    } finally {
+      setEnregistrementObjectifCollab(false);
+    }
+  };
+
   // Le réalisé de l'année : les mêmes dossiers que la tuile Chiffre
   // d'affaires (archivés, montant confirmé), restreints à l'année en cours,
   // datés par leur archivage — comme la ligne « Facturé » du mois.
@@ -721,7 +858,10 @@ export default function Dashboard({
           s'alignent, quelle que soit la longueur du commentaire en dessous.
           La grille, elle, garde des cartes de même hauteur : les caler en haut
           les aurait rendues inégales, ce qui aurait été pire. */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${estNovavisio ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+      {/* Conseils Finances (5 septembre) : un super admin y a quatre cases
+          (CA de l'agence, CA Sylvain, CA à venir, Objectif de l'année), un
+          collaborateur trois (les siennes). */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${estNovavisio || (estConseilsFinances && isSuperAdmin) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         {/* Ticket #34 — Chiffre d'affaires de l'agence, super admins seulement.
             Pipeline « Transaction V2 », montants HT (commission agence).
             Y entrent les dossiers ARCHIVÉS dont le montant a été confirmé au
@@ -746,7 +886,7 @@ export default function Dashboard({
               <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
                 {!chiffreAffairesAgence.pipelineTrouve ? (
                   <span className="text-amber-400/90">
-                    {estNovavisio
+                    {parPipelinePrincipal
                       ? "Aucun pipeline principal pour cette agence"
                       : 'Aucun pipeline dont le nom contient « transaction » et « v2 »'}
                     {chiffreAffairesAgence.nomsConnus.length > 0 && (
@@ -772,7 +912,7 @@ export default function Dashboard({
                     <span className="text-slate-500 font-normal block mt-0.5">
                       {chiffreAffairesAgence.dansLePipeline === 0
                         ? 'Aucune affaire dans ce pipeline'
-                        : `sur ${chiffreAffairesAgence.dansLePipeline} dans ${estNovavisio ? 'le pipeline principal' : 'Transaction V2'}`}
+                        : `sur ${chiffreAffairesAgence.dansLePipeline} ${dansPipelineVise}`}
                       {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans montant HT`}
                     </span>
                     {/* Dossier archivé, montant confirmé, mais rattaché à
@@ -781,7 +921,7 @@ export default function Dashboard({
                         perdre en silence. */}
                     {chiffreAffairesAgence.horsPipelineNb > 0 && (
                       <span className="text-amber-400/90 font-normal block mt-0.5">
-                        {chiffreAffairesAgence.horsPipelineNb} archivée{chiffreAffairesAgence.horsPipelineNb > 1 ? 's' : ''} hors {estNovavisio ? 'pipeline principal' : 'Transaction V2'} : {formatCurrency(chiffreAffairesAgence.horsPipelineMontant)}
+                        {chiffreAffairesAgence.horsPipelineNb} archivée{chiffreAffairesAgence.horsPipelineNb > 1 ? 's' : ''} hors {nomPipelineVise} : {formatCurrency(chiffreAffairesAgence.horsPipelineMontant)}
                       </span>
                     )}
                   </>
@@ -794,13 +934,154 @@ export default function Dashboard({
           </div>
         )}
 
+        {/* Demandé le 5 septembre (Conseils Finances) : « dans le tableau de
+            bord, tu ne dois mettre que les chiffres des collaborateurs et pas
+            de l'agence : tout en haut, CA du collaborateur — les dossiers que
+            nous archiverons dans la pipeline Conseils Finances — et CA à
+            venir, remonté dès que l'utilisateur met son dossier dans cette
+            pipeline ». Un collaborateur ne voit que ses propres dossiers (voir
+            `perimetre` plus haut) : ces tuiles reprennent donc les mêmes
+            chiffres que celles des super admins, restreints à lui. */}
+        {!isSuperAdmin && estConseilsFinances && (
+          <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg flex items-start justify-between group">
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">CA du collaborateur</span>
+              <div className="text-2xl font-black text-[#F9C977] tracking-tight">
+                {formatCurrency(chiffreAffairesAgence.total)}
+              </div>
+              <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
+                {!chiffreAffairesAgence.pipelineTrouve ? (
+                  <span className="text-amber-400/90">Aucun pipeline principal pour cette agence</span>
+                ) : (
+                  <>
+                    {chiffreAffairesAgence.comptees} dossier{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et confirmé{chiffreAffairesAgence.comptees > 1 ? 's' : ''}, honoraires agence HT
+                    <span className="text-slate-500 font-normal block mt-0.5">
+                      {chiffreAffairesAgence.dansLePipeline === 0
+                        ? `Aucun de vos dossiers ${dansPipelineVise}`
+                        : `sur ${chiffreAffairesAgence.dansLePipeline} de vos dossiers ${dansPipelineVise}`}
+                    </span>
+                  </>
+                )}
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977]">
+              <TrendingUp className="w-6 h-6" />
+            </div>
+          </div>
+        )}
+
+        {!isSuperAdmin && estConseilsFinances && (
+          <div className="dash-card p-6 rounded-2xl border border-teal-500/25 shadow-lg flex items-start justify-between group">
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">CA à venir</span>
+              <div className="text-2xl font-black text-white tracking-tight">
+                {formatCurrency(chiffreAffairesAgence.aVenir)}
+              </div>
+              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                {chiffreAffairesAgence.comptessAVenir === 0
+                  ? `Aucun de vos dossiers en attente ${dansPipelineVise}`
+                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers encore ${dansPipelineVise}, honoraires agence HT`}
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300">
+              <Coins className="w-6 h-6" />
+            </div>
+          </div>
+        )}
+
+        {/* « Quand le dossier sera archivé, il remontera aussi dans la case
+            objectif de l'année des collaborateurs, tout en haut. » L'objectif
+            est réglé par un super admin (panneau plus bas) ; ici, le
+            collaborateur voit le sien et où il en est. */}
+        {!isSuperAdmin && estConseilsFinances && (
+          <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg flex items-start justify-between gap-4 group">
+            <div className="space-y-1 min-w-0 flex-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">Objectif de l'année {currentYear}</span>
+              <div className="text-2xl font-black text-[#F9C977] tracking-tight">
+                {monObjectifAnnee > 0 ? formatCurrency(monObjectifAnnee) : <span className="text-base font-bold text-slate-500">non défini</span>}
+              </div>
+              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                {erreurObjectifsCollab ? (
+                  <span className="text-amber-400/90">Objectif indisponible : {(erreurObjectifsCollab as Error).message}</span>
+                ) : monObjectifAnnee <= 0 ? (
+                  "Votre objectif est réglé par un administrateur"
+                ) : (
+                  <>
+                    Réalisé en {currentYear} : <b className="text-slate-300">{formatCurrency(realiseAnnee)}</b>
+                    <span className="block mt-0.5">
+                      {realiseAnnee > monObjectifAnnee
+                        ? `Objectif dépassé de ${formatCurrency(realiseAnnee - monObjectifAnnee)}`
+                        : `Reste à faire : ${formatCurrency(monObjectifAnnee - realiseAnnee)}`}
+                    </span>
+                  </>
+                )}
+              </span>
+            </div>
+            {monObjectifAnnee > 0 && !erreurObjectifsCollab ? (
+              <CamembertObjectif realise={realiseAnnee} cible={monObjectifAnnee} />
+            ) : (
+              <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977] shrink-0">
+                <Target className="w-6 h-6" />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Super admins de Conseils Finances (5 septembre) : « CA Sylvain » à
+            côté du CA de l'agence — même mécanique que « Commission Natacha »
+            sur Novavisio, mais sur le chiffre d'affaires (ses dossiers
+            archivés), pas sur une commission saisie à part. */}
+        {isSuperAdmin && estConseilsFinances && (
+          <div className="dash-card p-6 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group">
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">
+                CA {sylvain?.name?.split(' ')[0] || 'Sylvain'}
+              </span>
+              <div className="text-2xl font-black text-sky-300 tracking-tight">{formatCurrency(caSylvain)}</div>
+              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                {sylvain
+                  ? "Ses dossiers archivés et confirmés, honoraires agence HT — compris dans le CA de l'agence"
+                  : 'Aucun collaborateur nommé Sylvain dans cette agence'}
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300 group-hover:scale-105 transition-transform">
+              <TrendingUp className="w-6 h-6" />
+            </div>
+          </div>
+        )}
+
+        {/* « CA à venir qui sera le CA à partir de Accord banque » : la somme
+            des dossiers du pipeline arrivés à l'étape Accord banque ou
+            au-delà — le même calcul que la tuile Volume financier plus bas,
+            mis en tête pour les super admins de Conseils Finances. Pour eux,
+            la tuile ImmoSphera (tout ce qui est dans le pipeline, avant
+            Accord banque compris) ne s'affiche donc pas. */}
+        {isSuperAdmin && estConseilsFinances && (
+          <div className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group">
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400 font-medium tracking-wide">CA à venir</span>
+              <div className="text-2xl font-black text-white tracking-tight">
+                {formatCurrency(accordBanque.total)}
+              </div>
+              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                {accordBanque.nb === 0
+                  ? "Aucun dossier à partir de l'étape Accord banque"
+                  : `${accordBanque.nb} dossier${accordBanque.nb > 1 ? 's' : ''} à partir de l'étape Accord banque, honoraires agence HT`}
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
+              <Coins className="w-6 h-6" />
+            </div>
+          </div>
+        )}
+
         {/* Demandé le 2 septembre pour ImmoSphera : « tout en haut, le CA de
             l'agence, le CA à venir, et à droite une troisième case Objectif de
             l'année, avec un camembert ». Hors Novavisio, la rangée compte donc
             trois cases ; Novavisio garde ses quatre. Le CA à venir est le
             même chiffre que le cercle plus bas, sans sa répartition par
             colonne : ici, le total, à côté du réalisé. */}
-        {isSuperAdmin && !estNovavisio && (
+        {isSuperAdmin && !estNovavisio && !estConseilsFinances && (
           <div
             role="button"
             tabIndex={0}
@@ -985,6 +1266,90 @@ export default function Dashboard({
         )}
       </div>
 
+      {/* Conseils Finances (5 septembre) : les objectifs de l'année, un par
+          collaborateur, réglés ici par les super admins — chaque personne
+          retrouve le sien tout en haut de son propre tableau de bord. Le
+          réalisé est celui de l'année en cours, dossiers archivés et
+          confirmés, attribués à la personne. */}
+      {isSuperAdmin && estConseilsFinances && goalAgencyId && (
+        <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg space-y-4">
+          <div>
+            <h3 className="font-bold text-sm text-white">Objectifs de l'année {currentYear} — par collaborateur</h3>
+            <p className="text-xs text-slate-400">
+              Chaque collaborateur voit son objectif en tête de son tableau de bord ; le réalisé est celui de ses dossiers archivés cette année.
+            </p>
+          </div>
+          {erreurObjectifsCollab && (
+            <p className="text-xs text-amber-400/90">Objectifs indisponibles : {(erreurObjectifsCollab as Error).message}</p>
+          )}
+          {collaborateurs.length === 0 ? (
+            <p className="text-xs text-slate-500">Aucun collaborateur rattaché à cette agence.</p>
+          ) : (
+            <div className="divide-y divide-[#144447]/40">
+              {collaborateurs.map((collab) => {
+                const cible = objectifDe(collab.id);
+                const realise = chiffreAffairesAgence.parConseillerAnnee.get(collab.id) || 0;
+                const enEdition = collabEnEdition === collab.id;
+                return (
+                  <div key={collab.id} className="py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-white truncate">{collab.name}</div>
+                      <div className="text-[11px] text-slate-500">
+                        Réalisé en {currentYear} : <b className="text-slate-300">{formatCurrency(realise)}</b>
+                        {cible > 0 && (
+                          <span>
+                            {' · '}
+                            {realise > cible
+                              ? `objectif dépassé de ${formatCurrency(realise - cible)}`
+                              : `reste à faire : ${formatCurrency(cible - realise)}`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {enEdition ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={saisieObjectifCollab}
+                          onChange={(e) => setSaisieObjectifCollab(e.target.value)}
+                          placeholder="Montant en €"
+                          autoFocus
+                          className="w-32 px-2 py-1 rounded-lg bg-[#07191b] border border-[#1b4b4e] text-white text-xs focus:outline-none focus:border-[#F7BC5F]"
+                          onKeyDown={(e) => { if (e.key === 'Enter') void enregistrerObjectifCollab(collab.id); if (e.key === 'Escape') setCollabEnEdition(null); }}
+                        />
+                        <button
+                          onClick={() => void enregistrerObjectifCollab(collab.id)}
+                          disabled={enregistrementObjectifCollab}
+                          className="px-2.5 py-1 rounded-lg bg-[#F7BC5F] text-slate-950 text-xs font-bold disabled:opacity-60"
+                        >
+                          {enregistrementObjectifCollab ? 'Enregistrement…' : 'Enregistrer'}
+                        </button>
+                        <button onClick={() => setCollabEnEdition(null)} className="text-xs text-slate-400 hover:text-white">Annuler</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <span className="text-base font-black text-[#F9C977] tabular-nums">
+                          {cible > 0 ? formatCurrency(cible) : <span className="text-sm font-bold text-slate-500">non défini</span>}
+                        </span>
+                        <button
+                          onClick={() => { setSaisieObjectifCollab(cible > 0 ? String(cible) : ''); setCollabEnEdition(collab.id); }}
+                          className="text-slate-400 hover:text-white"
+                          title={`Définir l'objectif ${currentYear} de ${collab.name}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        {cible > 0 && <CamembertObjectif realise={realise} cible={cible} />}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1 - Prospects (Deep Teal theme) */}
@@ -1107,7 +1472,7 @@ export default function Dashboard({
         <div className="dash-card p-6 rounded-2xl border border-[#144447]/60 hover:border-[#1e5d61] shadow-xl hover:shadow-teal-500/5 transition-all duration-300 flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-sm text-white">CA à venir</h3>
-            <p className="text-xs text-slate-400">Commission agence HT encore dans Transaction V2, par colonne.</p>
+            <p className="text-xs text-slate-400">Commission agence HT encore {dansPipelineVise}, par colonne.</p>
           </div>
           <div
             role="button"
@@ -1119,7 +1484,7 @@ export default function Dashboard({
           >
             {chiffreAffairesAgence.repartitionAVenir.length === 0 ? (
               <span className="text-xs text-slate-500 text-center px-4">
-                Aucun montant HT en attente dans Transaction V2
+                Aucun montant HT en attente {dansPipelineVise}
               </span>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -1273,7 +1638,7 @@ export default function Dashboard({
                   {realise ? "Chiffre d'affaires réalisé" : 'CA à venir'}
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Transaction V2 · {lignesVisibles.length} dossier{lignesVisibles.length > 1 ? 's' : ''} ·{' '}
+                  {nomPipelineVise} · {lignesVisibles.length} dossier{lignesVisibles.length > 1 ? 's' : ''} ·{' '}
                   {formatCurrency(totalVisible)}
                   {realise ? ' comptabilisés' : ' en attente de facturation'}
                 </p>
@@ -1297,7 +1662,7 @@ export default function Dashboard({
                 <p className="p-8 text-center text-sm text-slate-500">
                   {realise
                     ? 'Aucun dossier archivé avec un montant confirmé pour le moment.'
-                    : 'Aucun dossier en attente dans Transaction V2.'}
+                    : `Aucun dossier en attente ${dansPipelineVise}.`}
                 </p>
               ) : (
                 lignesVisibles.map((ligne) => (
