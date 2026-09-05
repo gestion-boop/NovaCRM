@@ -340,8 +340,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
     setPastAnnouncements((list || []) as any);
     const byAnnouncement: Record<string, string[]> = {};
     ((reads || []) as any[]).forEach((r) => {
-      const name = users.find((u) => u.id === r.user_id)?.full_name || r.user_id;
-      (byAnnouncement[r.announcement_id] ||= []).push(name);
+      (byAnnouncement[r.announcement_id] ||= []).push(r.user_id);
     });
     setAnnouncementReaders(byAnnouncement);
 
@@ -353,11 +352,49 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
     });
     const votesByOption: Record<string, string[]> = {};
     ((votes || []) as any[]).forEach((v) => {
-      const name = users.find((u) => u.id === v.user_id)?.full_name || v.user_id;
-      (votesByOption[v.option_id] ||= []).push(name);
+      (votesByOption[v.option_id] ||= []).push(v.user_id);
     });
     setAnnouncementPollOptions(optionsByAnnouncement);
     setAnnouncementPollVotes(votesByOption);
+
+    // Filet de sécurité : les identifiants que la liste des comptes ne
+    // connaît pas encore (ou pas du tout) sont relus directement dans
+    // `profiles`, en une seule requête. Ça couvre le cas où la liste n'est
+    // pas encore arrivée, et celui d'un compte absent de cette liste.
+    const identifiants = Array.from(
+      new Set([
+        ...((reads || []) as any[]).map((r) => r.user_id),
+        ...((votes || []) as any[]).map((v) => v.user_id),
+      ].filter(Boolean) as string[]),
+    );
+    if (identifiants.length > 0) {
+      const { data: profils } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', identifiants);
+      const noms: Record<string, string> = {};
+      ((profils as any[]) || []).forEach((profil) => {
+        const nom = (profil.full_name || profil.email || '').trim();
+        if (nom) noms[profil.id] = nom;
+      });
+      setNomsLecteursHorsListe(noms);
+    }
+  };
+
+  /**
+   * Identifiant d'un lecteur ou d'un votant → nom lisible, résolu au moment de
+   * l'affichage (voir le commentaire sur announcementReaders).
+   *
+   * Ordre : la liste des comptes chargée par Paramètres, puis les profils relus
+   * pour l'occasion, puis un repli explicite. On n'affiche JAMAIS l'identifiant
+   * technique : il ne dit rien à personne. Un compte réellement introuvable
+   * (supprimé depuis, identifiant orphelin) devient « Compte supprimé », avec
+   * l'identifiant en infobulle pour que je puisse le retrouver si besoin.
+   */
+  const nomDuLecteur = (identifiant: string) => {
+    const compte = users.find((u) => u.id === identifiant);
+    const nom = (compte?.full_name || compte?.email || nomsLecteursHorsListe[identifiant] || '').trim();
+    return nom || 'Compte supprimé';
   };
   const isMobile = useIsMobile();
   const visibleSections = useMemo(() => DEFAULT_SECTIONS.filter(s => !s.adminOnly || isAdmin), [isAdmin]);
@@ -553,7 +590,23 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
   // Ticket #22 (nouvelle base) : le super admin doit pouvoir savoir qui a
   // consulté une annonce — historique + lecteurs par annonce.
   const [pastAnnouncements, setPastAnnouncements] = useState<Array<{ id: string; message: string; created_at: string; is_poll?: boolean }>>([]);
+  // Signalé (5 septembre, capture à l'appui) : dans « Annonces précédentes —
+  // qui a lu », le lecteur s'affichait comme « 4f6eea64-ce42-40ff-… », son
+  // identifiant technique, au lieu de son nom.
+  //
+  // La cause n'était pas l'absence du nom mais le MOMENT où il était cherché :
+  // il était résolu une seule fois, au chargement de la section, puis rangé
+  // dans l'état sous forme de texte. La liste des comptes (`users`) arrive de
+  // /api/settings/bootstrap, donc plus tard : si la section était ouverte
+  // avant, la résolution retombait sur l'identifiant — et n'était plus jamais
+  // refaite, même une fois la liste arrivée.
+  //
+  // On garde donc les IDENTIFIANTS ici, et le nom est résolu au moment de
+  // l'affichage (voir nomDuLecteur plus bas) : il se corrige tout seul dès que
+  // la liste est là. Les identifiants absents de la liste (compte supprimé,
+  // identifiant orphelin) sont relus directement dans `profiles`.
   const [announcementReaders, setAnnouncementReaders] = useState<Record<string, string[]>>({});
+  const [nomsLecteursHorsListe, setNomsLecteursHorsListe] = useState<Record<string, string>>({});
   const [expandedAnnouncementId, setExpandedAnnouncementId] = useState<string | null>(null);
   // Signalé (30/08/2026) : "l'historique... ça crée un scroll" — repliée
   // par défaut plutôt que supprimée (aucune donnée perdue : qui a lu quoi
@@ -1733,7 +1786,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                                       <span className="font-bold text-white">{voters.length}</span>
                                     </div>
                                     {voters.length > 0 && (
-                                      <p className="text-[10px] text-slate-500 truncate">{voters.join(', ')}</p>
+                                      <p className="text-[10px] text-slate-500 truncate" title={voters.join(', ')}>{voters.map(nomDuLecteur).join(', ')}</p>
                                     )}
                                   </div>
                                 );
@@ -1746,8 +1799,8 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                               <p className="text-xs text-slate-500">Personne ne l'a encore lue.</p>
                             ) : (
                               <div className="flex flex-wrap gap-1.5">
-                                {readers.map((name, i) => (
-                                  <span key={i} className="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300">{name}</span>
+                                {readers.map((identifiant, i) => (
+                                  <span key={i} title={identifiant} className="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300">{nomDuLecteur(identifiant)}</span>
                                 ))}
                               </div>
                             )}
