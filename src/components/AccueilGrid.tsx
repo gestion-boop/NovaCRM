@@ -616,6 +616,32 @@ function flattenTileIds(items: TileItemNode[]): string[] {
 }
 const DEFAULT_TILE_IDS = new Set(flattenTileIds(INITIAL_TILES));
 
+// Demandé (5 septembre) : « supprime les tuiles de rappels, chat, mail et
+// agenda vu qu'elles sont sur la barre du haut », puis (capture d'une grille
+// SYNCHRONISÉE depuis le serveur, où elles étaient toujours là) : « pour les
+// tuiles que je te donne [Agenda & RDV, Rappels & Alertes, Tableau de bord],
+// supprime-les définitivement, on a les raccourcis en haut ». Ces tuiles sont
+// déjà dans le bandeau "Ma journée / Priorités" (ORDRE_BARRE_HAUT), qui les
+// lit dans INITIAL_TILES indépendamment de cette grille : les retirer d'ici
+// ne retire rien à ce bandeau, ni au menu latéral qui garde ses propres
+// entrées Chat/Mail/Agenda/Rappels.
+// Fonction hissée au niveau module (au lieu de rester interne à
+// `reconcilierGrille`, dans le composant) : une grille reçue du SERVEUR
+// (voir le chargement multi-appareils plus bas) ne repasse JAMAIS par
+// `reconcilierGrille` — un choix volontaire du 2 septembre, pour ne pas faire
+// ressortir les cartes des dossiers verrouillés — donc un retrait qui ne
+// vivait que dans `reconcilierGrille` n'avait aucun effet sur une grille
+// synchronisée depuis un autre appareil, exactement le cas ici. Ce filtre-ci,
+// lui, ne touche qu'une poignée d'identifiants précis (jamais le contenu des
+// dossiers verrouillés) : sûr à appliquer aussi à une grille venue du
+// serveur.
+const QUICK_BAR_DUPLICATE_IDS = new Set(['rappels', 'chat', 'mail', 'agenda', 'tableau-de-bord']);
+function removeQuickBarDuplicates(items: TileItemNode[]): TileItemNode[] {
+  return items
+    .filter((t) => !QUICK_BAR_DUPLICATE_IDS.has(t.id))
+    .map((t) => (t.children ? { ...t, children: removeQuickBarDuplicates(t.children) } : t));
+}
+
 // Id de la tuile "Carte" ci-dessus, réservée à Novavisio + super admin
 // (voir canSeeNovavisio plus bas) — même principe que
 // IMMOSPHERA_EXTRA_TILE_IDS/canSeeImmospheraExtras.
@@ -1348,23 +1374,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         .filter((t) => t.id !== 'assistant-ia')
         .map((t) => (t.children ? { ...t, children: removeAssistantIaTile(t.children) } : t));
     base = removeAssistantIaTile(base);
-    // Demandé (5 septembre) : « le mail est encore messagerie mail, à la
-    // limite supprime les tuiles de rappels, chat, mail et agenda vu
-    // qu'elles sont sur la barre du haut » — ces quatre tuiles sont déjà
-    // dans le bandeau "Ma journée / Priorités" au-dessus (voir
-    // ORDRE_BARRE_HAUT), qui les lit dans INITIAL_TILES indépendamment de
-    // cette grille : les retirer d'ici ne retire rien à ce bandeau, ni au
-    // reste de l'application (le menu latéral, entre autres, garde ses
-    // propres entrées Chat/Mail/Agenda/Rappels). Même principe que
-    // removeAssistantIaTile juste au-dessus : retrait forcé y compris dans
-    // les grilles déjà personnalisées/enregistrées, à n'importe quel niveau
-    // (racine ou dossier, "chat" et "mail" vivant dans "Communication &
-    // Mails").
-    const QUICK_BAR_DUPLICATE_IDS = new Set(['rappels', 'chat', 'mail', 'agenda']);
-    const removeQuickBarDuplicates = (items: TileItemNode[]): TileItemNode[] =>
-      items
-        .filter((t) => !QUICK_BAR_DUPLICATE_IDS.has(t.id))
-        .map((t) => (t.children ? { ...t, children: removeQuickBarDuplicates(t.children) } : t));
+    // Rappels & Alertes, Chat Équipe, Mail, Agenda & RDV, Tableau de bord :
+    // déjà dans le bandeau "Ma journée / Priorités" (voir la fonction
+    // `removeQuickBarDuplicates`, hissée au niveau module — même retrait
+    // forcé appliqué aussi à une grille reçue du serveur, voir plus bas).
     base = removeQuickBarDuplicates(base);
     if (!existsRecursive(base, 'annonce')) {
       const annonceTile = INITIAL_TILES.find((t) => t.id === 'annonce');
@@ -1660,7 +1673,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           const locales = toujoursActive() ? tilesRef.current : JSON.parse(localStorage.getItem(cleTuiles) || '[]');
           void ecrireDispositionAgence('home_tiles', currentUser.uid, agencyId, locales, majLocaleTuiles);
         } else if (tuilesServeur && tuilesServeur.length > 0) {
-          const normalisees = (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t));
+          // Signalé (capture d'une grille synchronisée depuis le serveur) :
+          // Agenda & RDV / Rappels & Alertes / Tableau de bord réapparaissaient
+          // malgré leur retrait de la grille (déjà dans le bandeau du haut) —
+          // cette grille-ci vient du SERVEUR et ne passe jamais par
+          // `reconcilierGrille` (voir la note juste en dessous), donc un
+          // retrait qui n'aurait vécu que là-bas restait sans effet ici. Même
+          // filtre, sûr sur une grille venue du serveur (ne touche que ces
+          // identifiants précis, jamais le contenu d'un dossier verrouillé).
+          const normalisees = removeQuickBarDuplicates(
+            (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+          );
           try { localStorage.setItem(cleTuiles, JSON.stringify(normalisees)); } catch { /* ignore */ }
           if (lectureTuiles.maj) ecrireHorodatageLocal(cleTuiles, lectureTuiles.maj);
           if (!toujoursActive()) return;
