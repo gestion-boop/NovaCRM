@@ -206,6 +206,15 @@ export default function Dashboard({
   // qui n'existe que chez ImmoSphera : c'est pour ça que toutes les tuiles
   // restaient à zéro sur Conseils Finances.
   const estConseilsFinances = /conseils?\s*finances?/i.test(activeAgency?.name || '');
+  // « Tout ce qui est CA à venir agence ou CA agence doit être vu que par
+  // Sylvain Grazia et Mélanie, c'est tout » (5 septembre). Sur Conseils
+  // Finances, la direction est donc reconnue à son nom ou à son adresse,
+  // pas à son rôle : Mélanie n'est pas super admin, et un super admin d'une
+  // autre société n'a pas à voir ces chiffres. Ailleurs, rien ne change :
+  // le rôle super admin décide, comme avant.
+  const identite = `${userProfile?.displayName || currentUser?.displayName || ''} ${userProfile?.email || currentUser?.email || ''}`;
+  const estDirectionCF = /grazia|gestion@immosphera\.fr/i.test(identite);
+  const voitChiffresAgence = estConseilsFinances ? estDirectionCF : isSuperAdmin;
   const parPipelinePrincipal = estNovavisio || estConseilsFinances;
   // Le pipeline suivi, nommé dans les libellés des tuiles.
   const nomPipelineVise = estConseilsFinances
@@ -270,7 +279,7 @@ export default function Dashboard({
     // conseiller personnellement. » Le cercle « CA à venir » est visible par
     // tout le monde : un conseiller n'y voit donc que ses propres affaires.
     // (La tuile dorée, elle, n'est affichée qu'aux super admins.)
-    const perimetre = isSuperAdmin
+    const perimetre = voitChiffresAgence
       ? perimetreAgence
       : perimetreAgence.filter((d) => d.advisorId && d.advisorId === currentUser?.uid);
 
@@ -286,17 +295,19 @@ export default function Dashboard({
     // L'étape, elle, sait toujours à quel pipeline elle appartient.
     const pipelineParEtape = new Map<string, string>();
     stagesWithPosition.forEach((s) => { pipelineParEtape.set(s.id, s.pipeline_id); });
-    // Conseils Finances (5 septembre) : « pour l'instant uniquement : CA à
-    // venir, à partir des dossiers mis dans Accord banque / Rendez-vous ».
-    // Position de cette étape dans chaque pipeline, et position de chaque
-    // étape — même lecture que la tuile Volume financier plus haut.
-    const seuilAccordBanque = new Map<string, number>();
+    // Conseils Finances (5 septembre) : « le CA à venir devrait être à
+    // partir de Montage dossier » (d'abord demandé à partir d'Accord banque /
+    // Rendez-vous, puis avancé à cette étape). Position de cette étape dans
+    // chaque pipeline, et position de chaque étape — même lecture que la
+    // tuile Volume financier plus haut. Reconnue à son nom (« Montage
+    // dossier », « Montage bancaire »…), la première si plusieurs.
+    const seuilDepart = new Map<string, number>();
     const positionEtape = new Map<string, number>();
     stagesWithPosition.forEach((s) => {
       positionEtape.set(`${s.pipeline_id}::${s.name}`, s.position);
-      if (/accord\s*banque/i.test(s.name)) {
-        const actuel = seuilAccordBanque.get(s.pipeline_id);
-        if (actuel === undefined || s.position < actuel) seuilAccordBanque.set(s.pipeline_id, s.position);
+      if (/montage/i.test(s.name)) {
+        const actuel = seuilDepart.get(s.pipeline_id);
+        if (actuel === undefined || s.position < actuel) seuilDepart.set(s.pipeline_id, s.position);
       }
     });
 
@@ -359,7 +370,7 @@ export default function Dashboard({
     const anneeCourante = new Date().getFullYear();
     const parConseillerAnnee = new Map<string, number>();
     // « CA à venir » conseiller par conseiller — sur Conseils Finances, les
-    // dossiers à partir d'Accord banque : « ceux qui appartiennent aux
+    // dossiers à partir de Montage dossier : « ceux qui appartiennent aux
     // courtiers, Sylvain compris, une case en haut du tableau de bord ».
     const parConseillerAVenir = new Map<string, number>();
     // Demandé le 2 septembre : « quand je clique dans la colonne chiffre
@@ -393,14 +404,12 @@ export default function Dashboard({
         const etape = sansAccents(d.stage || '');
         if (!etape.includes('factur') && !etape.includes('regler')) return;
       }
-      // Conseils Finances : « pour l'instant uniquement, à partir des
-      // dossiers mis dans Accord banque / Rendez-vous ». Un dossier ne
-      // compte qu'à partir de cette étape — vivant (CA à venir) comme
-      // archivé (réalisé). Les anciennes fiches archivées sans étape
-      // (l'écran affichait leur température, « chaud ») ne comptent donc
-      // nulle part.
+      // Conseils Finances : un dossier ne compte qu'à partir de l'étape
+      // Montage dossier — vivant (CA à venir) comme archivé (réalisé). Les
+      // anciennes fiches archivées sans étape (l'écran affichait leur
+      // température, « chaud ») ne comptent donc nulle part.
       if (estConseilsFinances) {
-        const seuil = seuilAccordBanque.get(pipelineReel);
+        const seuil = seuilDepart.get(pipelineReel);
         const position = positionEtape.get(`${pipelineReel}::${d.stage}`);
         if (seuil === undefined || position === undefined || position < seuil) return;
       }
@@ -473,7 +482,7 @@ export default function Dashboard({
         (a, b) => Number(b.archive) - Number(a.archive) || b.montant - a.montant || a.nom.localeCompare(b.nom, 'fr')
       ),
     };
-  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, isSuperAdmin, currentUser?.uid, estNovavisio, estConseilsFinances, parPipelinePrincipal]);
+  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, voitChiffresAgence, currentUser?.uid, estNovavisio, estConseilsFinances, parPipelinePrincipal]);
 
   // « Rajoute sur le tableau de bord une autre case avec CA de Natacha » —
   // repérée par son prénom dans la liste des collaborateurs de l'agence
@@ -492,7 +501,7 @@ export default function Dashboard({
   // qui appartiennent aux courtiers, Sylvain Grazia compris : rajouter une
   // case en haut du tableau de bord, CA Sylvain, ou le nom du courtier ». Une
   // case par personne de l'agence : ses dossiers archivés et confirmés, plus
-  // ses dossiers à partir d'Accord banque / Rendez-vous — la même règle que le
+  // ses dossiers à partir de Montage dossier — la même règle que le
   // CA de l'agence. Une personne sans compte dans la liste mais qui porte des
   // dossiers apparaît quand même, plutôt que de perdre son chiffre.
   const caParCourtier = useMemo(() => {
@@ -686,7 +695,7 @@ export default function Dashboard({
   // super admins depuis la case elle-même.
   const { data: objectifAnnee, error: erreurObjectifAnnee } = useQuery({
     queryKey: ['annual-goal', goalAgencyId, currentYear],
-    enabled: !!goalAgencyId && isSuperAdmin && !estNovavisio,
+    enabled: !!goalAgencyId && voitChiffresAgence && !estNovavisio,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('annual_goals' as any)
@@ -927,7 +936,7 @@ export default function Dashboard({
             Y entrent les dossiers ARCHIVÉS dont le montant a été confirmé au
             moment de l'archivage : « quand c'est archivé et confirmé sur la
             somme, cela ira dans le chiffre d'affaires de l'agence ». */}
-        {isSuperAdmin && (
+        {voitChiffresAgence && (
           <div
             role="button"
             tabIndex={0}
@@ -965,7 +974,7 @@ export default function Dashboard({
                     {chiffreAffairesAgence.comptessAVenir} en cours ({formatCurrency(chiffreAffairesAgence.aVenir)})
                     {' + '}{chiffreAffairesAgence.comptees} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)})
                     <span className="text-slate-500 font-normal block mt-0.5">
-                      À partir d'Accord banque / Rendez-vous, honoraires agence TTC saisis sur la fiche (pas de hors taxes sur Conseils Finances)
+                      À partir de l'étape Montage dossier, honoraires agence TTC saisis sur la fiche (pas de hors taxes sur Conseils Finances)
                       {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans honoraires`}
                     </span>
                   </>
@@ -1016,7 +1025,7 @@ export default function Dashboard({
             pipeline ». Un collaborateur ne voit que ses propres dossiers (voir
             `perimetre` plus haut) : ces tuiles reprennent donc les mêmes
             chiffres que celles des super admins, restreints à lui. */}
-        {!isSuperAdmin && estConseilsFinances && (
+        {!estDirectionCF && estConseilsFinances && (
           <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg flex items-start justify-between group">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">CA du collaborateur</span>
@@ -1044,7 +1053,7 @@ export default function Dashboard({
           </div>
         )}
 
-        {!isSuperAdmin && estConseilsFinances && (
+        {!estDirectionCF && estConseilsFinances && (
           <div className="dash-card p-6 rounded-2xl border border-teal-500/25 shadow-lg flex items-start justify-between group">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">CA à venir</span>
@@ -1053,8 +1062,8 @@ export default function Dashboard({
               </div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.comptessAVenir === 0
-                  ? "Aucun de vos dossiers à partir de l'étape Accord banque / Rendez-vous"
-                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Accord banque / Rendez-vous, honoraires agence TTC`}
+                  ? "Aucun de vos dossiers à partir de l'étape Montage dossier"
+                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Montage dossier, honoraires agence TTC`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300">
@@ -1067,7 +1076,7 @@ export default function Dashboard({
             objectif de l'année des collaborateurs, tout en haut. » L'objectif
             est réglé par un super admin (panneau plus bas) ; ici, le
             collaborateur voit le sien et où il en est. */}
-        {!isSuperAdmin && estConseilsFinances && (
+        {!estDirectionCF && estConseilsFinances && (
           <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg flex items-start justify-between gap-4 group">
             <div className="space-y-1 min-w-0 flex-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Objectif de l'année {currentYear}</span>
@@ -1107,7 +1116,7 @@ export default function Dashboard({
             haut, la même que le cercle et la fenêtre de détail). Pour les
             super admins de Conseils Finances, la tuile ImmoSphera (tout ce
             qui est dans le pipeline) ne s'affiche donc pas. */}
-        {isSuperAdmin && estConseilsFinances && (
+        {estDirectionCF && estConseilsFinances && (
           <div
             role="button"
             tabIndex={0}
@@ -1116,14 +1125,14 @@ export default function Dashboard({
             title="Voir le détail des dossiers à venir, ligne par ligne"
             className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">CA à venir</span>
+              <span className="text-xs text-slate-400 font-medium tracking-wide">CA à venir agence</span>
               <div className="text-2xl font-black text-white tracking-tight">
                 {formatCurrency(chiffreAffairesAgence.aVenir)}
               </div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.comptessAVenir === 0
-                  ? "Aucun dossier à partir de l'étape Accord banque / Rendez-vous"
-                  : `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Accord banque / Rendez-vous, honoraires agence TTC — compris dans le CA de l'agence`}
+                  ? "Aucun dossier à partir de l'étape Montage dossier"
+                  : `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Montage dossier, honoraires agence TTC — compris dans le CA de l'agence`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
@@ -1167,7 +1176,7 @@ export default function Dashboard({
             le camembert oppose le réalisé de l'année à ce qui reste — la
             soustraction demandée. Objectif atteint : cercle tout doré et
             dépassement affiché. */}
-        {isSuperAdmin && !estNovavisio && (
+        {voitChiffresAgence && !estNovavisio && (
           <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 flex items-start justify-between gap-4 group">
             <div className="space-y-1 min-w-0 flex-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Objectif de l'année {currentYear}</span>
@@ -1327,8 +1336,8 @@ export default function Dashboard({
           appartiennent aux courtiers, Sylvain Grazia compris : rajouter une
           case en haut du tableau de bord, CA Sylvain, ou le nom du courtier ».
           Une case par personne, même règle que le CA de l'agence (archivés +
-          à partir d'Accord banque / Rendez-vous), la plus grosse en premier. */}
-      {isSuperAdmin && estConseilsFinances && (
+          à partir de Montage dossier), la plus grosse en premier. */}
+      {estDirectionCF && estConseilsFinances && (
         <div className="space-y-2">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">CA par courtier</h3>
           {caParCourtier.length === 0 ? (
@@ -1342,8 +1351,8 @@ export default function Dashboard({
                     <div className="text-xl font-black text-sky-300 tracking-tight">{formatCurrency(c.total)}</div>
                     <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                       {c.total === 0
-                        ? 'Aucun dossier à partir d\'Accord banque / Rendez-vous'
-                        : `${formatCurrency(c.aVenir)} en cours + ${formatCurrency(c.archive)} archivé, à partir d'Accord banque`}
+                        ? 'Aucun dossier à partir de Montage dossier'
+                        : `${formatCurrency(c.aVenir)} en cours + ${formatCurrency(c.archive)} archivé, à partir de Montage dossier`}
                     </span>
                   </div>
                   <div className="w-10 h-10 shrink-0 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300">
@@ -1361,7 +1370,7 @@ export default function Dashboard({
           retrouve le sien tout en haut de son propre tableau de bord. Le
           réalisé est celui de l'année en cours, dossiers archivés et
           confirmés, attribués à la personne. */}
-      {isSuperAdmin && estConseilsFinances && goalAgencyId && (
+      {estDirectionCF && estConseilsFinances && goalAgencyId && (
         <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg space-y-4">
           <div>
             <h3 className="font-bold text-sm text-white">Objectifs de l'année {currentYear} — par collaborateur</h3>
@@ -1564,7 +1573,7 @@ export default function Dashboard({
             <h3 className="font-bold text-sm text-white">CA à venir</h3>
             <p className="text-xs text-slate-400">
               {estConseilsFinances
-                ? "Honoraires agence TTC des dossiers à partir d'Accord banque / Rendez-vous, par colonne."
+                ? "Honoraires agence TTC des dossiers à partir de Montage dossier, par colonne."
                 : `Commission agence HT encore ${dansPipelineVise}, par colonne.`}
             </p>
           </div>
