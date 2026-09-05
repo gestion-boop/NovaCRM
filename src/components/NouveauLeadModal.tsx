@@ -647,25 +647,28 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
 
                 {/* Commission agence — anciennement « Honoraires ». C'est le
                     chiffre d'affaires de l'agence, celui qui alimente les
-                    statistiques ; saisi en HT. */}
+                    statistiques ; saisi en HT.
+                    Conseils Finances (5 septembre) : « honoraires agence,
+                    mandat, commissions conseillers, ce sont des infos que tu
+                    dois laisser dans ImmoSphera ». Ces trois cases n'y
+                    apparaissent donc plus ; le même montant (c'est lui le
+                    chiffre d'affaires) se saisit dans le bloc « Reporting
+                    financier courtier », plus bas. */}
+                {!estConseilsFinances && (
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-200">
-                    {estConseilsFinances ? 'Honoraires agence' : 'Commission agence'} (€ TTC)
-                  </label>
+                  <label className="block text-xs font-bold text-slate-200">Commission agence (€ TTC)</label>
                   <input
                     type="number"
                     placeholder="ex: 5000"
                     value={honoraires}
-                    onChange={(e) => {
-                      // Base des honoraires courtier : on recalcule.
-                      courtierTouche.current = false;
-                      setHonoraires(e.target.value === '' ? '' : Number(e.target.value));
-                    }}
+                    onChange={(e) => setHonoraires(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
                   />
                 </div>
+                )}
 
                 {/* Commission du conseiller — saisie TTC, affichée HT ailleurs. */}
+                {!estConseilsFinances && (
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-200">Commission conseiller (€ TTC)</label>
                   <input
@@ -676,9 +679,10 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
                   />
                 </div>
+                )}
 
                 {/* Numéro de mandat */}
-                {!estNovavisio && (
+                {!estNovavisio && !estConseilsFinances && (
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-200">Numéro de mandat</label>
                   <input
@@ -709,11 +713,32 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                 {/* Conseils Finances (5 septembre) : courtage et banque. « Il
                     faudrait bien organiser en verticales les cases pour mettre
                     les bons montants » : un bloc à part, les cases les unes
-                    sous les autres, libellé à gauche et montant à droite. */}
+                    sous les autres, libellé à gauche et montant à droite.
+                    Puis : « dans les montants que l'on doit saisir, mettre une
+                    catégorie Reporting financier courtier et les cases à
+                    remplir dessous » — c'est ce bloc, avec Honoraires agence
+                    en tête (retirée de la rangée ImmoSphera au-dessus). */}
                 {estConseilsFinances && (
                 <div className="sm:col-span-2 lg:col-span-4 mt-1 rounded-xl border border-[#153c3f]/80 bg-[#07191b]/40 p-3 space-y-2.5">
-                  <p className="text-[11px] font-bold text-[#F7BC5F] uppercase tracking-wider">Courtage & banque</p>
+                  <p className="text-[11px] font-bold text-[#F7BC5F] uppercase tracking-wider">Reporting financier courtier</p>
                   <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,240px)] items-center gap-x-4 gap-y-2.5">
+                    <label htmlFor="cf-honoraires-agence" className="text-xs font-bold text-slate-200">
+                      Honoraires agence (€ TTC)
+                      <span className="block text-[10px] font-normal text-slate-500">Le chiffre d'affaires du dossier ; base des honoraires courtier</span>
+                    </label>
+                    <input
+                      id="cf-honoraires-agence"
+                      type="number"
+                      placeholder="ex: 5000"
+                      value={honoraires}
+                      onChange={(e) => {
+                        // Base des honoraires courtier : on recalcule.
+                        courtierTouche.current = false;
+                        setHonoraires(e.target.value === '' ? '' : Number(e.target.value));
+                      }}
+                      className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
+                    />
+
                     <label htmlFor="cf-honoraires-courtier" className="text-xs font-bold text-slate-200">
                       Honoraires courtier (€)
                       <span className="block text-[10px] font-normal text-slate-500">
