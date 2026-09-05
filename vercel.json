@@ -2,7 +2,8 @@
   "buildCommand": "vite build",
   "git": {
     "deploymentEnabled": {
-      "claude/finish-tasks-7f70wu": false
+      "claude/finish-tasks-7f70wu": false,
+      "claude/immosphera-novavisio-visibility-l0ecp3": false
     }
   },
   "outputDirectory": "dist",
