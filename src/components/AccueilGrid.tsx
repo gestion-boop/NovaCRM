@@ -3208,7 +3208,22 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // soit le nombre de tuiles — Nova reste ancré près du bas grâce à son
     // propre positionnement fixe (déjà indépendant du contenu, voir plus
     // bas), donc l'ensemble reste équilibré de 1 à 21 tuiles.
-    <div className="min-h-full p-3 sm:p-5 flex flex-col gap-2 relative overflow-y-auto custom-scrollbar select-none">
+    // Signalé (5 septembre, persistant après le premier correctif "figé") :
+    // le bandeau "Ma journée / Priorités" ne restait PAS réellement figé au
+    // défilement. Cause : `overflow-y-auto` posé ICI, sur un conteneur qui
+    // n'a qu'un `min-h-full` (un PLANCHER de hauteur, jamais un plafond) —
+    // sans hauteur maximale, ce bloc grandit toujours pour loger tout son
+    // contenu et ne peut donc jamais avoir besoin de défiler LUI-MÊME ; le
+    // vrai défilement se produit toujours plus haut, sur <main> (App.tsx),
+    // le seul ancêtre dont la hauteur est réellement bornée. Ce
+    // `overflow-y-auto` mort ici comptait pourtant, aux yeux de CSS, comme
+    // le plus proche ancêtre défilant du bandeau `sticky` : le bandeau se
+    // figeait donc par rapport à un conteneur dont la position de défilement
+    // ne bouge jamais (lui-même immobile), ce qui revenait à n'avoir aucun
+    // effet visible — tout l'ensemble suivait le vrai défilement de <main>
+    // comme un seul bloc rigide. Retiré : le bandeau se fige maintenant
+    // correctement par rapport à <main>, qui défile réellement.
+    <div className="min-h-full p-3 sm:p-5 flex flex-col gap-2 relative select-none">
       {/* Dynamic Background Glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-900/10 via-transparent to-transparent pointer-events-none" />
 
