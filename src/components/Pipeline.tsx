@@ -321,6 +321,10 @@ const PipelineColumn: React.FC<{
   // meme colonne : le total de l'agence pour les super admins, sa propre
   // commission pour un conseiller.
   estSuperAdmin: boolean;
+  // Infobulle du total de la colonne : « Commission agence, hors taxes »
+  // partout, sauf Conseils Finances où c'est « Honoraires agence, TTC »
+  // (5 septembre : « il n'y a pas de hors taxes dans Conseils Finances »).
+  libelleMontant?: string;
   stageMonHt: number;
   // Commission conseiller cumulée de la colonne, convertie en HT.
   stageAdvisorHt: number;
@@ -336,7 +340,7 @@ const PipelineColumn: React.FC<{
   onRequestDelete: (stage: string) => void;
   justArrived: boolean;
 }> = ({
-  stage, stageDeals, stageTotal, stageAdvisorHt, estSuperAdmin, stageMonHt, accentColor, canManageStructure,
+  stage, stageDeals, stageTotal, stageAdvisorHt, estSuperAdmin, stageMonHt, accentColor, canManageStructure, libelleMontant,
   contactsById, taskStatusByContactId, onSelectContact, onDeleteDeal, onOpenChecklist, onOpenNova, onRename, onRequestDelete, justArrived,
 }) => {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
@@ -400,7 +404,7 @@ const PipelineColumn: React.FC<{
                 stageTotal > 0 && (
                   <>
                     <span className="text-[10px] text-gray-600">·</span>
-                    <p className="text-[10px] font-bold" style={{ color: accentColor }} title="Commission agence, hors taxes">{formatCurrency(stageTotal)}</p>
+                    <p className="text-[10px] font-bold" style={{ color: accentColor }} title={libelleMontant || 'Commission agence, hors taxes'}>{formatCurrency(stageTotal)}</p>
                     {stageAdvisorHt > 0 && (
                       <>
                         <span className="text-[10px] text-gray-600">·</span>
@@ -1618,6 +1622,11 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
   // comme le champ « Commission agence » de la fiche client. Les autres
   // agences confirment en HT — on ne touche pas à leur historique.
   const estNovavisio = /novavisio/i.test(activeAgency?.name || '');
+  // « Il n'y a pas de hors taxes dans Conseils Finances, c'est que du TTC »
+  // (5 septembre) : montant enregistré tel que saisi (comme ici pour les
+  // autres agences), mais nommé TTC — honoraires agence.
+  const estConseilsFinances = /conseils?\s*finances?/i.test(activeAgency?.name || '');
+  const libelleUniteMontant = estNovavisio || estConseilsFinances ? 'TTC' : 'hors taxes';
 
   const validerMontantHt = async () => {
     if (!pendingMontantPrompt) return;
@@ -1626,7 +1635,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     if (saisi === '') { setPendingMontantPrompt(null); return; }
     const montant = Number(saisi);
     if (!Number.isFinite(montant) || montant < 0) {
-      toast.error("Le montant hors taxes n'est pas un nombre valide.");
+      toast.error(`Le montant ${libelleUniteMontant} n'est pas un nombre valide.`);
       return;
     }
     setMontantHtEnCours(true);
@@ -1635,7 +1644,11 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
         id: pendingMontantPrompt.dealId,
         updates: { amount: estNovavisio ? Math.round(htDepuisTtc(montant) * 100) / 100 : montant },
       });
-      toast.success('Commission agence HT enregistrée');
+      toast.success(
+        estConseilsFinances
+          ? 'Honoraires agence TTC enregistrés'
+          : `Commission agence ${estNovavisio ? 'TTC' : 'HT'} enregistrée`
+      );
       setPendingMontantPrompt(null);
     } catch (montantError: any) {
       toast.error(montantError?.message || "Impossible d'enregistrer le montant.");
@@ -2055,6 +2068,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                     stageTotal={stageTotal}
                     stageAdvisorHt={stageAdvisorHt}
                     estSuperAdmin={canManageStructure}
+                    libelleMontant={estConseilsFinances ? 'Honoraires agence, TTC' : 'Commission agence, hors taxes'}
                     stageMonHt={stageMonHt}
                     accentColor={accentColor}
                     canManageStructure={canManageStructure}
@@ -2391,7 +2405,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           title={
             pendingMontantPrompt.ttc
               ? 'Montant TTC (conciergerie)'
-              : `Commission agence, ${estNovavisio ? 'TTC' : 'hors taxes'}`
+              : `${estConseilsFinances ? 'Honoraires' : 'Commission'} agence, ${libelleUniteMontant}`
           }
           onClose={() => setPendingMontantPrompt(null)}
         >
@@ -2399,7 +2413,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
             "{pendingMontantPrompt.dealTitle}" vient de passer en « {pendingMontantPrompt.etape} ».
             {pendingMontantPrompt.ttc
               ? ' Quel est le montant TTC de la prestation de conciergerie ?'
-              : ` Quel est le montant de la commission agence, ${estNovavisio ? 'TTC' : 'hors taxes'} ?`}
+              : ` Quel est le montant ${estConseilsFinances ? 'des honoraires agence' : 'de la commission agence'}, ${libelleUniteMontant} ?`}
           </p>
           <input
             autoFocus

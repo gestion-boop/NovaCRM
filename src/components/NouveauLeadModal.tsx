@@ -89,6 +89,13 @@ const TAUX_BANQUE: Record<string, number | null> = {
 };
 const pourcent = (taux: number) => `${(taux * 100).toLocaleString('fr-FR')} %`;
 
+// « Il n'y a pas de hors taxes dans Conseils Finances, c'est que du TTC »
+// (5 septembre) : les honoraires agence s'y enregistrent tels que saisis,
+// sans la division par 1,2 appliquée ailleurs. Lu depuis la société de la
+// fiche (`matchesAgency` : identifiants hérités encore présents).
+const estAgenceConseilsFinances = (agencyId: string | undefined) =>
+  /conseils?\s*finances?/i.test(AGENCIES.find((a) => matchesAgency(agencyId || '', a.id))?.name || '');
+
 export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   isOpen,
   onClose,
@@ -231,9 +238,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   const estNovavisio = /novavisio/i.test(
     AGENCIES.find((a) => matchesAgency(agencyId, a.id))?.name || ''
   );
-  const estConseilsFinances = /conseils?\s*finances?/i.test(
-    AGENCIES.find((a) => matchesAgency(agencyId, a.id))?.name || ''
-  );
+  const estConseilsFinances = estAgenceConseilsFinances(agencyId);
 
   // Signalé le 2 septembre : « quand je crée un client et que je le valide,
   // puis que j'en recrée un nouveau, j'ai les coordonnées de l'ancienne fiche
@@ -259,8 +264,16 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
     setTypeBien(c?.typeBien || c?.projectType || '');
     setPipeline(c?.pipeline || '');
     setStatutLead(temperatureDe(c));
-    // Le HT est en base ; le formulaire se saisit en TTC.
-    setHonoraires(c?.honoraires ? Math.round(ttcDepuisHt(c.honoraires) * 100) / 100 : '');
+    // Le HT est en base ; le formulaire se saisit en TTC — sauf Conseils
+    // Finances, tout en TTC : la valeur enregistrée est celle qu'on relit.
+    // (Société lue sur la fiche elle-même : l'état `agencyId` n'est pas
+    // encore à jour à ce moment-là.)
+    const ficheConseilsFinances = estAgenceConseilsFinances(c?.agencyId || selectedAgencyId);
+    setHonoraires(
+      c?.honoraires
+        ? (ficheConseilsFinances ? Number(c.honoraires) : Math.round(ttcDepuisHt(c.honoraires) * 100) / 100)
+        : ''
+    );
     setAdvisorCommission(c?.advisorCommissionTtc ? Number(c.advisorCommissionTtc) : '');
     setMandateNumber(c?.mandateNumber || '');
     setAssignedTo(c?.assignedTo || '');
@@ -365,8 +378,11 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         typeBien: typeBien.trim(),
         pipeline,
         statutLead,
-        // Saisi en TTC, stocké en HT — voir lib/utils.
-        honoraires: honoraires === '' ? 0 : Math.round((Number(honoraires) / 1.2) * 100) / 100,
+        // Saisi en TTC, stocké en HT — voir lib/utils. Conseils Finances :
+        // tout en TTC, enregistré tel quel.
+        honoraires: honoraires === ''
+          ? 0
+          : estConseilsFinances ? Number(honoraires) : Math.round((Number(honoraires) / 1.2) * 100) / 100,
         advisorCommissionTtc: advisorCommission === '' ? vide(0) : Number(advisorCommission),
         mandateNumber: mandateNumber.trim() || vide(''),
         comments: comments.trim(),

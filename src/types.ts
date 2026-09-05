@@ -83,8 +83,13 @@ export interface PipelineDef {
 export interface Deal {
   id: string;
   title: string;
-  // Commission de l'agence, stockée en HT (colonne `estimated_value`).
+  // Commission de l'agence, stockée en HT (colonne `estimated_value`) —
+  // avec repli sur le budget quand elle est vide (carte du pipeline).
   amount: number;
+  // La même colonne `estimated_value`, SANS repli : vide si rien n'a été
+  // saisi. Conseils Finances (5 septembre) : le chiffre d'affaires ne doit
+  // compter que des honoraires agence réellement saisis, jamais un budget.
+  commissionAgenceHt?: number;
   // Commission du conseiller, stockée en TTC ; affichée en HT dans les
   // colonnes du pipeline (voir htDepuisTtc).
   advisorCommissionTtc?: number;

@@ -27,6 +27,10 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
       [(item.first_name as string), (item.last_name as string)].filter(Boolean).join(' ') ||
       'Opportunité sans nom',
     amount: (item.estimated_value as number) || (item.budget as number) || 0,
+    commissionAgenceHt:
+      item.estimated_value === null || item.estimated_value === undefined
+        ? undefined
+        : Number(item.estimated_value),
     advisorCommissionTtc:
       item.advisor_commission_ttc === null || item.advisor_commission_ttc === undefined
         ? undefined

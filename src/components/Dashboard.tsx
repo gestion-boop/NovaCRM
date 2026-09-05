@@ -19,6 +19,9 @@ import { useTasks } from '@/hooks/useTasks';
 // suit ainsi le thème comme le reste (voir --nv-chart-* dans index.css).
 interface LigneCa {
   id: string;
+  // Fiche du client (demandé le 5 septembre : « quand on clique sur les
+  // noms, j'aimerais avoir l'accès à la fiche du client directement »).
+  contactId: string;
   nom: string;
   mandat: string;
   montant: number;
@@ -85,11 +88,15 @@ function CamembertObjectif({ realise, cible }: { realise: number; cible: number 
 export default function Dashboard({
   onNavigate,
   onNavigateToStage,
+  onOpenContact,
 }: {
   onNavigate: (tab: string) => void;
   // Ticket #105 : clic sur une colonne du graphique -> pipeline, direct
   // sur l'étape correspondante (au lieu de rester à choisir soi-même).
   onNavigateToStage?: (stage: string) => void;
+  // Fenêtre de détail du chiffre d'affaires : un clic sur le nom ouvre la
+  // fiche du client (5 septembre).
+  onOpenContact?: (contactId: string) => void;
 }) {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const isSuperAdmin = userProfile?.role === 'super_admin';
@@ -362,7 +369,15 @@ export default function Dashboard({
     // compté, ligne à ligne.
     const lignes: LigneCa[] = [];
     perimetre.forEach((d) => {
-      const montant = Number(d.amount) || 0;
+      // Conseils Finances (5 septembre, capture « les montants ne
+      // correspondent pas à la réalité des règles ») : `amount` retombe sur
+      // le BUDGET quand la commission agence est vide — d'anciennes fiches
+      // archivées sans honoraires comptaient donc leur budget (213 000 €
+      // pour un crédit, 2 500 € un peu partout) comme chiffre d'affaires.
+      // Ici, seuls des honoraires agence réellement saisis comptent.
+      const montant = estConseilsFinances
+        ? Number(d.commissionAgenceHt) || 0
+        : Number(d.amount) || 0;
       const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
       if (!pipelineReel || !pipelinesVises.has(pipelineReel)) {
         if (d.archivedAt && montant > 0) { horsPipelineMontant += montant; horsPipelineNb += 1; }
@@ -378,10 +393,13 @@ export default function Dashboard({
         const etape = sansAccents(d.stage || '');
         if (!etape.includes('factur') && !etape.includes('regler')) return;
       }
-      // Conseils Finances : un dossier vivant du pipeline n'entre dans le
-      // « CA à venir » qu'à partir de l'étape Accord banque / Rendez-vous ;
-      // avant, il ne compte nulle part.
-      if (estConseilsFinances && !d.archivedAt) {
+      // Conseils Finances : « pour l'instant uniquement, à partir des
+      // dossiers mis dans Accord banque / Rendez-vous ». Un dossier ne
+      // compte qu'à partir de cette étape — vivant (CA à venir) comme
+      // archivé (réalisé). Les anciennes fiches archivées sans étape
+      // (l'écran affichait leur température, « chaud ») ne comptent donc
+      // nulle part.
+      if (estConseilsFinances) {
         const seuil = seuilAccordBanque.get(pipelineReel);
         const position = positionEtape.get(`${pipelineReel}::${d.stage}`);
         if (seuil === undefined || position === undefined || position < seuil) return;
@@ -391,6 +409,7 @@ export default function Dashboard({
         sansMontant += 1;
         lignes.push({
           id: d.id,
+          contactId: d.contactId || d.id,
           nom: d.title,
           mandat: d.mandateNumber || '',
           montant: 0,
@@ -406,6 +425,7 @@ export default function Dashboard({
       // avec sa commission agence en HT, il est en « CA à venir ».
       lignes.push({
         id: d.id,
+        contactId: d.contactId || d.id,
         nom: d.title,
         mandat: d.mandateNumber || '',
         montant,
@@ -942,11 +962,11 @@ export default function Dashboard({
                   </span>
                 ) : estConseilsFinances ? (
                   <>
-                    {chiffreAffairesAgence.comptees} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)})
-                    {' + '}{chiffreAffairesAgence.comptessAVenir} à partir d'Accord banque / Rendez-vous ({formatCurrency(chiffreAffairesAgence.aVenir)})
+                    {chiffreAffairesAgence.comptessAVenir} en cours ({formatCurrency(chiffreAffairesAgence.aVenir)})
+                    {' + '}{chiffreAffairesAgence.comptees} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)})
                     <span className="text-slate-500 font-normal block mt-0.5">
-                      Honoraires agence HT, {dansPipelineVise}
-                      {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans montant`}
+                      À partir d'Accord banque / Rendez-vous, honoraires agence TTC saisis sur la fiche (pas de hors taxes sur Conseils Finances)
+                      {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans honoraires`}
                     </span>
                   </>
                 ) : (
@@ -1008,7 +1028,7 @@ export default function Dashboard({
                   <span className="text-amber-400/90">Aucun pipeline principal pour cette agence</span>
                 ) : (
                   <>
-                    {chiffreAffairesAgence.comptees} dossier{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et confirmé{chiffreAffairesAgence.comptees > 1 ? 's' : ''}, honoraires agence HT
+                    {chiffreAffairesAgence.comptees} dossier{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et confirmé{chiffreAffairesAgence.comptees > 1 ? 's' : ''}, honoraires agence TTC
                     <span className="text-slate-500 font-normal block mt-0.5">
                       {chiffreAffairesAgence.dansLePipeline === 0
                         ? `Aucun de vos dossiers ${dansPipelineVise}`
@@ -1034,7 +1054,7 @@ export default function Dashboard({
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.comptessAVenir === 0
                   ? "Aucun de vos dossiers à partir de l'étape Accord banque / Rendez-vous"
-                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Accord banque / Rendez-vous, honoraires agence HT`}
+                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Accord banque / Rendez-vous, honoraires agence TTC`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300">
@@ -1103,7 +1123,7 @@ export default function Dashboard({
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.comptessAVenir === 0
                   ? "Aucun dossier à partir de l'étape Accord banque / Rendez-vous"
-                  : `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Accord banque / Rendez-vous, honoraires agence HT — compris dans le CA de l'agence`}
+                  : `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Accord banque / Rendez-vous, honoraires agence TTC — compris dans le CA de l'agence`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
@@ -1322,8 +1342,8 @@ export default function Dashboard({
                     <div className="text-xl font-black text-sky-300 tracking-tight">{formatCurrency(c.total)}</div>
                     <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                       {c.total === 0
-                        ? 'Aucun dossier archivé ni à partir d\'Accord banque'
-                        : `${formatCurrency(c.archive)} archivé + ${formatCurrency(c.aVenir)} à partir d'Accord banque`}
+                        ? 'Aucun dossier à partir d\'Accord banque / Rendez-vous'
+                        : `${formatCurrency(c.aVenir)} en cours + ${formatCurrency(c.archive)} archivé, à partir d'Accord banque`}
                     </span>
                   </div>
                   <div className="w-10 h-10 shrink-0 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300">
@@ -1544,7 +1564,7 @@ export default function Dashboard({
             <h3 className="font-bold text-sm text-white">CA à venir</h3>
             <p className="text-xs text-slate-400">
               {estConseilsFinances
-                ? "Honoraires agence HT des dossiers à partir d'Accord banque / Rendez-vous, par colonne."
+                ? "Honoraires agence TTC des dossiers à partir d'Accord banque / Rendez-vous, par colonne."
                 : `Commission agence HT encore ${dansPipelineVise}, par colonne.`}
             </p>
           </div>
@@ -1747,7 +1767,20 @@ export default function Dashboard({
                 lignesVisibles.map((ligne) => (
                   <div key={ligne.id} className="flex items-center gap-3 px-5 py-2.5">
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
+                      {/* Le nom ouvre la fiche du client (5 septembre) ; la
+                          fenêtre se referme pour laisser la place. */}
+                      {onOpenContact ? (
+                        <button
+                          type="button"
+                          onClick={() => { setDetailCa(null); onOpenContact(ligne.contactId); }}
+                          title="Ouvrir la fiche du client"
+                          className="block max-w-full text-left text-sm text-white font-semibold truncate hover:text-[#F9C977] hover:underline"
+                        >
+                          {ligne.nom}
+                        </button>
+                      ) : (
+                        <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
+                      )}
                       <div className="text-[11px] text-slate-500 truncate">
                         {ligne.etape || 'Sans étape'}
                         {ligne.mandat && <span className="sm:hidden"> · Mandat {ligne.mandat}</span>}

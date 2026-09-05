@@ -1023,6 +1023,7 @@ function App() {
                   setPipelineInitialStage(stage);
                   setCurrentNav('pipeline');
                 }}
+                onOpenContact={(contactId) => openClientProfile(contactId)}
               />
             </div>
           )}

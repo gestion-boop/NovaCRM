@@ -530,7 +530,14 @@ export default function ClientProfileView({
   const estNovavisio = /novavisio/i.test(
     AGENCIES.find((a) => matchesAgency(client?.agencyId, a.id))?.name || ''
   );
-  const uniteMontant = estNovavisio ? 'TTC' : 'HT';
+  // « Il n'y a pas de hors taxes dans Conseils Finances, c'est que du TTC »
+  // (5 septembre) : le montant est enregistré tel que saisi, comme ici pour
+  // les autres agences, mais il se NOMME TTC.
+  const estConseilsFinances = /conseils?\s*finances?/i.test(
+    AGENCIES.find((a) => matchesAgency(client?.agencyId, a.id))?.name || ''
+  );
+  const uniteMontant = estNovavisio || estConseilsFinances ? 'TTC' : 'HT';
+  const libelleUnite = estNovavisio || estConseilsFinances ? 'TTC' : 'hors taxes';
   const versBase = (saisi: number) => (estNovavisio ? Math.round(htDepuisTtc(saisi) * 100) / 100 : saisi);
   const depuisBase = (stocke: number) =>
     estNovavisio ? Math.round(ttcDepuisHt(stocke) * 100) / 100 : stocke;
@@ -540,7 +547,7 @@ export default function ClientProfileView({
     if (saisi === '') { setMontantEtapePrompt(null); return; }
     const montant = Number(saisi);
     if (!Number.isFinite(montant) || montant < 0) {
-      toast.error("Le montant hors taxes n'est pas un nombre valide.");
+      toast.error(`Le montant ${libelleUnite} n'est pas un nombre valide.`);
       return;
     }
     setMontantEtapeEnCours(true);
@@ -550,7 +557,7 @@ export default function ClientProfileView({
       .eq('id', clientId);
     setMontantEtapeEnCours(false);
     if (error) { toast.error(error.message); return; }
-    toast.success('Commission agence HT enregistrée');
+    toast.success(`${estConseilsFinances ? 'Honoraires' : 'Commission'} agence ${uniteMontant} enregistré${estConseilsFinances ? 's' : 'e'}`);
     qc.invalidateQueries({ queryKey: ['contacts_all'] });
     qc.invalidateQueries({ queryKey: ['deals'] });
     setMontantEtapePrompt(null);
@@ -4520,13 +4527,13 @@ export default function ClientProfileView({
             <h3 className="text-base font-bold text-white mb-2">
               {estConciergerie
                 ? 'Montant TTC (conciergerie)'
-                : `Commission agence, ${estNovavisio ? 'TTC' : 'hors taxes'}`}
+                : `${estConseilsFinances ? 'Honoraires' : 'Commission'} agence, ${libelleUnite}`}
             </h3>
             <p className="text-sm text-slate-300 mb-4">
               La fiche vient de passer en « {montantEtapePrompt} ».{' '}
               {estConciergerie
                 ? 'Quel est le montant TTC de la prestation de conciergerie ?'
-                : `Quel est le montant de la commission agence, ${estNovavisio ? 'TTC' : 'hors taxes'} ?`}
+                : `Quel est le montant ${estConseilsFinances ? 'des honoraires agence' : 'de la commission agence'}, ${libelleUnite} ?`}
             </p>
             <input
               autoFocus
@@ -4597,7 +4604,7 @@ export default function ClientProfileView({
 
             <div className="mb-5">
               <label htmlFor="archive-montant-ht" className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Commission agence, {estNovavisio ? 'TTC' : 'hors taxes'}
+                {estConseilsFinances ? 'Honoraires' : 'Commission'} agence, {libelleUnite}
               </label>
               <input
                 id="archive-montant-ht"
