@@ -2665,7 +2665,37 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
 
       // activeFolder est garanti null ici (garde-fou ci-dessus) : jamais de
       // dossier créé à l'intérieur d'un autre dossier.
-      setTiles([...baseTiles, newFolder]);
+      //
+      // Demandé (5 septembre) : « quand je crée un dossier il se met toujours
+      // en bas, je veux que le dossier se mette en haut, pas besoin de prendre
+      // de l'espace pour cela ».
+      //
+      // Le mettre en tête de `tiles` ne suffit PAS : à la racine, l'ordre
+      // affiché ne vient pas de `tiles` mais de `rootSlots`, la grille de
+      // positions (une case par emplacement). Une tuile absente de cette
+      // grille y est posée dans la première case VIDE — donc après toutes les
+      // autres, en bas. Il faut lui réserver explicitement la première case.
+      //
+      // Les deux sont donc mis à jour : `tiles` pour que l'intention tienne
+      // même si la grille de positions devait être reconstruite de zéro
+      // (loadRootSlots repart de l'ordre de `tiles`), et `rootSlots` pour
+      // l'affichage d'aujourd'hui. Aucune case n'est ajoutée à la grille :
+      // le dossier prend la première, les autres décalent d'un cran.
+      setTiles([newFolder, ...baseTiles]);
+      setRootSlots((prev) => {
+        if (prev.includes(newFolder.id)) return prev;
+        const next = [...prev];
+        // On retire la première case vide pour la récupérer en tête : ce qui
+        // est avant elle décale d'un cran, ce qui est après ne bouge pas, et
+        // la grille garde exactement sa taille.
+        const libre = next.indexOf(null);
+        if (libre >= 0) next.splice(libre, 1);
+        // Grille entièrement pleine (36 tuiles) : la dernière bascule dans
+        // « Voir plus » plutôt que d'empêcher le dossier de se poser.
+        else next.pop();
+        next.unshift(newFolder.id);
+        return next;
+      });
       setOpenFolderStack([]);
     } else {
       const trimmedUrl = newUrl.trim();
