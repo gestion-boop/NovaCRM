@@ -955,51 +955,33 @@ export default function ComptabiliteView() {
                   </tr>
                 ))}
               </tbody>
+              {!actualsChargement && actualsDuMoisActif.length > 0 && (
+                <tfoot>
+                  {/* Demandé le 6 septembre : « je veux que tu fasses une
+                      somme au total de la colonne à chaque fois qui
+                      correspond tout en bas » — un vrai total de colonne,
+                      aligné sous Crédit/Débit/Solde prévisionnel/Solde
+                      bancaire, plutôt qu'un bandeau à part au style
+                      différent. Solde bancaire actuel = solde d'ouverture du
+                      mois moins le total débit plus le total crédit. */}
+                  <tr className="border-t-2 border-[#2a6a6f] bg-[#0a1e20] divide-x divide-[#2a6a6f]/50 text-xs font-bold">
+                    <td className="px-3 py-2 text-slate-400 uppercase tracking-widest text-[10px]" colSpan={5}>Total du mois</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-emerald-400">{formatCurrencyPrecis(totalCreditMois)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-red-400">{formatCurrencyPrecis(totalDebitMois)}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${totalPrevisionnelMois >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
+                      {totalPrevisionnelMois >= 0 ? '+' : ''}{formatCurrencyPrecis(totalPrevisionnelMois)}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-right tabular-nums ${soldeOuvertureMoisActif - totalDebitMois + totalCreditMois >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}
+                      title="Solde d'ouverture du mois − total débit + total crédit"
+                    >
+                      {formatCurrencyPrecis(soldeOuvertureMoisActif - totalDebitMois + totalCreditMois)}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              )}
             </table>
-          </div>
-        )}
-
-        {!actualsChargement && actualsDuMoisActif.length > 0 && (
-          <div className="flex flex-wrap items-stretch gap-0 rounded-xl border-2 border-[#2a6a6f] bg-[#0a1e20] overflow-hidden text-xs">
-            {/* Totaux bruts du mois (débit/crédit des lignes validées,
-                confirmées ou non) — distincts du « Solde bancaire »
-                ci-dessus qui, lui, ne cumule que les montants cochés
-                confirmés ; un titre explicite évite toute confusion entre
-                les deux séries de chiffres. */}
-            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center" title="Total des débits du mois, confirmés ou non (hors lignes encore prévisionnelles)">
-              <div className="text-[10px] uppercase tracking-widest text-slate-500">Solde débit</div>
-              <div className="text-sm font-bold text-red-400 tabular-nums">{formatCurrencyPrecis(totalDebitMois)}</div>
-            </div>
-            <div className="w-px bg-[#2a6a6f]" />
-            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center" title="Total des crédits du mois, confirmés ou non (hors lignes encore prévisionnelles)">
-              <div className="text-[10px] uppercase tracking-widest text-slate-500">Solde crédit</div>
-              <div className="text-sm font-bold text-emerald-400 tabular-nums">{formatCurrencyPrecis(totalCreditMois)}</div>
-            </div>
-            <div className="w-px bg-[#2a6a6f]" />
-            {/* Demandé le 6 septembre : « entre le solde prévisionnel et le
-                solde de crédit, mets le solde bancaire actuel pour refléter
-                la réalité qu'il y a sur les comptes » — reprend le solde
-                bancaire confirmé de clôture du mois, déjà affiché en haut du
-                panneau, pour qu'il reste visible ici aussi. */}
-            <div className="flex-1 min-w-[130px] px-4 py-2.5 text-center" title="Solde bancaire réel (confirmé) à la clôture de ce mois">
-              <div className="text-[10px] uppercase tracking-widest text-slate-500">Solde bancaire actuel</div>
-              <div className={`text-sm font-bold tabular-nums ${soldeClotureMoisActif >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
-                {formatCurrencyPrecis(soldeClotureMoisActif)}
-              </div>
-            </div>
-            {/* Ligne verticale plus marquée avant « Prévisionnel » (6
-                septembre) : cette valeur reste une projection, pas un
-                mouvement confirmé — on la sépare visuellement du reste.
-                Reprécisé le 6 septembre : cette case compte maintenant
-                TOUTES les lignes du mois pas encore cochées (crédit ou
-                débit), pas seulement celles encore dans le panneau ⏳. */}
-            <div className="w-[3px] bg-[#F7BC5F]" />
-            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center bg-[#F7BC5F]/5" title="Mouvement net de toutes les lignes du mois pas encore cochées, crédit ou débit">
-              <div className="text-[10px] uppercase tracking-widest text-[#F7BC5F]/80">Prévisionnel (non coché)</div>
-              <div className={`text-sm font-bold tabular-nums ${totalPrevisionnelMois >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
-                {totalPrevisionnelMois >= 0 ? '+' : ''}{formatCurrencyPrecis(totalPrevisionnelMois)}
-              </div>
-            </div>
           </div>
         )}
       </div>
