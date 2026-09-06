@@ -403,7 +403,14 @@ export default function Dashboard({
         ? Number(d.commissionAgenceHt) || 0
         : Number(d.amount) || 0;
       const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
-      if (!pipelineReel || !pipelinesVises.has(pipelineReel)) {
+      const dansPipelineViseFlag = Boolean(pipelineReel && pipelinesVises.has(pipelineReel));
+      // Demandé le 6 septembre : « du moment que c'est archivé, même si ce
+      // n'est pas dans le pipeline de Conseils Finances, comptabilise-le ».
+      // Un dossier ARCHIVÉ compte donc toujours sur Conseils Finances — le
+      // filtre pipeline/étape ne s'applique plus qu'aux dossiers encore
+      // vivants (CA à venir), où il garde tout son sens.
+      const archiveHorsRegles = estConseilsFinances && Boolean(d.archivedAt);
+      if (!archiveHorsRegles && !dansPipelineViseFlag) {
         if (d.archivedAt && montant > 0) { horsPipelineMontant += montant; horsPipelineNb += 1; }
         return;
       }
@@ -417,11 +424,10 @@ export default function Dashboard({
         const etape = sansAccents(d.stage || '');
         if (!etape.includes('factur') && !etape.includes('regler')) return;
       }
-      // Conseils Finances : un dossier ne compte qu'à partir de l'étape
-      // Montage dossier — vivant (CA à venir) comme archivé (réalisé). Les
-      // anciennes fiches archivées sans étape (l'écran affichait leur
-      // température, « chaud ») ne comptent donc nulle part.
-      if (estConseilsFinances) {
+      // Conseils Finances : un dossier vivant ne compte qu'à partir de
+      // l'étape Montage dossier (le CA à venir). Un dossier archivé, lui,
+      // compte toujours (archiveHorsRegles ci-dessus).
+      if (estConseilsFinances && !archiveHorsRegles) {
         const seuil = seuilDepart.get(pipelineReel);
         const position = positionEtape.get(`${pipelineReel}::${d.stage}`);
         if (seuil === undefined || position === undefined || position < seuil) return;
