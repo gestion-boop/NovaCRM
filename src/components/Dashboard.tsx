@@ -597,6 +597,22 @@ export default function Dashboard({
       .sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'));
   }, [collaborateurs, chiffreAffairesAgence]);
 
+  // Demandé le 6 septembre : « dans le CA de l'agence, il faut que tu
+  // additionnes le chiffre d'affaires réalisé par les courtiers, et non pas
+  // l'encours » — le total de la case « Chiffre d'affaires de l'agence »
+  // doit correspondre exactement à la somme des cases CA par courtier
+  // (archivé + commission + commission Banque de chacun), pas à un calcul
+  // séparé sur l'ensemble des dossiers de l'agence qui pourrait diverger
+  // (ex. dossier archivé et signé mais sans courtier attribué).
+  const caRealiseCourtiers = useMemo(
+    () => caParCourtier.reduce((somme, c) => somme + c.total, 0),
+    [caParCourtier]
+  );
+  const commissionRealiseeCourtiers = useMemo(
+    () => caParCourtier.reduce((somme, c) => somme + c.commission, 0),
+    [caParCourtier]
+  );
+
   // Demandé le 6 septembre : seulement 5 cases nommées (Sylvain, Eric,
   // Coralia, Lucie, Karine), dans cet ordre, plutôt que toute la liste
   // triée par montant. On compare sur tous les mots du nom (pas juste le
@@ -713,6 +729,14 @@ export default function Dashboard({
   // sur le même tableau ». Une seule fenêtre, deux contenus : la tuile dorée
   // ouvre le réalisé, le cercle ouvre l'à-venir.
   const [detailCa, setDetailCa] = useState<'realise' | 'avenir' | null>(null);
+  // Demandé le 6 septembre : « une vue courtier hors chiffres CA agence, pour
+  // pas que quand je montre ce tableau en réunion, les courtiers voient les
+  // chiffres de l'agence ». Un simple bouton, réservé à la direction CF, qui
+  // masque les cases agence (CA de l'agence, CA à venir agence, Objectif de
+  // l'année, cercle CA à venir) sans toucher aux cases CA par courtier —
+  // celles-ci restent visibles, c'est le but de la réunion. Repart à false à
+  // chaque rechargement : ce n'est pas une préférence à retenir.
+  const [vueReunionSansAgence, setVueReunionSansAgence] = useState(false);
   const [montantsSaisis, setMontantsSaisis] = useState<Record<string, string>>({});
   const [ligneEnCours, setLigneEnCours] = useState<string | null>(null);
 
@@ -1028,13 +1052,29 @@ export default function Dashboard({
           (CA de l'agence, CA à venir, Objectif de l'année), puis une rangée
           « CA par courtier » ; trois cases aussi pour un collaborateur (les
           siennes). */}
+      {estDirectionCF && estConseilsFinances && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setVueReunionSansAgence((v) => !v)}
+            title="Masque les chiffres de l'agence, garde les cases CA par courtier — pratique pour montrer ce tableau en réunion"
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              vueReunionSansAgence
+                ? 'bg-[#F7BC5F] text-slate-950'
+                : 'bg-white/10 text-slate-300 hover:bg-white/15'
+            }`}
+          >
+            {vueReunionSansAgence ? 'Vue réunion active — sans les chiffres agence' : 'Vue réunion (masquer les chiffres agence)'}
+          </button>
+        </div>
+      )}
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${estNovavisio ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         {/* Ticket #34 — Chiffre d'affaires de l'agence, super admins seulement.
             Pipeline « Transaction V2 », montants HT (commission agence).
             Y entrent les dossiers ARCHIVÉS dont le montant a été confirmé au
             moment de l'archivage : « quand c'est archivé et confirmé sur la
             somme, cela ira dans le chiffre d'affaires de l'agence ». */}
-        {voitChiffresAgence && (
+        {voitChiffresAgence && !vueReunionSansAgence && (
           <div
             role="button"
             tabIndex={0}
@@ -1047,15 +1087,16 @@ export default function Dashboard({
               {/* Demandé le 6 septembre : « le chiffre d'affaires de l'agence
                   doit être uniquement les chiffres qui ont été comptabilisés
                   du moment qu'on a archivé la fiche du client et que nous
-                  avons mis signé, pas avant ». Remplace la règle du 5
-                  septembre qui mélangeait le CA à venir (Accord banque /
-                  Rendez-vous) dans ce total — celui-ci n'est plus qu'archivé
-                  et signé, comme chiffreAffairesAgence.total ; le CA à venir
-                  reste affiché à part (case dédiée, et en info ci-dessous). */}
+                  avons mis signé, pas avant » — et « il faut que tu
+                  additionnes le chiffre d'affaires réalisé par les
+                  courtiers, et non pas l'encours ». Ce total est donc
+                  exactement la somme des cases CA par courtier
+                  (caRealiseCourtiers), jamais l'encours (CA à venir),
+                  affiché à part (case dédiée, et en info ci-dessous). */}
               <div className="text-2xl font-black text-[#F9C977] tracking-tight">
                 {formatCurrency(
                   estConseilsFinances
-                    ? chiffreAffairesAgence.total + chiffreAffairesAgence.comBanqueTotal
+                    ? caRealiseCourtiers
                     : chiffreAffairesAgence.total
                 )}
               </div>
@@ -1077,6 +1118,9 @@ export default function Dashboard({
                 ) : estConseilsFinances ? (
                   <>
                     {chiffreAffairesAgence.comptees} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et signé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)})
+                    {commissionRealiseeCourtiers > 0 && (
+                      <>{' + '}commission des courtiers ({formatCurrency(commissionRealiseeCourtiers)})</>
+                    )}
                     {chiffreAffairesAgence.comBanqueTotal > 0 && (
                       <>{' + '}commission Banque ({formatCurrency(chiffreAffairesAgence.comBanqueTotal)})</>
                     )}
@@ -1228,7 +1272,7 @@ export default function Dashboard({
             haut, la même que le cercle et la fenêtre de détail). Pour les
             super admins de Conseils Finances, la tuile ImmoSphera (tout ce
             qui est dans le pipeline) ne s'affiche donc pas. */}
-        {estDirectionCF && estVueDirectionCF && (
+        {estDirectionCF && estVueDirectionCF && !vueReunionSansAgence && (
           <div
             role="button"
             tabIndex={0}
@@ -1288,7 +1332,7 @@ export default function Dashboard({
             le camembert oppose le réalisé de l'année à ce qui reste — la
             soustraction demandée. Objectif atteint : cercle tout doré et
             dépassement affiché. */}
-        {voitChiffresAgence && !estNovavisio && (
+        {voitChiffresAgence && !estNovavisio && !vueReunionSansAgence && (
           <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 flex items-start justify-between gap-4 group">
             <div className="space-y-1 min-w-0 flex-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Objectif de l'année {currentYear}</span>
@@ -1698,7 +1742,9 @@ export default function Dashboard({
             facturer ; quand c'est archivé et confirmé sur la somme, cela ira
             dans le chiffre d'affaires de l'agence ». Le cercle montre donc
             l'argent encore dans Transaction V2 (non archivé), réparti par
-            colonne ; la tuile dorée, elle, montre le réalisé. */}
+            colonne ; la tuile dorée, elle, montre le réalisé. Masqué en vue
+            réunion (6 septembre) : c'est un chiffre agence. */}
+        {!vueReunionSansAgence && (
         <div className="dash-card p-6 rounded-2xl border border-[#144447]/60 hover:border-[#1e5d61] shadow-xl hover:shadow-teal-500/5 transition-all duration-300 flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-sm text-white">CA à venir</h3>
@@ -1767,6 +1813,7 @@ export default function Dashboard({
             ))}
           </div>
         </div>
+        )}
       </div>
 
       {/* Demandé le 2 septembre pour ImmoSphera : « tableau de bord, enlève
