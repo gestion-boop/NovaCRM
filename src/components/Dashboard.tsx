@@ -562,13 +562,15 @@ export default function Dashboard({
         const nom = collaborateurs.find((u) => u.id === id)?.name || 'Collaborateur sans compte';
         const archive = chiffreAffairesAgence.parConseiller.get(id) || 0;
         const aVenir = chiffreAffairesAgence.parConseillerAVenir.get(id) || 0;
-        // Demandé le 6 septembre : « Commission des courtiers » = honoraires
-        // archivés du courtier + sa commission personnelle, additionnés.
-        const commissionPersonnelle = chiffreAffairesAgence.commissionParConseiller.get(id) || 0;
-        const commission = archive + commissionPersonnelle;
+        const commission = chiffreAffairesAgence.commissionParConseiller.get(id) || 0;
         const comBanque = chiffreAffairesAgence.comBanqueParConseiller.get(id) || 0;
+        // Demandé le 6 septembre : la case CA de chaque courtier (Sylvain
+        // compris) additionne honoraires + CA à venir + sa commission
+        // personnelle + sa commission Banque — même principe que le CA de
+        // l'agence, qui additionne honoraires + commission Banque.
         return {
-          id, nom, prenom: nom.split(' ')[0], archive, aVenir, total: archive + aVenir,
+          id, nom, prenom: nom.split(' ')[0], archive, aVenir,
+          total: archive + aVenir + commission + comBanque,
           commission, comBanque,
         };
       })
@@ -1435,7 +1437,7 @@ export default function Dashboard({
                     <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                       {c.total === 0
                         ? 'Aucun dossier à partir de Montage dossier'
-                        : `${formatCurrency(c.aVenir)} en cours + ${formatCurrency(c.archive)} archivé, à partir de Montage dossier`}
+                        : `${formatCurrency(c.aVenir)} en cours + ${formatCurrency(c.archive)} archivé + ${formatCurrency(c.commission)} commission + ${formatCurrency(c.comBanque)} commission Banque`}
                     </span>
                     {/* Demandé le 6 septembre : la commission du courtier
                         (advisor_commission_ttc, tous ses dossiers archivés)
