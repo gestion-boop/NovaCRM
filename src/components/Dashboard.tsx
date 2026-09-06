@@ -2038,6 +2038,13 @@ export default function Dashboard({
           realise ? (l.archive || estConseilsFinances) : !l.archive
         );
         const totalVisible = lignesVisibles.reduce((somme, l) => somme + l.montant, 0);
+        // Demandé le 6 septembre : « quand on clique sur le CA de l'agence,
+        // je voudrais voir les chiffres détaillés avec les commissions
+        // Banque perçues par l'agence — chiffre d'affaires courtage et
+        // chiffre d'affaires agence commission Banque ». comBanqueAgence
+        // (pas comBanque, qui est déjà la part du courtier) est ce que
+        // l'agence perçoit elle-même de la banque, par dossier.
+        const totalBanqueVisible = lignesVisibles.reduce((somme, l) => somme + l.comBanqueAgence, 0);
         return (
         <div
           className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
@@ -2054,7 +2061,10 @@ export default function Dashboard({
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {nomPipelineVise} · {lignesVisibles.length} dossier{lignesVisibles.length > 1 ? 's' : ''} ·{' '}
-                  {formatCurrency(totalVisible)}
+                  {formatCurrency(totalVisible)} courtage
+                  {estConseilsFinances && totalBanqueVisible > 0 && (
+                    <> + {formatCurrencyPrecis(totalBanqueVisible)} commission Banque</>
+                  )}
                   {realise ? ' comptabilisés' : ' en attente de facturation'}
                 </p>
               </div>
@@ -2069,7 +2079,8 @@ export default function Dashboard({
             <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
               <span className="flex-1">Client</span>
               <span className="w-28 hidden sm:block">Mandat</span>
-              <span className="w-32 text-right">Montant</span>
+              <span className="w-32 text-right">Courtage</span>
+              {estConseilsFinances && <span className="w-28 text-right hidden sm:block">Comm. Banque</span>}
             </div>
 
             <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
@@ -2120,6 +2131,11 @@ export default function Dashboard({
                           : 'border-[#144447]/60 text-white'
                       }`}
                     />
+                    {estConseilsFinances && (
+                      <span className="w-28 text-right text-sm text-slate-300 tabular-nums hidden sm:block">
+                        {formatCurrencyPrecis(ligne.comBanqueAgence)}
+                      </span>
+                    )}
                   </div>
                 ))
               )}
