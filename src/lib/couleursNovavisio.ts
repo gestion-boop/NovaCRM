@@ -20,7 +20,12 @@ const sansAccentsMin = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f
 export const couleurEtapeNovavisio = (nomEtape: string | null | undefined): string | null => {
   const nom = sansAccentsMin(nomEtape || '');
   if (nom.includes('attente')) return COULEURS_NOVAVISIO.orange;
-  if (nom.includes('sign')) return COULEURS_NOVAVISIO.vert;
+  // « facture » : le dossier est déjà signé, il est même allé plus loin
+  // (facturé) — sans ce mot-clé, ces fiches sortaient du décompte « Signé »
+  // affiché tout en haut de la carte, alors qu'elles ont bien une adresse
+  // localisée (constaté le 6 septembre : 59 adresses sur la carte contre 52
+  // seulement dans les 4 pastilles de filtre, l'écart venant de là).
+  if (nom.includes('sign') || nom.includes('factur')) return COULEURS_NOVAVISIO.vert;
   if (nom.includes('discussion') || nom.includes('negoci') || nom.includes('echange')) return COULEURS_NOVAVISIO.jaune;
   if (nom.includes('contact') || nom.includes('nouveau')) return COULEURS_NOVAVISIO.bleu;
   return null;
@@ -31,7 +36,7 @@ export type CategorieNovavisio = 'signe' | 'attente' | 'discussion' | 'contact';
 export const categorieEtapeNovavisio = (nomEtape: string | null | undefined): CategorieNovavisio | null => {
   const nom = sansAccentsMin(nomEtape || '');
   if (nom.includes('attente')) return 'attente';
-  if (nom.includes('sign')) return 'signe';
+  if (nom.includes('sign') || nom.includes('factur')) return 'signe';
   if (nom.includes('discussion') || nom.includes('negoci') || nom.includes('echange')) return 'discussion';
   if (nom.includes('contact') || nom.includes('nouveau')) return 'contact';
   return null;
