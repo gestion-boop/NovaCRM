@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2, Palette } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTreasuryLines } from '@/hooks/useTreasuryLines';
@@ -195,6 +195,62 @@ export default function ComptabiliteView() {
     ),
     [lines, moisIsoActif]
   );
+
+  // Matérialisation automatique des lignes récurrentes/ponctuelles dans le
+  // grand livre daté (6 septembre : « il faut que tu comptabilises les
+  // récurrences dans le tableau prévisionnel aussi [...] qu'on puisse les
+  // checker »). Pour chaque ligne active du mois actif, si aucune occurrence
+  // datée (treasury_actuals.source_line_id) n'existe déjà pour ce mois, on en
+  // crée une en attente de validation (previsionnel: true), casée au 1er du
+  // mois — l'utilisateur la valide (✓) une fois le prélèvement/virement
+  // effectivement passé sur le compte, comme n'importe quelle autre ligne du
+  // panneau « en attente ». On ne fait ça QUE pour le mois/année actuellement
+  // ouvert (pas d'un coup pour tous les mois futurs), pour rester léger.
+  //
+  // Garde anti-doublon à deux niveaux :
+  //  1. On vérifie d'abord dans `actuals` (déjà chargé, réactif) si une ligne
+  //     avec ce `source_line_id` existe déjà pour ce mois/année — c'est le
+  //     cas normal une fois la création précédente retombée par invalidation
+  //     react-query.
+  //  2. Un ref `Set` mémorise en plus, pour la session en cours, les clés
+  //     `${ligne.id}-${année}-${mois}` déjà demandées à la création — ça
+  //     couvre le cas d'un aller-retour réseau lent entre l'insertion et le
+  //     rechargement (ou un double rendu en StrictMode) qui pourrait sinon
+  //     déclencher une deuxième insertion avant que `actuals` n'ait eu le
+  //     temps de refléter la première.
+  // Limite connue et acceptée (pas à résoudre ici) : si l'utilisateur avait
+  // déjà saisi à la main, avant cette fonctionnalité, une ligne pour le même
+  // loyer/abonnement réel, elle peut apparaître en double avec l'occurrence
+  // auto-matérialisée — la détection ne se fait que par `source_line_id`, pas
+  // par rapprochement de libellé.
+  const clesMaterialiseesRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (actualsChargement) return; // évite d'agir sur un `actuals` encore incomplet
+    lignesDuMoisActif.forEach((ligne) => {
+      const cle = `${ligne.id}-${anneeActive}-${moisActuelOnglet}`;
+      if (clesMaterialiseesRef.current.has(cle)) return;
+      const dejaMaterialisee = actuals.some(
+        (a) => a.sourceLineId === ligne.id && a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive)
+      );
+      if (dejaMaterialisee) {
+        clesMaterialiseesRef.current.add(cle);
+        return;
+      }
+      clesMaterialiseesRef.current.add(cle);
+      creerActual.mutate({
+        date: moisIsoActif,
+        label: ligne.label,
+        description: ligne.kind === 'recurrent' ? `Récurrent — ${ligne.category}` : `Ponctuel — ${ligne.category}`,
+        credit: ligne.amount >= 0 ? ligne.amount : 0,
+        debit: ligne.amount < 0 ? Math.abs(ligne.amount) : 0,
+        previsionnel: true,
+        sourceLineId: ligne.id,
+        silencieux: true,
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lignesDuMoisActif, actuals, actualsChargement, anneeActive, moisActuelOnglet, moisIsoActif]);
 
   const overrideMoisActif = overridesParMois.get(`${anneeActive}-${moisActuelOnglet}`);
 
@@ -832,6 +888,12 @@ export default function ComptabiliteView() {
         <h3 className="text-xs font-bold text-white uppercase tracking-wide">
           Lignes récurrentes / ponctuelles — {NOMS_MOIS_COURT[moisActuelOnglet]} {anneeActive}
         </h3>
+        <p className="text-[10px] text-slate-500 italic">
+          Chaque ligne récurrente ou ponctuelle de ce mois est automatiquement ajoutée en attente
+          de validation dans le grand livre ci-dessus — cochez-la (✓ Valider) une fois réellement
+          passée sur le compte. Cette liste reste l'endroit pour modifier la règle elle-même
+          (montant, catégorie, date de fin).
+        </p>
         {lignesDuMoisActif.length === 0 ? (
           <p className="text-xs text-slate-500 italic py-2">
             Aucune ligne récurrente ou ponctuelle sur ce mois.

@@ -24,6 +24,11 @@ export interface TreasuryActual {
   // contente de proposer le résultat calculé au moment de la saisie.
   comment?: string | null;
   previsionnel: boolean;
+  // Lien vers la ligne récurrente/ponctuelle (treasury_lines) qui a généré
+  // automatiquement cette occurrence datée, si elle vient de là — sert
+  // uniquement à éviter de recréer la même occurrence deux fois, jamais
+  // modifié depuis l'UI.
+  sourceLineId?: string | null;
 }
 
 function ligneVersActual(row: Record<string, unknown>): TreasuryActual {
@@ -42,6 +47,7 @@ function ligneVersActual(row: Record<string, unknown>): TreasuryActual {
     notes: (row.notes as string | null) ?? null,
     comment: (row.comment as string | null) ?? null,
     previsionnel: Boolean(row.previsionnel),
+    sourceLineId: (row.source_line_id as string | null) ?? null,
   };
 }
 
@@ -87,6 +93,11 @@ export function useTreasuryActuals(agencyId: string) {
       notes?: string | null;
       comment?: string | null;
       previsionnel?: boolean;
+      sourceLineId?: string | null;
+      // Matérialisation automatique d'une ligne récurrente/ponctuelle
+      // (voir ComptabiliteView) : pas de toast, pour ne pas spammer
+      // l'utilisateur à chaque ouverture d'un nouvel onglet mois.
+      silencieux?: boolean;
     }) => {
       const { error: sbError } = await supabase.from('treasury_actuals' as any).insert({
         agency_id: agencyId,
@@ -100,10 +111,12 @@ export function useTreasuryActuals(agencyId: string) {
         notes: ligne.notes ?? null,
         comment: ligne.comment ?? null,
         previsionnel: ligne.previsionnel ?? false,
+        source_line_id: ligne.sourceLineId ?? null,
       } as any);
       if (sbError) throw new Error(sbError.message);
+      return { silencieux: ligne.silencieux ?? false };
     },
-    onSuccess: () => { invalidate(); toast.success('Ligne ajoutée au grand livre'); },
+    onSuccess: (res) => { invalidate(); if (!res?.silencieux) toast.success('Ligne ajoutée au grand livre'); },
     onError: (err: Error) => toast.error(err.message),
   });
 
