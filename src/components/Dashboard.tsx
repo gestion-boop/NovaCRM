@@ -496,6 +496,14 @@ export default function Dashboard({
   // plutôt que par un identifiant écrit en dur, qui deviendrait faux au
   // premier changement de compte.
   const collaborateurs = useAssignableUsers(activeAgency.id);
+  // Mélanie fait partie de la direction (comme Sylvain, voir estDirectionCF
+  // plus haut) mais n'est pas courtière : elle n'a pas à apparaître dans la
+  // liste des objectifs par collaborateur, réservée à ceux qui portent des
+  // dossiers.
+  const collaborateursCourtiers = useMemo(
+    () => collaborateurs.filter((u) => !/melanie/i.test(sansAccents(u.name || ''))),
+    [collaborateurs]
+  );
   const natacha = useMemo(
     () => collaborateurs.find((u) => /nata[sc]ha/i.test(u.name || '')),
     [collaborateurs]
@@ -1407,11 +1415,11 @@ export default function Dashboard({
           {erreurObjectifsCollab && (
             <p className="text-xs text-amber-400/90">Objectifs indisponibles : {(erreurObjectifsCollab as Error).message}</p>
           )}
-          {collaborateurs.length === 0 ? (
+          {collaborateursCourtiers.length === 0 ? (
             <p className="text-xs text-slate-500">Aucun collaborateur rattaché à cette agence.</p>
           ) : (
             <div className="divide-y divide-[#144447]/40">
-              {collaborateurs.map((collab) => {
+              {collaborateursCourtiers.map((collab) => {
                 const cible = objectifDe(collab.id);
                 const realise = chiffreAffairesAgence.parConseillerAnnee.get(collab.id) || 0;
                 const enEdition = collabEnEdition === collab.id;
