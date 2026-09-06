@@ -773,6 +773,11 @@ export default function Dashboard({
   // quand je clique sur un client, j'accède à sa fiche ». Même principe que
   // detailCa, mais pour un seul courtier (son id).
   const [detailCourtierId, setDetailCourtierId] = useState<string | null>(null);
+  // Demandé le 6 septembre : « tu feras la même chose dans le chiffre
+  // d'affaires à venir, histoire qu'on ait les lignes qui se décomposent,
+  // mais tu ne mettras pas les chèques [cases à cocher], ce n'est pas la
+  // peine ». Même principe que detailCourtierId, sur les dossiers vivants.
+  const [detailCourtierAvenirId, setDetailCourtierAvenirId] = useState<string | null>(null);
   // Demandé le 6 septembre : « une vue courtier hors chiffres CA agence, pour
   // pas que quand je montre ce tableau en réunion, les courtiers voient les
   // chiffres de l'agence ». Un simple bouton, réservé à la direction CF, qui
@@ -1585,9 +1590,14 @@ export default function Dashboard({
                         informatif, à part du total ci-dessus qui ne compte
                         que de l'archivé et signé. */}
                     {c.aVenir > 0 && (
-                      <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setDetailCourtierAvenirId(c.id); }}
+                        title={`Voir le détail des dossiers en cours de ${c.prenom}, client par client`}
+                        className="text-[11px] text-slate-500 hover:text-[#F9C977] font-semibold tracking-wide block underline decoration-dotted underline-offset-2"
+                      >
                         + {formatCurrency(c.aVenir)} en cours (non archivé, pas dans le total)
-                      </span>
+                      </button>
                     )}
                     {/* Demandé le 6 septembre : la commission du courtier
                         (advisor_commission_ttc, tous ses dossiers archivés)
@@ -2107,7 +2117,7 @@ export default function Dashboard({
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
+              className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
             >
               <div className="flex items-start justify-between gap-4 p-5 border-b border-[#144447]/60">
                 <div>
@@ -2140,8 +2150,8 @@ export default function Dashboard({
               <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
                 <span className="flex-1">Client</span>
                 <span className="w-24 text-right">Honoraires</span>
-                <span className="w-28 text-right hidden sm:block">Commission</span>
-                <span className="w-32 text-right hidden sm:block">Com. Banque</span>
+                <span className="w-32 text-right">Commission</span>
+                <span className="w-36 text-right">Com. Banque</span>
               </div>
 
               <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
@@ -2179,14 +2189,14 @@ export default function Dashboard({
                           ) : (
                             <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
                           )}
-                          <div className="text-[11px] text-slate-500 truncate sm:hidden">
-                            {formatCurrency(ligne.commission)} commission · {formatCurrency(ligne.comBanque)} banque
-                          </div>
                         </div>
                         <span className="w-24 text-right text-sm text-white tabular-nums">
                           {formatCurrency(ligne.montant)}
                         </span>
-                        <label className="w-28 hidden sm:flex items-center justify-end gap-1.5 cursor-pointer">
+                        <label
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-32 flex items-center justify-end gap-2 cursor-pointer select-none"
+                        >
                           <span className={`text-sm tabular-nums ${ligne.commissionValidee ? 'text-emerald-300' : 'text-amber-400'}`}>
                             {formatCurrency(ligne.commission)}
                           </span>
@@ -2195,11 +2205,14 @@ export default function Dashboard({
                             checked={ligne.commissionValidee}
                             disabled={validationEnCours === `${ligne.id}:commission_validee`}
                             onChange={(e) => void basculerValidation(ligne, 'commission_validee', e.target.checked)}
-                            className="w-4 h-4 rounded accent-emerald-500 cursor-pointer disabled:opacity-50"
+                            className="w-5 h-5 shrink-0 rounded accent-emerald-500 cursor-pointer disabled:opacity-50"
                             title="Commission validée"
                           />
                         </label>
-                        <label className="w-32 hidden sm:flex items-center justify-end gap-1.5 cursor-pointer">
+                        <label
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-36 flex items-center justify-end gap-2 cursor-pointer select-none"
+                        >
                           <span className={`text-sm tabular-nums ${ligne.comBanqueValidee ? 'text-emerald-300' : 'text-amber-400'}`}>
                             {formatCurrency(ligne.comBanque)}
                           </span>
@@ -2208,7 +2221,7 @@ export default function Dashboard({
                             checked={ligne.comBanqueValidee}
                             disabled={validationEnCours === `${ligne.id}:com_banque_validee`}
                             onChange={(e) => void basculerValidation(ligne, 'com_banque_validee', e.target.checked)}
-                            className="w-4 h-4 rounded accent-emerald-500 cursor-pointer disabled:opacity-50"
+                            className="w-5 h-5 shrink-0 rounded accent-emerald-500 cursor-pointer disabled:opacity-50"
                             title="Commission Banque validée"
                           />
                         </label>
@@ -2222,6 +2235,96 @@ export default function Dashboard({
                 Cliquez sur un client pour ouvrir sa fiche directement. Cochez commission et
                 commission Banque une fois reçues : la ligne passe au vert quand les deux le sont,
                 orange tant que l'une manque.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Demandé le 6 septembre : « tu feras la même chose dans le chiffre
+          d'affaires à venir, histoire qu'on ait les lignes qui se
+          décomposent, mais tu ne mettras pas les chèques, ce n'est pas la
+          peine ». Même tableau que le détail réalisé d'un courtier, sur ses
+          dossiers encore vivants (pas archivés), sans cases à cocher —
+          rien à valider tant que ce n'est pas facturé. */}
+      {detailCourtierAvenirId && (() => {
+        const courtier = caParCourtier.find((c) => c.id === detailCourtierAvenirId);
+        const lignesCourtier = chiffreAffairesAgence.lignes.filter(
+          (l) => l.advisorId === detailCourtierAvenirId && !l.archive
+        );
+        return (
+          <div
+            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setDetailCourtierAvenirId(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4 p-5 border-b border-[#144447]/60">
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    CA {courtier?.prenom || ''} — en cours, détail par client
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {lignesCourtier.length} dossier{lignesCourtier.length > 1 ? 's' : ''} en cours · {formatCurrency(courtier?.aVenir || 0)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDetailCourtierAvenirId(null)}
+                  className="text-slate-500 hover:text-white text-xl leading-none px-1"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
+                <span className="flex-1">Client</span>
+                <span className="w-24 text-right">Honoraires</span>
+                <span className="w-24 text-right">Commission</span>
+                <span className="w-28 text-right">Com. Banque</span>
+              </div>
+
+              <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
+                {lignesCourtier.length === 0 ? (
+                  <p className="p-8 text-center text-sm text-slate-500">
+                    Aucun dossier en cours pour ce courtier pour le moment.
+                  </p>
+                ) : (
+                  lignesCourtier.map((ligne) => (
+                    <div key={ligne.id} className="flex items-center gap-3 px-5 py-2.5">
+                      <div className="flex-1 min-w-0">
+                        {onOpenContact ? (
+                          <button
+                            type="button"
+                            onClick={() => { setDetailCourtierAvenirId(null); onOpenContact(ligne.contactId); }}
+                            title="Ouvrir la fiche du client"
+                            className="block max-w-full text-left text-sm text-white font-semibold truncate hover:text-[#F9C977] hover:underline"
+                          >
+                            {ligne.nom}
+                          </button>
+                        ) : (
+                          <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
+                        )}
+                        <div className="text-[11px] text-slate-500 truncate">{ligne.etape || 'Sans étape'}</div>
+                      </div>
+                      <span className="w-24 text-right text-sm text-white tabular-nums">
+                        {formatCurrency(ligne.montant)}
+                      </span>
+                      <span className="w-24 text-right text-sm text-slate-300 tabular-nums">
+                        {formatCurrency(ligne.commission)}
+                      </span>
+                      <span className="w-28 text-right text-sm text-slate-300 tabular-nums">
+                        {formatCurrency(ligne.comBanque)}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <p className="px-5 py-3 text-[11px] text-slate-500 border-t border-[#144447]/60 leading-relaxed">
+                Cliquez sur un client pour ouvrir sa fiche directement. Ces dossiers ne sont pas
+                encore archivés et signés : rien à valider ici pour le moment.
               </p>
             </div>
           </div>
