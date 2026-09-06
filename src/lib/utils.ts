@@ -9,6 +9,14 @@ export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount);
 }
 
+// Demandé le 6 septembre : « concernant les chiffres des commissions
+// Banque, je veux que tu respectes la virgule avec les deux décimales
+// après, n'arrondis pas » — contrairement à formatCurrency (arrondi à
+// l'euro), toujours deux décimales exactes pour la commission Banque.
+export function formatCurrencyPrecis(amount: number): string {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+}
+
 export function formatDate(dateStr: string): string {
   if (!dateStr) return '';
   try {
