@@ -17,6 +17,9 @@ export interface TreasuryActual {
   monthSheet: string;
   creditConfirme: boolean;
   debitConfirme: boolean;
+  color?: string | null;
+  notes?: string | null;
+  previsionnel: boolean;
 }
 
 function ligneVersActual(row: Record<string, unknown>): TreasuryActual {
@@ -31,6 +34,9 @@ function ligneVersActual(row: Record<string, unknown>): TreasuryActual {
     monthSheet: (row.month_sheet as string) || '',
     creditConfirme: Boolean(row.credit_confirme),
     debitConfirme: Boolean(row.debit_confirme),
+    color: (row.color as string | null) ?? null,
+    notes: (row.notes as string | null) ?? null,
+    previsionnel: Boolean(row.previsionnel),
   };
 }
 
@@ -72,6 +78,9 @@ export function useTreasuryActuals(agencyId: string) {
       credit: number;
       debit: number;
       monthSheet?: string;
+      color?: string | null;
+      notes?: string | null;
+      previsionnel?: boolean;
     }) => {
       const { error: sbError } = await supabase.from('treasury_actuals' as any).insert({
         agency_id: agencyId,
@@ -81,6 +90,9 @@ export function useTreasuryActuals(agencyId: string) {
         credit: ligne.credit || 0,
         debit: ligne.debit || 0,
         month_sheet: ligne.monthSheet || moisDepuisDate(ligne.date),
+        color: ligne.color ?? null,
+        notes: ligne.notes ?? null,
+        previsionnel: ligne.previsionnel ?? false,
       } as any);
       if (sbError) throw new Error(sbError.message);
     },
@@ -101,6 +113,9 @@ export function useTreasuryActuals(agencyId: string) {
       debit?: number;
       creditConfirme?: boolean;
       debitConfirme?: boolean;
+      color?: string | null;
+      notes?: string | null;
+      previsionnel?: boolean;
     }) => {
       const update: Record<string, unknown> = {};
       if (patch.date !== undefined) {
@@ -113,6 +128,9 @@ export function useTreasuryActuals(agencyId: string) {
       if (patch.debit !== undefined) update.debit = patch.debit;
       if (patch.creditConfirme !== undefined) update.credit_confirme = patch.creditConfirme;
       if (patch.debitConfirme !== undefined) update.debit_confirme = patch.debitConfirme;
+      if (patch.color !== undefined) update.color = patch.color;
+      if (patch.notes !== undefined) update.notes = patch.notes;
+      if (patch.previsionnel !== undefined) update.previsionnel = patch.previsionnel;
       const { error: sbError } = await supabase.from('treasury_actuals' as any).update(update as any).eq('id', id);
       if (sbError) throw new Error(sbError.message);
     },
