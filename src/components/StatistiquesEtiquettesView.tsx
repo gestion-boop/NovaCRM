@@ -349,10 +349,14 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
   );
   // Verrouillage des montants (6 septembre) : un agent simple ne voit que sa
   // propre ligne ; la direction (super admin/admin) garde tout.
-  const orderedRows = useMemo(
-    () => (estDirection ? orderedRowsToutesLignes : orderedRowsToutesLignes.filter((r) => r.agentId === monAgentId)),
-    [orderedRowsToutesLignes, estDirection, monAgentId]
-  );
+  // Reprécisé le 6 septembre : « les classements soient visibles par tous
+  // [...] sauf les chiffres doivent être cloisonnés pour chacun ». On
+  // n'exclut donc plus personne de la liste (tout le monde voit qui est
+  // classé où, y compris le podium) — seuls les MONTANTS en euros restent
+  // réservés à la direction et à son propre chiffre (voir peuxVoirMontant
+  // plus bas, utilisé partout où un € est affiché).
+  const orderedRows = orderedRowsToutesLignes;
+  const peuxVoirMontant = (agentId: string) => estDirection || agentId === monAgentId;
 
 
   // Trois onglets séparés, un par étape, plus la vue d'ensemble existante
@@ -447,13 +451,13 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
 
   const detailLeads = useMemo(() => {
     if (!detailFor) return [];
+    // La liste des dossiers reste visible pour tous (qui est dans cette
+    // case) ; seul le montant affiché à côté de chaque dossier est masqué
+    // pour un dossier qui n'est pas le sien (voir peuxVoirMontant).
     return details
       .filter((d) => d.stage === detailFor.stage && (!detailFor.agentId || d.agentId === detailFor.agentId))
-      // Verrouillage : même sur le clic « Total agence » (agentId = null), un
-      // agent simple ne voit que ses propres dossiers dans la liste de détail.
-      .filter((d) => estDirection || d.agentId === monAgentId)
       .sort((a, b) => b.honoraires - a.honoraires || a.name.localeCompare(b.name, 'fr'));
-  }, [details, detailFor, estDirection, monAgentId]);
+  }, [details, detailFor]);
 
   // Demandé : podium sur le classement — or, argent, bronze, médaille à côté
   // du nom. Au-delà du 3e, présentation neutre.
@@ -512,14 +516,11 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           ))}
         </div>
 
-        {/* Le classement par conseiller n'a de sens que s'il y a plusieurs
-            lignes à comparer : un agent verrouillé sur sa seule ligne (voir
-            estDirection plus haut) n'a rien à trier, le bouton semblerait
-            « ne pas marcher » puisque rien ne changerait jamais à l'écran.
-            Sur l'onglet Conciergerie, le bouton reste utile même pour un
-            agent simple : il trie aussi le classement par apporteur
-            d'affaires juste en dessous, qui lui n'est jamais verrouillé. */}
-        {tab !== 'apercu' && (estDirection || tab === 'conciergerie') && (
+        {/* Tout le monde voit le classement complet désormais (seuls les
+            montants € sont cloisonnés, pas les lignes) : le tri par CA ou
+            par nombre de ventes redevient utile pour tous, sur tous les
+            onglets. */}
+        {tab !== 'apercu' && (
           <div className="flex items-center gap-2 mb-4">
             <span className="text-[10px] uppercase tracking-widest text-[#C9B67B]">Classer par</span>
             {([
@@ -585,18 +586,18 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
                   >
                     {r.count}
                   </button>
-                  <span className="w-32 text-right text-sm font-bold text-[#D4AF37] tabular-nums">{formatEuros(r.ca)}</span>
+                  <span className="w-32 text-right text-sm font-bold text-[#D4AF37] tabular-nums">
+                    {peuxVoirMontant(r.agentId) ? formatEuros(r.ca) : '🔒 —'}
+                  </span>
                 </div>
                 );
               })}
               <div className="flex items-center rounded-xl border-2 border-[#D4AF37] bg-[#1b1712] px-4 py-3 mt-3">
                 <span className="w-7 shrink-0" />
-                <span className="flex-1 text-xs font-bold uppercase tracking-widest text-[#D4AF37]">
-                  {estDirection ? 'Total agence' : 'Mes chiffres'}
-                </span>
+                <span className="flex-1 text-xs font-bold uppercase tracking-widest text-[#D4AF37]">Total agence</span>
                 <button
                   type="button"
-                  onClick={() => setDetailFor({ stage: tab as StageKey, agentId: estDirection ? null : monAgentId || null, title: estDirection ? 'Toute l\'agence' : 'Mes dossiers' })}
+                  onClick={() => setDetailFor({ stage: tab as StageKey, agentId: null, title: 'Toute l\'agence' })}
                   className="w-20 text-center text-sm font-bold text-[#F3EAD3] tabular-nums hover:text-[#D4AF37] underline decoration-dotted underline-offset-4"
                   title="Voir tous les clients de cette étape"
                 >
@@ -758,7 +759,9 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
                         {lead.ville ? ` · ${lead.ville}` : ''}
                       </span>
                     </span>
-                    <span className="text-xs font-bold text-[#D4AF37] tabular-nums shrink-0">{formatEuros(lead.honoraires)}</span>
+                    <span className="text-xs font-bold text-[#D4AF37] tabular-nums shrink-0">
+                      {peuxVoirMontant(lead.agentId) ? formatEuros(lead.honoraires) : '🔒'}
+                    </span>
                   </button>
                 ))
               )}
