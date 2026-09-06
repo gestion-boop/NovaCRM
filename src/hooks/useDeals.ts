@@ -35,6 +35,22 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
       item.advisor_commission_ttc === null || item.advisor_commission_ttc === undefined
         ? undefined
         : Number(item.advisor_commission_ttc),
+    comBanque:
+      item.com_banque === null || item.com_banque === undefined
+        ? undefined
+        : Number(item.com_banque),
+    honorairesCourtier:
+      item.honoraires_courtier === null || item.honoraires_courtier === undefined
+        ? undefined
+        : Number(item.honoraires_courtier),
+    comBanqueCourtier:
+      item.com_banque_courtier === null || item.com_banque_courtier === undefined
+        ? undefined
+        : Number(item.com_banque_courtier),
+    commissionValidee: Boolean(item.commission_validee),
+    comBanqueValidee: Boolean(item.com_banque_validee),
+    commissionAgenceValidee: Boolean(item.commission_agence_validee),
+    comBanqueAgenceValidee: Boolean(item.com_banque_agence_validee),
     mandateNumber: (item.mandate_number as string) || undefined,
     caDevisAVenir:
       item.pending_quote_amount === null || item.pending_quote_amount === undefined

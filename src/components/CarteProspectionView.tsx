@@ -127,14 +127,12 @@ function ficheSurvol(
   adresse: string | null
 ): string {
   return `
-    <div style="width:320px;border-radius:18px;overflow:hidden;background:#07191b;border:1px solid #1b4e52;box-shadow:0 16px 42px rgba(0,0,0,0.55);font-family:inherit">
+    <div style="width:300px;border-radius:18px;overflow:hidden;background:#07191b;border:1px solid #1b4e52;box-shadow:0 16px 42px rgba(0,0,0,0.55);font-family:inherit">
       <div style="height:6px;background:${couleur}"></div>
       <div style="padding:14px 16px 15px">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
-          <p style="margin:0;font-size:17px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.01em">${echapper(nom)}</p>
-          <span style="flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;padding:5px 10px;border-radius:999px;background:${couleur}22;color:${couleur};border:1px solid ${couleur}55;white-space:nowrap">${echapper(etat)}</span>
-        </div>
-        ${etape ? `<p style="margin:5px 0 0;font-size:12.5px;color:#7c9ba0;letter-spacing:0.02em">${echapper(etape)}</p>` : ''}
+        <p title="${echapper(nom)}" style="margin:0 0 8px;font-size:15.5px;font-weight:800;color:#ffffff;line-height:1.3;letter-spacing:-0.01em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${echapper(nom)}</p>
+        <span style="display:inline-block;font-size:11px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;padding:5px 10px;border-radius:999px;background:${couleur}22;color:${couleur};border:1px solid ${couleur}55;white-space:nowrap">${echapper(etat)}</span>
+        ${etape ? `<p style="margin:8px 0 0;font-size:12.5px;color:#7c9ba0;letter-spacing:0.02em">${echapper(etape)}</p>` : ''}
         ${telephone || email || adresse ? '<div style="height:1px;background:#153c3f;margin:13px 0 5px"></div>' : ''}
         ${ligneFiche(ICONE_TEL, telephone)}
         ${ligneFiche(ICONE_MAIL, email)}
@@ -351,6 +349,29 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
           className: 'nova-carte-fiche',
         }
       );
+      // Un pin proche du haut (ou d'un bord) de la carte faisait déborder la
+      // fiche hors du cadre visible, cachée derrière la barre du dessus —
+      // on la repousse alors à l'intérieur des limites de la carte pour
+      // qu'elle reste entièrement lisible et cliquable (elle donne accès à
+      // la fiche client).
+      marker.on('tooltipopen', (e: L.LeafletEvent) => {
+        const tooltipEl = (e as unknown as { tooltip?: L.Tooltip }).tooltip?.getElement?.();
+        const mapEl = map.getContainer();
+        if (!tooltipEl || !mapEl) return;
+        const cadre = mapEl.getBoundingClientRect();
+        const marge = 8;
+        requestAnimationFrame(() => {
+          const fiche = tooltipEl.getBoundingClientRect();
+          let dx = 0;
+          let dy = 0;
+          if (fiche.top < cadre.top + marge) dy = cadre.top + marge - fiche.top;
+          if (fiche.left < cadre.left + marge) dx = cadre.left + marge - fiche.left;
+          if (fiche.right > cadre.right - marge) dx = Math.min(dx, cadre.right - marge - fiche.right);
+          if (dx || dy) {
+            tooltipEl.style.transform += ` translate(${dx}px, ${dy}px)`;
+          }
+        });
+      });
       marker.on("click", () => onSelectContact?.(lead.id));
       marker.addTo(map);
       markersRef.current.push(marker);
@@ -389,6 +410,11 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
           padding: 0;
           border-radius: 14px;
           animation: carteprospection-fiche 0.14s ease-out;
+          /* Leaflet met white-space:nowrap par défaut sur ses infobulles :
+             un nom un peu long était alors coupé net par le overflow:hidden
+             de la fiche au lieu de passer à la ligne. */
+          white-space: normal;
+          max-width: none;
         }
         .leaflet-tooltip.nova-carte-fiche::before { display: none; }
         @keyframes carteprospection-fiche {

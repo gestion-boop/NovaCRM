@@ -135,6 +135,11 @@ export function supabaseLeadToContact(item: Record<string, unknown>): Contact {
       item.com_banque === null || item.com_banque === undefined
         ? undefined
         : Number(item.com_banque),
+    comBanqueCourtier:
+      item.com_banque_courtier === null || item.com_banque_courtier === undefined
+        ? undefined
+        : Number(item.com_banque_courtier),
+    referrerId: (item.referrer_id as string) || undefined,
     companyName: ((item.company as Record<string, unknown> | null)?.name as string) || undefined,
     companyAddress: ((item.company as Record<string, unknown> | null)?.address as string) || undefined,
     companySiret: ((item.company as Record<string, unknown> | null)?.siret as string) || undefined,
@@ -322,6 +327,10 @@ export const useContacts = () => {
         ...(newContact.montantCredit !== undefined ? { montant_credit: newContact.montantCredit } : {}),
         ...(newContact.banqueChoisie !== undefined ? { banque_choisie: newContact.banqueChoisie?.trim() || null } : {}),
         ...(newContact.comBanque !== undefined ? { com_banque: newContact.comBanque } : {}),
+        ...(newContact.comBanqueCourtier !== undefined ? { com_banque_courtier: newContact.comBanqueCourtier } : {}),
+        // Apporteur d'affaires (Conciergerie ImmoSphera, 6 septembre) :
+        // référent choisi dans la liste gérée `real_estate_referrers`.
+        referrer_id: newContact.referrerId || null,
       };
 
       const { data, error: sbError } = await supabase
@@ -495,6 +504,10 @@ export const useContacts = () => {
         patch.com_banque = updates.comBanque;
       }
 
+      if (updates.comBanqueCourtier !== undefined) {
+        patch.com_banque_courtier = updates.comBanqueCourtier;
+      }
+
       if (updates.secteur !== undefined) {
         patch.sector = updates.secteur;
       }
@@ -513,6 +526,10 @@ export const useContacts = () => {
 
       if (updates.coBorrower !== undefined) {
         patch.secondary_contact = updates.coBorrower;
+      }
+
+      if (updates.referrerId !== undefined) {
+        patch.referrer_id = updates.referrerId || null;
       }
 
       patch.updated_at = new Date().toISOString();

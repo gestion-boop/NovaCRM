@@ -2,10 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { AGENCIES } from '@/types';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatCurrencyPrecis } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { Users, Coins, Briefcase, CheckCircle2, ArrowRight, Building, Sparkles, Pencil, TrendingUp, TrendingDown, Target } from 'lucide-react';
+import { Users, Coins, Briefcase, CheckCircle2, ArrowRight, Building, Sparkles, Pencil, TrendingUp, TrendingDown, Target, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useContacts, matchesAgency } from '@/hooks/useContacts';
 import { useDeals } from '@/hooks/useDeals';
@@ -30,6 +30,26 @@ interface LigneCa {
   // Date d'archivage : c'est elle qui date réellement le chiffre d'affaires,
   // et donc le montant « facturé » du mois.
   archiveLe?: string;
+  // Demandé le 6 septembre : « quand je clique dans les cases de chaque
+  // courtier, un tableau avec commission et commission Banque par client ».
+  advisorId?: string;
+  commission: number;
+  comBanque: number;
+  // Demandé le 6 septembre : « commission de l'agence, ensuite commission
+  // du courtier, banque agence, commission banque courtier — des chèques
+  // sur les quatre lignes, pour être sûr de tout vérifier correctement ».
+  // `montant` sert déjà de « commission de l'agence » ; comBanqueAgence est
+  // son équivalent côté banque (comBanque reste la part du courtier).
+  comBanqueAgence: number;
+  // Cases à cocher du détail par courtier (6 septembre) : vert une fois
+  // pointées, orange tant que non — une paire par ligne (agence / courtier).
+  commissionValidee: boolean;
+  comBanqueValidee: boolean;
+  commissionAgenceValidee: boolean;
+  comBanqueAgenceValidee: boolean;
+  // Signature faite à l'archivage (leads.signed_at) — condition ultime pour
+  // qu'un dossier archivé compte dans le CA (voir le calcul plus haut).
+  signe: boolean;
 }
 
 const CHART_TOOLTIP_STYLE = {
@@ -213,8 +233,15 @@ export default function Dashboard({
   // autre société n'a pas à voir ces chiffres. Ailleurs, rien ne change :
   // le rôle super admin décide, comme avant.
   const identite = `${userProfile?.displayName || currentUser?.displayName || ''} ${userProfile?.email || currentUser?.email || ''}`;
-  const estDirectionCF = /grazia|gestion@immosphera\.fr/i.test(identite);
+  const estDirectionCF = /grazia|melanie|gestion@immosphera\.fr/i.test(identite);
   const voitChiffresAgence = estConseilsFinances ? estDirectionCF : isSuperAdmin;
+  // « Toutes les sociétés » (id 'all') n'a pas de nom qui matche
+  // /conseils?\s*finances?/i, donc les blocs réservés à la direction CF
+  // (Sylvain/Mélanie) disparaissaient dès qu'on quittait l'agence Conseils
+  // Finances seule pour la vue consolidée. Les chiffres sous-jacents restent
+  // corrects sur « all » (calculés par agence puis sommés) : c'est
+  // uniquement l'affichage de ces blocs qu'il faut garder visible ici.
+  const estVueDirectionCF = estConseilsFinances || activeAgency?.id === 'all';
   const parPipelinePrincipal = estNovavisio || estConseilsFinances;
   // Le pipeline suivi, nommé dans les libellés des tuiles.
   const nomPipelineVise = estConseilsFinances
@@ -248,7 +275,7 @@ export default function Dashboard({
     );
     if (pipelinesVises.size === 0) {
       return {
-        total: 0, comptees: 0, aVenir: 0, comptessAVenir: 0, sansMontant: 0,
+        total: 0, comBanqueTotal: 0, comptees: 0, aVenir: 0, comptessAVenir: 0, sansMontant: 0,
         pipelineTrouve: false, dansLePipeline: 0, horsEtape: 0,
         repartitionAVenir: [] as { name: string; value: number }[],
         horsPipelineMontant: 0, horsPipelineNb: 0,
@@ -260,6 +287,7 @@ export default function Dashboard({
         devis: 0, devisNb: 0, recurrence: 0, recurrenceNb: 0,
         parConseiller: new Map<string, number>(), commissionParConseiller: new Map<string, number>(),
         parConseillerAnnee: new Map<string, number>(), parConseillerAVenir: new Map<string, number>(),
+        comBanqueParConseiller: new Map<string, number>(),
       };
     }
 
@@ -295,17 +323,19 @@ export default function Dashboard({
     // L'étape, elle, sait toujours à quel pipeline elle appartient.
     const pipelineParEtape = new Map<string, string>();
     stagesWithPosition.forEach((s) => { pipelineParEtape.set(s.id, s.pipeline_id); });
-    // Conseils Finances (5 septembre) : « le CA à venir devrait être à
-    // partir de Montage dossier » (d'abord demandé à partir d'Accord banque /
-    // Rendez-vous, puis avancé à cette étape). Position de cette étape dans
+    // Conseils Finances : le CA à venir de l'agence compte à partir de
+    // l'étape Accord banque / Rendez-vous (règle d'origine du 5 septembre,
+    // un temps avancée à Montage dossier, puis redemandée le 6 septembre
+    // « il faut que cela soit comptabilisé du moment que le dossier passe à
+    // l'étape Accord banque / Rendez-vous »). Position de cette étape dans
     // chaque pipeline, et position de chaque étape — même lecture que la
-    // tuile Volume financier plus haut. Reconnue à son nom (« Montage
-    // dossier », « Montage bancaire »…), la première si plusieurs.
+    // tuile Volume financier plus haut. Reconnue à son nom (« Accord
+    // banque », « Rendez-vous »…), la première si plusieurs.
     const seuilDepart = new Map<string, number>();
     const positionEtape = new Map<string, number>();
     stagesWithPosition.forEach((s) => {
       positionEtape.set(`${s.pipeline_id}::${s.name}`, s.position);
-      if (/montage/i.test(s.name)) {
+      if (/accord\s*banque/i.test(s.name) || /rendez.?vous/i.test(s.name)) {
         const actuel = seuilDepart.get(s.pipeline_id);
         if (actuel === undefined || s.position < actuel) seuilDepart.set(s.pipeline_id, s.position);
       }
@@ -319,6 +349,10 @@ export default function Dashboard({
     //              ou dossier archivé avec un montant confirmé.
     // Les additionner donnerait un chiffre qui mélange le réalisé et le prévu.
     let total = 0;
+    // Commission Banque totale de l'agence (leads.com_banque) — demandé le
+    // 6 septembre pour s'ajouter au chiffre d'affaires de l'agence, comme
+    // pour chaque courtier.
+    let comBanqueTotal = 0;
     let aVenir = 0;
     let comptees = 0;
     let comptessAVenir = 0;
@@ -363,6 +397,11 @@ export default function Dashboard({
     // chiffre d'affaires de l'agence. Les deux ne se déduisent pas l'un de
     // l'autre — on les compte séparément.
     const commissionParConseiller = new Map<string, number>();
+    // Commission Banque (leads.com_banque, saisie sur la fiche du client) :
+    // demandée le 6 septembre pour s'ajouter, sur la case CA de chaque
+    // courtier, à sa commission — même règle que commissionParConseiller
+    // (comptée à l'archivage).
+    const comBanqueParConseiller = new Map<string, number>();
     // Réalisé de l'année en cours, conseiller par conseiller : c'est ce qui
     // remplit l'objectif de l'année de chaque collaborateur (Conseils
     // Finances, 5 septembre). Daté par l'archivage, comme le réalisé de
@@ -370,8 +409,9 @@ export default function Dashboard({
     const anneeCourante = new Date().getFullYear();
     const parConseillerAnnee = new Map<string, number>();
     // « CA à venir » conseiller par conseiller — sur Conseils Finances, les
-    // dossiers à partir de Montage dossier : « ceux qui appartiennent aux
-    // courtiers, Sylvain compris, une case en haut du tableau de bord ».
+    // dossiers à partir d'Accord banque / Rendez-vous : « ceux qui
+    // appartiennent aux courtiers, Sylvain compris, une case en haut du
+    // tableau de bord ».
     const parConseillerAVenir = new Map<string, number>();
     // Demandé le 2 septembre : « quand je clique dans la colonne chiffre
     // d'affaires d'agence, je voudrais un tableau avec le nom et prénom des
@@ -389,8 +429,31 @@ export default function Dashboard({
       const montant = estConseilsFinances
         ? Number(d.commissionAgenceHt) || 0
         : Number(d.amount) || 0;
+      // Demandé le 6 septembre : mêmes sources que commissionParConseiller /
+      // comBanqueParConseiller plus bas, mais gardées par dossier pour le
+      // tableau détaillé de chaque case CA par courtier.
+      const commissionLigne = estConseilsFinances
+        ? Number(d.honorairesCourtier) || 0
+        : Number(d.advisorCommissionTtc) || 0;
+      // Corrigé le 6 septembre : « il faut uniquement comptabiliser la
+      // commission qu'on leur donne, plus la commission Banque qu'on leur
+      // donne en fonction de leur pourcentage » — comBanque est ce que
+      // perçoit l'AGENCE (utilisé pour le CA agence, comBanqueAgenceLigne
+      // plus bas) ; comBanqueCourtier est la part du COURTIER (utilisée
+      // pour sa case), un montant différent, pas le même divisé après coup.
+      const comBanqueAgenceLigne = Number(d.comBanque) || 0;
+      const comBanqueLigne = estConseilsFinances
+        ? Number(d.comBanqueCourtier) || 0
+        : Number(d.comBanque) || 0;
       const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
-      if (!pipelineReel || !pipelinesVises.has(pipelineReel)) {
+      const dansPipelineViseFlag = Boolean(pipelineReel && pipelinesVises.has(pipelineReel));
+      // Demandé le 6 septembre : « du moment que c'est archivé, même si ce
+      // n'est pas dans le pipeline de Conseils Finances, comptabilise-le ».
+      // Un dossier ARCHIVÉ compte donc toujours sur Conseils Finances — le
+      // filtre pipeline/étape ne s'applique plus qu'aux dossiers encore
+      // vivants (CA à venir), où il garde tout son sens.
+      const archiveHorsRegles = estConseilsFinances && Boolean(d.archivedAt);
+      if (!archiveHorsRegles && !dansPipelineViseFlag) {
         if (d.archivedAt && montant > 0) { horsPipelineMontant += montant; horsPipelineNb += 1; }
         return;
       }
@@ -404,11 +467,10 @@ export default function Dashboard({
         const etape = sansAccents(d.stage || '');
         if (!etape.includes('factur') && !etape.includes('regler')) return;
       }
-      // Conseils Finances : un dossier ne compte qu'à partir de l'étape
-      // Montage dossier — vivant (CA à venir) comme archivé (réalisé). Les
-      // anciennes fiches archivées sans étape (l'écran affichait leur
-      // température, « chaud ») ne comptent donc nulle part.
-      if (estConseilsFinances) {
+      // Conseils Finances : un dossier vivant ne compte qu'à partir de
+      // l'étape Accord banque / Rendez-vous (le CA à venir). Un dossier
+      // archivé, lui, compte toujours (archiveHorsRegles ci-dessus).
+      if (estConseilsFinances && !archiveHorsRegles) {
         const seuil = seuilDepart.get(pipelineReel);
         const position = positionEtape.get(`${pipelineReel}::${d.stage}`);
         if (seuil === undefined || position === undefined || position < seuil) return;
@@ -424,6 +486,15 @@ export default function Dashboard({
           montant: 0,
           etape: d.stage || '',
           archive: Boolean(d.archivedAt),
+          advisorId: d.advisorId,
+          commission: commissionLigne,
+          comBanque: comBanqueLigne,
+          comBanqueAgence: comBanqueAgenceLigne,
+          signe: Boolean(d.signedAt),
+          commissionValidee: Boolean(d.commissionValidee),
+          comBanqueValidee: Boolean(d.comBanqueValidee),
+          commissionAgenceValidee: Boolean(d.commissionAgenceValidee),
+          comBanqueAgenceValidee: Boolean(d.comBanqueAgenceValidee),
         });
         return;
       }
@@ -441,25 +512,57 @@ export default function Dashboard({
         etape: d.stage || '',
         archive: Boolean(d.archivedAt),
         archiveLe: d.archivedAt || undefined,
+        advisorId: d.advisorId,
+        commission: commissionLigne,
+        comBanque: comBanqueLigne,
+        comBanqueAgence: comBanqueAgenceLigne,
+        signe: Boolean(d.signedAt),
+        commissionValidee: Boolean(d.commissionValidee),
+        comBanqueValidee: Boolean(d.comBanqueValidee),
+        commissionAgenceValidee: Boolean(d.commissionAgenceValidee),
+        comBanqueAgenceValidee: Boolean(d.comBanqueAgenceValidee),
       });
-      if (d.archivedAt) {
+      // Demandé le 6 septembre : « le chiffre comptabilisé doit être
+      // définitivement comptabilisé du moment que le dossier est archivé et
+      // que nous avons cliqué sur oui, dossier a été signé. Si le dossier
+      // n'est pas signé, c'est la condition ultime pour ne pas le
+      // comptabiliser » — dans le CA de l'agence comme dans celui du
+      // courtier. `signedAt` (leads.signed_at) n'est posé que sur « Oui,
+      // signature faite » à l'archivage (voir handleArchive côté fiche
+      // client) ; un dossier archivé sans signature ne compte donc nulle
+      // part, ni en réalisé ni en « à venir » — il est clos, pas en cours.
+      if (d.archivedAt && d.signedAt) {
         total += montant;
         comptees += 1;
+        comBanqueTotal += comBanqueAgenceLigne;
         if (d.advisorId) {
           parConseiller.set(d.advisorId, (parConseiller.get(d.advisorId) || 0) + montant);
           if (new Date(d.archivedAt).getFullYear() === anneeCourante) {
             parConseillerAnnee.set(d.advisorId, (parConseillerAnnee.get(d.advisorId) || 0) + montant);
           }
-          const commission = Number(d.advisorCommissionTtc) || 0;
+          // Conseils Finances : « Commission des courtiers » vient du champ
+          // Honoraires courtier de la fiche client (calculé automatiquement
+          // par taux, modifiable), pas de la commission saisie à
+          // l'archivage — celle-ci reste réservée à Novavisio (« Commission
+          // Natacha »).
+          const commission = estConseilsFinances
+            ? Number(d.honorairesCourtier) || 0
+            : Number(d.advisorCommissionTtc) || 0;
           if (commission > 0) {
             commissionParConseiller.set(
               d.advisorId,
               (commissionParConseiller.get(d.advisorId) || 0) + commission
             );
           }
+          if (comBanqueLigne > 0) {
+            comBanqueParConseiller.set(
+              d.advisorId,
+              (comBanqueParConseiller.get(d.advisorId) || 0) + comBanqueLigne
+            );
+          }
         }
       }
-      else {
+      else if (!d.archivedAt) {
         aVenir += montant;
         comptessAVenir += 1;
         const etape = d.stage || 'Sans étape';
@@ -473,10 +576,11 @@ export default function Dashboard({
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
     return {
-      total, comptees, aVenir, comptessAVenir, sansMontant,
+      total, comBanqueTotal, comptees, aVenir, comptessAVenir, sansMontant,
       pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [],
       repartitionAVenir, horsPipelineMontant, horsPipelineNb, devis, devisNb,
       recurrence, recurrenceNb, parConseiller, commissionParConseiller, parConseillerAnnee, parConseillerAVenir,
+      comBanqueParConseiller,
       // Archivés d'abord — c'est ce qui est déjà compté — puis par montant.
       lignes: lignes.sort(
         (a, b) => Number(b.archive) - Number(a.archive) || b.montant - a.montant || a.nom.localeCompare(b.nom, 'fr')
@@ -489,6 +593,14 @@ export default function Dashboard({
   // plutôt que par un identifiant écrit en dur, qui deviendrait faux au
   // premier changement de compte.
   const collaborateurs = useAssignableUsers(activeAgency.id);
+  // Mélanie fait partie de la direction (comme Sylvain, voir estDirectionCF
+  // plus haut) mais n'est pas courtière : elle n'a pas à apparaître dans la
+  // liste des objectifs par collaborateur, réservée à ceux qui portent des
+  // dossiers.
+  const collaborateursCourtiers = useMemo(
+    () => collaborateurs.filter((u) => !/melanie/i.test(sansAccents(u.name || ''))),
+    [collaborateurs]
+  );
   const natacha = useMemo(
     () => collaborateurs.find((u) => /nata[sc]ha/i.test(u.name || '')),
     [collaborateurs]
@@ -496,12 +608,24 @@ export default function Dashboard({
   const commissionNatacha = natacha
     ? chiffreAffairesAgence.commissionParConseiller.get(natacha.id) || 0
     : 0;
+  // Corrigé le 6 septembre : la case « CA du collaborateur » (chaque
+  // courtier sur son propre tableau de bord) n'additionne QUE ce qu'il
+  // perçoit lui-même — sa commission personnelle + sa commission Banque —
+  // jamais les honoraires de l'agence, qui ne lui reviennent pas.
+  // `perimetre` restreint déjà tout le calcul à ses propres dossiers (voir
+  // plus haut), donc ces deux Maps n'ont qu'une seule entrée ici — la sienne.
+  const maCommissionPersonnelle = currentUser?.uid
+    ? chiffreAffairesAgence.commissionParConseiller.get(currentUser.uid) || 0
+    : 0;
+  const maComBanquePersonnelle = currentUser?.uid
+    ? chiffreAffairesAgence.comBanqueParConseiller.get(currentUser.uid) || 0
+    : 0;
 
   // Demandé le 5 septembre (Conseils Finances), pour les super admins : « ceux
   // qui appartiennent aux courtiers, Sylvain Grazia compris : rajouter une
   // case en haut du tableau de bord, CA Sylvain, ou le nom du courtier ». Une
   // case par personne de l'agence : ses dossiers archivés et confirmés, plus
-  // ses dossiers à partir de Montage dossier — la même règle que le
+  // ses dossiers à partir d'Accord banque / Rendez-vous — la même règle que le
   // CA de l'agence. Une personne sans compte dans la liste mais qui porte des
   // dossiers apparaît quand même, plutôt que de perdre son chiffre.
   const caParCourtier = useMemo(() => {
@@ -513,11 +637,59 @@ export default function Dashboard({
         const nom = collaborateurs.find((u) => u.id === id)?.name || 'Collaborateur sans compte';
         const archive = chiffreAffairesAgence.parConseiller.get(id) || 0;
         const aVenir = chiffreAffairesAgence.parConseillerAVenir.get(id) || 0;
-        return { id, nom, prenom: nom.split(' ')[0], archive, aVenir, total: archive + aVenir };
+        const commission = chiffreAffairesAgence.commissionParConseiller.get(id) || 0;
+        const comBanque = chiffreAffairesAgence.comBanqueParConseiller.get(id) || 0;
+        // Corrigé le 6 septembre : « il ne faut pas additionner le chiffre
+        // d'affaires de l'agence, ça lui appartient — l'agence donne une
+        // rétrocession au courtier, il ne reçoit pas ce montant-là ».
+        // Le total du courtier n'est donc QUE ce qu'il perçoit lui-même :
+        // sa commission personnelle + sa commission Banque. Les honoraires
+        // (archive) restent affichés à titre d'information, à part, jamais
+        // additionnés — c'est l'argent de l'agence, pas le sien.
+        return {
+          id, nom, prenom: nom.split(' ')[0], archive, aVenir,
+          total: commission + comBanque,
+          commission, comBanque,
+        };
       })
       .sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'));
   }, [collaborateurs, chiffreAffairesAgence]);
 
+  // Demandé le 6 septembre : « dans le CA de l'agence, il faut que tu
+  // additionnes le chiffre d'affaires réalisé par les courtiers, et non pas
+  // l'encours » — le total de la case « Chiffre d'affaires de l'agence »
+  // doit correspondre exactement à la somme des cases CA par courtier
+  // (archivé + commission + commission Banque de chacun), pas à un calcul
+  // séparé sur l'ensemble des dossiers de l'agence qui pourrait diverger
+  // (ex. dossier archivé et signé mais sans courtier attribué).
+  const caRealiseCourtiers = useMemo(
+    () => caParCourtier.reduce((somme, c) => somme + c.total, 0),
+    [caParCourtier]
+  );
+  const commissionRealiseeCourtiers = useMemo(
+    () => caParCourtier.reduce((somme, c) => somme + c.commission, 0),
+    [caParCourtier]
+  );
+
+  // Demandé le 6 septembre : seulement 5 cases nommées (Sylvain, Eric,
+  // Coralia, Lucie, Karine), dans cet ordre, plutôt que toute la liste
+  // triée par montant. On compare sur tous les mots du nom (pas juste le
+  // premier) car « full_name » n'est pas toujours saisi « Prénom Nom » —
+  // « Nom Prénom » ne doit pas faire disparaître la case de quelqu'un.
+  const prenomsCourtiersVises = ['Sylvain', 'Eric', 'Coralia', 'Lucie', 'Karine'];
+  const caCourtiersVises = useMemo(() => {
+    return prenomsCourtiersVises
+      .map((prenom) => {
+        const trouve = caParCourtier.find((c) =>
+          sansAccents(c.nom).split(/\s+/).includes(sansAccents(prenom))
+        );
+        // Le prénom affiché est celui visé, pas c.prenom (premier mot de
+        // « full_name ») : si le nom est saisi « Nom Prénom », le premier
+        // mot serait le nom de famille, pas « Sylvain ».
+        return trouve ? { ...trouve, prenom } : undefined;
+      })
+      .filter((c): c is (typeof caParCourtier)[number] => Boolean(c));
+  }, [caParCourtier]);
 
   // On ne considère que les agences réellement affichées (l'agence active,
   // ou toutes celles présentes dans les dossiers si "Toutes les agences" est
@@ -615,6 +787,28 @@ export default function Dashboard({
   // sur le même tableau ». Une seule fenêtre, deux contenus : la tuile dorée
   // ouvre le réalisé, le cercle ouvre l'à-venir.
   const [detailCa, setDetailCa] = useState<'realise' | 'avenir' | null>(null);
+  // Demandé le 6 septembre : « quand je clique dans les cases de chaque
+  // courtier, un tableau avec commission, commission Banque par client, et
+  // quand je clique sur un client, j'accède à sa fiche ». Même principe que
+  // detailCa, mais pour un seul courtier (son id).
+  const [detailCourtierId, setDetailCourtierId] = useState<string | null>(null);
+  // Demandé le 6 septembre : « tu feras la même chose dans le chiffre
+  // d'affaires à venir, histoire qu'on ait les lignes qui se décomposent,
+  // mais tu ne mettras pas les chèques [cases à cocher], ce n'est pas la
+  // peine ». Même principe que detailCourtierId, sur les dossiers vivants.
+  const [detailCourtierAvenirId, setDetailCourtierAvenirId] = useState<string | null>(null);
+  // Demandé le 6 septembre : « une barre de recherche, et respecte l'ordre
+  // des derniers clients archivés tout en haut » — sur le détail réalisé
+  // d'un courtier.
+  const [rechercheCourtier, setRechercheCourtier] = useState('');
+  // Demandé le 6 septembre : « une vue courtier hors chiffres CA agence, pour
+  // pas que quand je montre ce tableau en réunion, les courtiers voient les
+  // chiffres de l'agence ». Un simple bouton, réservé à la direction CF, qui
+  // masque les cases agence (CA de l'agence, CA à venir agence, Objectif de
+  // l'année, cercle CA à venir) sans toucher aux cases CA par courtier —
+  // celles-ci restent visibles, c'est le but de la réunion. Repart à false à
+  // chaque rechargement : ce n'est pas une préférence à retenir.
+  const [vueReunionSansAgence, setVueReunionSansAgence] = useState(false);
   const [montantsSaisis, setMontantsSaisis] = useState<Record<string, string>>({});
   const [ligneEnCours, setLigneEnCours] = useState<string | null>(null);
 
@@ -640,6 +834,49 @@ export default function Dashboard({
     queryClient.invalidateQueries({ queryKey: ['deals'] });
     queryClient.invalidateQueries({ queryKey: ['contacts_all'] });
     toast.success(`Montant mis à jour : ${formatCurrency(montant)}`);
+  };
+
+  // Demandé le 6 septembre : dans le détail par courtier, une case à cocher
+  // « commission validée » et une « commission Banque validée » par client —
+  // vert une fois pointées, orange tant que non, et la ligne entière passe au
+  // vert seulement quand les deux sont cochées.
+  // Demandé le 6 septembre : « je veux que les checks soient plus rapides à
+  // enlever et à remettre » — la case change de couleur tout de suite (état
+  // optimiste local), sans attendre l'aller-retour réseau ni le rechargement
+  // complet des dossiers ; seul un échec réel la fait revenir en arrière.
+  const [validationOverrides, setValidationOverrides] = useState<Record<string, boolean>>({});
+  type ChampValidation =
+    | 'commission_validee' | 'com_banque_validee'
+    | 'commission_agence_validee' | 'com_banque_agence_validee';
+  const CHAMP_VERS_CLE: Record<ChampValidation, keyof Pick<
+    LigneCa, 'commissionValidee' | 'comBanqueValidee' | 'commissionAgenceValidee' | 'comBanqueAgenceValidee'
+  >> = {
+    commission_validee: 'commissionValidee',
+    com_banque_validee: 'comBanqueValidee',
+    commission_agence_validee: 'commissionAgenceValidee',
+    com_banque_agence_validee: 'comBanqueAgenceValidee',
+  };
+  const estLigneValidee = (ligne: LigneCa, champ: ChampValidation) => {
+    const cle = `${ligne.id}:${champ}`;
+    return cle in validationOverrides ? validationOverrides[cle] : ligne[CHAMP_VERS_CLE[champ]];
+  };
+  const basculerValidation = async (
+    ligne: LigneCa,
+    champ: ChampValidation,
+    valeur: boolean
+  ) => {
+    const cle = `${ligne.id}:${champ}`;
+    setValidationOverrides((v) => ({ ...v, [cle]: valeur }));
+    const { error } = await supabase
+      .from('leads')
+      .update({ [champ]: valeur } as any)
+      .eq('id', ligne.id);
+    if (error) {
+      toast.error(error.message);
+      setValidationOverrides((v) => ({ ...v, [cle]: !valeur }));
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['deals'] });
   };
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -907,6 +1144,21 @@ export default function Dashboard({
               )}
             </>
           )}
+          {/* Demandé le 6 septembre : « je préfère mettre un œil ouvert pour
+              tous, et qu'on s'en serve pour enlever les chiffres de l'agence,
+              de façon que les courtiers ne se posent pas la question » —
+              une icône discrète plutôt qu'un bouton texte qui trahirait ce
+              qui est masqué. Réservée à la direction CF. */}
+          {estDirectionCF && estConseilsFinances && (
+            <button
+              type="button"
+              onClick={() => setVueReunionSansAgence((v) => !v)}
+              title={vueReunionSansAgence ? 'Réafficher les chiffres de l\'agence' : 'Masquer les chiffres de l\'agence (vue réunion)'}
+              className="text-slate-500 hover:text-white transition-colors"
+            >
+              {vueReunionSansAgence ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -936,7 +1188,7 @@ export default function Dashboard({
             Y entrent les dossiers ARCHIVÉS dont le montant a été confirmé au
             moment de l'archivage : « quand c'est archivé et confirmé sur la
             somme, cela ira dans le chiffre d'affaires de l'agence ». */}
-        {voitChiffresAgence && (
+        {voitChiffresAgence && !vueReunionSansAgence && (
           <div
             role="button"
             tabIndex={0}
@@ -946,13 +1198,21 @@ export default function Dashboard({
             className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Chiffre d'affaires de l'agence</span>
-              {/* Conseils Finances (5 septembre) : « CA à venir, à partir des
-                  dossiers mis dans Accord banque / Rendez-vous, à prendre en
-                  compte dans le CA agence ». Le chiffre additionne donc les
-                  dossiers archivés et ceux arrivés à cette étape ; ailleurs,
-                  les archivés seulement, comme avant. */}
+              {/* Demandé le 6 septembre : « le chiffre d'affaires de l'agence
+                  doit être uniquement les chiffres qui ont été comptabilisés
+                  du moment qu'on a archivé la fiche du client et que nous
+                  avons mis signé, pas avant » — et « il faut que tu
+                  additionnes le chiffre d'affaires réalisé par les
+                  courtiers, et non pas l'encours ». Ce total est donc
+                  exactement la somme des cases CA par courtier
+                  (caRealiseCourtiers), jamais l'encours (CA à venir),
+                  affiché à part (case dédiée, et en info ci-dessous). */}
               <div className="text-2xl font-black text-[#F9C977] tracking-tight">
-                {formatCurrency(estConseilsFinances ? chiffreAffairesAgence.total + chiffreAffairesAgence.aVenir : chiffreAffairesAgence.total)}
+                {formatCurrency(
+                  estConseilsFinances
+                    ? caRealiseCourtiers
+                    : chiffreAffairesAgence.total
+                )}
               </div>
               {/* Une tuile qui affiche zéro sans dire pourquoi fait perdre une
                   soirée. Elle explique donc ce qu'elle a trouvé, et où ça
@@ -971,10 +1231,20 @@ export default function Dashboard({
                   </span>
                 ) : estConseilsFinances ? (
                   <>
-                    {chiffreAffairesAgence.comptessAVenir} en cours ({formatCurrency(chiffreAffairesAgence.aVenir)})
-                    {' + '}{chiffreAffairesAgence.comptees} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)})
+                    {chiffreAffairesAgence.comptees} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et signé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)})
+                    {commissionRealiseeCourtiers > 0 && (
+                      <>{' + '}commission des courtiers ({formatCurrency(commissionRealiseeCourtiers)})</>
+                    )}
+                    {chiffreAffairesAgence.comBanqueTotal > 0 && (
+                      <>{' + '}commission Banque ({formatCurrencyPrecis(chiffreAffairesAgence.comBanqueTotal)})</>
+                    )}
+                    {chiffreAffairesAgence.aVenir > 0 && (
+                      <span className="text-slate-500 font-normal block mt-0.5">
+                        + {formatCurrency(chiffreAffairesAgence.aVenir)} en cours ({chiffreAffairesAgence.comptessAVenir} dossier{chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''}, non archivé, pas dans le total)
+                      </span>
+                    )}
                     <span className="text-slate-500 font-normal block mt-0.5">
-                      À partir de l'étape Montage dossier, honoraires agence TTC saisis sur la fiche (pas de hors taxes sur Conseils Finances)
+                      Archivé et signé seulement, honoraires agence TTC saisis sur la fiche (pas de hors taxes sur Conseils Finances)
                       {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans honoraires`}
                     </span>
                   </>
@@ -1030,14 +1300,17 @@ export default function Dashboard({
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">CA du collaborateur</span>
               <div className="text-2xl font-black text-[#F9C977] tracking-tight">
-                {formatCurrency(chiffreAffairesAgence.total)}
+                {formatCurrency(maCommissionPersonnelle + maComBanquePersonnelle)}
               </div>
               <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
                 {!chiffreAffairesAgence.pipelineTrouve ? (
                   <span className="text-amber-400/90">Aucun pipeline principal pour cette agence</span>
                 ) : (
                   <>
-                    {chiffreAffairesAgence.comptees} dossier{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et confirmé{chiffreAffairesAgence.comptees > 1 ? 's' : ''}, honoraires agence TTC
+                    {formatCurrency(maCommissionPersonnelle)} commission + {formatCurrencyPrecis(maComBanquePersonnelle)} commission Banque
+                    <span className="text-slate-500 font-normal block mt-0.5">
+                      Sur {chiffreAffairesAgence.comptees} dossier{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et signé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)} d'honoraires pour l'agence, pas pour vous)
+                    </span>
                     <span className="text-slate-500 font-normal block mt-0.5">
                       {chiffreAffairesAgence.dansLePipeline === 0
                         ? `Aucun de vos dossiers ${dansPipelineVise}`
@@ -1062,8 +1335,8 @@ export default function Dashboard({
               </div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.comptessAVenir === 0
-                  ? "Aucun de vos dossiers à partir de l'étape Montage dossier"
-                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Montage dossier, honoraires agence TTC`}
+                  ? "Aucun de vos dossiers à partir de l'étape Accord banque / Rendez-vous"
+                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Accord banque / Rendez-vous, honoraires agence TTC`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300">
@@ -1116,7 +1389,7 @@ export default function Dashboard({
             haut, la même que le cercle et la fenêtre de détail). Pour les
             super admins de Conseils Finances, la tuile ImmoSphera (tout ce
             qui est dans le pipeline) ne s'affiche donc pas. */}
-        {estDirectionCF && estConseilsFinances && (
+        {estDirectionCF && estVueDirectionCF && !vueReunionSansAgence && (
           <div
             role="button"
             tabIndex={0}
@@ -1131,8 +1404,8 @@ export default function Dashboard({
               </div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.comptessAVenir === 0
-                  ? "Aucun dossier à partir de l'étape Montage dossier"
-                  : `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Montage dossier, honoraires agence TTC — compris dans le CA de l'agence`}
+                  ? "Aucun dossier à partir de l'étape Accord banque / Rendez-vous"
+                  : `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Accord banque / Rendez-vous, honoraires agence TTC — pas dans le chiffre d'affaires de l'agence tant que non archivé et signé`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
@@ -1176,7 +1449,7 @@ export default function Dashboard({
             le camembert oppose le réalisé de l'année à ce qui reste — la
             soustraction demandée. Objectif atteint : cercle tout doré et
             dépassement affiché. */}
-        {voitChiffresAgence && !estNovavisio && (
+        {voitChiffresAgence && !estNovavisio && !vueReunionSansAgence && (
           <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 flex items-start justify-between gap-4 group">
             <div className="space-y-1 min-w-0 flex-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Objectif de l'année {currentYear}</span>
@@ -1337,23 +1610,54 @@ export default function Dashboard({
           case en haut du tableau de bord, CA Sylvain, ou le nom du courtier ».
           Une case par personne, même règle que le CA de l'agence (archivés +
           à partir de Montage dossier), la plus grosse en premier. */}
-      {estDirectionCF && estConseilsFinances && (
+      {estDirectionCF && estVueDirectionCF && (
         <div className="space-y-2">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">CA par courtier</h3>
-          {caParCourtier.length === 0 ? (
+          {caCourtiersVises.length === 0 ? (
             <p className="text-xs text-slate-500 px-1">Aucun collaborateur rattaché à cette agence.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {caParCourtier.map((c) => (
-                <div key={c.id} className="dash-card p-5 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 flex items-start justify-between gap-3 group">
+              {caCourtiersVises.map((c) => (
+                <div
+                  key={c.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => { setRechercheCourtier(''); setDetailCourtierId(c.id); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setRechercheCourtier(''); setDetailCourtierId(c.id); } }}
+                  title={`Voir le détail des dossiers de ${c.prenom}, client par client`}
+                  className="dash-card p-5 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 flex items-start justify-between gap-3 group cursor-pointer">
                   <div className="space-y-1 min-w-0">
                     <span className="text-xs text-slate-400 font-medium tracking-wide block truncate" title={c.nom}>CA {c.prenom}</span>
                     <div className="text-xl font-black text-sky-300 tracking-tight">{formatCurrency(c.total)}</div>
                     <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                       {c.total === 0
-                        ? 'Aucun dossier à partir de Montage dossier'
-                        : `${formatCurrency(c.aVenir)} en cours + ${formatCurrency(c.archive)} archivé, à partir de Montage dossier`}
+                        ? 'Aucun dossier archivé et signé'
+                        : `${formatCurrency(c.archive)} archivé + ${formatCurrency(c.commission)} commission + ${formatCurrencyPrecis(c.comBanque)} commission Banque`}
                     </span>
+                    {/* Le CA à venir (encore vivant, pas archivé) reste
+                        informatif, à part du total ci-dessus qui ne compte
+                        que de l'archivé et signé. */}
+                    {c.aVenir > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setDetailCourtierAvenirId(c.id); }}
+                        title={`Voir le détail des dossiers en cours de ${c.prenom}, client par client`}
+                        className="text-[11px] text-slate-500 hover:text-[#F9C977] font-semibold tracking-wide block underline decoration-dotted underline-offset-2"
+                      >
+                        + {formatCurrency(c.aVenir)} en cours (non archivé, pas dans le total)
+                      </button>
+                    )}
+                    {/* Demandé le 6 septembre : la commission du courtier
+                        (advisor_commission_ttc, tous ses dossiers archivés)
+                        et, en dessous, la commission Banque (com_banque). */}
+                    <div className="pt-1 mt-1 border-t border-white/5 space-y-0.5">
+                      <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
+                        Commission des courtiers : <span className="text-slate-200">{formatCurrency(c.commission)}</span>
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
+                        Commission Banque : <span className="text-slate-200">{formatCurrencyPrecis(c.comBanque)}</span>
+                      </span>
+                    </div>
                   </div>
                   <div className="w-10 h-10 shrink-0 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300">
                     <TrendingUp className="w-5 h-5" />
@@ -1370,7 +1674,7 @@ export default function Dashboard({
           retrouve le sien tout en haut de son propre tableau de bord. Le
           réalisé est celui de l'année en cours, dossiers archivés et
           confirmés, attribués à la personne. */}
-      {estDirectionCF && estConseilsFinances && goalAgencyId && (
+      {estDirectionCF && estVueDirectionCF && goalAgencyId && (
         <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg space-y-4">
           <div>
             <h3 className="font-bold text-sm text-white">Objectifs de l'année {currentYear} — par collaborateur</h3>
@@ -1381,11 +1685,11 @@ export default function Dashboard({
           {erreurObjectifsCollab && (
             <p className="text-xs text-amber-400/90">Objectifs indisponibles : {(erreurObjectifsCollab as Error).message}</p>
           )}
-          {collaborateurs.length === 0 ? (
+          {collaborateursCourtiers.length === 0 ? (
             <p className="text-xs text-slate-500">Aucun collaborateur rattaché à cette agence.</p>
           ) : (
             <div className="divide-y divide-[#144447]/40">
-              {collaborateurs.map((collab) => {
+              {collaborateursCourtiers.map((collab) => {
                 const cible = objectifDe(collab.id);
                 const realise = chiffreAffairesAgence.parConseillerAnnee.get(collab.id) || 0;
                 const enEdition = collabEnEdition === collab.id;
@@ -1567,13 +1871,15 @@ export default function Dashboard({
             facturer ; quand c'est archivé et confirmé sur la somme, cela ira
             dans le chiffre d'affaires de l'agence ». Le cercle montre donc
             l'argent encore dans Transaction V2 (non archivé), réparti par
-            colonne ; la tuile dorée, elle, montre le réalisé. */}
+            colonne ; la tuile dorée, elle, montre le réalisé. Masqué en vue
+            réunion (6 septembre) : c'est un chiffre agence. */}
+        {!vueReunionSansAgence && (
         <div className="dash-card p-6 rounded-2xl border border-[#144447]/60 hover:border-[#1e5d61] shadow-xl hover:shadow-teal-500/5 transition-all duration-300 flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-sm text-white">CA à venir</h3>
             <p className="text-xs text-slate-400">
               {estConseilsFinances
-                ? "Honoraires agence TTC des dossiers à partir de Montage dossier, par colonne."
+                ? "Honoraires agence TTC des dossiers à partir de Accord banque / Rendez-vous, par colonne."
                 : `Commission agence HT encore ${dansPipelineVise}, par colonne.`}
             </p>
           </div>
@@ -1636,6 +1942,7 @@ export default function Dashboard({
             ))}
           </div>
         </div>
+        )}
       </div>
 
       {/* Demandé le 2 septembre pour ImmoSphera : « tableau de bord, enlève
@@ -1731,6 +2038,13 @@ export default function Dashboard({
           realise ? (l.archive || estConseilsFinances) : !l.archive
         );
         const totalVisible = lignesVisibles.reduce((somme, l) => somme + l.montant, 0);
+        // Demandé le 6 septembre : « quand on clique sur le CA de l'agence,
+        // je voudrais voir les chiffres détaillés avec les commissions
+        // Banque perçues par l'agence — chiffre d'affaires courtage et
+        // chiffre d'affaires agence commission Banque ». comBanqueAgence
+        // (pas comBanque, qui est déjà la part du courtier) est ce que
+        // l'agence perçoit elle-même de la banque, par dossier.
+        const totalBanqueVisible = lignesVisibles.reduce((somme, l) => somme + l.comBanqueAgence, 0);
         return (
         <div
           className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1747,7 +2061,10 @@ export default function Dashboard({
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {nomPipelineVise} · {lignesVisibles.length} dossier{lignesVisibles.length > 1 ? 's' : ''} ·{' '}
-                  {formatCurrency(totalVisible)}
+                  {formatCurrency(totalVisible)} courtage
+                  {estConseilsFinances && totalBanqueVisible > 0 && (
+                    <> + {formatCurrencyPrecis(totalBanqueVisible)} commission Banque</>
+                  )}
                   {realise ? ' comptabilisés' : ' en attente de facturation'}
                 </p>
               </div>
@@ -1762,7 +2079,8 @@ export default function Dashboard({
             <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
               <span className="flex-1">Client</span>
               <span className="w-28 hidden sm:block">Mandat</span>
-              <span className="w-32 text-right">Montant</span>
+              <span className="w-32 text-right">Courtage</span>
+              {estConseilsFinances && <span className="w-28 text-right hidden sm:block">Comm. Banque</span>}
             </div>
 
             <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
@@ -1813,6 +2131,11 @@ export default function Dashboard({
                           : 'border-[#144447]/60 text-white'
                       }`}
                     />
+                    {estConseilsFinances && (
+                      <span className="w-28 text-right text-sm text-slate-300 tabular-nums hidden sm:block">
+                        {formatCurrencyPrecis(ligne.comBanqueAgence)}
+                      </span>
+                    )}
                   </div>
                 ))
               )}
@@ -1827,6 +2150,288 @@ export default function Dashboard({
             </p>
           </div>
         </div>
+        );
+      })()}
+
+      {/* Demandé le 6 septembre : « quand je clique dans les cases de chaque
+          courtier, un tableau avec les montants commission, commission
+          Banque par client, et quand je clique sur un client, j'accède
+          directement à sa fiche ». Mêmes lignes que le détail du CA de
+          l'agence (chiffreAffairesAgence.lignes), filtrées sur ce courtier
+          et sur exactement ce qui compte dans sa case : archivé et signé. */}
+      {detailCourtierId && (() => {
+        const courtier = caParCourtier.find((c) => c.id === detailCourtierId);
+        const rechercheNormalisee = sansAccents(rechercheCourtier.trim());
+        const lignesCourtier = chiffreAffairesAgence.lignes
+          .filter((l) => l.advisorId === detailCourtierId && l.archive && l.signe)
+          .filter((l) => !rechercheNormalisee || sansAccents(l.nom).includes(rechercheNormalisee))
+          // Les derniers archivés tout en haut ; les rares lignes sans date
+          // d'archivage (anciennes fiches) restent en bas.
+          .sort((a, b) => {
+            if (!a.archiveLe && !b.archiveLe) return 0;
+            if (!a.archiveLe) return 1;
+            if (!b.archiveLe) return -1;
+            return new Date(b.archiveLe).getTime() - new Date(a.archiveLe).getTime();
+          });
+        // Demandé le 6 septembre : « commission de l'agence, commission du
+        // courtier, banque agence, banque courtier — des chèques sur les
+        // quatre lignes, pour être sûr de tout vérifier correctement ».
+        // Quatre cases bien visibles, en haut du tableau, avec ce qui a
+        // déjà été « comptabilisé validé » sur chacune, en vert.
+        const commissionAgenceValideeTotal = lignesCourtier
+          .filter((l) => estLigneValidee(l, 'commission_agence_validee'))
+          .reduce((s, l) => s + l.montant, 0);
+        const commissionValideeTotal = lignesCourtier
+          .filter((l) => estLigneValidee(l, 'commission_validee'))
+          .reduce((s, l) => s + l.commission, 0);
+        const comBanqueAgenceValideeTotal = lignesCourtier
+          .filter((l) => estLigneValidee(l, 'com_banque_agence_validee'))
+          .reduce((s, l) => s + l.comBanqueAgence, 0);
+        const comBanqueValideeTotal = lignesCourtier
+          .filter((l) => estLigneValidee(l, 'com_banque_validee'))
+          .reduce((s, l) => s + l.comBanque, 0);
+        return (
+          <div
+            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setDetailCourtierId(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-5xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4 p-5 border-b border-[#144447]/60">
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    CA {courtier?.prenom || ''} — détail par client
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {lignesCourtier.length} dossier{lignesCourtier.length > 1 ? 's' : ''} archivé{lignesCourtier.length > 1 ? 's' : ''} et signé{lignesCourtier.length > 1 ? 's' : ''} · {formatCurrency(courtier?.total || 0)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDetailCourtierId(null)}
+                  className="text-slate-500 hover:text-white text-xl leading-none px-1"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 border-b border-[#144447]/60">
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Commission agence validée</span>
+                  <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrency(commissionAgenceValideeTotal)}</span>
+                </div>
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Commission courtier validée</span>
+                  <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrency(commissionValideeTotal)}</span>
+                </div>
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Com. Banque agence validée</span>
+                  <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrencyPrecis(comBanqueAgenceValideeTotal)}</span>
+                </div>
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Com. Banque courtier validée</span>
+                  <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrencyPrecis(comBanqueValideeTotal)}</span>
+                </div>
+              </div>
+
+              <div className="px-5 pt-3">
+                <input
+                  type="search"
+                  value={rechercheCourtier}
+                  onChange={(e) => setRechercheCourtier(e.target.value)}
+                  placeholder="Rechercher un client…"
+                  className="w-full px-3.5 py-2 rounded-lg bg-[#0a1e20] border border-[#144447]/60 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]/60"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 px-5 pt-2 pb-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
+                <span className="flex-1">Client (derniers archivés en premier)</span>
+                <span className="w-28 text-right">Comm. agence</span>
+                <span className="w-28 text-right">Comm. courtier</span>
+                <span className="w-32 text-right">Banque agence</span>
+                <span className="w-32 text-right">Banque courtier</span>
+              </div>
+
+              <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
+                {lignesCourtier.length === 0 ? (
+                  <p className="p-8 text-center text-sm text-slate-500">
+                    {rechercheNormalisee
+                      ? 'Aucun client ne correspond à cette recherche.'
+                      : 'Aucun dossier archivé et signé pour ce courtier pour le moment.'}
+                  </p>
+                ) : (
+                  lignesCourtier.map((ligne) => {
+                    // Demandé le 6 septembre : quatre cases à cocher par
+                    // client — commission agence, commission courtier,
+                    // banque agence, banque courtier. Chaque montant est
+                    // vert coché, orange sinon ; la ligne entière ne passe
+                    // au vert que si les quatre sont cochées.
+                    const commissionAgenceValidee = estLigneValidee(ligne, 'commission_agence_validee');
+                    const commissionValidee = estLigneValidee(ligne, 'commission_validee');
+                    const comBanqueAgenceValidee = estLigneValidee(ligne, 'com_banque_agence_validee');
+                    const comBanqueValidee = estLigneValidee(ligne, 'com_banque_validee');
+                    const toutValide = commissionAgenceValidee && commissionValidee && comBanqueAgenceValidee && comBanqueValidee;
+                    const Cellule = ({
+                      largeur, montant, valide, champ, precis,
+                    }: {
+                      largeur: string; montant: number; valide: boolean; champ: ChampValidation; precis?: boolean;
+                    }) => (
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        className={`${largeur} flex items-center justify-end gap-2 cursor-pointer select-none`}
+                      >
+                        <span className={`text-sm tabular-nums ${valide ? 'text-emerald-300' : 'text-amber-400'}`}>
+                          {precis ? formatCurrencyPrecis(montant) : formatCurrency(montant)}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={valide}
+                          onChange={(e) => void basculerValidation(ligne, champ, e.target.checked)}
+                          className="w-5 h-5 shrink-0 rounded accent-emerald-500 cursor-pointer"
+                        />
+                      </label>
+                    );
+                    return (
+                      <div
+                        key={ligne.id}
+                        className={`flex items-center gap-3 px-5 py-2.5 border-l-2 ${
+                          toutValide
+                            ? 'bg-emerald-500/10 border-l-emerald-500'
+                            : 'bg-amber-500/5 border-l-amber-500/70'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          {onOpenContact ? (
+                            <button
+                              type="button"
+                              onClick={() => { setDetailCourtierId(null); onOpenContact(ligne.contactId); }}
+                              title="Ouvrir la fiche du client"
+                              className="block max-w-full text-left text-sm text-white font-semibold truncate hover:text-[#F9C977] hover:underline"
+                            >
+                              {ligne.nom}
+                            </button>
+                          ) : (
+                            <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
+                          )}
+                        </div>
+                        <Cellule largeur="w-28" montant={ligne.montant} valide={commissionAgenceValidee} champ="commission_agence_validee" />
+                        <Cellule largeur="w-28" montant={ligne.commission} valide={commissionValidee} champ="commission_validee" />
+                        <Cellule largeur="w-32" montant={ligne.comBanqueAgence} valide={comBanqueAgenceValidee} champ="com_banque_agence_validee" precis />
+                        <Cellule largeur="w-32" montant={ligne.comBanque} valide={comBanqueValidee} champ="com_banque_validee" precis />
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <p className="px-5 py-3 text-[11px] text-slate-500 border-t border-[#144447]/60 leading-relaxed">
+                Cliquez sur un client pour ouvrir sa fiche directement. Cochez chacune des quatre
+                cases une fois reçue : la ligne passe au vert quand les quatre le sont, orange tant
+                qu'il en manque une.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Demandé le 6 septembre : « tu feras la même chose dans le chiffre
+          d'affaires à venir, histoire qu'on ait les lignes qui se
+          décomposent, mais tu ne mettras pas les chèques, ce n'est pas la
+          peine ». Même tableau que le détail réalisé d'un courtier, sur ses
+          dossiers encore vivants (pas archivés), sans cases à cocher —
+          rien à valider tant que ce n'est pas facturé. */}
+      {detailCourtierAvenirId && (() => {
+        const courtier = caParCourtier.find((c) => c.id === detailCourtierAvenirId);
+        const lignesCourtier = chiffreAffairesAgence.lignes.filter(
+          (l) => l.advisorId === detailCourtierAvenirId && !l.archive
+        );
+        return (
+          <div
+            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setDetailCourtierAvenirId(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4 p-5 border-b border-[#144447]/60">
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    CA {courtier?.prenom || ''} — en cours, détail par client
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {lignesCourtier.length} dossier{lignesCourtier.length > 1 ? 's' : ''} en cours · {formatCurrency(courtier?.aVenir || 0)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDetailCourtierAvenirId(null)}
+                  className="text-slate-500 hover:text-white text-xl leading-none px-1"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Demandé le 6 septembre : « pour tout ce qui est à venir, tu
+                  peux faire aussi comme l'autre colonne, histoire de
+                  dispatcher un peu les montants » — même répartition à 4
+                  colonnes (agence / courtier) que le détail réalisé, mais
+                  sans case à cocher : rien n'est encore dû tant que ce n'est
+                  pas archivé et signé. */}
+              <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
+                <span className="flex-1">Client</span>
+                <span className="w-24 text-right">Comm. agence</span>
+                <span className="w-24 text-right">Comm. courtier</span>
+                <span className="w-28 text-right">Banque agence</span>
+                <span className="w-28 text-right">Banque courtier</span>
+              </div>
+
+              <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
+                {lignesCourtier.length === 0 ? (
+                  <p className="p-8 text-center text-sm text-slate-500">
+                    Aucun dossier en cours pour ce courtier pour le moment.
+                  </p>
+                ) : (
+                  lignesCourtier.map((ligne) => (
+                    <div key={ligne.id} className="flex items-center gap-3 px-5 py-2.5">
+                      <div className="flex-1 min-w-0">
+                        {onOpenContact ? (
+                          <button
+                            type="button"
+                            onClick={() => { setDetailCourtierAvenirId(null); onOpenContact(ligne.contactId); }}
+                            title="Ouvrir la fiche du client"
+                            className="block max-w-full text-left text-sm text-white font-semibold truncate hover:text-[#F9C977] hover:underline"
+                          >
+                            {ligne.nom}
+                          </button>
+                        ) : (
+                          <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
+                        )}
+                        <div className="text-[11px] text-slate-500 truncate">{ligne.etape || 'Sans étape'}</div>
+                      </div>
+                      <span className="w-24 text-right text-sm text-white tabular-nums">
+                        {formatCurrency(ligne.montant)}
+                      </span>
+                      <span className="w-24 text-right text-sm text-slate-300 tabular-nums">
+                        {formatCurrency(ligne.commission)}
+                      </span>
+                      <span className="w-28 text-right text-sm text-slate-300 tabular-nums">
+                        {formatCurrencyPrecis(ligne.comBanqueAgence)}
+                      </span>
+                      <span className="w-28 text-right text-sm text-slate-300 tabular-nums">
+                        {formatCurrencyPrecis(ligne.comBanque)}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <p className="px-5 py-3 text-[11px] text-slate-500 border-t border-[#144447]/60 leading-relaxed">
+                Cliquez sur un client pour ouvrir sa fiche directement. Ces dossiers ne sont pas
+                encore archivés et signés : rien à valider ici pour le moment.
+              </p>
+            </div>
+          </div>
         );
       })()}
     </div>

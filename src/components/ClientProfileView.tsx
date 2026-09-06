@@ -7,6 +7,7 @@ import { AGENCIES, NoteItem, DocItem, Task } from '@/types';
 import TransactionChecklistModal, {
   STAGE_CHECKLISTS,
   IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID,
+  IMMOSPHERA_AGENCY_ID,
   usePreviousStageMissingCount,
   useCurrentStageChecklistCount,
 } from './TransactionChecklistModal';
@@ -50,6 +51,7 @@ import { uploadDocumentToDrive } from '@/lib/documentDrive';
 import { getTaskDateStatus } from '@/lib/taskUtils';
 import { TEAM_MEMBERS, getAssignedUser } from '@/data/teamMembers';
 import { useAssignableUsers } from '@/hooks/useAssignableUsers';
+import { useApporteurs } from '@/hooks/useApporteurs';
 import ParcoursCreditModal from './ParcoursCreditModal';
 import EditClientModal from './EditClientModal';
 
@@ -517,6 +519,9 @@ export default function ClientProfileView({
     nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().includes('factur');
 
   const estConciergerie = /concierg/i.test(client?.clientType || '');
+  // Apporteur d'affaires (agent immobilier référent, 6 septembre) :
+  // uniquement chargé/affiché pour les fiches Conciergerie.
+  const { apporteurs: apporteursDisponibles } = useApporteurs(IMMOSPHERA_AGENCY_ID);
 
 
   // Novavisio, demandé le 2 septembre : « remettre le CA agence en TTC, et tu
@@ -899,6 +904,12 @@ export default function ClientProfileView({
         .update({
           archived_at: new Date().toISOString(),
           signed_at: signed ? new Date().toISOString() : null,
+          // Demandé le 6 septembre : « du moment que le dossier est
+          // archivé [et signé], il faut que la commission courtier soit
+          // cochée par défaut » — elle est décidée à l'archivage, contre la
+          // commission Banque qui n'arrive que plus tard et se coche à la
+          // main une fois réellement payée par la banque.
+          commission_validee: signed,
           // Champ laissé vide : on ne touche pas au montant déjà enregistré,
           // plutôt que de l'effacer par inadvertance.
           ...(montant === null ? {} : { estimated_value: versBase(montant) }),
@@ -2650,6 +2661,26 @@ export default function ClientProfileView({
                     ))}
                   </select>
                 </div>
+                {/* Apporteur d'affaires (agent immobilier référent, 6
+                    septembre) : uniquement sur les fiches Conciergerie,
+                    pour le classement par référent. */}
+                {estConciergerie && (
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Apporteur d'affaires (agent immobilier)</label>
+                    <select
+                      value={client.referrerId || ''}
+                      onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { referrerId: e.target.value || null } })}
+                      className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                    >
+                      <option value="">Aucun</option>
+                      {apporteursDisponibles.filter(a => a.active).map(a => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}{a.agencyName ? ` (${a.agencyName})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -4584,7 +4615,12 @@ export default function ClientProfileView({
             {/* Demandé le 2 septembre : la commission du conseiller AU-DESSUS
                 de celle de l'agence, puis la récurrence — trois montants
                 distincts, saisis à la main au moment d'archiver. */}
-            {estNovavisio && (
+            {/* Demandé le 6 septembre (Conseils Finances) : la case
+                « Commission des courtiers » du tableau de bord restait à
+                0 € — ce champ n'existait qu'à l'archivage Novavisio, donc
+                advisor_commission_ttc n'était jamais saisi sur ces
+                dossiers. */}
+            {(estNovavisio || estConseilsFinances) && (
               <div className="mb-4">
                 <label htmlFor="archive-commission-conseiller" className="block text-xs font-semibold text-slate-400 mb-1.5">
                   Commission {prenomConseiller ? `de ${prenomConseiller}` : 'du conseiller'}, TTC

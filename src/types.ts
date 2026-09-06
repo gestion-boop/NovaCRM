@@ -72,6 +72,15 @@ export interface Contact {
   // Com banques : calculée automatiquement à partir de montantCredit et du
   // taux de banqueChoisie — modifiable.
   comBanque?: number;
+  // Demandé le 6 septembre : « comBanque, c'est ce que perçoit la banque
+  // [comprendre : l'agence] ; à côté, la part qu'en reçoit le courtier,
+  // selon son pourcentage ». Calculée automatiquement à partir de comBanque
+  // et du même taux courtier que honorairesCourtier — modifiable.
+  comBanqueCourtier?: number;
+  // Apporteur d'affaires (agent immobilier référent) pour un dossier
+  // Conciergerie ImmoSphera (6 septembre) : `leads.referrer_id`, référence
+  // vers `real_estate_referrers`. Liste gérée, pas de texte libre.
+  referrerId?: string | null;
 }
 
 export interface PipelineDef {
@@ -93,6 +102,35 @@ export interface Deal {
   // Commission du conseiller, stockée en TTC ; affichée en HT dans les
   // colonnes du pipeline (voir htDepuisTtc).
   advisorCommissionTtc?: number;
+  // Commission Banque du dossier (leads.com_banque) : ce que l'AGENCE
+  // perçoit de la banque, en plus des honoraires — figure dans le chiffre
+  // d'affaires de l'agence, pas directement dans celui d'un courtier (voir
+  // comBanqueCourtier ci-dessous, sa part à lui).
+  comBanque?: number;
+  // Honoraires courtier (leads.honoraires_courtier, Conseils Finances) :
+  // calculé automatiquement sur la fiche client à partir des honoraires
+  // agence et du taux du courtier (Sylvain 100 %, Eric 80 %, autres 70 %),
+  // modifiable à la main. C'est ce champ — pas advisorCommissionTtc — qui
+  // alimente « Commission des courtiers » sur Conseils Finances.
+  honorairesCourtier?: number;
+  // Corrigé le 6 septembre : « il faut uniquement comptabiliser la
+  // commission qu'on leur donne, plus la commission Banque qu'on leur donne
+  // en fonction de leur pourcentage » — comBanque est ce que perçoit
+  // l'agence ; comBanqueCourtier (leads.com_banque_courtier) est la part
+  // qu'en reçoit le courtier, calculée avec le même taux que
+  // honorairesCourtier. C'est ce champ — pas comBanque — qui alimente la
+  // case « Commission Banque » de chaque courtier.
+  comBanqueCourtier?: number;
+  // Cases à cocher du tableau détaillé de chaque courtier (6 septembre) :
+  // vert une fois pointé/reçu, orange tant que ce n'est pas fait. Quatre
+  // lignes distinctes, chacune vérifiable séparément : la part de l'agence
+  // (commission_agence_validee, com_banque_agence_validee) et celle du
+  // courtier (commission_validee, com_banque_validee) — « pour être sûr de
+  // tout vérifier correctement ».
+  commissionValidee: boolean;
+  comBanqueValidee: boolean;
+  commissionAgenceValidee: boolean;
+  comBanqueAgenceValidee: boolean;
   // Numéro de mandat (leads.mandate_number) — affiché dans le détail du
   // chiffre d'affaires pour retrouver le dossier d'un coup d'œil.
   mandateNumber?: string;
@@ -413,4 +451,34 @@ export interface CameraReservation {
   createdByUserId?: string;
   createdByEmail?: string;
   createdAt?: string;
+}
+
+// Onglet Comptabilité (6 septembre, Conseils Finances) : « un vrai logiciel
+// de comptabilité pour piloter ce qui va rentrer aussi, et avoir une vue sur
+// le long terme ». Une ligne = un poste récurrent (loyer, assurance,
+// abonnement, commission mensuelle...) ou ponctuel (une seule fois), positif
+// pour une recette/encaissement, négatif pour une dépense/décaissement.
+export interface TreasuryLine {
+  id: string;
+  agencyId: string;
+  label: string;
+  category: string;
+  kind: 'recurrent' | 'ponctuel';
+  // Signé : négatif = dépense, positif = recette.
+  amount: number;
+  // Pour un ponctuel : le mois exact où il tombe (1er du mois, ISO).
+  // Pour un récurrent : le premier mois de la récurrence.
+  month: string;
+  // Récurrent uniquement : dernier mois où la ligne s'applique (incluse).
+  // Vide = récurrence projetée indéfiniment.
+  endMonth?: string | null;
+  // Jour du mois où le prélèvement/virement tombe réellement (1-31),
+  // optionnel — sans quoi la matérialisation automatique retombe sur le 1er
+  // du mois (voir ComptabiliteView). Demandé le 6 septembre : « la date
+  // n'est pas bonne car ça se prélève tous les 10 de chaque mois ».
+  jourPrelevement?: number | null;
+  notes?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

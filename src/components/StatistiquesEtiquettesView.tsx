@@ -1,7 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID, IMMOSPHERA_AGENCY_ID } from './TransactionChecklistModal';
+
+// Demandé le 6 septembre : « chaque utilisateur pourra voir son propre
+// chiffre d'affaires mais pas celui des autres [...] verrouiller les
+// montants pour éviter des tensions inutiles dans l'agence ». La direction
+// (super admin / admin) garde la vue complète, comme pour Conseils
+// Finances ; un agent simple ne voit plus que sa propre ligne, son propre
+// classement d'étape et ses propres dossiers dans les listes de détail.
 
 // Demande explicite (28/08/2026) : "tuile statistique" façon "tableau à
 // l'ancienne" — panneau d'étiquettes en cuivre/laiton (référence photo
@@ -51,6 +59,22 @@ interface StageLead {
   honoraires: number;
   ville: string;
   mandat: string;
+  referrerId: string | null;
+}
+
+// Classement par apporteur d'affaires (6 septembre) : « l'agent immobilier
+// nous envoie un client » — combien de dossiers Conciergerie chaque
+// référent a apportés, et le chiffre d'affaires correspondant. Une
+// information de pilotage d'agence, pas un revenu personnel d'un
+// collègue : elle n'est PAS soumise au verrouillage « mes stats
+// uniquement » (estDirection/monAgentId) qui protège le classement par
+// conseiller.
+interface ReferrerRow {
+  referrerId: string | null;
+  name: string;
+  agencyName?: string;
+  count: number;
+  ca: number;
 }
 
 interface AgentRow {
@@ -141,6 +165,10 @@ const AgentRow: React.FC<{ row: AgentRow; color: string; onOpen?: (stage: StageK
 );
 
 const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: string) => void }> = ({ onSelectContact }) => {
+  const { currentUser, userProfile } = useAuth();
+  const estDirection = userProfile?.role === 'super_admin' || userProfile?.role === 'admin';
+  const monAgentId = currentUser?.uid;
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<AgentRow[]>([]);
   // Demandé : « savoir qui est présent dans cette case ». On garde le détail
@@ -148,6 +176,10 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
   // sur un chiffre, et ouvrir la fiche depuis la liste.
   const [details, setDetails] = useState<StageLead[]>([]);
   const [detailFor, setDetailFor] = useState<{ stage: StageKey; agentId: string | null; title: string } | null>(null);
+  // Classement par apporteur d'affaires (Conciergerie uniquement) : id ->
+  // nom/agence du référent, pour afficher le classement sans exposer les
+  // uuid bruts.
+  const [referrerById, setReferrerById] = useState<Record<string, { name: string; agencyName?: string }>>({});
 
 
   useEffect(() => {
@@ -224,6 +256,17 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
       // absents du tableau. On part donc des MEMBRES de l'agence, et les
       // dossiers viennent remplir leurs compteurs — un conseiller sans
       // dossier reste visible, à zéro.
+      // Apporteurs d'affaires (référents) de l'agence — pour le classement
+      // Conciergerie par référent.
+      const { data: referrers } = await supabase
+        .from('real_estate_referrers' as any)
+        .select('id, name, agency_name')
+        .eq('agency_id', IMMOSPHERA_AGENCY_ID);
+      const referrerNameById: Record<string, { name: string; agencyName?: string }> = {};
+      ((referrers || []) as any[]).forEach((r) => {
+        referrerNameById[r.id] = { name: r.name, agencyName: r.agency_name || undefined };
+      });
+
       const { data: membres } = await supabase
         .from('agency_members')
         .select('user_id')
@@ -286,11 +329,13 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
         honoraires: Number(l.estimated_value) || 0,
         ville: (l.sector || '').trim(),
         mandat: (l.mandate_number || '').trim(),
+        referrerId: (l.referrer_id as string) || null,
       })).filter((d) => d.stage);
 
       if (!cancelled) {
         setRows(Object.values(byAgent));
         setDetails(detailRows);
+        setReferrerById(referrerNameById);
         setLoading(false);
       }
     })();
@@ -298,10 +343,20 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
   }, []);
 
   // Classement par résultats : le conseiller le plus performant en tête.
-  const orderedRows = useMemo(
+  const orderedRowsToutesLignes = useMemo(
     () => [...rows].sort((a, b) => b.total - a.total || a.agentFullName.localeCompare(b.agentFullName, 'fr')),
     [rows]
   );
+  // Verrouillage des montants (6 septembre) : un agent simple ne voit que sa
+  // propre ligne ; la direction (super admin/admin) garde tout.
+  // Reprécisé le 6 septembre : « les classements soient visibles par tous
+  // [...] sauf les chiffres doivent être cloisonnés pour chacun ». On
+  // n'exclut donc plus personne de la liste (tout le monde voit qui est
+  // classé où, y compris le podium) — seuls les MONTANTS en euros restent
+  // réservés à la direction et à son propre chiffre (voir peuxVoirMontant
+  // plus bas, utilisé partout où un € est affiché).
+  const orderedRows = orderedRowsToutesLignes;
+  const peuxVoirMontant = (agentId: string) => estDirection || agentId === monAgentId;
 
 
   // Trois onglets séparés, un par étape, plus la vue d'ensemble existante
@@ -347,6 +402,37 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
     [stageRows]
   );
 
+  // Classement par apporteur d'affaires — Conciergerie uniquement. Sciemment
+  // PAS filtré par estDirection/monAgentId : ce n'est pas le revenu
+  // personnel d'un conseiller, tout utilisateur ayant accès à cette vue peut
+  // voir quel agent immobilier apporte le plus d'affaires.
+  const referrerRows = useMemo<ReferrerRow[]>(() => {
+    if (tab !== 'conciergerie') return [];
+    const byReferrer: Record<string, ReferrerRow> = {};
+    details.filter((d) => d.stage === 'conciergerie').forEach((d) => {
+      const key = d.referrerId || '__sans_apporteur__';
+      if (!byReferrer[key]) {
+        const info = d.referrerId ? referrerById[d.referrerId] : undefined;
+        byReferrer[key] = {
+          referrerId: d.referrerId,
+          name: info?.name || (d.referrerId ? 'Apporteur inconnu' : 'Sans apporteur'),
+          agencyName: info?.agencyName,
+          count: 0,
+          ca: 0,
+        };
+      }
+      byReferrer[key].count += 1;
+      byReferrer[key].ca += d.honoraires;
+    });
+    const rowsArr = Object.values(byReferrer);
+    // « Sans apporteur » toujours en dernier, comme demandé — sinon tri par
+    // le même critère (CA ou ventes) que le classement par conseiller.
+    const avecApporteur = rowsArr.filter((r) => r.referrerId !== null);
+    const sansApporteur = rowsArr.filter((r) => r.referrerId === null);
+    avecApporteur.sort((a, b) => (rankBy === 'ca' ? b.ca - a.ca || b.count - a.count : b.count - a.count || b.ca - a.ca));
+    return [...avecApporteur, ...sansApporteur];
+  }, [details, tab, rankBy, referrerById]);
+
   const totals = useMemo(
     () =>
       orderedRows.reduce(
@@ -365,6 +451,9 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
 
   const detailLeads = useMemo(() => {
     if (!detailFor) return [];
+    // La liste des dossiers reste visible pour tous (qui est dans cette
+    // case) ; seul le montant affiché à côté de chaque dossier est masqué
+    // pour un dossier qui n'est pas le sien (voir peuxVoirMontant).
     return details
       .filter((d) => d.stage === detailFor.stage && (!detailFor.agentId || d.agentId === detailFor.agentId))
       .sort((a, b) => b.honoraires - a.honoraires || a.name.localeCompare(b.name, 'fr'));
@@ -414,6 +503,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           {TABS.map((t) => (
             <button
               key={t.key}
+              type="button"
               onClick={() => setTab(t.key)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold tracking-wide transition-colors border ${
                 tab === t.key
@@ -426,6 +516,10 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           ))}
         </div>
 
+        {/* Tout le monde voit le classement complet désormais (seuls les
+            montants € sont cloisonnés, pas les lignes) : le tri par CA ou
+            par nombre de ventes redevient utile pour tous, sur tous les
+            onglets. */}
         {tab !== 'apercu' && (
           <div className="flex items-center gap-2 mb-4">
             <span className="text-[10px] uppercase tracking-widest text-[#C9B67B]">Classer par</span>
@@ -435,6 +529,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
             ]).map((opt) => (
               <button
                 key={opt.key}
+                type="button"
                 onClick={() => setRankBy(opt.key)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
                   rankBy === opt.key
@@ -491,7 +586,9 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
                   >
                     {r.count}
                   </button>
-                  <span className="w-32 text-right text-sm font-bold text-[#D4AF37] tabular-nums">{formatEuros(r.ca)}</span>
+                  <span className="w-32 text-right text-sm font-bold text-[#D4AF37] tabular-nums">
+                    {peuxVoirMontant(r.agentId) ? formatEuros(r.ca) : '🔒 —'}
+                  </span>
                 </div>
                 );
               })}
@@ -512,6 +609,53 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
                 Chiffre d'affaires = champ « Honoraires (€) » de la fiche client. Un dossier sans
                 honoraires renseignés compte pour 0 €.
               </p>
+
+              {/* Classement par apporteur d'affaires — Conciergerie
+                  uniquement (demande du 6 septembre). Visible de tous, sans
+                  le verrouillage « mes stats » du classement par
+                  conseiller ci-dessus. */}
+              {tab === 'conciergerie' && (
+                <div className="pt-5 mt-5 border-t border-[#3a2f1a] space-y-2">
+                  <h3 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wide mb-2">
+                    Classement par apporteur d'affaires
+                  </h3>
+                  {referrerRows.length === 0 ? (
+                    <p className="text-xs text-[#C9B67B] py-4 text-center">Aucun dossier Conciergerie pour le moment.</p>
+                  ) : (
+                    <>
+                      <div className="flex items-center px-4 py-2 text-[9px] uppercase tracking-widest text-[#C9B67B]">
+                        <span className="w-7 shrink-0" />
+                        <span className="flex-1">Agent immobilier référent</span>
+                        <span className="w-20 text-center">Dossiers</span>
+                        <span className="w-32 text-right">Chiffre d'affaires</span>
+                      </div>
+                      {referrerRows.map((r, rank) => {
+                        const podium = r.referrerId !== null ? PODIUM[rank] : undefined;
+                        return (
+                          <div
+                            key={r.referrerId || '__sans_apporteur__'}
+                            className="flex items-center rounded-xl px-4 py-3"
+                            style={{
+                              border: `${podium ? '2px' : '1px'} solid ${podium ? podium.border : '#6B5220'}`,
+                              background: podium ? podium.bg : (r.referrerId === null ? '#1b1712' : '#2A2211'),
+                            }}
+                          >
+                            <span className="w-7 shrink-0 text-base leading-none" aria-hidden="true">{podium ? podium.medal : ''}</span>
+                            <span
+                              className="flex-1 text-sm font-bold truncate"
+                              style={{ color: podium ? podium.name : (r.referrerId === null ? '#C9B67B' : '#F3EAD3') }}
+                            >
+                              {r.name}{r.agencyName ? ` (${r.agencyName})` : ''}
+                            </span>
+                            <span className="w-20 text-center text-sm text-[#C9B67B] tabular-nums">{r.count}</span>
+                            <span className="w-32 text-right text-sm font-bold text-[#D4AF37] tabular-nums">{formatEuros(r.ca)}</span>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )
         ) : orderedRows.length === 0 ? (
@@ -536,7 +680,9 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
         {!loading && orderedRows.length > 0 && (
           <div className="mt-5 flex justify-center">
             <div className="flex items-center gap-4 sm:gap-6 rounded-2xl border-2 border-[#D4AF37] bg-[#2A2211] px-5 sm:px-7 py-3 sm:py-4 shadow-[0_4px_14px_rgba(0,0,0,0.4)]">
-              <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-[#D4AF37]">Total agence</span>
+              <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-[#D4AF37]">
+                {estDirection ? 'Total agence' : 'Mes chiffres'}
+              </span>
               <div className="flex items-center gap-3 sm:gap-4">
                 <div className="text-center">
                   <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.location}</div>
@@ -613,7 +759,9 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
                         {lead.ville ? ` · ${lead.ville}` : ''}
                       </span>
                     </span>
-                    <span className="text-xs font-bold text-[#D4AF37] tabular-nums shrink-0">{formatEuros(lead.honoraires)}</span>
+                    <span className="text-xs font-bold text-[#D4AF37] tabular-nums shrink-0">
+                      {peuxVoirMontant(lead.agentId) ? formatEuros(lead.honoraires) : '🔒'}
+                    </span>
                   </button>
                 ))
               )}
