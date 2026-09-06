@@ -498,7 +498,7 @@ export default function ComptabiliteView() {
                     <span className="text-slate-100 truncate">{a.label}</span>
                     {a.notes && (
                       <span
-                        className="text-slate-300 italic truncate max-w-[220px] px-1.5 py-0.5 rounded border border-amber-400/70 bg-amber-400/[0.06]"
+                        className="text-slate-900 italic truncate max-w-[220px] px-1.5 py-0.5 rounded border border-amber-400 bg-amber-300"
                         title={a.notes}
                       >
                         {a.notes}
@@ -573,7 +573,7 @@ export default function ComptabiliteView() {
                         <div
                           onClick={() => ouvrirNotePopover(a)}
                           title="Cliquer pour modifier la note"
-                          className="max-h-12 overflow-y-auto custom-scrollbar text-slate-300 italic leading-snug cursor-pointer hover:text-white whitespace-pre-wrap px-1.5 py-1 rounded border border-amber-400/70 bg-amber-400/[0.06]"
+                          className="max-h-12 overflow-y-auto custom-scrollbar text-slate-900 italic leading-snug cursor-pointer hover:brightness-95 whitespace-pre-wrap px-1.5 py-1 rounded border border-amber-400 bg-amber-300"
                         >
                           {a.notes}
                         </div>
