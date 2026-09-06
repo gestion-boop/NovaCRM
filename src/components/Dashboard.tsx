@@ -608,14 +608,17 @@ export default function Dashboard({
   const commissionNatacha = natacha
     ? chiffreAffairesAgence.commissionParConseiller.get(natacha.id) || 0
     : 0;
-  // Demandé le 6 septembre : la case « CA du collaborateur » (chaque
-  // courtier sur son propre tableau de bord) additionne, comme la case CA
-  // du super admin, ses honoraires archivés + sa commission personnelle +
-  // sa commission Banque. `perimetre` restreint déjà tout le calcul à ses
-  // propres dossiers (voir plus haut), donc commissionParConseiller n'a
-  // qu'une seule entrée ici — la sienne.
+  // Corrigé le 6 septembre : la case « CA du collaborateur » (chaque
+  // courtier sur son propre tableau de bord) n'additionne QUE ce qu'il
+  // perçoit lui-même — sa commission personnelle + sa commission Banque —
+  // jamais les honoraires de l'agence, qui ne lui reviennent pas.
+  // `perimetre` restreint déjà tout le calcul à ses propres dossiers (voir
+  // plus haut), donc ces deux Maps n'ont qu'une seule entrée ici — la sienne.
   const maCommissionPersonnelle = currentUser?.uid
     ? chiffreAffairesAgence.commissionParConseiller.get(currentUser.uid) || 0
+    : 0;
+  const maComBanquePersonnelle = currentUser?.uid
+    ? chiffreAffairesAgence.comBanqueParConseiller.get(currentUser.uid) || 0
     : 0;
 
   // Demandé le 5 septembre (Conseils Finances), pour les super admins : « ceux
@@ -636,14 +639,16 @@ export default function Dashboard({
         const aVenir = chiffreAffairesAgence.parConseillerAVenir.get(id) || 0;
         const commission = chiffreAffairesAgence.commissionParConseiller.get(id) || 0;
         const comBanque = chiffreAffairesAgence.comBanqueParConseiller.get(id) || 0;
-        // Demandé le 6 septembre : « il faut qu'il y ait tout ce qui a été
-        // archivé » — la case CA de chaque courtier (Sylvain compris)
-        // additionne honoraires archivés + sa commission personnelle + sa
-        // commission Banque. Le CA à venir (encore vivant, pas archivé)
-        // reste affiché à part, sans entrer dans ce total.
+        // Corrigé le 6 septembre : « il ne faut pas additionner le chiffre
+        // d'affaires de l'agence, ça lui appartient — l'agence donne une
+        // rétrocession au courtier, il ne reçoit pas ce montant-là ».
+        // Le total du courtier n'est donc QUE ce qu'il perçoit lui-même :
+        // sa commission personnelle + sa commission Banque. Les honoraires
+        // (archive) restent affichés à titre d'information, à part, jamais
+        // additionnés — c'est l'argent de l'agence, pas le sien.
         return {
           id, nom, prenom: nom.split(' ')[0], archive, aVenir,
-          total: archive + commission + comBanque,
+          total: commission + comBanque,
           commission, comBanque,
         };
       })
@@ -1295,14 +1300,17 @@ export default function Dashboard({
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">CA du collaborateur</span>
               <div className="text-2xl font-black text-[#F9C977] tracking-tight">
-                {formatCurrency(chiffreAffairesAgence.total + maCommissionPersonnelle + chiffreAffairesAgence.comBanqueTotal)}
+                {formatCurrency(maCommissionPersonnelle + maComBanquePersonnelle)}
               </div>
               <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
                 {!chiffreAffairesAgence.pipelineTrouve ? (
                   <span className="text-amber-400/90">Aucun pipeline principal pour cette agence</span>
                 ) : (
                   <>
-                    {chiffreAffairesAgence.comptees} dossier{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et confirmé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} : {formatCurrency(chiffreAffairesAgence.total)} honoraires + {formatCurrency(maCommissionPersonnelle)} commission + {formatCurrencyPrecis(chiffreAffairesAgence.comBanqueTotal)} commission Banque
+                    {formatCurrency(maCommissionPersonnelle)} commission + {formatCurrencyPrecis(maComBanquePersonnelle)} commission Banque
+                    <span className="text-slate-500 font-normal block mt-0.5">
+                      Sur {chiffreAffairesAgence.comptees} dossier{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et signé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)} d'honoraires pour l'agence, pas pour vous)
+                    </span>
                     <span className="text-slate-500 font-normal block mt-0.5">
                       {chiffreAffairesAgence.dansLePipeline === 0
                         ? `Aucun de vos dossiers ${dansPipelineVise}`
