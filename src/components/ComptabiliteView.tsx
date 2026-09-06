@@ -35,6 +35,20 @@ function moisIso(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
+// Même logique que dernierJourDuMois (useTreasuryActuals.ts) : borne un jour
+// souhaité au dernier jour réel du mois visé (ex. jourPrelevement 31 en
+// février retombe sur le 28/29, jamais sur mars).
+function dernierJourDuMoisIso(annee: number, moisUnIndexe: number): number {
+  return new Date(annee, moisUnIndexe, 0).getDate();
+}
+
+// Calcule la date ISO d'une occurrence pour une année/mois donnés à partir
+// d'un jour de prélèvement souhaité, clampé au dernier jour réel du mois.
+function dateAvecJour(annee: number, moisUnIndexe: number, jourSouhaite: number): string {
+  const jour = Math.min(jourSouhaite, dernierJourDuMoisIso(annee, moisUnIndexe));
+  return `${annee}-${String(moisUnIndexe).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+}
+
 interface FormLigne {
   label: string;
   category: string;
@@ -43,10 +57,14 @@ interface FormLigne {
   montant: string;
   month: string;
   endMonth: string;
+  // Jour du prélèvement/virement réel (1-31), optionnel — voir le champ
+  // `jourPrelevement` de TreasuryLine. Chaîne vide = pas fixé, la ligne
+  // se matérialise alors au 1er du mois comme avant (6 septembre).
+  jourPrelevement: string;
 }
 
 const formVide = (moisParDefaut: string): FormLigne => ({
-  label: '', category: '', kind: 'recurrent', sens: 'depense', montant: '', month: moisParDefaut, endMonth: '',
+  label: '', category: '', kind: 'recurrent', sens: 'depense', montant: '', month: moisParDefaut, endMonth: '', jourPrelevement: '',
 });
 
 interface FormActual {
@@ -238,8 +256,14 @@ export default function ComptabiliteView() {
         return;
       }
       clesMaterialiseesRef.current.add(cle);
+      // Jour de prélèvement fixé sur la ligne (6 septembre : « ça se
+      // prélève tous les 10 de chaque mois ») : on l'utilise à la place du
+      // 1er du mois par défaut, clampé au dernier jour réel du mois.
+      const dateMaterialisation = ligne.jourPrelevement
+        ? dateAvecJour(Number(anneeActive), Number(moisActuelOnglet), ligne.jourPrelevement)
+        : moisIsoActif;
       creerActual.mutate({
-        date: moisIsoActif,
+        date: dateMaterialisation,
         label: ligne.label,
         description: ligne.kind === 'recurrent' ? `Récurrent — ${ligne.category}` : `Ponctuel — ${ligne.category}`,
         credit: ligne.amount >= 0 ? ligne.amount : 0,
@@ -314,6 +338,7 @@ export default function ComptabiliteView() {
       montant: String(Math.abs(ligne.amount)),
       month: ligne.month,
       endMonth: ligne.endMonth || '',
+      jourPrelevement: ligne.jourPrelevement ? String(ligne.jourPrelevement) : '',
     });
     setFormOuvert(ligne.id);
   };
@@ -328,6 +353,7 @@ export default function ComptabiliteView() {
     const montantNombre = Number(form.montant.replace(',', '.'));
     if (!form.label.trim() || !form.category.trim() || !Number.isFinite(montantNombre) || montantNombre <= 0) return;
     const amount = form.sens === 'depense' ? -Math.abs(montantNombre) : Math.abs(montantNombre);
+    const jourPrelevement = form.jourPrelevement ? Number(form.jourPrelevement) : null;
     const payload = {
       label: form.label.trim(),
       category: form.category.trim(),
@@ -335,11 +361,31 @@ export default function ComptabiliteView() {
       amount,
       month: form.month,
       endMonth: form.kind === 'recurrent' ? (form.endMonth || null) : null,
+      jourPrelevement,
     };
     if (formOuvert === 'nouveau') {
       creerLigne.mutate(payload);
     } else if (formOuvert) {
+      const ligneOriginale = lines.find((l) => l.id === formOuvert);
       modifierLigne.mutate({ id: formOuvert, ...payload });
+      // Correction du jour de prélèvement (6 septembre : « je vais avoir
+      // également la possibilité de changer les dates et de pouvoir
+      // confirmer par la suite ») : si le jour change, on recale aussi les
+      // occurrences déjà matérialisées mais encore en attente (previsionnel)
+      // de cette ligne, tous mois confondus — jamais celles déjà validées,
+      // ni celles d'une autre ligne récurrente.
+      if (ligneOriginale && (ligneOriginale.jourPrelevement ?? null) !== jourPrelevement && jourPrelevement) {
+        actuals
+          .filter((a) => a.sourceLineId === formOuvert && a.previsionnel)
+          .forEach((a) => {
+            const annee = Number(a.date.slice(0, 4));
+            const mois = Number(a.date.slice(5, 7));
+            const dateCorrigee = dateAvecJour(annee, mois, jourPrelevement);
+            if (dateCorrigee !== a.date.slice(0, 10)) {
+              modifierActual.mutate({ id: a.id, date: dateCorrigee });
+            }
+          });
+      }
     }
     setFormOuvert(null);
   };
@@ -1034,6 +1080,17 @@ export default function ComptabiliteView() {
                   className="w-full px-3 py-2 rounded-lg bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Jour du prélèvement (optionnel)</label>
+              <input
+                type="number" min={1} max={31} value={form.jourPrelevement}
+                onChange={(e) => setForm((f) => ({ ...f, jourPrelevement: e.target.value }))}
+                placeholder="ex : 10"
+                className="w-full px-3 py-2 rounded-lg bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">Laissé vide : la ligne se case au 1er du mois par défaut.</p>
             </div>
 
             {form.kind === 'recurrent' && (

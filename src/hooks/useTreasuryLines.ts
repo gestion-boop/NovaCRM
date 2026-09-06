@@ -18,6 +18,7 @@ function ligneVersTreasury(row: Record<string, unknown>): TreasuryLine {
     amount: Number(row.amount) || 0,
     month: (row.month as string) || '',
     endMonth: (row.end_month as string | null) || null,
+    jourPrelevement: (row.jour_prelevement as number | null) ?? null,
     notes: (row.notes as string) || undefined,
     createdBy: (row.created_by as string) || undefined,
     createdAt: (row.created_at as string) || undefined,
@@ -55,6 +56,7 @@ export function useTreasuryLines(agencyId: string) {
         amount: ligne.amount,
         month: ligne.month,
         end_month: ligne.endMonth || null,
+        jour_prelevement: ligne.jourPrelevement ?? null,
         notes: ligne.notes || null,
       } as any);
       if (sbError) throw new Error(sbError.message);
@@ -72,6 +74,7 @@ export function useTreasuryLines(agencyId: string) {
       if (patch.amount !== undefined) update.amount = patch.amount;
       if (patch.month !== undefined) update.month = patch.month;
       if (patch.endMonth !== undefined) update.end_month = patch.endMonth || null;
+      if (patch.jourPrelevement !== undefined) update.jour_prelevement = patch.jourPrelevement ?? null;
       if (patch.notes !== undefined) update.notes = patch.notes || null;
       update.updated_at = new Date().toISOString();
       const { error: sbError } = await supabase.from('treasury_lines' as any).update(update as any).eq('id', id);
