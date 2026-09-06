@@ -899,6 +899,12 @@ export default function ClientProfileView({
         .update({
           archived_at: new Date().toISOString(),
           signed_at: signed ? new Date().toISOString() : null,
+          // Demandé le 6 septembre : « du moment que le dossier est
+          // archivé [et signé], il faut que la commission courtier soit
+          // cochée par défaut » — elle est décidée à l'archivage, contre la
+          // commission Banque qui n'arrive que plus tard et se coche à la
+          // main une fois réellement payée par la banque.
+          commission_validee: signed,
           // Champ laissé vide : on ne touche pas au montant déjà enregistré,
           // plutôt que de l'effacer par inadvertance.
           ...(montant === null ? {} : { estimated_value: versBase(montant) }),
