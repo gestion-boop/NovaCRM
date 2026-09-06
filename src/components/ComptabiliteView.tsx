@@ -1,9 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { Calculator, ChevronLeft, ChevronRight, Plus, Trash2, TrendingUp, TrendingDown, Pencil } from 'lucide-react';
+import { Calculator, Plus, Trash2, TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTreasuryLines } from '@/hooks/useTreasuryLines';
+import { useTreasuryActuals } from '@/hooks/useTreasuryActuals';
 import { TreasuryLine } from '@/types';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrencyPrecis } from '@/lib/utils';
+
+const MOIS_ONGLETS = ['01', '02', '03', '04', '05', '06', '07', '08', '09'];
+const NOMS_MOIS_COURT: Record<string, string> = {
+  '01': 'Janv.', '02': 'Févr.', '03': 'Mars', '04': 'Avr.', '05': 'Mai',
+  '06': 'Juin', '07': 'Juil.', '08': 'Août', '09': 'Sept.', '10': 'Oct.', '11': 'Nov.', '12': 'Déc.',
+};
 
 // Onglet Comptabilité (6 septembre, Conseils Finances) : « un onglet
 // comptabilité avec les 12 mois, comme un prévisionnel de trésorerie, et ce
@@ -58,6 +65,7 @@ const formVide = (moisParDefaut: string): FormLigne => ({
 export default function ComptabiliteView() {
   const { userProfile, currentUser, activeAgency } = useAuth();
   const { lines, isLoading, creerLigne, modifierLigne, supprimerLigne } = useTreasuryLines(activeAgency.id);
+  const { actuals, isLoading: actualsChargement } = useTreasuryActuals(activeAgency.id);
 
   // Double garde (menu ET contenu, même principe que CarteProspectionView.tsx) :
   // « que par les super admins, Mélanie et Sylvain, c'est tout ».
@@ -65,12 +73,38 @@ export default function ComptabiliteView() {
   const estDirectionCF = /grazia|melanie|gestion@immosphera\.fr/i.test(identite);
   const estConseilsFinances = /conseils?\s*finances?/i.test(activeAgency?.name || '');
 
-  const [debutFenetre, setDebutFenetre] = useState(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  });
+  const [debutFenetre] = useState(() => new Date(2026, 0, 1));
   const mois = useMemo(() => Array.from({ length: 12 }, (_, i) => ajouterMois(debutFenetre, i)), [debutFenetre]);
   const moisIsoListe = useMemo(() => mois.map(moisIso), [mois]);
+
+  const [moisActuelOnglet, setMoisActuelOnglet] = useState('01');
+
+  // Solde bancaire théorique cumulé : on part de la toute première ligne du
+  // grand livre (le report d'ouverture) et on accumule crédit - débit dans
+  // l'ordre chronologique complet, tous mois confondus.
+  const actualsAvecSolde = useMemo(() => {
+    let solde = 0;
+    return actuals.map((a) => {
+      solde += a.credit - a.debit;
+      return { ...a, soldeApres: solde };
+    });
+  }, [actuals]);
+
+  const actualsDuMoisActif = useMemo(
+    () => actualsAvecSolde.filter((a) => a.monthSheet === moisActuelOnglet),
+    [actualsAvecSolde, moisActuelOnglet]
+  );
+
+  const soldeOuvertureMoisActif = useMemo(() => {
+    const idxPremier = actualsAvecSolde.findIndex((a) => a.monthSheet === moisActuelOnglet);
+    if (idxPremier === -1) return 0;
+    if (idxPremier === 0) return actualsAvecSolde[0].soldeApres - (actualsAvecSolde[0].credit - actualsAvecSolde[0].debit);
+    return actualsAvecSolde[idxPremier - 1].soldeApres;
+  }, [actualsAvecSolde, moisActuelOnglet]);
+
+  const soldeClotureMoisActif = actualsDuMoisActif.length > 0
+    ? actualsDuMoisActif[actualsDuMoisActif.length - 1].soldeApres
+    : soldeOuvertureMoisActif;
 
   const [formOuvert, setFormOuvert] = useState<string | null>(null); // null = fermé, 'nouveau' ou id d'une ligne éditée
   const [form, setForm] = useState<FormLigne>(() => formVide(moisIso(new Date())));
@@ -158,35 +192,78 @@ export default function ComptabiliteView() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setDebutFenetre((d) => ajouterMois(d, -12))}
-            className="p-2 rounded-lg bg-white/10 hover:bg-white/15 text-slate-300"
-            title="12 mois précédents"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-xs text-slate-400 font-semibold min-w-[140px] text-center">
-            {libelleMois(mois[0])} → {libelleMois(mois[11])}
-          </span>
-          <button
-            onClick={() => setDebutFenetre((d) => ajouterMois(d, 12))}
-            className="p-2 rounded-lg bg-white/10 hover:bg-white/15 text-slate-300"
-            title="12 mois suivants"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => { const d = new Date(); setDebutFenetre(new Date(d.getFullYear(), d.getMonth(), 1)); }}
-            className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-xs text-slate-300"
-          >
-            Aujourd'hui
-          </button>
-          <button
             onClick={ouvrirNouveau}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F7BC5F] text-slate-950 text-xs font-bold hover:bg-[#F9C977]"
           >
             <Plus className="w-3.5 h-3.5" /> Nouvelle ligne
           </button>
         </div>
+      </div>
+
+      {/* Solde bancaire théorique — grand livre du mois actif */}
+      <div className="rounded-2xl border border-[#144447]/60 bg-[#0a1e20]/60 p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm font-bold text-white">
+            Solde bancaire théorique — Grand livre {moisActuelOnglet} · {NOMS_MOIS_COURT[moisActuelOnglet]}
+          </h3>
+          <div className="flex items-center gap-4 text-xs">
+            <span className="text-slate-400">
+              {moisActuelOnglet === '01' ? 'Solde de départ : ' : 'Solde ouverture : '}
+              <span className={`font-bold ${soldeOuvertureMoisActif >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatCurrencyPrecis(soldeOuvertureMoisActif)}
+              </span>
+            </span>
+            <span className="text-slate-400">
+              Solde clôture :{' '}
+              <span className={`font-bold ${soldeClotureMoisActif >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatCurrencyPrecis(soldeClotureMoisActif)}
+              </span>
+            </span>
+          </div>
+        </div>
+
+        {actualsChargement ? (
+          <p className="text-sm text-slate-500">Chargement…</p>
+        ) : actualsDuMoisActif.length === 0 ? (
+          <p className="text-xs text-slate-500 italic py-4 text-center">
+            Aucune donnée réelle importée pour ce mois.
+          </p>
+        ) : (
+          <div className="overflow-y-auto overflow-x-auto custom-scrollbar rounded-xl border border-[#144447]/50 max-h-[70vh]">
+            <table className="w-full text-xs border-collapse">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-[#0a1e20] text-[10px] uppercase tracking-widest text-slate-500">
+                  <th className="text-left px-3 py-2 bg-[#0a1e20]">Date</th>
+                  <th className="text-left px-3 py-2 bg-[#0a1e20]">Libellé</th>
+                  <th className="text-left px-3 py-2 bg-[#0a1e20]">Description</th>
+                  <th className="text-right px-3 py-2 bg-[#0a1e20]">Crédit</th>
+                  <th className="text-right px-3 py-2 bg-[#0a1e20]">Débit</th>
+                  <th className="text-right px-3 py-2 bg-[#0a1e20]">Solde théorique</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#144447]/30">
+                {actualsDuMoisActif.map((a) => (
+                  <tr key={a.id} className="hover:bg-white/5">
+                    <td className="px-3 py-1.5 text-slate-400 whitespace-nowrap text-xs">
+                      {new Date(a.date).toLocaleDateString('fr-FR')}
+                    </td>
+                    <td className="px-3 py-1.5 text-slate-200 text-xs">{a.label}</td>
+                    <td className="px-3 py-1.5 text-slate-500 text-xs">{a.description}</td>
+                    <td className={`px-3 py-1.5 text-right tabular-nums text-xs ${a.credit > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
+                      {a.credit > 0 ? formatCurrencyPrecis(a.credit) : '—'}
+                    </td>
+                    <td className={`px-3 py-1.5 text-right tabular-nums text-xs ${a.debit > 0 ? 'text-red-400' : 'text-slate-600'}`}>
+                      {a.debit > 0 ? formatCurrencyPrecis(a.debit) : '—'}
+                    </td>
+                    <td className={`px-3 py-1.5 text-right tabular-nums text-xs font-bold ${a.soldeApres >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
+                      {formatCurrencyPrecis(a.soldeApres)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {isLoading ? (
@@ -222,7 +299,7 @@ export default function ComptabiliteView() {
                         const total = lignesCat.reduce((s, l) => s + (ligneActiveSur(l, m) ? l.amount : 0), 0);
                         return (
                           <td key={i} className={`text-right px-3 py-1.5 text-xs font-bold ${total > 0 ? 'text-emerald-400' : total < 0 ? 'text-red-400' : 'text-slate-600'}`}>
-                            {total !== 0 ? formatCurrency(total) : '—'}
+                            {total !== 0 ? formatCurrencyPrecis(total) : '—'}
                           </td>
                         );
                       })}
@@ -243,7 +320,7 @@ export default function ComptabiliteView() {
                         </td>
                         {moisIsoListe.map((m, i) => (
                           <td key={i} className={`text-right px-3 py-2 tabular-nums ${ligne.amount > 0 ? 'text-emerald-300' : 'text-slate-300'}`}>
-                            {ligneActiveSur(ligne, m) ? formatCurrency(ligne.amount) : ''}
+                            {ligneActiveSur(ligne, m) ? formatCurrencyPrecis(ligne.amount) : ''}
                           </td>
                         ))}
                         <td className="px-1">
@@ -270,28 +347,28 @@ export default function ComptabiliteView() {
               <tr className="border-t-2 border-[#144447] bg-[#0a1e20]">
                 <td className="px-4 py-2 text-xs font-bold text-emerald-400 sticky left-0 bg-[#0a1e20]" colSpan={2}>Total recettes</td>
                 {recettesParMois.map((v, i) => (
-                  <td key={i} className="text-right px-3 py-2 text-xs font-bold text-emerald-400 tabular-nums">{formatCurrency(v)}</td>
+                  <td key={i} className="text-right px-3 py-2 text-xs font-bold text-emerald-400 tabular-nums">{formatCurrencyPrecis(v)}</td>
                 ))}
                 <td />
               </tr>
               <tr className="bg-[#0a1e20]">
                 <td className="px-4 py-2 text-xs font-bold text-red-400 sticky left-0 bg-[#0a1e20]" colSpan={2}>Total dépenses</td>
                 {depensesParMois.map((v, i) => (
-                  <td key={i} className="text-right px-3 py-2 text-xs font-bold text-red-400 tabular-nums">{formatCurrency(v)}</td>
+                  <td key={i} className="text-right px-3 py-2 text-xs font-bold text-red-400 tabular-nums">{formatCurrencyPrecis(v)}</td>
                 ))}
                 <td />
               </tr>
               <tr className="bg-[#0a1e20] border-t border-[#144447]/60">
                 <td className="px-4 py-2 text-xs font-bold text-white sticky left-0 bg-[#0a1e20]" colSpan={2}>Solde du mois</td>
                 {totalParMois.map((v, i) => (
-                  <td key={i} className={`text-right px-3 py-2 text-xs font-bold tabular-nums ${v >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>{formatCurrency(v)}</td>
+                  <td key={i} className={`text-right px-3 py-2 text-xs font-bold tabular-nums ${v >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>{formatCurrencyPrecis(v)}</td>
                 ))}
                 <td />
               </tr>
               <tr className="bg-[#0a1e20]/80">
                 <td className="px-4 py-2 text-[11px] text-slate-500 sticky left-0 bg-[#0a1e20]/80" colSpan={2}>Cumul (depuis le début de cette vue)</td>
                 {cumulParMois.map((v, i) => (
-                  <td key={i} className={`text-right px-3 py-2 text-[11px] tabular-nums ${v >= 0 ? 'text-slate-400' : 'text-red-400/80'}`}>{formatCurrency(v)}</td>
+                  <td key={i} className={`text-right px-3 py-2 text-[11px] tabular-nums ${v >= 0 ? 'text-slate-400' : 'text-red-400/80'}`}>{formatCurrencyPrecis(v)}</td>
                 ))}
                 <td />
               </tr>
@@ -306,6 +383,23 @@ export default function ComptabiliteView() {
         chaque mois entre son mois de départ et, si elle en a une, sa date de fin ; une ligne ponctuelle ne compte
         que sur son propre mois.
       </p>
+
+      {/* Onglets mois du grand livre réel, en bas de la vue */}
+      <div className="sticky bottom-0 flex flex-wrap gap-1.5 justify-center pt-3 border-t border-[#144447]/60 bg-[#07191b]">
+        {MOIS_ONGLETS.map((m) => (
+          <button
+            key={m}
+            onClick={() => setMoisActuelOnglet(m)}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+              moisActuelOnglet === m
+                ? 'bg-[#F7BC5F] text-slate-950'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10'
+            }`}
+          >
+            {m} · {NOMS_MOIS_COURT[m]}
+          </button>
+        ))}
+      </div>
 
       {/* Formulaire d'ajout / modification */}
       {formOuvert && (
