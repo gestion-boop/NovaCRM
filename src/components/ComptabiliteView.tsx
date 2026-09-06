@@ -756,8 +756,8 @@ export default function ComptabiliteView() {
                   <th className="text-left px-3 py-2 bg-[#0a1e20] text-sky-300/80">Commentaire</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Crédit</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Débit</th>
-                  <th className="text-right px-3 py-2 bg-[#0a1e20]" title="Cumul confirmé uniquement — retombe sur le vrai solde bancaire">Solde bancaire</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20] text-[#F7BC5F]/80">Solde prévisionnel</th>
+                  <th className="text-right px-3 py-2 bg-[#0a1e20]" title="Cumul confirmé uniquement — retombe sur le vrai solde bancaire">Solde bancaire</th>
                   <th className="text-right px-2 py-2 bg-[#0a1e20]"></th>
                 </tr>
               </thead>
@@ -891,11 +891,11 @@ export default function ComptabiliteView() {
                         )}
                       </div>
                     </td>
-                    <td className={`px-3 py-1.5 text-right tabular-nums text-xs font-bold ${a.soldeApres >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
-                      {formatCurrencyPrecis(a.soldeApres)}
-                    </td>
                     <td className="px-3 py-1.5 text-right tabular-nums text-xs text-[#F7BC5F]/70">
                       {formatCurrencyPrecis(soldePrevisionnelParId.get(a.id) ?? a.soldeApres)}
+                    </td>
+                    <td className={`px-3 py-1.5 text-right tabular-nums text-xs font-bold ${a.soldeApres >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
+                      {formatCurrencyPrecis(a.soldeApres)}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity relative">
