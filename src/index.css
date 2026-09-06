@@ -1145,8 +1145,13 @@ textarea[class]:not([class~="bg-transparent"]) {
 /* Cartes du Tableau de bord : un seul fond partagé par les 8 tuiles (4 KPI
    + 4 panneaux), leurs bordures et icônes de couleur restant propres à
    chacune. */
-.dash-card { background-color: var(--nv-surface-1); }
+.dash-card { background-color: var(--nv-surface-1); transition: background-color 0.3s, box-shadow 0.3s; }
 .dash-card:hover { background-color: var(--nv-surface-1-hover); }
+/* Demandé le 6 septembre : « un halo jaune quand je survole les cases du
+   tableau de bord » — un liseré doré diffus au survol, en plus des
+   bordures colorées propres à chaque case, cohérent avec le jaune/or utilisé
+   partout ailleurs dans l'interface (#F7BC5F). */
+.dash-card:hover { box-shadow: 0 0 0 1px rgba(247, 188, 95, 0.35), 0 0 24px rgba(247, 188, 95, 0.25); }
 
 /* Graphiques (Recharts). Les info-bulles sont posées en style INLINE par la
    bibliothèque : aucune classe CSS ne peut les atteindre, elles restaient

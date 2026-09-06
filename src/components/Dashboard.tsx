@@ -5,7 +5,7 @@ import { AGENCIES } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { Users, Coins, Briefcase, CheckCircle2, ArrowRight, Building, Sparkles, Pencil, TrendingUp, TrendingDown, Target } from 'lucide-react';
+import { Users, Coins, Briefcase, CheckCircle2, ArrowRight, Building, Sparkles, Pencil, TrendingUp, TrendingDown, Target, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useContacts, matchesAgency } from '@/hooks/useContacts';
 import { useDeals } from '@/hooks/useDeals';
@@ -30,6 +30,14 @@ interface LigneCa {
   // Date d'archivage : c'est elle qui date réellement le chiffre d'affaires,
   // et donc le montant « facturé » du mois.
   archiveLe?: string;
+  // Demandé le 6 septembre : « quand je clique dans les cases de chaque
+  // courtier, un tableau avec commission et commission Banque par client ».
+  advisorId?: string;
+  commission: number;
+  comBanque: number;
+  // Signature faite à l'archivage (leads.signed_at) — condition ultime pour
+  // qu'un dossier archivé compte dans le CA (voir le calcul plus haut).
+  signe: boolean;
 }
 
 const CHART_TOOLTIP_STYLE = {
@@ -409,6 +417,13 @@ export default function Dashboard({
       const montant = estConseilsFinances
         ? Number(d.commissionAgenceHt) || 0
         : Number(d.amount) || 0;
+      // Demandé le 6 septembre : mêmes sources que commissionParConseiller /
+      // comBanqueParConseiller plus bas, mais gardées par dossier pour le
+      // tableau détaillé de chaque case CA par courtier.
+      const commissionLigne = estConseilsFinances
+        ? Number(d.honorairesCourtier) || 0
+        : Number(d.advisorCommissionTtc) || 0;
+      const comBanqueLigne = Number(d.comBanque) || 0;
       const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
       const dansPipelineViseFlag = Boolean(pipelineReel && pipelinesVises.has(pipelineReel));
       // Demandé le 6 septembre : « du moment que c'est archivé, même si ce
@@ -450,6 +465,10 @@ export default function Dashboard({
           montant: 0,
           etape: d.stage || '',
           archive: Boolean(d.archivedAt),
+          advisorId: d.advisorId,
+          commission: commissionLigne,
+          comBanque: comBanqueLigne,
+          signe: Boolean(d.signedAt),
         });
         return;
       }
@@ -467,6 +486,10 @@ export default function Dashboard({
         etape: d.stage || '',
         archive: Boolean(d.archivedAt),
         archiveLe: d.archivedAt || undefined,
+        advisorId: d.advisorId,
+        commission: commissionLigne,
+        comBanque: comBanqueLigne,
+        signe: Boolean(d.signedAt),
       });
       // Demandé le 6 septembre : « le chiffre comptabilisé doit être
       // définitivement comptabilisé du moment que le dossier est archivé et
@@ -729,6 +752,11 @@ export default function Dashboard({
   // sur le même tableau ». Une seule fenêtre, deux contenus : la tuile dorée
   // ouvre le réalisé, le cercle ouvre l'à-venir.
   const [detailCa, setDetailCa] = useState<'realise' | 'avenir' | null>(null);
+  // Demandé le 6 septembre : « quand je clique dans les cases de chaque
+  // courtier, un tableau avec commission, commission Banque par client, et
+  // quand je clique sur un client, j'accède à sa fiche ». Même principe que
+  // detailCa, mais pour un seul courtier (son id).
+  const [detailCourtierId, setDetailCourtierId] = useState<string | null>(null);
   // Demandé le 6 septembre : « une vue courtier hors chiffres CA agence, pour
   // pas que quand je montre ce tableau en réunion, les courtiers voient les
   // chiffres de l'agence ». Un simple bouton, réservé à la direction CF, qui
@@ -1029,6 +1057,21 @@ export default function Dashboard({
               )}
             </>
           )}
+          {/* Demandé le 6 septembre : « je préfère mettre un œil ouvert pour
+              tous, et qu'on s'en serve pour enlever les chiffres de l'agence,
+              de façon que les courtiers ne se posent pas la question » —
+              une icône discrète plutôt qu'un bouton texte qui trahirait ce
+              qui est masqué. Réservée à la direction CF. */}
+          {estDirectionCF && estConseilsFinances && (
+            <button
+              type="button"
+              onClick={() => setVueReunionSansAgence((v) => !v)}
+              title={vueReunionSansAgence ? 'Réafficher les chiffres de l\'agence' : 'Masquer les chiffres de l\'agence (vue réunion)'}
+              className="text-slate-500 hover:text-white transition-colors"
+            >
+              {vueReunionSansAgence ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1052,22 +1095,6 @@ export default function Dashboard({
           (CA de l'agence, CA à venir, Objectif de l'année), puis une rangée
           « CA par courtier » ; trois cases aussi pour un collaborateur (les
           siennes). */}
-      {estDirectionCF && estConseilsFinances && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setVueReunionSansAgence((v) => !v)}
-            title="Masque les chiffres de l'agence, garde les cases CA par courtier — pratique pour montrer ce tableau en réunion"
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-              vueReunionSansAgence
-                ? 'bg-[#F7BC5F] text-slate-950'
-                : 'bg-white/10 text-slate-300 hover:bg-white/15'
-            }`}
-          >
-            {vueReunionSansAgence ? 'Vue réunion active — sans les chiffres agence' : 'Vue réunion (masquer les chiffres agence)'}
-          </button>
-        </div>
-      )}
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${estNovavisio ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         {/* Ticket #34 — Chiffre d'affaires de l'agence, super admins seulement.
             Pipeline « Transaction V2 », montants HT (commission agence).
@@ -1501,7 +1528,14 @@ export default function Dashboard({
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {caCourtiersVises.map((c) => (
-                <div key={c.id} className="dash-card p-5 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 flex items-start justify-between gap-3 group">
+                <div
+                  key={c.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDetailCourtierId(c.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCourtierId(c.id); } }}
+                  title={`Voir le détail des dossiers de ${c.prenom}, client par client`}
+                  className="dash-card p-5 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 flex items-start justify-between gap-3 group cursor-pointer">
                   <div className="space-y-1 min-w-0">
                     <span className="text-xs text-slate-400 font-medium tracking-wide block truncate" title={c.nom}>CA {c.prenom}</span>
                     <div className="text-xl font-black text-sky-300 tracking-tight">{formatCurrency(c.total)}</div>
@@ -2005,6 +2039,97 @@ export default function Dashboard({
             </p>
           </div>
         </div>
+        );
+      })()}
+
+      {/* Demandé le 6 septembre : « quand je clique dans les cases de chaque
+          courtier, un tableau avec les montants commission, commission
+          Banque par client, et quand je clique sur un client, j'accède
+          directement à sa fiche ». Mêmes lignes que le détail du CA de
+          l'agence (chiffreAffairesAgence.lignes), filtrées sur ce courtier
+          et sur exactement ce qui compte dans sa case : archivé et signé. */}
+      {detailCourtierId && (() => {
+        const courtier = caParCourtier.find((c) => c.id === detailCourtierId);
+        const lignesCourtier = chiffreAffairesAgence.lignes.filter(
+          (l) => l.advisorId === detailCourtierId && l.archive && l.signe
+        );
+        return (
+          <div
+            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setDetailCourtierId(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4 p-5 border-b border-[#144447]/60">
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    CA {courtier?.prenom || ''} — détail par client
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {lignesCourtier.length} dossier{lignesCourtier.length > 1 ? 's' : ''} archivé{lignesCourtier.length > 1 ? 's' : ''} et signé{lignesCourtier.length > 1 ? 's' : ''} · {formatCurrency(courtier?.total || 0)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDetailCourtierId(null)}
+                  className="text-slate-500 hover:text-white text-xl leading-none px-1"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
+                <span className="flex-1">Client</span>
+                <span className="w-24 text-right">Honoraires</span>
+                <span className="w-24 text-right hidden sm:block">Commission</span>
+                <span className="w-28 text-right hidden sm:block">Com. Banque</span>
+              </div>
+
+              <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
+                {lignesCourtier.length === 0 ? (
+                  <p className="p-8 text-center text-sm text-slate-500">
+                    Aucun dossier archivé et signé pour ce courtier pour le moment.
+                  </p>
+                ) : (
+                  lignesCourtier.map((ligne) => (
+                    <div key={ligne.id} className="flex items-center gap-3 px-5 py-2.5">
+                      <div className="flex-1 min-w-0">
+                        {onOpenContact ? (
+                          <button
+                            type="button"
+                            onClick={() => { setDetailCourtierId(null); onOpenContact(ligne.contactId); }}
+                            title="Ouvrir la fiche du client"
+                            className="block max-w-full text-left text-sm text-white font-semibold truncate hover:text-[#F9C977] hover:underline"
+                          >
+                            {ligne.nom}
+                          </button>
+                        ) : (
+                          <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
+                        )}
+                        <div className="text-[11px] text-slate-500 truncate sm:hidden">
+                          {formatCurrency(ligne.commission)} commission · {formatCurrency(ligne.comBanque)} banque
+                        </div>
+                      </div>
+                      <span className="w-24 text-right text-sm text-white tabular-nums">
+                        {formatCurrency(ligne.montant)}
+                      </span>
+                      <span className="w-24 text-right text-sm text-slate-300 tabular-nums hidden sm:block">
+                        {formatCurrency(ligne.commission)}
+                      </span>
+                      <span className="w-28 text-right text-sm text-slate-300 tabular-nums hidden sm:block">
+                        {formatCurrency(ligne.comBanque)}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <p className="px-5 py-3 text-[11px] text-slate-500 border-t border-[#144447]/60 leading-relaxed">
+                Cliquez sur un client pour ouvrir sa fiche directement.
+              </p>
+            </div>
+          </div>
         );
       })()}
     </div>
