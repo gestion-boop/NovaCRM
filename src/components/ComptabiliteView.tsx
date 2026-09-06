@@ -464,7 +464,13 @@ export default function ComptabiliteView() {
       description: formActual.description.trim(),
       credit,
       debit,
-      previsionnel: formActual.previsionnel || !formActual.date,
+      // Une ligne ajoutée avec une date connue va directement dans le
+      // tableau normal, cochable sur place (6 septembre : « je ne veux pas
+      // que ça apparaisse en haut à vérifier, ça doit aller directement
+      // dans le tableau »). Sans date, elle reste en attente comme avant.
+      // En modification, on ne touche pas au statut prévisionnel de la
+      // ligne existante — seul le bouton « ✓ Valider » le change.
+      previsionnel: ligneActualOuverte === 'nouveau' ? !formActual.date : formActual.previsionnel,
     };
     if (ligneActualOuverte === 'nouveau') {
       creerActual.mutate(payload);
@@ -1240,16 +1246,6 @@ export default function ComptabiliteView() {
                 />
               </div>
             </div>
-
-            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formActual.previsionnel}
-                onChange={(e) => setFormActual((f) => ({ ...f, previsionnel: e.target.checked }))}
-                className="w-3.5 h-3.5 rounded accent-[#F7BC5F]"
-              />
-              Ligne prévisionnelle (pas encore sur le compte)
-            </label>
 
             {/* Sans date, deux destinations possibles (6 septembre : « on a
                 le choix soit de les mettre dans le tableau prévisionnel,
