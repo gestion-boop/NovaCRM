@@ -3,6 +3,7 @@ import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext';
 import { useTreasuryLines } from '@/hooks/useTreasuryLines';
 import { useTreasuryActuals, TreasuryActual } from '@/hooks/useTreasuryActuals';
+import { TreasuryLine } from '@/types';
 import { formatCurrencyPrecis } from '@/lib/utils';
 
 const MOIS_ONGLETS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
@@ -61,7 +62,7 @@ const formActualVide = (dateParDefaut: string): FormActual => ({
 
 export default function ComptabiliteView() {
   const { userProfile, currentUser, activeAgency } = useAuth();
-  const { lines, creerLigne, modifierLigne } = useTreasuryLines(activeAgency.id);
+  const { lines, creerLigne, modifierLigne, supprimerLigne } = useTreasuryLines(activeAgency.id);
   const {
     actuals,
     isLoading: actualsChargement,
@@ -77,11 +78,13 @@ export default function ComptabiliteView() {
   const estDirectionCF = /grazia|melanie|gestion@immosphera\.fr/i.test(identite);
   const estConseilsFinances = /conseils?\s*finances?/i.test(activeAgency?.name || '');
 
+  const [anneeActive, setAnneeActive] = useState<'2026' | '2027'>('2026');
   const [moisActuelOnglet, setMoisActuelOnglet] = useState('01');
 
   // Solde bancaire théorique cumulé : on part de la toute première ligne du
   // grand livre (le report d'ouverture) et on accumule crédit - débit dans
-  // l'ordre chronologique complet, tous mois confondus.
+  // l'ordre chronologique complet, tous mois ET toutes années confondus (le
+  // solde de clôture 2026 devient naturellement le solde d'ouverture 2027).
   const actualsAvecSolde = useMemo(() => {
     let solde = 0;
     return actuals.map((a) => {
@@ -91,16 +94,25 @@ export default function ComptabiliteView() {
   }, [actuals]);
 
   const actualsDuMoisActif = useMemo(
-    () => actualsAvecSolde.filter((a) => a.monthSheet === moisActuelOnglet),
-    [actualsAvecSolde, moisActuelOnglet]
+    () => actualsAvecSolde.filter((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive)),
+    [actualsAvecSolde, moisActuelOnglet, anneeActive]
+  );
+
+  const moisIsoActif = `${anneeActive}-${moisActuelOnglet}-01`;
+
+  const lignesDuMoisActif = useMemo(
+    () => lines.filter((l) =>
+      l.kind === 'ponctuel' ? l.month === moisIsoActif : moisIsoActif >= l.month && (!l.endMonth || moisIsoActif <= l.endMonth)
+    ),
+    [lines, moisIsoActif]
   );
 
   const soldeOuvertureMoisActif = useMemo(() => {
-    const idxPremier = actualsAvecSolde.findIndex((a) => a.monthSheet === moisActuelOnglet);
+    const idxPremier = actualsAvecSolde.findIndex((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive));
     if (idxPremier === -1) return 0;
     if (idxPremier === 0) return actualsAvecSolde[0].soldeApres - (actualsAvecSolde[0].credit - actualsAvecSolde[0].debit);
     return actualsAvecSolde[idxPremier - 1].soldeApres;
-  }, [actualsAvecSolde, moisActuelOnglet]);
+  }, [actualsAvecSolde, moisActuelOnglet, anneeActive]);
 
   const soldeClotureMoisActif = actualsDuMoisActif.length > 0
     ? actualsDuMoisActif[actualsDuMoisActif.length - 1].soldeApres
@@ -112,7 +124,7 @@ export default function ComptabiliteView() {
   // Formulaire distinct pour les lignes du grand livre réel (treasury_actuals) :
   // null = fermé, 'nouveau' ou id de la ligne éditée.
   const [ligneActualOuverte, setLigneActualOuverte] = useState<string | null>(null);
-  const [formActual, setFormActual] = useState<FormActual>(() => formActualVide(`2026-${moisActuelOnglet}-01`));
+  const [formActual, setFormActual] = useState<FormActual>(() => formActualVide(`2026-01-01`));
 
   const categories = useMemo(() => {
     const set = new Set<string>(CATEGORIES_SUGGEREES);
@@ -128,7 +140,26 @@ export default function ComptabiliteView() {
     );
   }
 
-  const ouvrirNouveau = () => { setForm(formVide(`2026-${moisActuelOnglet}-01`)); setFormOuvert('nouveau'); };
+  const ouvrirNouveau = () => { setForm(formVide(moisIsoActif)); setFormOuvert('nouveau'); };
+
+  const ouvrirEdition = (ligne: TreasuryLine) => {
+    setForm({
+      label: ligne.label,
+      category: ligne.category,
+      kind: ligne.kind,
+      sens: ligne.amount < 0 ? 'depense' : 'recette',
+      montant: String(Math.abs(ligne.amount)),
+      month: ligne.month,
+      endMonth: ligne.endMonth || '',
+    });
+    setFormOuvert(ligne.id);
+  };
+
+  const supprimerLigneAvecConfirmation = (id: string) => {
+    if (window.confirm('Supprimer définitivement cette ligne récurrente/ponctuelle ?')) {
+      supprimerLigne.mutate(id);
+    }
+  };
 
   const soumettre = () => {
     const montantNombre = Number(form.montant.replace(',', '.'));
@@ -151,7 +182,7 @@ export default function ComptabiliteView() {
   };
 
   const ouvrirNouvelActual = () => {
-    setFormActual(formActualVide(`2026-${moisActuelOnglet}-01`));
+    setFormActual(formActualVide(moisIsoActif));
     setLigneActualOuverte('nouveau');
   };
 
@@ -212,6 +243,23 @@ export default function ComptabiliteView() {
             <Plus className="w-3.5 h-3.5" /> Ajouter au grand livre
           </button>
         </div>
+      </div>
+
+      {/* Onglets année */}
+      <div className="flex items-center gap-1.5">
+        {(['2026', '2027'] as const).map((annee) => (
+          <button
+            key={annee}
+            onClick={() => setAnneeActive(annee)}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
+              anneeActive === annee
+                ? 'bg-[#F7BC5F] text-slate-950'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10'
+            }`}
+          >
+            {annee}
+          </button>
+        ))}
       </div>
 
       {/* Solde bancaire théorique — grand livre du mois actif */}
@@ -336,6 +384,49 @@ export default function ComptabiliteView() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* Lignes récurrentes / ponctuelles (treasury_lines) actives sur le mois affiché — CRUD complet */}
+      <div className="rounded-2xl border-2 border-[#2a6a6f] bg-[#0a1e20]/60 p-4 space-y-2">
+        <h3 className="text-xs font-bold text-white uppercase tracking-wide">
+          Lignes récurrentes / ponctuelles — {NOMS_MOIS_COURT[moisActuelOnglet]} {anneeActive}
+        </h3>
+        {lignesDuMoisActif.length === 0 ? (
+          <p className="text-xs text-slate-500 italic py-2">
+            Aucune ligne récurrente ou ponctuelle sur ce mois.
+          </p>
+        ) : (
+          <div className="divide-y divide-[#2a6a6f]/50">
+            {lignesDuMoisActif.map((l) => (
+              <div key={l.id} className="group flex items-center justify-between gap-2 py-1.5 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      l.kind === 'recurrent' ? 'bg-sky-500/20 text-sky-300' : 'bg-amber-500/20 text-amber-300'
+                    }`}
+                  >
+                    {l.kind === 'recurrent' ? 'Récur.' : 'Ponct.'}
+                  </span>
+                  <span className="text-slate-200 truncate">{l.label}</span>
+                  <span className="text-slate-500 truncate">· {l.category}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`font-bold tabular-nums ${l.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {formatCurrencyPrecis(l.amount)}
+                  </span>
+                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => ouvrirEdition(l)} title="Modifier" className="text-slate-400 hover:text-[#F7BC5F]">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => supprimerLigneAvecConfirmation(l.id)} title="Supprimer" className="text-slate-400 hover:text-red-400">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
