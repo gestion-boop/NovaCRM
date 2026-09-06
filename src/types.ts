@@ -72,6 +72,11 @@ export interface Contact {
   // Com banques : calculée automatiquement à partir de montantCredit et du
   // taux de banqueChoisie — modifiable.
   comBanque?: number;
+  // Demandé le 6 septembre : « comBanque, c'est ce que perçoit la banque
+  // [comprendre : l'agence] ; à côté, la part qu'en reçoit le courtier,
+  // selon son pourcentage ». Calculée automatiquement à partir de comBanque
+  // et du même taux courtier que honorairesCourtier — modifiable.
+  comBanqueCourtier?: number;
 }
 
 export interface PipelineDef {
@@ -93,9 +98,10 @@ export interface Deal {
   // Commission du conseiller, stockée en TTC ; affichée en HT dans les
   // colonnes du pipeline (voir htDepuisTtc).
   advisorCommissionTtc?: number;
-  // Commission Banque du dossier (leads.com_banque) : demandée le 6
-  // septembre pour figurer, en plus des honoraires, sur la case CA de
-  // chaque courtier (Conseils Finances).
+  // Commission Banque du dossier (leads.com_banque) : ce que l'AGENCE
+  // perçoit de la banque, en plus des honoraires — figure dans le chiffre
+  // d'affaires de l'agence, pas directement dans celui d'un courtier (voir
+  // comBanqueCourtier ci-dessous, sa part à lui).
   comBanque?: number;
   // Honoraires courtier (leads.honoraires_courtier, Conseils Finances) :
   // calculé automatiquement sur la fiche client à partir des honoraires
@@ -103,6 +109,20 @@ export interface Deal {
   // modifiable à la main. C'est ce champ — pas advisorCommissionTtc — qui
   // alimente « Commission des courtiers » sur Conseils Finances.
   honorairesCourtier?: number;
+  // Corrigé le 6 septembre : « il faut uniquement comptabiliser la
+  // commission qu'on leur donne, plus la commission Banque qu'on leur donne
+  // en fonction de leur pourcentage » — comBanque est ce que perçoit
+  // l'agence ; comBanqueCourtier (leads.com_banque_courtier) est la part
+  // qu'en reçoit le courtier, calculée avec le même taux que
+  // honorairesCourtier. C'est ce champ — pas comBanque — qui alimente la
+  // case « Commission Banque » de chaque courtier.
+  comBanqueCourtier?: number;
+  // Case à cocher « commission validée » / « commission Banque validée »
+  // (leads.commission_validee / com_banque_validee) — demandé le 6
+  // septembre pour le tableau détaillé de chaque courtier : vert une fois
+  // pointé/reçu, orange tant que ce n'est pas fait.
+  commissionValidee: boolean;
+  comBanqueValidee: boolean;
   // Numéro de mandat (leads.mandate_number) — affiché dans le détail du
   // chiffre d'affaires pour retrouver le dossier d'un coup d'œil.
   mandateNumber?: string;

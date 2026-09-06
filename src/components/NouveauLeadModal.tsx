@@ -144,6 +144,11 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   const [montantCredit, setMontantCredit] = useState<number | ''>('');
   const [banqueChoisie, setBanqueChoisie] = useState('');
   const [comBanque, setComBanque] = useState<number | ''>('');
+  // Corrigé le 6 septembre : « il faut uniquement comptabiliser la
+  // commission qu'on leur donne, plus la commission Banque qu'on leur donne
+  // en fonction de leur pourcentage » — la part du courtier sur la
+  // commission Banque, même taux que honorairesCourtier.
+  const [comBanqueCourtier, setComBanqueCourtier] = useState<number | ''>('');
   // « Touché » : la personne a écrit elle-même dans la case — on ne
   // recalcule plus par-dessus, jusqu'à ce qu'une base du calcul (honoraires,
   // attribution, banque, montant du crédit) change à nouveau. « Auto » : la
@@ -153,6 +158,8 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   const courtierAuto = useRef<number | ''>('');
   const banqueTouche = useRef(false);
   const banqueAuto = useRef<number | ''>('');
+  const comBanqueCourtierTouche = useRef(false);
+  const comBanqueCourtierAuto = useRef<number | ''>('');
   const [assignedTo, setAssignedTo] = useState('');
   const [comments, setComments] = useState('');
 
@@ -290,10 +297,13 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
     setMontantCredit(c?.montantCredit ? Number(c.montantCredit) : '');
     setBanqueChoisie(c?.banqueChoisie || '');
     setComBanque(c?.comBanque ? Number(c.comBanque) : '');
+    setComBanqueCourtier(c?.comBanqueCourtier ? Number(c.comBanqueCourtier) : '');
     courtierTouche.current = Boolean(c?.honorairesCourtier);
     courtierAuto.current = '';
     banqueTouche.current = Boolean(c?.comBanque);
     banqueAuto.current = '';
+    comBanqueCourtierTouche.current = Boolean(c?.comBanqueCourtier);
+    comBanqueCourtierAuto.current = '';
     setSubmitting(false);
   }, [isOpen, initial, selectedAgencyId]);
 
@@ -331,6 +341,21 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
     setComBanque(calcule);
   }, [isOpen, estConseilsFinances, tauxBanque, montantCredit]);
 
+  // Com banques courtier = taux du courtier × com banques, même règle que
+  // honoraires courtier — corrigé le 6 septembre : c'était la commission
+  // Banque totale (celle de l'agence) qui remontait sur la case du courtier
+  // au lieu de sa seule part.
+  useEffect(() => {
+    if (!isOpen || !estConseilsFinances || comBanqueCourtierTouche.current) return;
+    if (tauxCourtier === null || comBanque === '' || Number(comBanque) <= 0) {
+      setComBanqueCourtier((v) => (v !== '' && v === comBanqueCourtierAuto.current ? '' : v));
+      return;
+    }
+    const calcule = Math.round(Number(comBanque) * tauxCourtier * 100) / 100;
+    comBanqueCourtierAuto.current = calcule;
+    setComBanqueCourtier(calcule);
+  }, [isOpen, estConseilsFinances, tauxCourtier, comBanque]);
+
   if (!isOpen) return null;
 
   const currentAgency = AGENCIES.find((a) => matchesAgency(agencyId, a.id)) || AGENCIES[0];
@@ -357,8 +382,8 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
     const societeAEnregistrer = societeRenseignee(societe) ? societeVersContact(societe) : {};
 
     const courtageRenseigne =
-      honorairesCourtier !== '' || montantCredit !== '' || banqueChoisie !== '' || comBanque !== '' ||
-      Boolean(initial?.honorairesCourtier || initial?.montantCredit || initial?.banqueChoisie || initial?.comBanque);
+      honorairesCourtier !== '' || montantCredit !== '' || banqueChoisie !== '' || comBanque !== '' || comBanqueCourtier !== '' ||
+      Boolean(initial?.honorairesCourtier || initial?.montantCredit || initial?.banqueChoisie || initial?.comBanque || initial?.comBanqueCourtier);
 
     setSubmitting(true);
     try {
@@ -404,6 +429,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
               montantCredit: montantCredit === '' ? vide(0) : Number(montantCredit),
               banqueChoisie: banqueChoisie || vide(''),
               comBanque: comBanque === '' ? vide(0) : Number(comBanque),
+              comBanqueCourtier: comBanqueCourtier === '' ? vide(0) : Number(comBanqueCourtier),
             }
           : {}),
       });
@@ -829,6 +855,26 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                       onChange={(e) => {
                         banqueTouche.current = true;
                         setComBanque(e.target.value === '' ? '' : Number(e.target.value));
+                      }}
+                      className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
+                    />
+
+                    <label htmlFor="cf-com-banque-courtier" className="text-xs font-bold text-slate-200">
+                      Com banques courtier (€)
+                      <span className="block text-[10px] font-normal text-slate-500">
+                        {tauxCourtier !== null
+                          ? `${pourcent(tauxCourtier)} des com banques, calculé automatiquement — modifiable`
+                          : 'Attribuez la fiche à un courtier pour le calcul automatique'}
+                      </span>
+                    </label>
+                    <input
+                      id="cf-com-banque-courtier"
+                      type="number"
+                      placeholder="Calculé"
+                      value={comBanqueCourtier}
+                      onChange={(e) => {
+                        comBanqueCourtierTouche.current = true;
+                        setComBanqueCourtier(e.target.value === '' ? '' : Number(e.target.value));
                       }}
                       className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors font-mono"
                     />
