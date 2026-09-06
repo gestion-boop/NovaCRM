@@ -1101,6 +1101,24 @@ textarea[class]:not([class~="bg-transparent"]) {
   border-color: var(--nv-field-border);
 }
 
+/* Signalé (6 septembre) : « corrige les écritures dans les cases c'est
+   illisible » sur la fiche « Nouveau bien » d'Immosphera360. Ce module a été
+   conçu à thème clair (cartes blanches, texte foncé) quelle que soit la
+   préférence jour/nuit du reste de l'app — mais la règle ci-dessus repeint
+   quand même ses champs en `--nv-field` du thème NUIT (très sombre, `:root`)
+   quand l'app est en mode nuit : texte foncé du module sur fond forcé sombre,
+   illisible. `.immosphera-root` (posé sur la racine du module, y compris ses
+   modales — voir components/ui/dialog.tsx qui les porte dedans exprès) donne
+   une spécificité plus grande qui l'emporte sur la règle globale ci-dessus,
+   sans dépendre du mode jour/nuit choisi par ailleurs dans l'app. */
+.immosphera-root input[class]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([class~="bg-transparent"]),
+.immosphera-root select[class]:not([class~="bg-transparent"]),
+.immosphera-root textarea[class]:not([class~="bg-transparent"]) {
+  background-color: #ffffff;
+  border-color: #cbd5e0;
+  color: #1b2126;
+}
+
 /* ── 8 bis. Panneau de contenu ───────────────────────────────────────────── */
 /* À poser sur tout bloc qui affiche du texte directement au-dessus du fond
    de page. Plusieurs écrans utilisaient `bg-white/5` pour ça : ce n'est pas
