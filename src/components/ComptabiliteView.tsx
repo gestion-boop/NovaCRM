@@ -207,13 +207,27 @@ export default function ComptabiliteView() {
 
   // Totaux du bas de tableau (6 septembre : « solde débit ensuite crédit et
   // ensuite prévisionnel ») — débit et crédit portent sur les lignes
-  // confirmées du mois, le prévisionnel sur le mouvement net des lignes
-  // encore en attente de validation.
+  // confirmées du mois. Reprécisé le 6 septembre : « pour l'instant
+  // concernant les prévisionnels c'est toutes les lignes qui ne sont pas
+  // cochées, il faut que tu le mettes dedans » — le prévisionnel compte
+  // désormais TOUTES les lignes du mois pas encore cochées (crédit ou
+  // débit, qu'elles soient ou non marquées `previsionnel`), pas seulement
+  // les lignes en attente de validation.
   const totalDebitMois = useMemo(() => actualsDuMoisActif.reduce((s, a) => s + a.debit, 0), [actualsDuMoisActif]);
   const totalCreditMois = useMemo(() => actualsDuMoisActif.reduce((s, a) => s + a.credit, 0), [actualsDuMoisActif]);
+  const toutesLignesDuMoisActif = useMemo(
+    () => actuals.filter((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive)),
+    [actuals, moisActuelOnglet, anneeActive]
+  );
   const totalPrevisionnelMois = useMemo(
-    () => previsionnelsDuMoisActif.reduce((s, a) => s + (a.credit - a.debit), 0),
-    [previsionnelsDuMoisActif]
+    () =>
+      toutesLignesDuMoisActif.reduce((s, a) => {
+        let net = 0;
+        if (a.credit > 0 && !a.creditConfirme) net += a.credit;
+        if (a.debit > 0 && !a.debitConfirme) net -= a.debit;
+        return s + net;
+      }, 0),
+    [toutesLignesDuMoisActif]
   );
 
   const moisIsoActif = `${anneeActive}-${moisActuelOnglet}-01`;
@@ -961,17 +975,27 @@ export default function ComptabiliteView() {
               <div className="text-[10px] uppercase tracking-widest text-slate-500">Solde crédit</div>
               <div className="text-sm font-bold text-emerald-400 tabular-nums">{formatCurrencyPrecis(totalCreditMois)}</div>
             </div>
+            <div className="w-px bg-[#2a6a6f]" />
+            {/* Demandé le 6 septembre : « entre le solde prévisionnel et le
+                solde de crédit, mets le solde bancaire actuel pour refléter
+                la réalité qu'il y a sur les comptes » — reprend le solde
+                bancaire confirmé de clôture du mois, déjà affiché en haut du
+                panneau, pour qu'il reste visible ici aussi. */}
+            <div className="flex-1 min-w-[130px] px-4 py-2.5 text-center" title="Solde bancaire réel (confirmé) à la clôture de ce mois">
+              <div className="text-[10px] uppercase tracking-widest text-slate-500">Solde bancaire actuel</div>
+              <div className={`text-sm font-bold tabular-nums ${soldeClotureMoisActif >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
+                {formatCurrencyPrecis(soldeClotureMoisActif)}
+              </div>
+            </div>
             {/* Ligne verticale plus marquée avant « Prévisionnel » (6
                 septembre) : cette valeur reste une projection, pas un
                 mouvement confirmé — on la sépare visuellement du reste.
-                Cette case reste le mouvement net des lignes ENCORE en
-                attente de validation (panneau ⏳ ci-dessus) — à ne pas
-                confondre avec la nouvelle case « Prévisionnel fin de mois »
-                du bandeau du haut, qui elle raisonne sur les débits non
-                confirmés (prévisionnels ou non) soustraits au solde bancaire. */}
+                Reprécisé le 6 septembre : cette case compte maintenant
+                TOUTES les lignes du mois pas encore cochées (crédit ou
+                débit), pas seulement celles encore dans le panneau ⏳. */}
             <div className="w-[3px] bg-[#F7BC5F]" />
-            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center bg-[#F7BC5F]/5" title="Mouvement net des lignes encore en attente de validation (⏳ ci-dessus)">
-              <div className="text-[10px] uppercase tracking-widest text-[#F7BC5F]/80">Prévisionnel (en attente)</div>
+            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center bg-[#F7BC5F]/5" title="Mouvement net de toutes les lignes du mois pas encore cochées, crédit ou débit">
+              <div className="text-[10px] uppercase tracking-widest text-[#F7BC5F]/80">Prévisionnel (non coché)</div>
               <div className={`text-sm font-bold tabular-nums ${totalPrevisionnelMois >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
                 {totalPrevisionnelMois >= 0 ? '+' : ''}{formatCurrencyPrecis(totalPrevisionnelMois)}
               </div>
