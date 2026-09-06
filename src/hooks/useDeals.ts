@@ -43,6 +43,12 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
       item.honoraires_courtier === null || item.honoraires_courtier === undefined
         ? undefined
         : Number(item.honoraires_courtier),
+    comBanqueCourtier:
+      item.com_banque_courtier === null || item.com_banque_courtier === undefined
+        ? undefined
+        : Number(item.com_banque_courtier),
+    commissionValidee: Boolean(item.commission_validee),
+    comBanqueValidee: Boolean(item.com_banque_validee),
     mandateNumber: (item.mandate_number as string) || undefined,
     caDevisAVenir:
       item.pending_quote_amount === null || item.pending_quote_amount === undefined

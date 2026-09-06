@@ -135,6 +135,10 @@ export function supabaseLeadToContact(item: Record<string, unknown>): Contact {
       item.com_banque === null || item.com_banque === undefined
         ? undefined
         : Number(item.com_banque),
+    comBanqueCourtier:
+      item.com_banque_courtier === null || item.com_banque_courtier === undefined
+        ? undefined
+        : Number(item.com_banque_courtier),
     companyName: ((item.company as Record<string, unknown> | null)?.name as string) || undefined,
     companyAddress: ((item.company as Record<string, unknown> | null)?.address as string) || undefined,
     companySiret: ((item.company as Record<string, unknown> | null)?.siret as string) || undefined,
@@ -322,6 +326,7 @@ export const useContacts = () => {
         ...(newContact.montantCredit !== undefined ? { montant_credit: newContact.montantCredit } : {}),
         ...(newContact.banqueChoisie !== undefined ? { banque_choisie: newContact.banqueChoisie?.trim() || null } : {}),
         ...(newContact.comBanque !== undefined ? { com_banque: newContact.comBanque } : {}),
+        ...(newContact.comBanqueCourtier !== undefined ? { com_banque_courtier: newContact.comBanqueCourtier } : {}),
       };
 
       const { data, error: sbError } = await supabase
@@ -493,6 +498,10 @@ export const useContacts = () => {
 
       if (updates.comBanque !== undefined) {
         patch.com_banque = updates.comBanque;
+      }
+
+      if (updates.comBanqueCourtier !== undefined) {
+        patch.com_banque_courtier = updates.comBanqueCourtier;
       }
 
       if (updates.secteur !== undefined) {

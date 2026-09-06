@@ -35,6 +35,10 @@ interface LigneCa {
   advisorId?: string;
   commission: number;
   comBanque: number;
+  // Cases à cocher du détail par courtier (6 septembre) : vert une fois
+  // pointées, orange tant que non.
+  commissionValidee: boolean;
+  comBanqueValidee: boolean;
   // Signature faite à l'archivage (leads.signed_at) — condition ultime pour
   // qu'un dossier archivé compte dans le CA (voir le calcul plus haut).
   signe: boolean;
@@ -423,7 +427,16 @@ export default function Dashboard({
       const commissionLigne = estConseilsFinances
         ? Number(d.honorairesCourtier) || 0
         : Number(d.advisorCommissionTtc) || 0;
-      const comBanqueLigne = Number(d.comBanque) || 0;
+      // Corrigé le 6 septembre : « il faut uniquement comptabiliser la
+      // commission qu'on leur donne, plus la commission Banque qu'on leur
+      // donne en fonction de leur pourcentage » — comBanque est ce que
+      // perçoit l'AGENCE (utilisé pour le CA agence, comBanqueAgenceLigne
+      // plus bas) ; comBanqueCourtier est la part du COURTIER (utilisée
+      // pour sa case), un montant différent, pas le même divisé après coup.
+      const comBanqueAgenceLigne = Number(d.comBanque) || 0;
+      const comBanqueLigne = estConseilsFinances
+        ? Number(d.comBanqueCourtier) || 0
+        : Number(d.comBanque) || 0;
       const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
       const dansPipelineViseFlag = Boolean(pipelineReel && pipelinesVises.has(pipelineReel));
       // Demandé le 6 septembre : « du moment que c'est archivé, même si ce
@@ -469,6 +482,8 @@ export default function Dashboard({
           commission: commissionLigne,
           comBanque: comBanqueLigne,
           signe: Boolean(d.signedAt),
+          commissionValidee: Boolean(d.commissionValidee),
+          comBanqueValidee: Boolean(d.comBanqueValidee),
         });
         return;
       }
@@ -490,6 +505,8 @@ export default function Dashboard({
         commission: commissionLigne,
         comBanque: comBanqueLigne,
         signe: Boolean(d.signedAt),
+        commissionValidee: Boolean(d.commissionValidee),
+        comBanqueValidee: Boolean(d.comBanqueValidee),
       });
       // Demandé le 6 septembre : « le chiffre comptabilisé doit être
       // définitivement comptabilisé du moment que le dossier est archivé et
@@ -503,7 +520,7 @@ export default function Dashboard({
       if (d.archivedAt && d.signedAt) {
         total += montant;
         comptees += 1;
-        comBanqueTotal += Number(d.comBanque) || 0;
+        comBanqueTotal += comBanqueAgenceLigne;
         if (d.advisorId) {
           parConseiller.set(d.advisorId, (parConseiller.get(d.advisorId) || 0) + montant);
           if (new Date(d.archivedAt).getFullYear() === anneeCourante) {
@@ -523,11 +540,10 @@ export default function Dashboard({
               (commissionParConseiller.get(d.advisorId) || 0) + commission
             );
           }
-          const comBanque = Number(d.comBanque) || 0;
-          if (comBanque > 0) {
+          if (comBanqueLigne > 0) {
             comBanqueParConseiller.set(
               d.advisorId,
-              (comBanqueParConseiller.get(d.advisorId) || 0) + comBanque
+              (comBanqueParConseiller.get(d.advisorId) || 0) + comBanqueLigne
             );
           }
         }
@@ -790,6 +806,27 @@ export default function Dashboard({
     queryClient.invalidateQueries({ queryKey: ['deals'] });
     queryClient.invalidateQueries({ queryKey: ['contacts_all'] });
     toast.success(`Montant mis à jour : ${formatCurrency(montant)}`);
+  };
+
+  // Demandé le 6 septembre : dans le détail par courtier, une case à cocher
+  // « commission validée » et une « commission Banque validée » par client —
+  // vert une fois pointées, orange tant que non, et la ligne entière passe au
+  // vert seulement quand les deux sont cochées.
+  const [validationEnCours, setValidationEnCours] = useState<string | null>(null);
+  const basculerValidation = async (
+    ligne: LigneCa,
+    champ: 'commission_validee' | 'com_banque_validee',
+    valeur: boolean
+  ) => {
+    const cle = `${ligne.id}:${champ}`;
+    setValidationEnCours(cle);
+    const { error } = await supabase
+      .from('leads')
+      .update({ [champ]: valeur } as any)
+      .eq('id', ligne.id);
+    setValidationEnCours(null);
+    if (error) { toast.error(error.message); return; }
+    queryClient.invalidateQueries({ queryKey: ['deals'] });
   };
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -2053,6 +2090,16 @@ export default function Dashboard({
         const lignesCourtier = chiffreAffairesAgence.lignes.filter(
           (l) => l.advisorId === detailCourtierId && l.archive && l.signe
         );
+        // Demandé le 6 septembre : deux cases bien visibles, en haut du
+        // tableau, avec ce qui a déjà été « comptabilisé validé » — la
+        // somme de la commission (resp. commission Banque) des seules
+        // lignes cochées, en vert.
+        const commissionValideeTotal = lignesCourtier
+          .filter((l) => l.commissionValidee)
+          .reduce((s, l) => s + l.commission, 0);
+        const comBanqueValideeTotal = lignesCourtier
+          .filter((l) => l.comBanqueValidee)
+          .reduce((s, l) => s + l.comBanque, 0);
         return (
           <div
             className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
@@ -2079,11 +2126,22 @@ export default function Dashboard({
                 </button>
               </div>
 
+              <div className="grid grid-cols-2 gap-3 p-5 border-b border-[#144447]/60">
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Commission courtier validée</span>
+                  <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrency(commissionValideeTotal)}</span>
+                </div>
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Commission Banque validée</span>
+                  <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrency(comBanqueValideeTotal)}</span>
+                </div>
+              </div>
+
               <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
                 <span className="flex-1">Client</span>
                 <span className="w-24 text-right">Honoraires</span>
-                <span className="w-24 text-right hidden sm:block">Commission</span>
-                <span className="w-28 text-right hidden sm:block">Com. Banque</span>
+                <span className="w-28 text-right hidden sm:block">Commission</span>
+                <span className="w-32 text-right hidden sm:block">Com. Banque</span>
               </div>
 
               <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
@@ -2092,41 +2150,78 @@ export default function Dashboard({
                     Aucun dossier archivé et signé pour ce courtier pour le moment.
                   </p>
                 ) : (
-                  lignesCourtier.map((ligne) => (
-                    <div key={ligne.id} className="flex items-center gap-3 px-5 py-2.5">
-                      <div className="flex-1 min-w-0">
-                        {onOpenContact ? (
-                          <button
-                            type="button"
-                            onClick={() => { setDetailCourtierId(null); onOpenContact(ligne.contactId); }}
-                            title="Ouvrir la fiche du client"
-                            className="block max-w-full text-left text-sm text-white font-semibold truncate hover:text-[#F9C977] hover:underline"
-                          >
-                            {ligne.nom}
-                          </button>
-                        ) : (
-                          <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
-                        )}
-                        <div className="text-[11px] text-slate-500 truncate sm:hidden">
-                          {formatCurrency(ligne.commission)} commission · {formatCurrency(ligne.comBanque)} banque
+                  lignesCourtier.map((ligne) => {
+                    // Demandé le 6 septembre : une case à cocher « commission
+                    // validée » et une « commission Banque validée » par
+                    // client. Chaque montant est vert coché, orange sinon ;
+                    // la ligne entière ne passe au vert que si les deux sont
+                    // cochées — orange tant que l'une des deux ne l'est pas.
+                    const toutValide = ligne.commissionValidee && ligne.comBanqueValidee;
+                    return (
+                      <div
+                        key={ligne.id}
+                        className={`flex items-center gap-3 px-5 py-2.5 border-l-2 ${
+                          toutValide
+                            ? 'bg-emerald-500/10 border-l-emerald-500'
+                            : 'bg-amber-500/5 border-l-amber-500/70'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          {onOpenContact ? (
+                            <button
+                              type="button"
+                              onClick={() => { setDetailCourtierId(null); onOpenContact(ligne.contactId); }}
+                              title="Ouvrir la fiche du client"
+                              className="block max-w-full text-left text-sm text-white font-semibold truncate hover:text-[#F9C977] hover:underline"
+                            >
+                              {ligne.nom}
+                            </button>
+                          ) : (
+                            <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
+                          )}
+                          <div className="text-[11px] text-slate-500 truncate sm:hidden">
+                            {formatCurrency(ligne.commission)} commission · {formatCurrency(ligne.comBanque)} banque
+                          </div>
                         </div>
+                        <span className="w-24 text-right text-sm text-white tabular-nums">
+                          {formatCurrency(ligne.montant)}
+                        </span>
+                        <label className="w-28 hidden sm:flex items-center justify-end gap-1.5 cursor-pointer">
+                          <span className={`text-sm tabular-nums ${ligne.commissionValidee ? 'text-emerald-300' : 'text-amber-400'}`}>
+                            {formatCurrency(ligne.commission)}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={ligne.commissionValidee}
+                            disabled={validationEnCours === `${ligne.id}:commission_validee`}
+                            onChange={(e) => void basculerValidation(ligne, 'commission_validee', e.target.checked)}
+                            className="w-4 h-4 rounded accent-emerald-500 cursor-pointer disabled:opacity-50"
+                            title="Commission validée"
+                          />
+                        </label>
+                        <label className="w-32 hidden sm:flex items-center justify-end gap-1.5 cursor-pointer">
+                          <span className={`text-sm tabular-nums ${ligne.comBanqueValidee ? 'text-emerald-300' : 'text-amber-400'}`}>
+                            {formatCurrency(ligne.comBanque)}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={ligne.comBanqueValidee}
+                            disabled={validationEnCours === `${ligne.id}:com_banque_validee`}
+                            onChange={(e) => void basculerValidation(ligne, 'com_banque_validee', e.target.checked)}
+                            className="w-4 h-4 rounded accent-emerald-500 cursor-pointer disabled:opacity-50"
+                            title="Commission Banque validée"
+                          />
+                        </label>
                       </div>
-                      <span className="w-24 text-right text-sm text-white tabular-nums">
-                        {formatCurrency(ligne.montant)}
-                      </span>
-                      <span className="w-24 text-right text-sm text-slate-300 tabular-nums hidden sm:block">
-                        {formatCurrency(ligne.commission)}
-                      </span>
-                      <span className="w-28 text-right text-sm text-slate-300 tabular-nums hidden sm:block">
-                        {formatCurrency(ligne.comBanque)}
-                      </span>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
               <p className="px-5 py-3 text-[11px] text-slate-500 border-t border-[#144447]/60 leading-relaxed">
-                Cliquez sur un client pour ouvrir sa fiche directement.
+                Cliquez sur un client pour ouvrir sa fiche directement. Cochez commission et
+                commission Banque une fois reçues : la ligne passe au vert quand les deux le sont,
+                orange tant que l'une manque.
               </p>
             </div>
           </div>
