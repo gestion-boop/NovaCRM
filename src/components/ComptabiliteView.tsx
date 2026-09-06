@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2 } from 'lucide-react';
+import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2, StickyNote, Palette } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTreasuryLines } from '@/hooks/useTreasuryLines';
 import { useTreasuryActuals, TreasuryActual } from '@/hooks/useTreasuryActuals';
@@ -55,11 +55,23 @@ interface FormActual {
   description: string;
   credit: string;
   debit: string;
+  previsionnel: boolean;
 }
 
 const formActualVide = (dateParDefaut: string): FormActual => ({
-  date: dateParDefaut, label: '', description: '', credit: '0', debit: '0',
+  date: dateParDefaut, label: '', description: '', credit: '0', debit: '0', previsionnel: false,
 });
+
+// Palette de couleurs prédéfinies pour marquer une ligne du grand livre
+// (catégorisation libre, ex. « à surveiller », « regroupement thématique »).
+const PALETTE_COULEURS = [
+  { nom: 'Ambre', valeur: '#F7BC5F' },
+  { nom: 'Vert', valeur: '#22C55E' },
+  { nom: 'Rouge', valeur: '#EF4444' },
+  { nom: 'Bleu', valeur: '#3B82F6' },
+  { nom: 'Violet', valeur: '#A855F7' },
+  { nom: 'Rose', valeur: '#EC4899' },
+];
 
 export default function ComptabiliteView() {
   const { userProfile, currentUser, activeAgency } = useAuth();
@@ -104,6 +116,11 @@ export default function ComptabiliteView() {
   // Une correction manuelle sur un mois réinitialise le solde cumulé à ce
   // point précis dans la passe unique : elle se propage donc naturellement
   // à tous les mois suivants, jusqu'à la prochaine correction éventuelle.
+  // Les lignes prévisionnelles (pas encore sur le compte) ne participent pas
+  // au solde théorique cumulé tant qu'elles ne sont pas validées : on garde
+  // la logique de bascule d'override par mois intacte (dernierMoisCle avance
+  // toujours, même pour une ligne prévisionnelle qu'on saute), mais on ne
+  // cumule son crédit/débit dans `solde` qu'une fois `previsionnel: false`.
   const actualsAvecSolde = useMemo(() => {
     let solde = 0;
     let dernierMoisCle: string | null = null;
@@ -117,14 +134,23 @@ export default function ComptabiliteView() {
         }
         dernierMoisCle = moisCle;
       }
-      solde += a.credit - a.debit;
+      if (!a.previsionnel) {
+        solde += a.credit - a.debit;
+      }
       return { ...a, soldeApres: solde };
     });
   }, [actuals, overridesParMois]);
 
   const actualsDuMoisActif = useMemo(
-    () => actualsAvecSolde.filter((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive)),
+    () => actualsAvecSolde.filter((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive) && !a.previsionnel),
     [actualsAvecSolde, moisActuelOnglet, anneeActive]
+  );
+
+  // Lignes prévisionnelles en attente de validation, sur le mois actif —
+  // affichées à part, au-dessus du tableau daté principal.
+  const previsionnelsDuMoisActif = useMemo(
+    () => actuals.filter((a) => a.previsionnel && a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive)),
+    [actuals, moisActuelOnglet, anneeActive]
   );
 
   const moisIsoActif = `${anneeActive}-${moisActuelOnglet}-01`;
@@ -157,6 +183,12 @@ export default function ComptabiliteView() {
   // null = fermé, 'nouveau' ou id de la ligne éditée.
   const [ligneActualOuverte, setLigneActualOuverte] = useState<string | null>(null);
   const [formActual, setFormActual] = useState<FormActual>(() => formActualVide(`2026-01-01`));
+
+  // Popover couleur / notes ouvert sur une ligne du grand livre (id de la
+  // ligne, ou null si fermé). Un seul popover à la fois.
+  const [couleurPickerOuvert, setCouleurPickerOuvert] = useState<string | null>(null);
+  const [notePopoverOuvert, setNotePopoverOuvert] = useState<string | null>(null);
+  const [valeurNoteEdition, setValeurNoteEdition] = useState('');
 
   // Correction manuelle du solde de départ du mois actif.
   const [correctionOuvertureOuverte, setCorrectionOuvertureOuverte] = useState(false);
@@ -229,6 +261,7 @@ export default function ComptabiliteView() {
       description: a.description,
       credit: String(a.credit || 0),
       debit: String(a.debit || 0),
+      previsionnel: a.previsionnel,
     });
     setLigneActualOuverte(a.id);
   };
@@ -243,6 +276,7 @@ export default function ComptabiliteView() {
       description: formActual.description.trim(),
       credit,
       debit,
+      previsionnel: formActual.previsionnel,
     };
     if (ligneActualOuverte === 'nouveau') {
       creerActual.mutate(payload);
@@ -250,6 +284,17 @@ export default function ComptabiliteView() {
       modifierActual.mutate({ id: ligneActualOuverte, ...payload });
     }
     setLigneActualOuverte(null);
+  };
+
+  const ouvrirNotePopover = (a: TreasuryActual) => {
+    setValeurNoteEdition(a.notes || '');
+    setNotePopoverOuvert(a.id);
+    setCouleurPickerOuvert(null);
+  };
+
+  const enregistrerNote = (id: string) => {
+    modifierActual.mutate({ id, notes: valeurNoteEdition.trim() || null });
+    setNotePopoverOuvert(null);
   };
 
   const supprimerActualAvecConfirmation = (id: string) => {
@@ -383,6 +428,43 @@ export default function ComptabiliteView() {
           </div>
         </div>
 
+        {previsionnelsDuMoisActif.length > 0 && (
+          <div className="rounded-xl border-2 border-dashed border-[#F7BC5F]/60 bg-[#F7BC5F]/5 p-3 space-y-2">
+            <h4 className="text-xs font-bold text-[#F7BC5F]">
+              ⏳ Lignes prévisionnelles — en attente de validation
+            </h4>
+            <div className="divide-y divide-[#F7BC5F]/20">
+              {previsionnelsDuMoisActif.map((a) => (
+                <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-slate-400 whitespace-nowrap">{new Date(a.date).toLocaleDateString('fr-FR')}</span>
+                    <span className="text-slate-200 truncate">{a.label}</span>
+                    {a.notes && <span className="text-slate-500 italic truncate">« {a.notes} »</span>}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className={`font-bold tabular-nums ${a.credit > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {a.credit > 0 ? formatCurrencyPrecis(a.credit) : `-${formatCurrencyPrecis(a.debit)}`}
+                    </span>
+                    <button
+                      onClick={() => modifierActual.mutate({ id: a.id, previsionnel: false })}
+                      className="px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold hover:bg-emerald-500/30"
+                    >
+                      ✓ Valider
+                    </button>
+                    <button
+                      onClick={() => supprimerActualAvecConfirmation(a.id)}
+                      title="Supprimer"
+                      className="text-slate-400 hover:text-red-400"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {actualsChargement ? (
           <p className="text-sm text-slate-500">Chargement…</p>
         ) : actualsDuMoisActif.length === 0 ? (
@@ -405,7 +487,11 @@ export default function ComptabiliteView() {
               </thead>
               <tbody className="divide-y divide-[#2a6a6f]/70">
                 {actualsDuMoisActif.map((a) => (
-                  <tr key={a.id} className="group hover:bg-white/5">
+                  <tr
+                    key={a.id}
+                    className="group hover:bg-white/5 relative"
+                    style={a.color ? { borderLeft: `3px solid ${a.color}`, backgroundColor: `${a.color}14` } : undefined}
+                  >
                     <td className="px-3 py-1.5 text-slate-400 whitespace-nowrap text-xs">
                       {new Date(a.date).toLocaleDateString('fr-FR')}
                     </td>
@@ -455,7 +541,70 @@ export default function ComptabiliteView() {
                       {formatCurrencyPrecis(a.soldeApres)}
                     </td>
                     <td className="px-2 py-1.5">
-                      <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity relative">
+                        <button
+                          onClick={() => { setCouleurPickerOuvert(couleurPickerOuvert === a.id ? null : a.id); setNotePopoverOuvert(null); }}
+                          title="Couleur de la ligne"
+                          className="text-slate-400 hover:text-[#F7BC5F]"
+                        >
+                          <Palette className="w-3.5 h-3.5" style={a.color ? { color: a.color } : undefined} />
+                        </button>
+                        {couleurPickerOuvert === a.id && (
+                          <div
+                            className="absolute right-0 top-full mt-1 z-30 flex items-center gap-1 p-1.5 rounded-lg bg-[#0a1e20] border-2 border-[#2a6a6f] shadow-xl"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {PALETTE_COULEURS.map((c) => (
+                              <button
+                                key={c.valeur}
+                                title={c.nom}
+                                onClick={() => { modifierActual.mutate({ id: a.id, color: c.valeur }); setCouleurPickerOuvert(null); }}
+                                className="w-4 h-4 rounded-full border border-white/20"
+                                style={{ backgroundColor: c.valeur }}
+                              />
+                            ))}
+                            <button
+                              title="Aucune couleur"
+                              onClick={() => { modifierActual.mutate({ id: a.id, color: null }); setCouleurPickerOuvert(null); }}
+                              className="w-4 h-4 rounded-full border border-slate-500 text-slate-400 text-[9px] flex items-center justify-center leading-none"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+                        <button
+                          onClick={() => (notePopoverOuvert === a.id ? setNotePopoverOuvert(null) : ouvrirNotePopover(a))}
+                          title={a.notes ? a.notes : 'Ajouter une note'}
+                          className={a.notes ? 'text-[#F9C977]' : 'text-slate-500 hover:text-[#F9C977]'}
+                        >
+                          <StickyNote className="w-3.5 h-3.5" />
+                        </button>
+                        {notePopoverOuvert === a.id && (
+                          <div
+                            className="absolute right-0 top-full mt-1 z-30 w-56 p-2 rounded-lg bg-[#07191b] border-2 border-[#2a6a6f] shadow-xl space-y-2"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <textarea
+                              autoFocus
+                              value={valeurNoteEdition}
+                              onChange={(e) => setValeurNoteEdition(e.target.value)}
+                              placeholder="Note libre sur cette ligne…"
+                              rows={3}
+                              className="w-full px-2 py-1.5 rounded bg-[#0a1e20] border border-[#144447]/60 text-white text-xs resize-none focus:outline-none focus:border-[#F7BC5F]/60"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button onClick={() => setNotePopoverOuvert(null)} className="text-[10px] text-slate-400 hover:text-white">
+                                Annuler
+                              </button>
+                              <button
+                                onClick={() => enregistrerNote(a.id)}
+                                className="px-2 py-1 rounded-lg bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 text-[10px] font-bold"
+                              >
+                                Enregistrer
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         <button
                           onClick={() => ouvrirModifierActual(a)}
                           title="Modifier"
@@ -720,6 +869,16 @@ export default function ComptabiliteView() {
                 />
               </div>
             </div>
+
+            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formActual.previsionnel}
+                onChange={(e) => setFormActual((f) => ({ ...f, previsionnel: e.target.checked }))}
+                className="w-3.5 h-3.5 rounded accent-[#F7BC5F]"
+              />
+              Ligne prévisionnelle (pas encore sur le compte)
+            </label>
 
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setLigneActualOuverte(null)} className="px-4 py-2 text-xs text-slate-400 hover:text-white">
