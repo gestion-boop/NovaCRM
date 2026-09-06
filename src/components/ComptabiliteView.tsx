@@ -141,6 +141,29 @@ export default function ComptabiliteView() {
     });
   }, [actuals, overridesParMois]);
 
+  // Solde prévisionnel (6 septembre) : même cumul, mais en comptant AUSSI
+  // les lignes prévisionnelles en attente — pour voir, à côté du « bon »
+  // solde théorique (confirmé), ce que donnerait le solde si tout ce qui
+  // est en attente arrivait bien sur le compte. Une fois une ligne validée
+  // (previsionnel: false), les deux colonnes convergent naturellement.
+  const soldePrevisionnelParId = useMemo(() => {
+    let solde = 0;
+    let dernierMoisCle: string | null = null;
+    const map = new Map<string, number>();
+    actuals.forEach((a) => {
+      const annee = a.date.slice(0, 4);
+      const moisCle = `${annee}-${a.monthSheet}`;
+      if (moisCle !== dernierMoisCle) {
+        const override = overridesParMois.get(moisCle);
+        if (override !== undefined) solde = override;
+        dernierMoisCle = moisCle;
+      }
+      solde += a.credit - a.debit;
+      map.set(a.id, solde);
+    });
+    return map;
+  }, [actuals, overridesParMois]);
+
   const actualsDuMoisActif = useMemo(
     () => actualsAvecSolde.filter((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive) && !a.previsionnel),
     [actualsAvecSolde, moisActuelOnglet, anneeActive]
@@ -474,7 +497,12 @@ export default function ComptabiliteView() {
                     <span className="text-slate-400 whitespace-nowrap font-semibold">{new Date(a.date).toLocaleDateString('fr-FR')}</span>
                     <span className="text-slate-100 truncate">{a.label}</span>
                     {a.notes && (
-                      <span className="text-slate-500 italic truncate max-w-[220px]" title={a.notes}>« {a.notes} »</span>
+                      <span
+                        className="text-slate-300 italic truncate max-w-[220px] px-1.5 py-0.5 rounded border border-amber-400/70 bg-amber-400/[0.06]"
+                        title={a.notes}
+                      >
+                        {a.notes}
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
@@ -519,6 +547,7 @@ export default function ComptabiliteView() {
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Crédit</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Débit</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Solde théorique</th>
+                  <th className="text-right px-3 py-2 bg-[#0a1e20] text-[#F7BC5F]/80">Solde prévisionnel</th>
                   <th className="text-right px-2 py-2 bg-[#0a1e20]"></th>
                 </tr>
               </thead>
@@ -532,7 +561,7 @@ export default function ComptabiliteView() {
                   <tr
                     key={a.id}
                     className={`group hover:bg-white/5 relative ${!a.color && idx % 2 === 1 ? 'bg-white/[0.035]' : ''}`}
-                    style={a.color ? { borderLeft: `3px solid ${a.color}`, backgroundColor: `${a.color}14` } : undefined}
+                    style={a.color ? { borderLeft: `5px solid ${a.color}`, backgroundColor: `${a.color}38` } : undefined}
                   >
                     <td className="px-3 py-1.5 text-slate-400 whitespace-nowrap text-xs">
                       {new Date(a.date).toLocaleDateString('fr-FR')}
@@ -544,7 +573,7 @@ export default function ComptabiliteView() {
                         <div
                           onClick={() => ouvrirNotePopover(a)}
                           title="Cliquer pour modifier la note"
-                          className="max-h-12 overflow-y-auto custom-scrollbar text-slate-400 italic leading-snug cursor-pointer hover:text-slate-200 whitespace-pre-wrap pr-1"
+                          className="max-h-12 overflow-y-auto custom-scrollbar text-slate-300 italic leading-snug cursor-pointer hover:text-white whitespace-pre-wrap px-1.5 py-1 rounded border border-amber-400/70 bg-amber-400/[0.06]"
                         >
                           {a.notes}
                         </div>
@@ -594,6 +623,9 @@ export default function ComptabiliteView() {
                     </td>
                     <td className={`px-3 py-1.5 text-right tabular-nums text-xs font-bold ${a.soldeApres >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
                       {formatCurrencyPrecis(a.soldeApres)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-xs text-[#F7BC5F]/70">
+                      {formatCurrencyPrecis(soldePrevisionnelParId.get(a.id) ?? a.soldeApres)}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity relative">
