@@ -69,7 +69,16 @@ function scopePath(reg: ServiceWorkerRegistration) {
 
 function isRecoverablePushSubscribeError(err: unknown) {
   const msg = String((err as any)?.message || err);
-  return /public key|already.*subscribed|invalid.*state/i.test(msg);
+  // « Registration failed - push service error » (AbortError Chrome) : le
+  // navigateur n'a pas réussi à joindre le service de push de Google (FCM)
+  // — souvent transitoire (réseau, VPN, pare-feu d'entreprise) — on tente
+  // donc la même reprise que pour les autres erreurs récupérables.
+  return /public key|already.*subscribed|invalid.*state|push service error/i.test(msg);
+}
+
+function isPushServiceUnreachable(err: unknown) {
+  const msg = String((err as any)?.message || err);
+  return /push service error/i.test(msg);
 }
 
 async function waitForUsableRegistration(reg: ServiceWorkerRegistration) {
@@ -196,7 +205,14 @@ export async function subscribePushSafely(
       await new Promise((r) => setTimeout(r, 1200));
       try {
         return await subscribe(fresh);
-      } catch {
+      } catch (finalErr) {
+        if (isPushServiceUnreachable(finalErr)) {
+          throw new Error(
+            "Impossible de joindre le service de notifications de Google (erreur navigateur « push service error »). " +
+            'Vérifiez votre connexion internet, désactivez un éventuel VPN/pare-feu/bloqueur de pub le temps du test, ' +
+            'puis réessayez. Si le problème persiste, réessayez depuis un autre réseau (ex. 4G).'
+          );
+        }
         throw new Error(
           "Impossible d'activer les notifications : fermez les autres onglets Nova CRM ouverts, puis réessayez."
         );
