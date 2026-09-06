@@ -499,6 +499,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           {TABS.map((t) => (
             <button
               key={t.key}
+              type="button"
               onClick={() => setTab(t.key)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold tracking-wide transition-colors border ${
                 tab === t.key
@@ -511,7 +512,14 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           ))}
         </div>
 
-        {tab !== 'apercu' && (
+        {/* Le classement par conseiller n'a de sens que s'il y a plusieurs
+            lignes à comparer : un agent verrouillé sur sa seule ligne (voir
+            estDirection plus haut) n'a rien à trier, le bouton semblerait
+            « ne pas marcher » puisque rien ne changerait jamais à l'écran.
+            Sur l'onglet Conciergerie, le bouton reste utile même pour un
+            agent simple : il trie aussi le classement par apporteur
+            d'affaires juste en dessous, qui lui n'est jamais verrouillé. */}
+        {tab !== 'apercu' && (estDirection || tab === 'conciergerie') && (
           <div className="flex items-center gap-2 mb-4">
             <span className="text-[10px] uppercase tracking-widest text-[#C9B67B]">Classer par</span>
             {([
@@ -520,6 +528,7 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
             ]).map((opt) => (
               <button
                 key={opt.key}
+                type="button"
                 onClick={() => setRankBy(opt.key)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
                   rankBy === opt.key
