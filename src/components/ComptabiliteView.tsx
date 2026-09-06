@@ -150,7 +150,7 @@ export default function ComptabiliteView() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-[#07191b] border border-[#1b4e52] rounded-2xl p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Calculator className="w-5 h-5 text-[#F7BC5F]" />
