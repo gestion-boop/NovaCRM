@@ -448,3 +448,28 @@ export interface CameraReservation {
   createdByEmail?: string;
   createdAt?: string;
 }
+
+// Onglet Comptabilité (6 septembre, Conseils Finances) : « un vrai logiciel
+// de comptabilité pour piloter ce qui va rentrer aussi, et avoir une vue sur
+// le long terme ». Une ligne = un poste récurrent (loyer, assurance,
+// abonnement, commission mensuelle...) ou ponctuel (une seule fois), positif
+// pour une recette/encaissement, négatif pour une dépense/décaissement.
+export interface TreasuryLine {
+  id: string;
+  agencyId: string;
+  label: string;
+  category: string;
+  kind: 'recurrent' | 'ponctuel';
+  // Signé : négatif = dépense, positif = recette.
+  amount: number;
+  // Pour un ponctuel : le mois exact où il tombe (1er du mois, ISO).
+  // Pour un récurrent : le premier mois de la récurrence.
+  month: string;
+  // Récurrent uniquement : dernier mois où la ligne s'applique (incluse).
+  // Vide = récurrence projetée indéfiniment.
+  endMonth?: string | null;
+  notes?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}

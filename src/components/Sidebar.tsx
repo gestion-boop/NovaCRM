@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import BuildStamp from './BuildStamp';
-import { 
-  Home, LayoutDashboard, Users, GitFork, FolderKanban, Calendar, 
-  Bell, MessageSquare, Mail, UserPlus, FileText, FileEdit, 
+import {
+  Home, LayoutDashboard, Users, GitFork, FolderKanban, Calendar,
+  Bell, MessageSquare, Mail, UserPlus, FileText, FileEdit,
   LifeBuoy, Settings, ChevronDown, ChevronLeft, ChevronRight, LogOut,
-  Building2,
+  Building2, Calculator,
   GraduationCap, Sparkles, Camera as CameraIcon, X, Map as MapIcon, Sun, Moon
 } from 'lucide-react';
 import { AGENCIES, Agency } from '@/types';
@@ -57,6 +57,11 @@ export const NAV_ITEMS = [
   // Carte de prospection Novavisio (accès aussi filtré côté composant, voir
   // CarteProspectionView.tsx) — même principe que Immosphera360 ci-dessus.
   { id: 'carte-novavisio', label: 'Carte', icon: MapIcon },
+  // Comptabilité (6 septembre, Conseils Finances) : prévisionnel de
+  // trésorerie sur 12 mois. « Que par les super admins, Mélanie et Sylvain,
+  // c'est tout » — filtrée juste en dessous comme carte-novavisio/academy,
+  // et re-vérifiée côté contenu dans ComptabiliteView.tsx.
+  { id: 'comptabilite', label: 'Comptabilité', icon: Calculator },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -92,15 +97,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // 3 septembre : « Réserver caméra pour Conseils Finances ne doit jamais
   // apparaître » — même règle que la tuile (AccueilGrid, tuileVisible).
   const isConseilsFinancesActive = /conseil|finance/i.test(activeAgency?.name ?? '');
+  // Comptabilité (6 septembre) : « que par les super admins, Mélanie et
+  // Sylvain » — même identification que estDirectionCF dans Dashboard.tsx
+  // (nom/email plutôt que le rôle, Mélanie n'étant pas super admin).
+  const identiteUtilisateur = `${userProfile?.displayName || currentUser?.displayName || ''} ${userProfile?.email || currentUser?.email || ''}`;
+  const estDirectionCF = /grazia|melanie|gestion@immosphera\.fr/i.test(identiteUtilisateur);
   const visibleNavItems = useMemo(
     () =>
       NAV_ITEMS.filter(
         (item) =>
           (item.id !== 'carte-novavisio' || isNovavisioActive) &&
           (item.id !== 'academy' || isImmospheraActive) &&
-          (item.id !== 'reserver-camera' || !isConseilsFinancesActive)
+          (item.id !== 'reserver-camera' || !isConseilsFinancesActive) &&
+          (item.id !== 'comptabilite' || (isConseilsFinancesActive && estDirectionCF))
       ),
-    [isNovavisioActive, isImmospheraActive, isConseilsFinancesActive]
+    [isNovavisioActive, isImmospheraActive, isConseilsFinancesActive, estDirectionCF]
   );
 
   // Filter available agencies according to user rights/profile
