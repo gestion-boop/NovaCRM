@@ -193,16 +193,17 @@ export default function ComptabiliteView() {
     return map;
   }, [actuals, overridesParMois]);
 
+  // Demandé le 6 septembre : « je ne veux plus avoir ce genre de choses qui
+  // apparaissent, élimine ça [...] du moment que je vais rentrer des
+  // éléments, ça sera intégré directement dans le tableau, je devrais
+  // checker pour confirmer la validation du montant » — plus de panneau
+  // séparé « en attente » : toute ligne du mois s'affiche directement ici,
+  // qu'elle soit cochée ou non (le flag `previsionnel` n'est plus utilisé
+  // pour filtrer l'affichage, seules `creditConfirme`/`debitConfirme`
+  // pilotent le solde bancaire confirmé).
   const actualsDuMoisActif = useMemo(
-    () => actualsAvecSolde.filter((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive) && !a.previsionnel),
+    () => actualsAvecSolde.filter((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive)),
     [actualsAvecSolde, moisActuelOnglet, anneeActive]
-  );
-
-  // Lignes prévisionnelles en attente de validation, sur le mois actif —
-  // affichées à part, au-dessus du tableau daté principal.
-  const previsionnelsDuMoisActif = useMemo(
-    () => actuals.filter((a) => a.previsionnel && a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive)),
-    [actuals, moisActuelOnglet, anneeActive]
   );
 
   // Totaux du bas de tableau (6 septembre : « solde débit ensuite crédit et
@@ -293,7 +294,10 @@ export default function ComptabiliteView() {
         description: ligne.kind === 'recurrent' ? `Récurrent — ${ligne.category}` : `Ponctuel — ${ligne.category}`,
         credit: ligne.amount >= 0 ? ligne.amount : 0,
         debit: ligne.amount < 0 ? Math.abs(ligne.amount) : 0,
-        previsionnel: true,
+        // Plus de panneau « en attente » séparé (6 septembre) : la ligne
+        // matérialisée apparaît directement dans le tableau, à cocher sur
+        // place comme n'importe quelle autre.
+        previsionnel: false,
         sourceLineId: ligne.id,
         silencieux: true,
       });
@@ -315,13 +319,12 @@ export default function ComptabiliteView() {
     ? actualsDuMoisActif[actualsDuMoisActif.length - 1].soldeApres
     : soldeOuvertureMoisActif;
 
-  // Même clôture, version « optimiste » (tout compté, coché ou non) — pour
-  // que le total du pied de tableau, colonne Solde prévisionnel, retombe
-  // exactement sur la dernière ligne affichée, comme demandé (« c'est ce
-  // montant-là que je dois retrouver tout en bas de la colonne »).
-  const soldePrevisionnelClotureMoisActif = actualsDuMoisActif.length > 0
-    ? soldePrevisionnelParId.get(actualsDuMoisActif[actualsDuMoisActif.length - 1].id) ?? soldeClotureMoisActif
-    : soldeClotureMoisActif;
+  // Reprécisé le 6 septembre : « la colonne du solde prévisionnel, ce n'est
+  // pas la peine d'avoir des montants [...] on voudra bien le total tout en
+  // bas en faisant la différence entre les recettes et les dépenses [...]
+  // ce sera le solde prévisionnel fin de mois » — plus un cumul, mais un
+  // simple net recettes − dépenses du mois affiché.
+  const soldePrevisionnelFinDeMoisActif = totalCreditMois - totalDebitMois;
 
   // « Prévisionnel fin de mois » (demande : « dans le prévisionnel tu mettes
   // tout ce qui n'a pas été débité [...] tu le soustrais au solde du compte
@@ -368,7 +371,6 @@ export default function ComptabiliteView() {
   // prévisionnelles tout en haut [...] le livre tout en bas, je veux que
   // par défaut, soit replié » — les deux panneaux restent disponibles au
   // clic mais démarrent repliés pour ne plus encombrer l'écran.
-  const [previsionnelsDeplies, setPrevisionnelsDeplies] = useState(false);
   const [ligneRecurrentesDepliees, setLigneRecurrentesDepliees] = useState(false);
 
   const categories = useMemo(() => {
@@ -429,12 +431,12 @@ export default function ComptabiliteView() {
       // Correction du jour de prélèvement (6 septembre : « je vais avoir
       // également la possibilité de changer les dates et de pouvoir
       // confirmer par la suite ») : si le jour change, on recale aussi les
-      // occurrences déjà matérialisées mais encore en attente (previsionnel)
-      // de cette ligne, tous mois confondus — jamais celles déjà validées,
-      // ni celles d'une autre ligne récurrente.
+      // occurrences déjà matérialisées mais pas encore cochées (ni crédit ni
+      // débit confirmé) de cette ligne, tous mois confondus — jamais celles
+      // déjà validées/cochées, ni celles d'une autre ligne récurrente.
       if (ligneOriginale && (ligneOriginale.jourPrelevement ?? null) !== jourPrelevement && jourPrelevement) {
         actuals
-          .filter((a) => a.sourceLineId === formOuvert && a.previsionnel)
+          .filter((a) => a.sourceLineId === formOuvert && !a.creditConfirme && !a.debitConfirme)
           .forEach((a) => {
             const annee = Number(a.date.slice(0, 4));
             const mois = Number(a.date.slice(5, 7));
@@ -465,10 +467,11 @@ export default function ComptabiliteView() {
     setLigneActualOuverte(a.id);
   };
 
-  // Pas de date saisie (6 septembre : « quand on ne met pas de date, on met
-  // ces lignes prévisionnelles à l'intérieur ») : la ligne devient
-  // automatiquement prévisionnelle, casée au 1er du mois actif en attendant
-  // une vraie date (modifiable ensuite via le crayon une fois validée).
+  // Plus de panneau « en attente » (6 septembre : « élimine ça [...] ça sera
+  // intégré directement dans le tableau, je devrais checker pour confirmer
+  // la validation du montant ») : toute ligne, avec ou sans date, va
+  // directement dans le grand livre, cochable sur place. Sans date, on case
+  // simplement la ligne au 1er du mois actif (modifiable ensuite).
   const soumettreActual = () => {
     const credit = Number(formActual.credit.replace(',', '.')) || 0;
     const debit = Number(formActual.debit.replace(',', '.')) || 0;
@@ -479,13 +482,7 @@ export default function ComptabiliteView() {
       description: formActual.description.trim(),
       credit,
       debit,
-      // Une ligne ajoutée avec une date connue va directement dans le
-      // tableau normal, cochable sur place (6 septembre : « je ne veux pas
-      // que ça apparaisse en haut à vérifier, ça doit aller directement
-      // dans le tableau »). Sans date, elle reste en attente comme avant.
-      // En modification, on ne touche pas au statut prévisionnel de la
-      // ligne existante — seul le bouton « ✓ Valider » le change.
-      previsionnel: ligneActualOuverte === 'nouveau' ? !formActual.date : formActual.previsionnel,
+      previsionnel: false,
     };
     if (ligneActualOuverte === 'nouveau') {
       creerActual.mutate(payload);
@@ -702,66 +699,6 @@ export default function ComptabiliteView() {
           </div>
         </div>
 
-        {previsionnelsDuMoisActif.length > 0 && (
-          <div className="rounded-xl border-2 border-dashed border-[#F7BC5F]/60 bg-[#F7BC5F]/5 p-3 space-y-2.5">
-            <button
-              type="button"
-              onClick={() => setPrevisionnelsDeplies((v) => !v)}
-              className="w-full flex items-center gap-1.5 text-xs font-bold text-[#F7BC5F]"
-            >
-              {previsionnelsDeplies ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-              ⏳ Lignes prévisionnelles — en attente de validation
-              <span className="text-[10px] font-normal text-[#F7BC5F]/60">({previsionnelsDuMoisActif.length})</span>
-            </button>
-            {/* Retouche visuelle (6 septembre) : rangées alternées + fond
-                carte pour chaque ligne, plutôt qu'un simple texte serré sur
-                une ligne, plus lisible avec plusieurs lignes en attente. */}
-            {previsionnelsDeplies && (
-            <div className="space-y-1">
-              {previsionnelsDuMoisActif.map((a, idx) => (
-                <div
-                  key={a.id}
-                  className={`flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2 text-xs ${
-                    idx % 2 === 1 ? 'bg-[#F7BC5F]/[0.07]' : 'bg-transparent'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <span className="text-slate-400 whitespace-nowrap font-semibold">{new Date(a.date).toLocaleDateString('fr-FR')}</span>
-                    <span className="text-slate-100 truncate">{a.label}</span>
-                    {a.notes && (
-                      <span
-                        className="text-slate-900 italic truncate max-w-[220px] px-1.5 py-0.5 rounded border border-amber-400 bg-amber-300"
-                        title={a.notes}
-                      >
-                        {a.notes}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className={`font-bold tabular-nums ${a.credit > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {a.credit > 0 ? formatCurrencyPrecis(a.credit) : `-${formatCurrencyPrecis(a.debit)}`}
-                    </span>
-                    <button
-                      onClick={() => modifierActual.mutate({ id: a.id, previsionnel: false })}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold hover:bg-emerald-500/30 whitespace-nowrap"
-                    >
-                      ✓ Valider
-                    </button>
-                    <button
-                      onClick={() => supprimerActualAvecConfirmation(a.id)}
-                      title="Supprimer"
-                      className="text-slate-400 hover:text-red-400"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            )}
-          </div>
-        )}
-
         {actualsChargement ? (
           <p className="text-sm text-slate-500">Chargement…</p>
         ) : actualsDuMoisActif.length === 0 ? (
@@ -919,9 +856,12 @@ export default function ComptabiliteView() {
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-xs text-[#F7BC5F]/70">
-                      {formatCurrencyPrecis(soldePrevisionnelParId.get(a.id) ?? a.soldeApres)}
-                    </td>
+                    {/* Demandé le 6 septembre : « la colonne du solde
+                        prévisionnel, ce n'est pas la peine d'avoir des
+                        montants [...] on voudra bien le total tout en bas »
+                        — plus de cumul ligne par ligne, seul le total du
+                        pied de tableau (recettes − dépenses) reste utile. */}
+                    <td className="px-3 py-1.5 text-right text-xs text-slate-700">—</td>
                     <td className={`px-3 py-1.5 text-right tabular-nums text-xs font-bold ${a.soldeApres >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
                       {formatCurrencyPrecis(a.soldeApres)}
                     </td>
@@ -985,26 +925,22 @@ export default function ComptabiliteView() {
               </tbody>
               {!actualsChargement && actualsDuMoisActif.length > 0 && (
                 <tfoot>
-                  {/* Demandé le 6 septembre : « je veux que tu fasses une
-                      somme au total de la colonne à chaque fois qui
-                      correspond tout en bas » — un vrai total de colonne,
-                      aligné sous Crédit/Débit/Solde prévisionnel/Solde
-                      bancaire. Corrigé le 6 septembre (écart constaté entre
-                      la dernière ligne à 3118,80 € et un total à 3837,82 €) :
-                      les colonnes Solde prévisionnel/Solde bancaire ne sont
-                      pas des sommes de la colonne mais des CUMULS — leur
-                      « total » doit donc être le solde de clôture déjà
-                      affiché sur la dernière ligne, pas une addition de tout
-                      ce qui précède. */}
+                  {/* Demandé le 6 septembre : total de colonne pour Crédit/
+                      Débit ; Solde bancaire reprend le solde de clôture
+                      confirmé de la dernière ligne (c'est un cumul, pas une
+                      somme). Reprécisé : la colonne Solde prévisionnel
+                      n'affiche plus de montant ligne par ligne — seul son
+                      total ici compte, en net recettes − dépenses du mois
+                      (« solde prévisionnel fin de mois »). */}
                   <tr className="border-t-2 border-[#2a6a6f] bg-[#0a1e20] divide-x divide-[#2a6a6f]/50 text-xs font-bold">
                     <td className="px-3 py-2 text-slate-400 uppercase tracking-widest text-[10px]" colSpan={5}>Total du mois</td>
                     <td className="px-3 py-2 text-right tabular-nums text-emerald-400">{formatCurrencyPrecis(totalCreditMois)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-red-400">{formatCurrencyPrecis(totalDebitMois)}</td>
                     <td
-                      className={`px-3 py-2 text-right tabular-nums ${soldePrevisionnelClotureMoisActif >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}
-                      title="Solde de clôture du mois, tout compté (coché ou non) — identique à la dernière ligne du tableau"
+                      className={`px-3 py-2 text-right tabular-nums ${soldePrevisionnelFinDeMoisActif >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}
+                      title="Solde prévisionnel fin de mois = total recettes − total dépenses du mois"
                     >
-                      {formatCurrencyPrecis(soldePrevisionnelClotureMoisActif)}
+                      {soldePrevisionnelFinDeMoisActif >= 0 ? '+' : ''}{formatCurrencyPrecis(soldePrevisionnelFinDeMoisActif)}
                     </td>
                     <td
                       className={`px-3 py-2 text-right tabular-nums ${soldeClotureMoisActif >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}
@@ -1307,7 +1243,7 @@ export default function ComptabiliteView() {
                     disabled={creerActual.isPending || !formActual.label.trim() || (Number(formActual.credit.replace(',', '.')) || 0) <= 0 && (Number(formActual.debit.replace(',', '.')) || 0) <= 0}
                     className="flex-1 px-3 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-40 text-slate-950 text-xs font-bold"
                   >
-                    ⏳ Grand livre (en attente)
+                    📒 Ajouter au grand livre
                   </button>
                 </div>
                 <div className="flex justify-end pt-1">
