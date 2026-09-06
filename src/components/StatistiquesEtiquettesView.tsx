@@ -1,7 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID, IMMOSPHERA_AGENCY_ID } from './TransactionChecklistModal';
+
+// Demandé le 6 septembre : « chaque utilisateur pourra voir son propre
+// chiffre d'affaires mais pas celui des autres [...] verrouiller les
+// montants pour éviter des tensions inutiles dans l'agence ». La direction
+// (super admin / admin) garde la vue complète, comme pour Conseils
+// Finances ; un agent simple ne voit plus que sa propre ligne, son propre
+// classement d'étape et ses propres dossiers dans les listes de détail.
 
 // Demande explicite (28/08/2026) : "tuile statistique" façon "tableau à
 // l'ancienne" — panneau d'étiquettes en cuivre/laiton (référence photo
@@ -141,6 +149,10 @@ const AgentRow: React.FC<{ row: AgentRow; color: string; onOpen?: (stage: StageK
 );
 
 const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: string) => void }> = ({ onSelectContact }) => {
+  const { currentUser, userProfile } = useAuth();
+  const estDirection = userProfile?.role === 'super_admin' || userProfile?.role === 'admin';
+  const monAgentId = currentUser?.uid;
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<AgentRow[]>([]);
   // Demandé : « savoir qui est présent dans cette case ». On garde le détail
@@ -298,9 +310,15 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
   }, []);
 
   // Classement par résultats : le conseiller le plus performant en tête.
-  const orderedRows = useMemo(
+  const orderedRowsToutesLignes = useMemo(
     () => [...rows].sort((a, b) => b.total - a.total || a.agentFullName.localeCompare(b.agentFullName, 'fr')),
     [rows]
+  );
+  // Verrouillage des montants (6 septembre) : un agent simple ne voit que sa
+  // propre ligne ; la direction (super admin/admin) garde tout.
+  const orderedRows = useMemo(
+    () => (estDirection ? orderedRowsToutesLignes : orderedRowsToutesLignes.filter((r) => r.agentId === monAgentId)),
+    [orderedRowsToutesLignes, estDirection, monAgentId]
   );
 
 
@@ -367,8 +385,11 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
     if (!detailFor) return [];
     return details
       .filter((d) => d.stage === detailFor.stage && (!detailFor.agentId || d.agentId === detailFor.agentId))
+      // Verrouillage : même sur le clic « Total agence » (agentId = null), un
+      // agent simple ne voit que ses propres dossiers dans la liste de détail.
+      .filter((d) => estDirection || d.agentId === monAgentId)
       .sort((a, b) => b.honoraires - a.honoraires || a.name.localeCompare(b.name, 'fr'));
-  }, [details, detailFor]);
+  }, [details, detailFor, estDirection, monAgentId]);
 
   // Demandé : podium sur le classement — or, argent, bronze, médaille à côté
   // du nom. Au-delà du 3e, présentation neutre.
@@ -497,10 +518,12 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
               })}
               <div className="flex items-center rounded-xl border-2 border-[#D4AF37] bg-[#1b1712] px-4 py-3 mt-3">
                 <span className="w-7 shrink-0" />
-                <span className="flex-1 text-xs font-bold uppercase tracking-widest text-[#D4AF37]">Total agence</span>
+                <span className="flex-1 text-xs font-bold uppercase tracking-widest text-[#D4AF37]">
+                  {estDirection ? 'Total agence' : 'Mes chiffres'}
+                </span>
                 <button
                   type="button"
-                  onClick={() => setDetailFor({ stage: tab as StageKey, agentId: null, title: 'Toute l\'agence' })}
+                  onClick={() => setDetailFor({ stage: tab as StageKey, agentId: estDirection ? null : monAgentId || null, title: estDirection ? 'Toute l\'agence' : 'Mes dossiers' })}
                   className="w-20 text-center text-sm font-bold text-[#F3EAD3] tabular-nums hover:text-[#D4AF37] underline decoration-dotted underline-offset-4"
                   title="Voir tous les clients de cette étape"
                 >
@@ -536,7 +559,9 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
         {!loading && orderedRows.length > 0 && (
           <div className="mt-5 flex justify-center">
             <div className="flex items-center gap-4 sm:gap-6 rounded-2xl border-2 border-[#D4AF37] bg-[#2A2211] px-5 sm:px-7 py-3 sm:py-4 shadow-[0_4px_14px_rgba(0,0,0,0.4)]">
-              <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-[#D4AF37]">Total agence</span>
+              <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-[#D4AF37]">
+                {estDirection ? 'Total agence' : 'Mes chiffres'}
+              </span>
               <div className="flex items-center gap-3 sm:gap-4">
                 <div className="text-center">
                   <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.location}</div>
