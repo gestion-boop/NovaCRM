@@ -7,6 +7,7 @@ import { AGENCIES, NoteItem, DocItem, Task } from '@/types';
 import TransactionChecklistModal, {
   STAGE_CHECKLISTS,
   IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID,
+  IMMOSPHERA_AGENCY_ID,
   usePreviousStageMissingCount,
   useCurrentStageChecklistCount,
 } from './TransactionChecklistModal';
@@ -50,6 +51,7 @@ import { uploadDocumentToDrive } from '@/lib/documentDrive';
 import { getTaskDateStatus } from '@/lib/taskUtils';
 import { TEAM_MEMBERS, getAssignedUser } from '@/data/teamMembers';
 import { useAssignableUsers } from '@/hooks/useAssignableUsers';
+import { useApporteurs } from '@/hooks/useApporteurs';
 import ParcoursCreditModal from './ParcoursCreditModal';
 import EditClientModal from './EditClientModal';
 
@@ -517,6 +519,9 @@ export default function ClientProfileView({
     nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().includes('factur');
 
   const estConciergerie = /concierg/i.test(client?.clientType || '');
+  // Apporteur d'affaires (agent immobilier référent, 6 septembre) :
+  // uniquement chargé/affiché pour les fiches Conciergerie.
+  const { apporteurs: apporteursDisponibles } = useApporteurs(IMMOSPHERA_AGENCY_ID);
 
 
   // Novavisio, demandé le 2 septembre : « remettre le CA agence en TTC, et tu
@@ -2656,6 +2661,26 @@ export default function ClientProfileView({
                     ))}
                   </select>
                 </div>
+                {/* Apporteur d'affaires (agent immobilier référent, 6
+                    septembre) : uniquement sur les fiches Conciergerie,
+                    pour le classement par référent. */}
+                {estConciergerie && (
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Apporteur d'affaires (agent immobilier)</label>
+                    <select
+                      value={client.referrerId || ''}
+                      onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { referrerId: e.target.value || null } })}
+                      className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                    >
+                      <option value="">Aucun</option>
+                      {apporteursDisponibles.filter(a => a.active).map(a => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}{a.agencyName ? ` (${a.agencyName})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 

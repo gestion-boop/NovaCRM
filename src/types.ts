@@ -77,6 +77,10 @@ export interface Contact {
   // selon son pourcentage ». Calculée automatiquement à partir de comBanque
   // et du même taux courtier que honorairesCourtier — modifiable.
   comBanqueCourtier?: number;
+  // Apporteur d'affaires (agent immobilier référent) pour un dossier
+  // Conciergerie ImmoSphera (6 septembre) : `leads.referrer_id`, référence
+  // vers `real_estate_referrers`. Liste gérée, pas de texte libre.
+  referrerId?: string | null;
 }
 
 export interface PipelineDef {
