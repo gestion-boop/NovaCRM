@@ -1041,15 +1041,18 @@ export default function Dashboard({
             className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-medium tracking-wide">Chiffre d'affaires de l'agence</span>
-              {/* Conseils Finances (5 septembre) : « CA à venir, à partir des
-                  dossiers mis dans Accord banque / Rendez-vous, à prendre en
-                  compte dans le CA agence ». Le chiffre additionne donc les
-                  dossiers archivés et ceux arrivés à cette étape ; ailleurs,
-                  les archivés seulement, comme avant. */}
+              {/* Demandé le 6 septembre : « le chiffre d'affaires de l'agence
+                  doit être uniquement les chiffres qui ont été comptabilisés
+                  du moment qu'on a archivé la fiche du client et que nous
+                  avons mis signé, pas avant ». Remplace la règle du 5
+                  septembre qui mélangeait le CA à venir (Accord banque /
+                  Rendez-vous) dans ce total — celui-ci n'est plus qu'archivé
+                  et signé, comme chiffreAffairesAgence.total ; le CA à venir
+                  reste affiché à part (case dédiée, et en info ci-dessous). */}
               <div className="text-2xl font-black text-[#F9C977] tracking-tight">
                 {formatCurrency(
                   estConseilsFinances
-                    ? chiffreAffairesAgence.total + chiffreAffairesAgence.aVenir + chiffreAffairesAgence.comBanqueTotal
+                    ? chiffreAffairesAgence.total + chiffreAffairesAgence.comBanqueTotal
                     : chiffreAffairesAgence.total
                 )}
               </div>
@@ -1070,13 +1073,17 @@ export default function Dashboard({
                   </span>
                 ) : estConseilsFinances ? (
                   <>
-                    {chiffreAffairesAgence.comptessAVenir} en cours ({formatCurrency(chiffreAffairesAgence.aVenir)})
-                    {' + '}{chiffreAffairesAgence.comptees} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)})
+                    {chiffreAffairesAgence.comptees} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et signé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)})
                     {chiffreAffairesAgence.comBanqueTotal > 0 && (
                       <>{' + '}commission Banque ({formatCurrency(chiffreAffairesAgence.comBanqueTotal)})</>
                     )}
+                    {chiffreAffairesAgence.aVenir > 0 && (
+                      <span className="text-slate-500 font-normal block mt-0.5">
+                        + {formatCurrency(chiffreAffairesAgence.aVenir)} en cours ({chiffreAffairesAgence.comptessAVenir} dossier{chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''}, non archivé, pas dans le total)
+                      </span>
+                    )}
                     <span className="text-slate-500 font-normal block mt-0.5">
-                      À partir de l'étape Montage dossier, honoraires agence TTC saisis sur la fiche (pas de hors taxes sur Conseils Finances)
+                      Archivé et signé seulement, à partir de l'étape Montage dossier, honoraires agence TTC saisis sur la fiche (pas de hors taxes sur Conseils Finances)
                       {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans honoraires`}
                     </span>
                   </>
