@@ -97,6 +97,12 @@ export interface Deal {
   // septembre pour figurer, en plus des honoraires, sur la case CA de
   // chaque courtier (Conseils Finances).
   comBanque?: number;
+  // Honoraires courtier (leads.honoraires_courtier, Conseils Finances) :
+  // calculé automatiquement sur la fiche client à partir des honoraires
+  // agence et du taux du courtier (Sylvain 100 %, Eric 80 %, autres 70 %),
+  // modifiable à la main. C'est ce champ — pas advisorCommissionTtc — qui
+  // alimente « Commission des courtiers » sur Conseils Finances.
+  honorairesCourtier?: number;
   // Numéro de mandat (leads.mandate_number) — affiché dans le détail du
   // chiffre d'affaires pour retrouver le dossier d'un coup d'œil.
   mandateNumber?: string;
