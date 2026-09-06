@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { AGENCIES } from '@/types';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatCurrencyPrecis } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Users, Coins, Briefcase, CheckCircle2, ArrowRight, Building, Sparkles, Pencil, TrendingUp, TrendingDown, Target, Eye, EyeOff } from 'lucide-react';
@@ -778,6 +778,10 @@ export default function Dashboard({
   // mais tu ne mettras pas les chèques [cases à cocher], ce n'est pas la
   // peine ». Même principe que detailCourtierId, sur les dossiers vivants.
   const [detailCourtierAvenirId, setDetailCourtierAvenirId] = useState<string | null>(null);
+  // Demandé le 6 septembre : « une barre de recherche, et respecte l'ordre
+  // des derniers clients archivés tout en haut » — sur le détail réalisé
+  // d'un courtier.
+  const [rechercheCourtier, setRechercheCourtier] = useState('');
   // Demandé le 6 septembre : « une vue courtier hors chiffres CA agence, pour
   // pas que quand je montre ce tableau en réunion, les courtiers voient les
   // chiffres de l'agence ». Un simple bouton, réservé à la direction CF, qui
@@ -817,20 +821,33 @@ export default function Dashboard({
   // « commission validée » et une « commission Banque validée » par client —
   // vert une fois pointées, orange tant que non, et la ligne entière passe au
   // vert seulement quand les deux sont cochées.
-  const [validationEnCours, setValidationEnCours] = useState<string | null>(null);
+  // Demandé le 6 septembre : « je veux que les checks soient plus rapides à
+  // enlever et à remettre » — la case change de couleur tout de suite (état
+  // optimiste local), sans attendre l'aller-retour réseau ni le rechargement
+  // complet des dossiers ; seul un échec réel la fait revenir en arrière.
+  const [validationOverrides, setValidationOverrides] = useState<Record<string, boolean>>({});
+  const estLigneValidee = (ligne: LigneCa, champ: 'commission_validee' | 'com_banque_validee') => {
+    const cle = `${ligne.id}:${champ}`;
+    return cle in validationOverrides
+      ? validationOverrides[cle]
+      : (champ === 'commission_validee' ? ligne.commissionValidee : ligne.comBanqueValidee);
+  };
   const basculerValidation = async (
     ligne: LigneCa,
     champ: 'commission_validee' | 'com_banque_validee',
     valeur: boolean
   ) => {
     const cle = `${ligne.id}:${champ}`;
-    setValidationEnCours(cle);
+    setValidationOverrides((v) => ({ ...v, [cle]: valeur }));
     const { error } = await supabase
       .from('leads')
       .update({ [champ]: valeur } as any)
       .eq('id', ligne.id);
-    setValidationEnCours(null);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      setValidationOverrides((v) => ({ ...v, [cle]: !valeur }));
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: ['deals'] });
   };
   const now = new Date();
@@ -1191,7 +1208,7 @@ export default function Dashboard({
                       <>{' + '}commission des courtiers ({formatCurrency(commissionRealiseeCourtiers)})</>
                     )}
                     {chiffreAffairesAgence.comBanqueTotal > 0 && (
-                      <>{' + '}commission Banque ({formatCurrency(chiffreAffairesAgence.comBanqueTotal)})</>
+                      <>{' + '}commission Banque ({formatCurrencyPrecis(chiffreAffairesAgence.comBanqueTotal)})</>
                     )}
                     {chiffreAffairesAgence.aVenir > 0 && (
                       <span className="text-slate-500 font-normal block mt-0.5">
@@ -1262,7 +1279,7 @@ export default function Dashboard({
                   <span className="text-amber-400/90">Aucun pipeline principal pour cette agence</span>
                 ) : (
                   <>
-                    {chiffreAffairesAgence.comptees} dossier{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et confirmé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} : {formatCurrency(chiffreAffairesAgence.total)} honoraires + {formatCurrency(maCommissionPersonnelle)} commission + {formatCurrency(chiffreAffairesAgence.comBanqueTotal)} commission Banque
+                    {chiffreAffairesAgence.comptees} dossier{chiffreAffairesAgence.comptees > 1 ? 's' : ''} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} et confirmé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} : {formatCurrency(chiffreAffairesAgence.total)} honoraires + {formatCurrency(maCommissionPersonnelle)} commission + {formatCurrencyPrecis(chiffreAffairesAgence.comBanqueTotal)} commission Banque
                     <span className="text-slate-500 font-normal block mt-0.5">
                       {chiffreAffairesAgence.dansLePipeline === 0
                         ? `Aucun de vos dossiers ${dansPipelineVise}`
@@ -1574,8 +1591,8 @@ export default function Dashboard({
                   key={c.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setDetailCourtierId(c.id)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCourtierId(c.id); } }}
+                  onClick={() => { setRechercheCourtier(''); setDetailCourtierId(c.id); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setRechercheCourtier(''); setDetailCourtierId(c.id); } }}
                   title={`Voir le détail des dossiers de ${c.prenom}, client par client`}
                   className="dash-card p-5 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 flex items-start justify-between gap-3 group cursor-pointer">
                   <div className="space-y-1 min-w-0">
@@ -1584,7 +1601,7 @@ export default function Dashboard({
                     <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                       {c.total === 0
                         ? 'Aucun dossier archivé et signé'
-                        : `${formatCurrency(c.archive)} archivé + ${formatCurrency(c.commission)} commission + ${formatCurrency(c.comBanque)} commission Banque`}
+                        : `${formatCurrency(c.archive)} archivé + ${formatCurrency(c.commission)} commission + ${formatCurrencyPrecis(c.comBanque)} commission Banque`}
                     </span>
                     {/* Le CA à venir (encore vivant, pas archivé) reste
                         informatif, à part du total ci-dessus qui ne compte
@@ -1607,7 +1624,7 @@ export default function Dashboard({
                         Commission des courtiers : <span className="text-slate-200">{formatCurrency(c.commission)}</span>
                       </span>
                       <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
-                        Commission Banque : <span className="text-slate-200">{formatCurrency(c.comBanque)}</span>
+                        Commission Banque : <span className="text-slate-200">{formatCurrencyPrecis(c.comBanque)}</span>
                       </span>
                     </div>
                   </div>
@@ -2097,18 +2114,27 @@ export default function Dashboard({
           et sur exactement ce qui compte dans sa case : archivé et signé. */}
       {detailCourtierId && (() => {
         const courtier = caParCourtier.find((c) => c.id === detailCourtierId);
-        const lignesCourtier = chiffreAffairesAgence.lignes.filter(
-          (l) => l.advisorId === detailCourtierId && l.archive && l.signe
-        );
+        const rechercheNormalisee = sansAccents(rechercheCourtier.trim());
+        const lignesCourtier = chiffreAffairesAgence.lignes
+          .filter((l) => l.advisorId === detailCourtierId && l.archive && l.signe)
+          .filter((l) => !rechercheNormalisee || sansAccents(l.nom).includes(rechercheNormalisee))
+          // Les derniers archivés tout en haut ; les rares lignes sans date
+          // d'archivage (anciennes fiches) restent en bas.
+          .sort((a, b) => {
+            if (!a.archiveLe && !b.archiveLe) return 0;
+            if (!a.archiveLe) return 1;
+            if (!b.archiveLe) return -1;
+            return new Date(b.archiveLe).getTime() - new Date(a.archiveLe).getTime();
+          });
         // Demandé le 6 septembre : deux cases bien visibles, en haut du
         // tableau, avec ce qui a déjà été « comptabilisé validé » — la
         // somme de la commission (resp. commission Banque) des seules
         // lignes cochées, en vert.
         const commissionValideeTotal = lignesCourtier
-          .filter((l) => l.commissionValidee)
+          .filter((l) => estLigneValidee(l, 'commission_validee'))
           .reduce((s, l) => s + l.commission, 0);
         const comBanqueValideeTotal = lignesCourtier
-          .filter((l) => l.comBanqueValidee)
+          .filter((l) => estLigneValidee(l, 'com_banque_validee'))
           .reduce((s, l) => s + l.comBanque, 0);
         return (
           <div
@@ -2143,12 +2169,22 @@ export default function Dashboard({
                 </div>
                 <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
                   <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Commission Banque validée</span>
-                  <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrency(comBanqueValideeTotal)}</span>
+                  <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrencyPrecis(comBanqueValideeTotal)}</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
-                <span className="flex-1">Client</span>
+              <div className="px-5 pt-3">
+                <input
+                  type="search"
+                  value={rechercheCourtier}
+                  onChange={(e) => setRechercheCourtier(e.target.value)}
+                  placeholder="Rechercher un client…"
+                  className="w-full px-3.5 py-2 rounded-lg bg-[#0a1e20] border border-[#144447]/60 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]/60"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 px-5 pt-2 pb-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
+                <span className="flex-1">Client (derniers archivés en premier)</span>
                 <span className="w-24 text-right">Honoraires</span>
                 <span className="w-32 text-right">Commission</span>
                 <span className="w-36 text-right">Com. Banque</span>
@@ -2157,7 +2193,9 @@ export default function Dashboard({
               <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
                 {lignesCourtier.length === 0 ? (
                   <p className="p-8 text-center text-sm text-slate-500">
-                    Aucun dossier archivé et signé pour ce courtier pour le moment.
+                    {rechercheNormalisee
+                      ? 'Aucun client ne correspond à cette recherche.'
+                      : 'Aucun dossier archivé et signé pour ce courtier pour le moment.'}
                   </p>
                 ) : (
                   lignesCourtier.map((ligne) => {
@@ -2166,7 +2204,9 @@ export default function Dashboard({
                     // client. Chaque montant est vert coché, orange sinon ;
                     // la ligne entière ne passe au vert que si les deux sont
                     // cochées — orange tant que l'une des deux ne l'est pas.
-                    const toutValide = ligne.commissionValidee && ligne.comBanqueValidee;
+                    const commissionValidee = estLigneValidee(ligne, 'commission_validee');
+                    const comBanqueValidee = estLigneValidee(ligne, 'com_banque_validee');
+                    const toutValide = commissionValidee && comBanqueValidee;
                     return (
                       <div
                         key={ligne.id}
@@ -2197,15 +2237,14 @@ export default function Dashboard({
                           onClick={(e) => e.stopPropagation()}
                           className="w-32 flex items-center justify-end gap-2 cursor-pointer select-none"
                         >
-                          <span className={`text-sm tabular-nums ${ligne.commissionValidee ? 'text-emerald-300' : 'text-amber-400'}`}>
+                          <span className={`text-sm tabular-nums ${commissionValidee ? 'text-emerald-300' : 'text-amber-400'}`}>
                             {formatCurrency(ligne.commission)}
                           </span>
                           <input
                             type="checkbox"
-                            checked={ligne.commissionValidee}
-                            disabled={validationEnCours === `${ligne.id}:commission_validee`}
+                            checked={commissionValidee}
                             onChange={(e) => void basculerValidation(ligne, 'commission_validee', e.target.checked)}
-                            className="w-5 h-5 shrink-0 rounded accent-emerald-500 cursor-pointer disabled:opacity-50"
+                            className="w-5 h-5 shrink-0 rounded accent-emerald-500 cursor-pointer"
                             title="Commission validée"
                           />
                         </label>
@@ -2213,15 +2252,14 @@ export default function Dashboard({
                           onClick={(e) => e.stopPropagation()}
                           className="w-36 flex items-center justify-end gap-2 cursor-pointer select-none"
                         >
-                          <span className={`text-sm tabular-nums ${ligne.comBanqueValidee ? 'text-emerald-300' : 'text-amber-400'}`}>
-                            {formatCurrency(ligne.comBanque)}
+                          <span className={`text-sm tabular-nums ${comBanqueValidee ? 'text-emerald-300' : 'text-amber-400'}`}>
+                            {formatCurrencyPrecis(ligne.comBanque)}
                           </span>
                           <input
                             type="checkbox"
-                            checked={ligne.comBanqueValidee}
-                            disabled={validationEnCours === `${ligne.id}:com_banque_validee`}
+                            checked={comBanqueValidee}
                             onChange={(e) => void basculerValidation(ligne, 'com_banque_validee', e.target.checked)}
-                            className="w-5 h-5 shrink-0 rounded accent-emerald-500 cursor-pointer disabled:opacity-50"
+                            className="w-5 h-5 shrink-0 rounded accent-emerald-500 cursor-pointer"
                             title="Commission Banque validée"
                           />
                         </label>
@@ -2315,7 +2353,7 @@ export default function Dashboard({
                         {formatCurrency(ligne.commission)}
                       </span>
                       <span className="w-28 text-right text-sm text-slate-300 tabular-nums">
-                        {formatCurrency(ligne.comBanque)}
+                        {formatCurrencyPrecis(ligne.comBanque)}
                       </span>
                     </div>
                   ))
