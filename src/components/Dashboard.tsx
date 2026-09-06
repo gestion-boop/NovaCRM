@@ -461,7 +461,16 @@ export default function Dashboard({
         archive: Boolean(d.archivedAt),
         archiveLe: d.archivedAt || undefined,
       });
-      if (d.archivedAt) {
+      // Demandé le 6 septembre : « le chiffre comptabilisé doit être
+      // définitivement comptabilisé du moment que le dossier est archivé et
+      // que nous avons cliqué sur oui, dossier a été signé. Si le dossier
+      // n'est pas signé, c'est la condition ultime pour ne pas le
+      // comptabiliser » — dans le CA de l'agence comme dans celui du
+      // courtier. `signedAt` (leads.signed_at) n'est posé que sur « Oui,
+      // signature faite » à l'archivage (voir handleArchive côté fiche
+      // client) ; un dossier archivé sans signature ne compte donc nulle
+      // part, ni en réalisé ni en « à venir » — il est clos, pas en cours.
+      if (d.archivedAt && d.signedAt) {
         total += montant;
         comptees += 1;
         if (d.advisorId) {
@@ -485,7 +494,7 @@ export default function Dashboard({
           }
         }
       }
-      else {
+      else if (!d.archivedAt) {
         aVenir += montant;
         comptessAVenir += 1;
         const etape = d.stage || 'Sans étape';
