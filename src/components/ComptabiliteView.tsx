@@ -127,18 +127,27 @@ export default function ComptabiliteView() {
     return map;
   }, [overrides]);
 
-  // Solde bancaire théorique cumulé : on part de la toute première ligne du
-  // grand livre (le report d'ouverture) et on accumule crédit - débit dans
-  // l'ordre chronologique complet, tous mois ET toutes années confondus (le
-  // solde de clôture 2026 devient naturellement le solde d'ouverture 2027).
-  // Une correction manuelle sur un mois réinitialise le solde cumulé à ce
-  // point précis dans la passe unique : elle se propage donc naturellement
-  // à tous les mois suivants, jusqu'à la prochaine correction éventuelle.
-  // Les lignes prévisionnelles (pas encore sur le compte) ne participent pas
-  // au solde théorique cumulé tant qu'elles ne sont pas validées : on garde
-  // la logique de bascule d'override par mois intacte (dernierMoisCle avance
-  // toujours, même pour une ligne prévisionnelle qu'on saute), mais on ne
-  // cumule son crédit/débit dans `solde` qu'une fois `previsionnel: false`.
+  // Solde bancaire cumulé (renommé depuis « solde théorique » — demande :
+  // « il faut que tu additionnes les rentrées et tu soustrait les sorties
+  // qui ont été checker et normalement je dois retomber sur le compte
+  // actuel de la banque ») : on part de la toute première ligne du grand
+  // livre (le report d'ouverture) et on accumule dans l'ordre chronologique
+  // complet, tous mois ET toutes années confondus (le solde de clôture 2026
+  // devient naturellement le solde d'ouverture 2027). Une correction
+  // manuelle sur un mois réinitialise le solde cumulé à ce point précis dans
+  // la passe unique : elle se propage donc naturellement à tous les mois
+  // suivants, jusqu'à la prochaine correction éventuelle.
+  //
+  // Ce cumul doit toujours retomber sur le VRAI solde bancaire : on
+  // n'ajoute donc un crédit que s'il est coché confirmé (`creditConfirme`)
+  // et on ne soustrait un débit que s'il est coché confirmé
+  // (`debitConfirme`) — peu importe que la ligne soit encore
+  // `previsionnel: true` ou non (une ligne prévisionnelle est de toute façon
+  // quasi toujours non confirmée, mais on teste directement les booléens de
+  // confirmation, pas le flag `previsionnel`, pour rester correct dans tous
+  // les cas). Une ligne avec un crédit/débit non confirmé apparaît toujours
+  // dans sa cellule Crédit/Débit avec son bouton à cocher, mais ne bouge pas
+  // ce cumul tant qu'elle n'est pas cochée.
   const actualsAvecSolde = useMemo(() => {
     let solde = 0;
     let dernierMoisCle: string | null = null;
@@ -152,18 +161,20 @@ export default function ComptabiliteView() {
         }
         dernierMoisCle = moisCle;
       }
-      if (!a.previsionnel) {
-        solde += a.credit - a.debit;
-      }
+      if (a.creditConfirme) solde += a.credit;
+      if (a.debitConfirme) solde -= a.debit;
       return { ...a, soldeApres: solde };
     });
   }, [actuals, overridesParMois]);
 
-  // Solde prévisionnel (6 septembre) : même cumul, mais en comptant AUSSI
-  // les lignes prévisionnelles en attente — pour voir, à côté du « bon »
-  // solde théorique (confirmé), ce que donnerait le solde si tout ce qui
-  // est en attente arrivait bien sur le compte. Une fois une ligne validée
-  // (previsionnel: false), les deux colonnes convergent naturellement.
+  // Solde prévisionnel (6 septembre, re-précisé lors du passage au « solde
+  // bancaire » confirmé ci-dessus) : cumul « optimiste » — on compte TOUT,
+  // crédits et débits, confirmés ou non, prévisionnels ou non, comme si
+  // chaque ligne se dénouait exactement telle que saisie. Cette colonne ne
+  // change pas avec le passage du solde bancaire à un cumul confirmé
+  // uniquement : elle continue de sommer chaque ligne sans condition — c'est
+  // ce qui la distingue du « Solde bancaire » désormais gated sur
+  // creditConfirme/debitConfirme.
   const soldePrevisionnelParId = useMemo(() => {
     let solde = 0;
     let dernierMoisCle: string | null = null;
@@ -289,6 +300,24 @@ export default function ComptabiliteView() {
   const soldeClotureMoisActif = actualsDuMoisActif.length > 0
     ? actualsDuMoisActif[actualsDuMoisActif.length - 1].soldeApres
     : soldeOuvertureMoisActif;
+
+  // « Prévisionnel fin de mois » (demande : « dans le prévisionnel tu mettes
+  // tout ce qui n'a pas été débité [...] tu le soustrais au solde du compte
+  // bancaire ») : somme des DÉBITS pas encore confirmés du mois actif —
+  // prévisionnels ou non, peu importe, seul compte `debitConfirme === false`
+  // — c'est la réserve de trésorerie à garder de côté pour ces sorties pas
+  // encore parties. On la retranche au solde bancaire confirmé de clôture du
+  // mois pour obtenir une estimation prudente de fin de mois. Les crédits
+  // non confirmés ne sont volontairement PAS ajoutés (formule dictée par
+  // l'utilisateur, volontairement conservatrice sur les sorties uniquement).
+  const previsionnelDebitsNonConfirmes = useMemo(
+    () => actuals
+      .filter((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive) && !a.debitConfirme)
+      .reduce((s, a) => s + a.debit, 0),
+    [actuals, moisActuelOnglet, anneeActive]
+  );
+
+  const previsionnelFinDeMois = soldeClotureMoisActif - previsionnelDebitsNonConfirmes;
 
   const [formOuvert, setFormOuvert] = useState<string | null>(null); // null = fermé, 'nouveau' ou id d'une ligne éditée
   const [form, setForm] = useState<FormLigne>(() => formVide(moisIso(new Date())));
@@ -560,11 +589,11 @@ export default function ComptabiliteView() {
         ))}
       </div>
 
-      {/* Solde bancaire théorique — grand livre du mois actif */}
+      {/* Solde bancaire — grand livre du mois actif */}
       <div className="rounded-2xl border-2 border-[#2a6a6f] bg-[#0a1e20]/60 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-bold text-white">
-            Solde bancaire théorique — Grand livre {moisActuelOnglet} · {NOMS_MOIS_COURT[moisActuelOnglet]}
+            Solde bancaire — Grand livre {moisActuelOnglet} · {NOMS_MOIS_COURT[moisActuelOnglet]}
           </h3>
           <div className="flex items-center gap-4 text-xs">
             <span className="relative flex items-center gap-1.5 text-slate-400">
@@ -621,6 +650,18 @@ export default function ComptabiliteView() {
               Solde clôture :{' '}
               <span className={`font-bold ${soldeClotureMoisActif >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {formatCurrencyPrecis(soldeClotureMoisActif)}
+              </span>
+            </span>
+            {/* Prévisionnel fin de mois (demande : « Prévisionnel fin de
+                mois [...] = Solde bancaire − Prévisionnel [tout ce qui n'a
+                pas été débité] ») : solde bancaire confirmé de clôture du
+                mois, moins les débits pas encore confirmés — une estimation
+                prudente de ce qui restera une fois toutes les sorties en
+                attente réellement passées. */}
+            <span className="flex items-center gap-1.5" title="Solde bancaire (clôture confirmée) − débits pas encore confirmés du mois">
+              <span style={{ color: '#F9C977' }}>Prévisionnel fin de mois :</span>
+              <span className={`font-bold ${previsionnelFinDeMois >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatCurrencyPrecis(previsionnelFinDeMois)}
               </span>
             </span>
           </div>
@@ -701,7 +742,7 @@ export default function ComptabiliteView() {
                   <th className="text-left px-3 py-2 bg-[#0a1e20] text-sky-300/80">Commentaire</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Crédit</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Débit</th>
-                  <th className="text-right px-3 py-2 bg-[#0a1e20]">Solde théorique</th>
+                  <th className="text-right px-3 py-2 bg-[#0a1e20]" title="Cumul confirmé uniquement — retombe sur le vrai solde bancaire">Solde bancaire</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20] text-[#F7BC5F]/80">Solde prévisionnel</th>
                   <th className="text-right px-2 py-2 bg-[#0a1e20]"></th>
                 </tr>
@@ -906,21 +947,31 @@ export default function ComptabiliteView() {
 
         {!actualsChargement && actualsDuMoisActif.length > 0 && (
           <div className="flex flex-wrap items-stretch gap-0 rounded-xl border-2 border-[#2a6a6f] bg-[#0a1e20] overflow-hidden text-xs">
-            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center">
+            {/* Totaux bruts du mois (débit/crédit des lignes validées,
+                confirmées ou non) — distincts du « Solde bancaire »
+                ci-dessus qui, lui, ne cumule que les montants cochés
+                confirmés ; un titre explicite évite toute confusion entre
+                les deux séries de chiffres. */}
+            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center" title="Total des débits du mois, confirmés ou non (hors lignes encore prévisionnelles)">
               <div className="text-[10px] uppercase tracking-widest text-slate-500">Solde débit</div>
               <div className="text-sm font-bold text-red-400 tabular-nums">{formatCurrencyPrecis(totalDebitMois)}</div>
             </div>
             <div className="w-px bg-[#2a6a6f]" />
-            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center">
+            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center" title="Total des crédits du mois, confirmés ou non (hors lignes encore prévisionnelles)">
               <div className="text-[10px] uppercase tracking-widest text-slate-500">Solde crédit</div>
               <div className="text-sm font-bold text-emerald-400 tabular-nums">{formatCurrencyPrecis(totalCreditMois)}</div>
             </div>
             {/* Ligne verticale plus marquée avant « Prévisionnel » (6
                 septembre) : cette valeur reste une projection, pas un
-                mouvement confirmé — on la sépare visuellement du reste. */}
+                mouvement confirmé — on la sépare visuellement du reste.
+                Cette case reste le mouvement net des lignes ENCORE en
+                attente de validation (panneau ⏳ ci-dessus) — à ne pas
+                confondre avec la nouvelle case « Prévisionnel fin de mois »
+                du bandeau du haut, qui elle raisonne sur les débits non
+                confirmés (prévisionnels ou non) soustraits au solde bancaire. */}
             <div className="w-[3px] bg-[#F7BC5F]" />
-            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center bg-[#F7BC5F]/5">
-              <div className="text-[10px] uppercase tracking-widest text-[#F7BC5F]/80">Prévisionnel</div>
+            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center bg-[#F7BC5F]/5" title="Mouvement net des lignes encore en attente de validation (⏳ ci-dessus)">
+              <div className="text-[10px] uppercase tracking-widest text-[#F7BC5F]/80">Prévisionnel (en attente)</div>
               <div className={`text-sm font-bold tabular-nums ${totalPrevisionnelMois >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
                 {totalPrevisionnelMois >= 0 ? '+' : ''}{formatCurrencyPrecis(totalPrevisionnelMois)}
               </div>
