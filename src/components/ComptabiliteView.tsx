@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2, Palette } from 'lucide-react';
+import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2, Palette, ChevronDown, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTreasuryLines } from '@/hooks/useTreasuryLines';
 import { useTreasuryActuals, TreasuryActual } from '@/hooks/useTreasuryActuals';
@@ -315,6 +315,14 @@ export default function ComptabiliteView() {
     ? actualsDuMoisActif[actualsDuMoisActif.length - 1].soldeApres
     : soldeOuvertureMoisActif;
 
+  // Même clôture, version « optimiste » (tout compté, coché ou non) — pour
+  // que le total du pied de tableau, colonne Solde prévisionnel, retombe
+  // exactement sur la dernière ligne affichée, comme demandé (« c'est ce
+  // montant-là que je dois retrouver tout en bas de la colonne »).
+  const soldePrevisionnelClotureMoisActif = actualsDuMoisActif.length > 0
+    ? soldePrevisionnelParId.get(actualsDuMoisActif[actualsDuMoisActif.length - 1].id) ?? soldeClotureMoisActif
+    : soldeClotureMoisActif;
+
   // « Prévisionnel fin de mois » (demande : « dans le prévisionnel tu mettes
   // tout ce qui n'a pas été débité [...] tu le soustrais au solde du compte
   // bancaire ») : somme des DÉBITS pas encore confirmés du mois actif —
@@ -355,6 +363,13 @@ export default function ComptabiliteView() {
   // Correction manuelle du solde de départ du mois actif.
   const [correctionOuvertureOuverte, setCorrectionOuvertureOuverte] = useState(false);
   const [valeurCorrectionOuverture, setValeurCorrectionOuverture] = useState('');
+
+  // Demandé le 6 septembre : « je ne veux plus voir ces lignes
+  // prévisionnelles tout en haut [...] le livre tout en bas, je veux que
+  // par défaut, soit replié » — les deux panneaux restent disponibles au
+  // clic mais démarrent repliés pour ne plus encombrer l'écran.
+  const [previsionnelsDeplies, setPrevisionnelsDeplies] = useState(false);
+  const [ligneRecurrentesDepliees, setLigneRecurrentesDepliees] = useState(false);
 
   const categories = useMemo(() => {
     const set = new Set<string>(CATEGORIES_SUGGEREES);
@@ -689,13 +704,19 @@ export default function ComptabiliteView() {
 
         {previsionnelsDuMoisActif.length > 0 && (
           <div className="rounded-xl border-2 border-dashed border-[#F7BC5F]/60 bg-[#F7BC5F]/5 p-3 space-y-2.5">
-            <h4 className="text-xs font-bold text-[#F7BC5F] flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPrevisionnelsDeplies((v) => !v)}
+              className="w-full flex items-center gap-1.5 text-xs font-bold text-[#F7BC5F]"
+            >
+              {previsionnelsDeplies ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
               ⏳ Lignes prévisionnelles — en attente de validation
               <span className="text-[10px] font-normal text-[#F7BC5F]/60">({previsionnelsDuMoisActif.length})</span>
-            </h4>
+            </button>
             {/* Retouche visuelle (6 septembre) : rangées alternées + fond
                 carte pour chaque ligne, plutôt qu'un simple texte serré sur
                 une ligne, plus lisible avec plusieurs lignes en attente. */}
+            {previsionnelsDeplies && (
             <div className="space-y-1">
               {previsionnelsDuMoisActif.map((a, idx) => (
                 <div
@@ -737,6 +758,7 @@ export default function ComptabiliteView() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         )}
 
@@ -967,21 +989,28 @@ export default function ComptabiliteView() {
                       somme au total de la colonne à chaque fois qui
                       correspond tout en bas » — un vrai total de colonne,
                       aligné sous Crédit/Débit/Solde prévisionnel/Solde
-                      bancaire, plutôt qu'un bandeau à part au style
-                      différent. Solde bancaire actuel = solde d'ouverture du
-                      mois moins le total débit plus le total crédit. */}
+                      bancaire. Corrigé le 6 septembre (écart constaté entre
+                      la dernière ligne à 3118,80 € et un total à 3837,82 €) :
+                      les colonnes Solde prévisionnel/Solde bancaire ne sont
+                      pas des sommes de la colonne mais des CUMULS — leur
+                      « total » doit donc être le solde de clôture déjà
+                      affiché sur la dernière ligne, pas une addition de tout
+                      ce qui précède. */}
                   <tr className="border-t-2 border-[#2a6a6f] bg-[#0a1e20] divide-x divide-[#2a6a6f]/50 text-xs font-bold">
                     <td className="px-3 py-2 text-slate-400 uppercase tracking-widest text-[10px]" colSpan={5}>Total du mois</td>
                     <td className="px-3 py-2 text-right tabular-nums text-emerald-400">{formatCurrencyPrecis(totalCreditMois)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-red-400">{formatCurrencyPrecis(totalDebitMois)}</td>
-                    <td className={`px-3 py-2 text-right tabular-nums ${totalPrevisionnelMois >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
-                      {totalPrevisionnelMois >= 0 ? '+' : ''}{formatCurrencyPrecis(totalPrevisionnelMois)}
+                    <td
+                      className={`px-3 py-2 text-right tabular-nums ${soldePrevisionnelClotureMoisActif >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}
+                      title="Solde de clôture du mois, tout compté (coché ou non) — identique à la dernière ligne du tableau"
+                    >
+                      {formatCurrencyPrecis(soldePrevisionnelClotureMoisActif)}
                     </td>
                     <td
-                      className={`px-3 py-2 text-right tabular-nums ${soldeOuvertureMoisActif - totalDebitMois + totalCreditMois >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}
-                      title="Solde d'ouverture du mois − total débit + total crédit"
+                      className={`px-3 py-2 text-right tabular-nums ${soldeClotureMoisActif >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}
+                      title="Solde de clôture confirmé du mois — identique à la dernière ligne du tableau"
                     >
-                      {formatCurrencyPrecis(soldeOuvertureMoisActif - totalDebitMois + totalCreditMois)}
+                      {formatCurrencyPrecis(soldeClotureMoisActif)}
                     </td>
                     <td />
                   </tr>
@@ -994,9 +1023,17 @@ export default function ComptabiliteView() {
 
       {/* Lignes récurrentes / ponctuelles (treasury_lines) actives sur le mois affiché — CRUD complet */}
       <div className="rounded-2xl border-2 border-[#2a6a6f] bg-[#0a1e20]/60 p-4 space-y-2">
-        <h3 className="text-xs font-bold text-white uppercase tracking-wide">
+        <button
+          type="button"
+          onClick={() => setLigneRecurrentesDepliees((v) => !v)}
+          className="w-full flex items-center gap-1.5 text-xs font-bold text-white uppercase tracking-wide"
+        >
+          {ligneRecurrentesDepliees ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           Lignes récurrentes / ponctuelles — {NOMS_MOIS_COURT[moisActuelOnglet]} {anneeActive}
-        </h3>
+          <span className="text-[10px] font-normal normal-case text-slate-500">({lignesDuMoisActif.length})</span>
+        </button>
+        {ligneRecurrentesDepliees && (
+        <>
         <p className="text-[10px] text-slate-500 italic">
           Chaque ligne récurrente ou ponctuelle de ce mois est automatiquement ajoutée en attente
           de validation dans le grand livre ci-dessus — cochez-la (✓ Valider) une fois réellement
@@ -1038,6 +1075,8 @@ export default function ComptabiliteView() {
               </div>
             ))}
           </div>
+        )}
+        </>
         )}
       </div>
 
