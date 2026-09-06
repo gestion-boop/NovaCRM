@@ -472,6 +472,11 @@ export interface TreasuryLine {
   // Récurrent uniquement : dernier mois où la ligne s'applique (incluse).
   // Vide = récurrence projetée indéfiniment.
   endMonth?: string | null;
+  // Jour du mois où le prélèvement/virement tombe réellement (1-31),
+  // optionnel — sans quoi la matérialisation automatique retombe sur le 1er
+  // du mois (voir ComptabiliteView). Demandé le 6 septembre : « la date
+  // n'est pas bonne car ça se prélève tous les 10 de chaque mois ».
+  jourPrelevement?: number | null;
   notes?: string;
   createdBy?: string;
   createdAt?: string;
