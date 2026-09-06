@@ -255,7 +255,7 @@ export default function Dashboard({
     );
     if (pipelinesVises.size === 0) {
       return {
-        total: 0, comptees: 0, aVenir: 0, comptessAVenir: 0, sansMontant: 0,
+        total: 0, comBanqueTotal: 0, comptees: 0, aVenir: 0, comptessAVenir: 0, sansMontant: 0,
         pipelineTrouve: false, dansLePipeline: 0, horsEtape: 0,
         repartitionAVenir: [] as { name: string; value: number }[],
         horsPipelineMontant: 0, horsPipelineNb: 0,
@@ -327,6 +327,10 @@ export default function Dashboard({
     //              ou dossier archivé avec un montant confirmé.
     // Les additionner donnerait un chiffre qui mélange le réalisé et le prévu.
     let total = 0;
+    // Commission Banque totale de l'agence (leads.com_banque) — demandé le
+    // 6 septembre pour s'ajouter au chiffre d'affaires de l'agence, comme
+    // pour chaque courtier.
+    let comBanqueTotal = 0;
     let aVenir = 0;
     let comptees = 0;
     let comptessAVenir = 0;
@@ -473,6 +477,7 @@ export default function Dashboard({
       if (d.archivedAt && d.signedAt) {
         total += montant;
         comptees += 1;
+        comBanqueTotal += Number(d.comBanque) || 0;
         if (d.advisorId) {
           parConseiller.set(d.advisorId, (parConseiller.get(d.advisorId) || 0) + montant);
           if (new Date(d.archivedAt).getFullYear() === anneeCourante) {
@@ -508,7 +513,7 @@ export default function Dashboard({
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
     return {
-      total, comptees, aVenir, comptessAVenir, sansMontant,
+      total, comBanqueTotal, comptees, aVenir, comptessAVenir, sansMontant,
       pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [],
       repartitionAVenir, horsPipelineMontant, horsPipelineNb, devis, devisNb,
       recurrence, recurrenceNb, parConseiller, commissionParConseiller, parConseillerAnnee, parConseillerAVenir,
@@ -557,7 +562,10 @@ export default function Dashboard({
         const nom = collaborateurs.find((u) => u.id === id)?.name || 'Collaborateur sans compte';
         const archive = chiffreAffairesAgence.parConseiller.get(id) || 0;
         const aVenir = chiffreAffairesAgence.parConseillerAVenir.get(id) || 0;
-        const commission = chiffreAffairesAgence.commissionParConseiller.get(id) || 0;
+        // Demandé le 6 septembre : « Commission des courtiers » = honoraires
+        // archivés du courtier + sa commission personnelle, additionnés.
+        const commissionPersonnelle = chiffreAffairesAgence.commissionParConseiller.get(id) || 0;
+        const commission = archive + commissionPersonnelle;
         const comBanque = chiffreAffairesAgence.comBanqueParConseiller.get(id) || 0;
         return {
           id, nom, prenom: nom.split(' ')[0], archive, aVenir, total: archive + aVenir,
@@ -1020,7 +1028,11 @@ export default function Dashboard({
                   dossiers archivés et ceux arrivés à cette étape ; ailleurs,
                   les archivés seulement, comme avant. */}
               <div className="text-2xl font-black text-[#F9C977] tracking-tight">
-                {formatCurrency(estConseilsFinances ? chiffreAffairesAgence.total + chiffreAffairesAgence.aVenir : chiffreAffairesAgence.total)}
+                {formatCurrency(
+                  estConseilsFinances
+                    ? chiffreAffairesAgence.total + chiffreAffairesAgence.aVenir + chiffreAffairesAgence.comBanqueTotal
+                    : chiffreAffairesAgence.total
+                )}
               </div>
               {/* Une tuile qui affiche zéro sans dire pourquoi fait perdre une
                   soirée. Elle explique donc ce qu'elle a trouvé, et où ça
@@ -1041,6 +1053,9 @@ export default function Dashboard({
                   <>
                     {chiffreAffairesAgence.comptessAVenir} en cours ({formatCurrency(chiffreAffairesAgence.aVenir)})
                     {' + '}{chiffreAffairesAgence.comptees} archivé{chiffreAffairesAgence.comptees > 1 ? 's' : ''} ({formatCurrency(chiffreAffairesAgence.total)})
+                    {chiffreAffairesAgence.comBanqueTotal > 0 && (
+                      <>{' + '}commission Banque ({formatCurrency(chiffreAffairesAgence.comBanqueTotal)})</>
+                    )}
                     <span className="text-slate-500 font-normal block mt-0.5">
                       À partir de l'étape Montage dossier, honoraires agence TTC saisis sur la fiche (pas de hors taxes sur Conseils Finances)
                       {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans honoraires`}
