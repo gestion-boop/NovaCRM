@@ -1,9 +1,8 @@
-import React, { useMemo, useState } from 'react';
-import { Calculator, Plus, Trash2, TrendingUp, TrendingDown, Pencil } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Calculator, Plus } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTreasuryLines } from '@/hooks/useTreasuryLines';
 import { useTreasuryActuals } from '@/hooks/useTreasuryActuals';
-import { TreasuryLine } from '@/types';
 import { formatCurrencyPrecis } from '@/lib/utils';
 
 const MOIS_ONGLETS = ['01', '02', '03', '04', '05', '06', '07', '08', '09'];
@@ -33,20 +32,6 @@ const CATEGORIES_SUGGEREES = [
 function moisIso(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
 }
-function ajouterMois(date: Date, n: number): Date {
-  return new Date(date.getFullYear(), date.getMonth() + n, 1);
-}
-function libelleMois(date: Date): string {
-  return date.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
-}
-
-// Un récurrent compte sur `mois` si mois >= début et (pas de fin, ou mois <= fin).
-function ligneActiveSur(ligne: TreasuryLine, moisCible: string): boolean {
-  if (ligne.kind === 'ponctuel') return ligne.month === moisCible;
-  if (moisCible < ligne.month) return false;
-  if (ligne.endMonth && moisCible > ligne.endMonth) return false;
-  return true;
-}
 
 interface FormLigne {
   label: string;
@@ -64,7 +49,7 @@ const formVide = (moisParDefaut: string): FormLigne => ({
 
 export default function ComptabiliteView() {
   const { userProfile, currentUser, activeAgency } = useAuth();
-  const { lines, isLoading, creerLigne, modifierLigne, supprimerLigne } = useTreasuryLines(activeAgency.id);
+  const { lines, creerLigne, modifierLigne } = useTreasuryLines(activeAgency.id);
   const { actuals, isLoading: actualsChargement } = useTreasuryActuals(activeAgency.id);
 
   // Double garde (menu ET contenu, même principe que CarteProspectionView.tsx) :
@@ -72,10 +57,6 @@ export default function ComptabiliteView() {
   const identite = `${userProfile?.displayName || currentUser?.displayName || ''} ${userProfile?.email || currentUser?.email || ''}`;
   const estDirectionCF = /grazia|melanie|gestion@immosphera\.fr/i.test(identite);
   const estConseilsFinances = /conseils?\s*finances?/i.test(activeAgency?.name || '');
-
-  const [debutFenetre] = useState(() => new Date(2026, 0, 1));
-  const mois = useMemo(() => Array.from({ length: 12 }, (_, i) => ajouterMois(debutFenetre, i)), [debutFenetre]);
-  const moisIsoListe = useMemo(() => mois.map(moisIso), [mois]);
 
   const [moisActuelOnglet, setMoisActuelOnglet] = useState('01');
 
@@ -115,36 +96,6 @@ export default function ComptabiliteView() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'fr'));
   }, [lines]);
 
-  const lignesParCategorie = useMemo(() => {
-    const map = new Map<string, TreasuryLine[]>();
-    lines.forEach((l) => {
-      const arr = map.get(l.category) || [];
-      arr.push(l);
-      map.set(l.category, arr);
-    });
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'fr'));
-  }, [lines]);
-
-  // Total par mois, toutes lignes confondues (positif = recette, négatif = dépense).
-  const totalParMois = useMemo(
-    () => moisIsoListe.map((m) => lines.reduce((s, l) => s + (ligneActiveSur(l, m) ? l.amount : 0), 0)),
-    [lines, moisIsoListe]
-  );
-  const recettesParMois = useMemo(
-    () => moisIsoListe.map((m) => lines.reduce((s, l) => s + (ligneActiveSur(l, m) && l.amount > 0 ? l.amount : 0), 0)),
-    [lines, moisIsoListe]
-  );
-  const depensesParMois = useMemo(
-    () => moisIsoListe.map((m) => lines.reduce((s, l) => s + (ligneActiveSur(l, m) && l.amount < 0 ? l.amount : 0), 0)),
-    [lines, moisIsoListe]
-  );
-  // Cumul depuis le premier mois affiché — pas le solde bancaire réel, voir
-  // la note en bas de page.
-  const cumulParMois = useMemo(() => {
-    let c = 0;
-    return totalParMois.map((t) => { c += t; return c; });
-  }, [totalParMois]);
-
   if (!estDirectionCF || !estConseilsFinances) {
     return (
       <div className="p-8 text-center text-sm text-slate-500">
@@ -153,15 +104,7 @@ export default function ComptabiliteView() {
     );
   }
 
-  const ouvrirNouveau = () => { setForm(formVide(moisIsoListe[0])); setFormOuvert('nouveau'); };
-  const ouvrirEdition = (l: TreasuryLine) => {
-    setForm({
-      label: l.label, category: l.category, kind: l.kind,
-      sens: l.amount >= 0 ? 'recette' : 'depense',
-      montant: String(Math.abs(l.amount)), month: l.month, endMonth: l.endMonth || '',
-    });
-    setFormOuvert(l.id);
-  };
+  const ouvrirNouveau = () => { setForm(formVide(`2026-${moisActuelOnglet}-01`)); setFormOuvert('nouveau'); };
 
   const soumettre = () => {
     const montantNombre = Number(form.montant.replace(',', '.'));
@@ -266,125 +209,13 @@ export default function ComptabiliteView() {
         )}
       </div>
 
-      {isLoading ? (
-        <p className="text-sm text-slate-500">Chargement…</p>
-      ) : (
-        <div className="overflow-x-auto custom-scrollbar rounded-2xl border-2 border-[#2a6a6f]">
-          <table className="w-full text-sm border-collapse min-w-[1200px]">
-            <thead>
-              <tr className="bg-[#0a1e20] text-[10px] uppercase tracking-widest text-slate-500 border-b-2 border-[#2a6a6f]">
-                <th className="text-left px-4 py-2 sticky left-0 bg-[#0a1e20] z-10 min-w-[220px]">Catégorie / ligne</th>
-                <th className="text-center px-2 py-2 w-16">Type</th>
-                {mois.map((m, i) => (
-                  <th key={i} className="text-right px-3 py-2 min-w-[90px]">{libelleMois(m)}</th>
-                ))}
-                <th className="w-10" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#2a6a6f]/70">
-              {lignesParCategorie.length === 0 ? (
-                <tr>
-                  <td colSpan={mois.length + 3} className="p-8 text-center text-sm text-slate-500">
-                    Aucune ligne pour le moment. Ajoutez vos charges et recettes récurrentes ou ponctuelles.
-                  </td>
-                </tr>
-              ) : (
-                lignesParCategorie.map(([categorie, lignesCat]) => (
-                  <React.Fragment key={categorie}>
-                    <tr className="bg-[#0a1e20]/60">
-                      <td className="px-4 py-1.5 font-bold text-[#F9C977] text-xs uppercase tracking-wide sticky left-0 bg-[#0a1e20]/60" colSpan={2}>
-                        {categorie}
-                      </td>
-                      {moisIsoListe.map((m, i) => {
-                        const total = lignesCat.reduce((s, l) => s + (ligneActiveSur(l, m) ? l.amount : 0), 0);
-                        return (
-                          <td key={i} className={`text-right px-3 py-1.5 text-xs font-bold ${total > 0 ? 'text-emerald-400' : total < 0 ? 'text-red-400' : 'text-slate-600'}`}>
-                            {total !== 0 ? formatCurrencyPrecis(total) : '—'}
-                          </td>
-                        );
-                      })}
-                      <td />
-                    </tr>
-                    {lignesCat.map((ligne) => (
-                      <tr key={ligne.id} className="hover:bg-white/5 group">
-                        <td className="px-4 py-2 pl-6 text-slate-200 sticky left-0 bg-[#07191b] group-hover:bg-[#0a1e20]">
-                          <button onClick={() => ouvrirEdition(ligne)} className="text-left hover:text-[#F9C977] hover:underline flex items-center gap-1.5">
-                            {ligne.amount >= 0 ? <TrendingUp className="w-3 h-3 text-emerald-400 shrink-0" /> : <TrendingDown className="w-3 h-3 text-red-400 shrink-0" />}
-                            {ligne.label}
-                          </button>
-                        </td>
-                        <td className="text-center px-2 py-2">
-                          <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${ligne.kind === 'recurrent' ? 'bg-sky-500/15 text-sky-300' : 'bg-amber-500/15 text-amber-300'}`}>
-                            {ligne.kind === 'recurrent' ? 'Récur.' : 'Ponct.'}
-                          </span>
-                        </td>
-                        {moisIsoListe.map((m, i) => (
-                          <td key={i} className={`text-right px-3 py-2 tabular-nums ${ligne.amount > 0 ? 'text-emerald-300' : 'text-slate-300'}`}>
-                            {ligneActiveSur(ligne, m) ? formatCurrencyPrecis(ligne.amount) : ''}
-                          </td>
-                        ))}
-                        <td className="px-1">
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                            <button onClick={() => ouvrirEdition(ligne)} className="p-1 text-slate-400 hover:text-white" title="Modifier">
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => { if (confirm(`Supprimer « ${ligne.label} » ?`)) supprimerLigne.mutate(ligne.id); }}
-                              className="p-1 text-slate-400 hover:text-red-400"
-                              title="Supprimer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </React.Fragment>
-                ))
-              )}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-[#2a6a6f] bg-[#0a1e20]">
-                <td className="px-4 py-2 text-xs font-bold text-emerald-400 sticky left-0 bg-[#0a1e20]" colSpan={2}>Total recettes</td>
-                {recettesParMois.map((v, i) => (
-                  <td key={i} className="text-right px-3 py-2 text-xs font-bold text-emerald-400 tabular-nums">{formatCurrencyPrecis(v)}</td>
-                ))}
-                <td />
-              </tr>
-              <tr className="bg-[#0a1e20] border-t border-[#2a6a6f]/70">
-                <td className="px-4 py-2 text-xs font-bold text-red-400 sticky left-0 bg-[#0a1e20]" colSpan={2}>Total dépenses</td>
-                {depensesParMois.map((v, i) => (
-                  <td key={i} className="text-right px-3 py-2 text-xs font-bold text-red-400 tabular-nums">{formatCurrencyPrecis(v)}</td>
-                ))}
-                <td />
-              </tr>
-              <tr className="bg-[#0a1e20] border-t-2 border-[#2a6a6f]">
-                <td className="px-4 py-2 text-xs font-bold text-white sticky left-0 bg-[#0a1e20]" colSpan={2}>Solde du mois</td>
-                {totalParMois.map((v, i) => (
-                  <td key={i} className={`text-right px-3 py-2 text-xs font-bold tabular-nums ${v >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>{formatCurrencyPrecis(v)}</td>
-                ))}
-                <td />
-              </tr>
-              <tr className="bg-[#0a1e20]/80 border-t border-[#2a6a6f]/70">
-                <td className="px-4 py-2 text-[11px] text-slate-500 sticky left-0 bg-[#0a1e20]/80" colSpan={2}>Cumul (depuis le début de cette vue)</td>
-                {cumulParMois.map((v, i) => (
-                  <td key={i} className={`text-right px-3 py-2 text-[11px] tabular-nums ${v >= 0 ? 'text-slate-400' : 'text-red-400/80'}`}>{formatCurrencyPrecis(v)}</td>
-                ))}
-                <td />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-
-      <p className="text-[11px] text-slate-500 leading-relaxed">
-        Le cumul ci-dessus part de zéro au premier mois affiché : ce n'est pas le solde réel du compte bancaire,
-        seulement l'effet net des lignes de ce prévisionnel sur la période visible. Une ligne récurrente se répète
-        chaque mois entre son mois de départ et, si elle en a une, sa date de fin ; une ligne ponctuelle ne compte
-        que sur son propre mois.
-      </p>
-
-      {/* Onglets mois du grand livre réel, en bas de la vue */}
+      {/* Onglets mois du grand livre réel, en bas de la vue — un seul
+          tableau à la fois, trié par date croissante (demande du 6
+          septembre : « uniquement un seul tableau [...] classé par date
+          croissante [...] pas tout en haut tous les onglets de tous les
+          mois »). Les lignes récurrentes/ponctuelles ajoutées à la main
+          restent modifiables via « Nouvelle ligne », mais ne sont plus
+          affichées en grille 12 mois. */}
       <div className="sticky bottom-0 flex flex-wrap gap-1.5 justify-center pt-3 border-t-2 border-[#2a6a6f] bg-[#07191b]">
         {MOIS_ONGLETS.map((m) => (
           <button
