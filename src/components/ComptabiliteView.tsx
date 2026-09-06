@@ -756,7 +756,8 @@ export default function ComptabiliteView() {
                             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) enregistrerNote(a.id);
                           }}
                           placeholder="Note libre…"
-                          className="w-full min-w-[140px] px-1.5 py-1 rounded border border-amber-400 bg-amber-300 text-slate-900 text-xs resize-y focus:outline-none"
+                          className="w-full min-w-[140px] px-1.5 py-1 rounded border border-amber-400 text-slate-900 text-xs resize-y focus:outline-none"
+                          style={{ backgroundColor: '#fcd34d' }}
                         />
                       ) : a.notes ? (
                         <div
