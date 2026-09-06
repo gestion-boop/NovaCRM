@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2, StickyNote, Palette, Sigma } from 'lucide-react';
+import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2, Palette } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTreasuryLines } from '@/hooks/useTreasuryLines';
 import { useTreasuryActuals, TreasuryActual } from '@/hooks/useTreasuryActuals';
@@ -174,6 +174,17 @@ export default function ComptabiliteView() {
   const previsionnelsDuMoisActif = useMemo(
     () => actuals.filter((a) => a.previsionnel && a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive)),
     [actuals, moisActuelOnglet, anneeActive]
+  );
+
+  // Totaux du bas de tableau (6 septembre : « solde débit ensuite crédit et
+  // ensuite prévisionnel ») — débit et crédit portent sur les lignes
+  // confirmées du mois, le prévisionnel sur le mouvement net des lignes
+  // encore en attente de validation.
+  const totalDebitMois = useMemo(() => actualsDuMoisActif.reduce((s, a) => s + a.debit, 0), [actualsDuMoisActif]);
+  const totalCreditMois = useMemo(() => actualsDuMoisActif.reduce((s, a) => s + a.credit, 0), [actualsDuMoisActif]);
+  const totalPrevisionnelMois = useMemo(
+    () => previsionnelsDuMoisActif.reduce((s, a) => s + (a.credit - a.debit), 0),
+    [previsionnelsDuMoisActif]
   );
 
   const moisIsoActif = `${anneeActive}-${moisActuelOnglet}-01`;
@@ -610,42 +621,77 @@ export default function ComptabiliteView() {
                     </td>
                     <td className="px-3 py-1.5 text-slate-200 text-xs">{a.label}</td>
                     <td className="px-3 py-1.5 text-slate-500 text-xs">{a.description}</td>
-                    <td className="px-3 py-1.5 text-xs">
-                      {a.notes ? (
+                    <td className="px-2 py-1 text-xs align-top">
+                      {notePopoverOuvert === a.id ? (
+                        <textarea
+                          autoFocus
+                          rows={2}
+                          value={valeurNoteEdition}
+                          onChange={(e) => setValeurNoteEdition(e.target.value)}
+                          onBlur={() => enregistrerNote(a.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') setNotePopoverOuvert(null);
+                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) enregistrerNote(a.id);
+                          }}
+                          placeholder="Note libre…"
+                          className="w-full min-w-[140px] px-1.5 py-1 rounded border border-amber-400 bg-amber-300 text-slate-900 text-xs resize-y focus:outline-none"
+                        />
+                      ) : a.notes ? (
                         <div
                           onClick={() => ouvrirNotePopover(a)}
                           title="Cliquer pour modifier la note"
-                          className="max-h-12 overflow-y-auto custom-scrollbar text-slate-900 italic leading-snug cursor-pointer hover:brightness-95 whitespace-pre-wrap px-1.5 py-1 rounded border border-amber-400 bg-amber-300"
+                          className="max-h-12 overflow-y-auto custom-scrollbar text-slate-900 italic leading-snug cursor-text hover:brightness-95 whitespace-pre-wrap px-1.5 py-1 rounded border border-amber-400 bg-amber-300"
                         >
                           {a.notes}
                         </div>
                       ) : (
-                        <button
+                        <div
                           onClick={() => ouvrirNotePopover(a)}
                           title="Cliquer pour ajouter une note"
-                          className="text-slate-600 hover:text-[#F9C977] italic text-[11px]"
+                          className="text-slate-600 hover:text-[#F9C977] italic text-[11px] cursor-text px-1.5 py-1"
                         >
                           + Ajouter une note
-                        </button>
+                        </div>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 text-xs">
-                      {a.comment ? (
-                        <button
+                    <td className="px-2 py-1 text-xs align-top">
+                      {commentPopoverOuvert === a.id ? (
+                        <div className="space-y-1 min-w-[140px]">
+                          <textarea
+                            autoFocus
+                            rows={2}
+                            value={valeurCommentEdition}
+                            onChange={(e) => setValeurCommentEdition(e.target.value)}
+                            onBlur={() => enregistrerComment(a.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setCommentPopoverOuvert(null);
+                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) enregistrerComment(a.id);
+                            }}
+                            placeholder="Commentaire ou calcul, ex : 150+200-30"
+                            className="w-full px-1.5 py-1 rounded border border-sky-400 bg-[#0a1e20] text-white text-xs resize-y focus:outline-none"
+                          />
+                          {resultatFormule(valeurCommentEdition) !== null && (
+                            <p className="text-[11px] text-sky-300 font-bold">
+                              = {formatCurrencyPrecis(resultatFormule(valeurCommentEdition) as number)}
+                            </p>
+                          )}
+                        </div>
+                      ) : a.comment ? (
+                        <div
                           onClick={() => ouvrirCommentPopover(a)}
                           title="Cliquer pour modifier le commentaire"
-                          className="max-w-[140px] truncate text-left text-sky-200 hover:text-sky-100 underline decoration-dotted underline-offset-2 block"
+                          className="max-w-[160px] truncate text-sky-200 hover:text-sky-100 cursor-text px-1.5 py-1"
                         >
                           {a.comment}
-                        </button>
+                        </div>
                       ) : (
-                        <button
+                        <div
                           onClick={() => ouvrirCommentPopover(a)}
                           title="Cliquer pour ajouter un commentaire (calculs +, -, *, / possibles)"
-                          className="text-slate-600 hover:text-sky-300 italic text-[11px]"
+                          className="text-slate-600 hover:text-sky-300 italic text-[11px] cursor-text px-1.5 py-1"
                         >
                           + Commentaire
-                        </button>
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-1.5 text-xs">
@@ -727,77 +773,6 @@ export default function ComptabiliteView() {
                           </div>
                         )}
                         <button
-                          onClick={() => (notePopoverOuvert === a.id ? setNotePopoverOuvert(null) : ouvrirNotePopover(a))}
-                          title={a.notes ? a.notes : 'Ajouter une note'}
-                          className={a.notes ? 'text-[#F9C977]' : 'text-slate-500 hover:text-[#F9C977]'}
-                        >
-                          <StickyNote className="w-3.5 h-3.5" />
-                        </button>
-                        {notePopoverOuvert === a.id && (
-                          <div
-                            className="absolute right-0 top-full mt-1 z-30 w-56 p-2 rounded-lg bg-[#07191b] border-2 border-[#2a6a6f] shadow-xl space-y-2"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <textarea
-                              autoFocus
-                              value={valeurNoteEdition}
-                              onChange={(e) => setValeurNoteEdition(e.target.value)}
-                              placeholder="Note libre sur cette ligne…"
-                              rows={3}
-                              className="w-full px-2 py-1.5 rounded bg-[#0a1e20] border border-[#144447]/60 text-white text-xs resize-none focus:outline-none focus:border-[#F7BC5F]/60"
-                            />
-                            <div className="flex justify-end gap-2">
-                              <button onClick={() => setNotePopoverOuvert(null)} className="text-[10px] text-slate-400 hover:text-white">
-                                Annuler
-                              </button>
-                              <button
-                                onClick={() => enregistrerNote(a.id)}
-                                className="px-2 py-1 rounded-lg bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 text-[10px] font-bold"
-                              >
-                                Enregistrer
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        <button
-                          onClick={() => (commentPopoverOuvert === a.id ? setCommentPopoverOuvert(null) : ouvrirCommentPopover(a))}
-                          title={a.comment ? a.comment : 'Ajouter un commentaire (calculs possibles)'}
-                          className={a.comment ? 'text-sky-300' : 'text-slate-500 hover:text-sky-300'}
-                        >
-                          <Sigma className="w-3.5 h-3.5" />
-                        </button>
-                        {commentPopoverOuvert === a.id && (
-                          <div
-                            className="absolute right-0 top-full mt-1 z-30 w-60 p-2 rounded-lg bg-[#07191b] border-2 border-[#2a6a6f] shadow-xl space-y-2"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <textarea
-                              autoFocus
-                              value={valeurCommentEdition}
-                              onChange={(e) => setValeurCommentEdition(e.target.value)}
-                              placeholder="Commentaire libre ou calcul, ex : 150+200-30"
-                              rows={3}
-                              className="w-full px-2 py-1.5 rounded bg-[#0a1e20] border border-[#144447]/60 text-white text-xs resize-none focus:outline-none focus:border-sky-400/60"
-                            />
-                            {resultatFormule(valeurCommentEdition) !== null && (
-                              <p className="text-[11px] text-sky-300 font-bold">
-                                = {formatCurrencyPrecis(resultatFormule(valeurCommentEdition) as number)}
-                              </p>
-                            )}
-                            <div className="flex justify-end gap-2">
-                              <button onClick={() => setCommentPopoverOuvert(null)} className="text-[10px] text-slate-400 hover:text-white">
-                                Annuler
-                              </button>
-                              <button
-                                onClick={() => enregistrerComment(a.id)}
-                                className="px-2 py-1 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-[10px] font-bold"
-                              >
-                                Enregistrer
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        <button
                           onClick={() => ouvrirModifierActual(a)}
                           title="Modifier"
                           className="text-slate-400 hover:text-[#F7BC5F]"
@@ -824,6 +799,30 @@ export default function ComptabiliteView() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!actualsChargement && actualsDuMoisActif.length > 0 && (
+          <div className="flex flex-wrap items-stretch gap-0 rounded-xl border-2 border-[#2a6a6f] bg-[#0a1e20] overflow-hidden text-xs">
+            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center">
+              <div className="text-[10px] uppercase tracking-widest text-slate-500">Solde débit</div>
+              <div className="text-sm font-bold text-red-400 tabular-nums">{formatCurrencyPrecis(totalDebitMois)}</div>
+            </div>
+            <div className="w-px bg-[#2a6a6f]" />
+            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center">
+              <div className="text-[10px] uppercase tracking-widest text-slate-500">Solde crédit</div>
+              <div className="text-sm font-bold text-emerald-400 tabular-nums">{formatCurrencyPrecis(totalCreditMois)}</div>
+            </div>
+            {/* Ligne verticale plus marquée avant « Prévisionnel » (6
+                septembre) : cette valeur reste une projection, pas un
+                mouvement confirmé — on la sépare visuellement du reste. */}
+            <div className="w-[3px] bg-[#F7BC5F]" />
+            <div className="flex-1 min-w-[120px] px-4 py-2.5 text-center bg-[#F7BC5F]/5">
+              <div className="text-[10px] uppercase tracking-widest text-[#F7BC5F]/80">Prévisionnel</div>
+              <div className={`text-sm font-bold tabular-nums ${totalPrevisionnelMois >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
+                {totalPrevisionnelMois >= 0 ? '+' : ''}{formatCurrencyPrecis(totalPrevisionnelMois)}
+              </div>
+            </div>
           </div>
         )}
       </div>
