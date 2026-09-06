@@ -291,7 +291,9 @@ export default function ComptabiliteView() {
       creerActual.mutate({
         date: dateMaterialisation,
         label: ligne.label,
-        description: ligne.kind === 'recurrent' ? `Récurrent — ${ligne.category}` : `Ponctuel — ${ligne.category}`,
+        // Demandé le 6 septembre : « supprime quand il y a marqué récurrent,
+        // ponctuel, cela ne sert à rien » — juste la catégorie, sans préfixe.
+        description: ligne.category,
         credit: ligne.amount >= 0 ? ligne.amount : 0,
         debit: ligne.amount < 0 ? Math.abs(ligne.amount) : 0,
         // Plus de panneau « en attente » séparé (6 septembre) : la ligne
@@ -735,7 +737,7 @@ export default function ComptabiliteView() {
                 {actualsDuMoisActif.map((a, idx) => (
                   <tr
                     key={a.id}
-                    className={`group hover:bg-white/5 relative divide-x divide-[#2a6a6f]/25 ${!a.color && idx % 2 === 1 ? 'bg-white/[0.035]' : ''}`}
+                    className={`group hover:bg-white/5 relative divide-x divide-[#2a6a6f]/25 align-top ${!a.color && idx % 2 === 1 ? 'bg-white/[0.035]' : ''}`}
                     style={a.color ? { borderLeft: `5px solid ${a.color}`, backgroundColor: `${a.color}38` } : undefined}
                   >
                     <td className="px-3 py-1.5 text-slate-400 whitespace-nowrap text-xs">
@@ -763,7 +765,7 @@ export default function ComptabiliteView() {
                         <div
                           onClick={() => ouvrirNotePopover(a)}
                           title="Cliquer pour modifier la note"
-                          className="max-h-12 overflow-y-auto custom-scrollbar text-slate-900 italic leading-snug cursor-text hover:brightness-95 whitespace-pre-wrap px-1.5 py-1 rounded border border-amber-400 bg-amber-300"
+                          className="text-slate-900 italic leading-snug cursor-text hover:brightness-95 whitespace-pre-wrap px-1.5 py-1 rounded border border-amber-400 bg-amber-300"
                         >
                           {a.notes}
                         </div>
