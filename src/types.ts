@@ -93,6 +93,10 @@ export interface Deal {
   // Commission du conseiller, stockée en TTC ; affichée en HT dans les
   // colonnes du pipeline (voir htDepuisTtc).
   advisorCommissionTtc?: number;
+  // Commission Banque du dossier (leads.com_banque) : demandée le 6
+  // septembre pour figurer, en plus des honoraires, sur la case CA de
+  // chaque courtier (Conseils Finances).
+  comBanque?: number;
   // Numéro de mandat (leads.mandate_number) — affiché dans le détail du
   // chiffre d'affaires pour retrouver le dossier d'un coup d'œil.
   mandateNumber?: string;
