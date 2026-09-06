@@ -35,10 +35,18 @@ interface LigneCa {
   advisorId?: string;
   commission: number;
   comBanque: number;
+  // Demandé le 6 septembre : « commission de l'agence, ensuite commission
+  // du courtier, banque agence, commission banque courtier — des chèques
+  // sur les quatre lignes, pour être sûr de tout vérifier correctement ».
+  // `montant` sert déjà de « commission de l'agence » ; comBanqueAgence est
+  // son équivalent côté banque (comBanque reste la part du courtier).
+  comBanqueAgence: number;
   // Cases à cocher du détail par courtier (6 septembre) : vert une fois
-  // pointées, orange tant que non.
+  // pointées, orange tant que non — une paire par ligne (agence / courtier).
   commissionValidee: boolean;
   comBanqueValidee: boolean;
+  commissionAgenceValidee: boolean;
+  comBanqueAgenceValidee: boolean;
   // Signature faite à l'archivage (leads.signed_at) — condition ultime pour
   // qu'un dossier archivé compte dans le CA (voir le calcul plus haut).
   signe: boolean;
@@ -481,9 +489,12 @@ export default function Dashboard({
           advisorId: d.advisorId,
           commission: commissionLigne,
           comBanque: comBanqueLigne,
+          comBanqueAgence: comBanqueAgenceLigne,
           signe: Boolean(d.signedAt),
           commissionValidee: Boolean(d.commissionValidee),
           comBanqueValidee: Boolean(d.comBanqueValidee),
+          commissionAgenceValidee: Boolean(d.commissionAgenceValidee),
+          comBanqueAgenceValidee: Boolean(d.comBanqueAgenceValidee),
         });
         return;
       }
@@ -504,9 +515,12 @@ export default function Dashboard({
         advisorId: d.advisorId,
         commission: commissionLigne,
         comBanque: comBanqueLigne,
+        comBanqueAgence: comBanqueAgenceLigne,
         signe: Boolean(d.signedAt),
         commissionValidee: Boolean(d.commissionValidee),
         comBanqueValidee: Boolean(d.comBanqueValidee),
+        commissionAgenceValidee: Boolean(d.commissionAgenceValidee),
+        comBanqueAgenceValidee: Boolean(d.comBanqueAgenceValidee),
       });
       // Demandé le 6 septembre : « le chiffre comptabilisé doit être
       // définitivement comptabilisé du moment que le dossier est archivé et
@@ -826,15 +840,24 @@ export default function Dashboard({
   // optimiste local), sans attendre l'aller-retour réseau ni le rechargement
   // complet des dossiers ; seul un échec réel la fait revenir en arrière.
   const [validationOverrides, setValidationOverrides] = useState<Record<string, boolean>>({});
-  const estLigneValidee = (ligne: LigneCa, champ: 'commission_validee' | 'com_banque_validee') => {
+  type ChampValidation =
+    | 'commission_validee' | 'com_banque_validee'
+    | 'commission_agence_validee' | 'com_banque_agence_validee';
+  const CHAMP_VERS_CLE: Record<ChampValidation, keyof Pick<
+    LigneCa, 'commissionValidee' | 'comBanqueValidee' | 'commissionAgenceValidee' | 'comBanqueAgenceValidee'
+  >> = {
+    commission_validee: 'commissionValidee',
+    com_banque_validee: 'comBanqueValidee',
+    commission_agence_validee: 'commissionAgenceValidee',
+    com_banque_agence_validee: 'comBanqueAgenceValidee',
+  };
+  const estLigneValidee = (ligne: LigneCa, champ: ChampValidation) => {
     const cle = `${ligne.id}:${champ}`;
-    return cle in validationOverrides
-      ? validationOverrides[cle]
-      : (champ === 'commission_validee' ? ligne.commissionValidee : ligne.comBanqueValidee);
+    return cle in validationOverrides ? validationOverrides[cle] : ligne[CHAMP_VERS_CLE[champ]];
   };
   const basculerValidation = async (
     ligne: LigneCa,
-    champ: 'commission_validee' | 'com_banque_validee',
+    champ: ChampValidation,
     valeur: boolean
   ) => {
     const cle = `${ligne.id}:${champ}`;
@@ -2126,13 +2149,20 @@ export default function Dashboard({
             if (!b.archiveLe) return -1;
             return new Date(b.archiveLe).getTime() - new Date(a.archiveLe).getTime();
           });
-        // Demandé le 6 septembre : deux cases bien visibles, en haut du
-        // tableau, avec ce qui a déjà été « comptabilisé validé » — la
-        // somme de la commission (resp. commission Banque) des seules
-        // lignes cochées, en vert.
+        // Demandé le 6 septembre : « commission de l'agence, commission du
+        // courtier, banque agence, banque courtier — des chèques sur les
+        // quatre lignes, pour être sûr de tout vérifier correctement ».
+        // Quatre cases bien visibles, en haut du tableau, avec ce qui a
+        // déjà été « comptabilisé validé » sur chacune, en vert.
+        const commissionAgenceValideeTotal = lignesCourtier
+          .filter((l) => estLigneValidee(l, 'commission_agence_validee'))
+          .reduce((s, l) => s + l.montant, 0);
         const commissionValideeTotal = lignesCourtier
           .filter((l) => estLigneValidee(l, 'commission_validee'))
           .reduce((s, l) => s + l.commission, 0);
+        const comBanqueAgenceValideeTotal = lignesCourtier
+          .filter((l) => estLigneValidee(l, 'com_banque_agence_validee'))
+          .reduce((s, l) => s + l.comBanqueAgence, 0);
         const comBanqueValideeTotal = lignesCourtier
           .filter((l) => estLigneValidee(l, 'com_banque_validee'))
           .reduce((s, l) => s + l.comBanque, 0);
@@ -2143,7 +2173,7 @@ export default function Dashboard({
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
+              className="w-full max-w-5xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
             >
               <div className="flex items-start justify-between gap-4 p-5 border-b border-[#144447]/60">
                 <div>
@@ -2162,13 +2192,21 @@ export default function Dashboard({
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 p-5 border-b border-[#144447]/60">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 border-b border-[#144447]/60">
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Commission agence validée</span>
+                  <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrency(commissionAgenceValideeTotal)}</span>
+                </div>
                 <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
                   <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Commission courtier validée</span>
                   <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrency(commissionValideeTotal)}</span>
                 </div>
                 <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
-                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Commission Banque validée</span>
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Com. Banque agence validée</span>
+                  <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrencyPrecis(comBanqueAgenceValideeTotal)}</span>
+                </div>
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Com. Banque courtier validée</span>
                   <span className="text-lg font-black text-emerald-300 tracking-tight">{formatCurrencyPrecis(comBanqueValideeTotal)}</span>
                 </div>
               </div>
@@ -2185,9 +2223,10 @@ export default function Dashboard({
 
               <div className="flex items-center gap-3 px-5 pt-2 pb-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
                 <span className="flex-1">Client (derniers archivés en premier)</span>
-                <span className="w-24 text-right">Honoraires</span>
-                <span className="w-32 text-right">Commission</span>
-                <span className="w-36 text-right">Com. Banque</span>
+                <span className="w-28 text-right">Comm. agence</span>
+                <span className="w-28 text-right">Comm. courtier</span>
+                <span className="w-32 text-right">Banque agence</span>
+                <span className="w-32 text-right">Banque courtier</span>
               </div>
 
               <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
@@ -2199,14 +2238,36 @@ export default function Dashboard({
                   </p>
                 ) : (
                   lignesCourtier.map((ligne) => {
-                    // Demandé le 6 septembre : une case à cocher « commission
-                    // validée » et une « commission Banque validée » par
-                    // client. Chaque montant est vert coché, orange sinon ;
-                    // la ligne entière ne passe au vert que si les deux sont
-                    // cochées — orange tant que l'une des deux ne l'est pas.
+                    // Demandé le 6 septembre : quatre cases à cocher par
+                    // client — commission agence, commission courtier,
+                    // banque agence, banque courtier. Chaque montant est
+                    // vert coché, orange sinon ; la ligne entière ne passe
+                    // au vert que si les quatre sont cochées.
+                    const commissionAgenceValidee = estLigneValidee(ligne, 'commission_agence_validee');
                     const commissionValidee = estLigneValidee(ligne, 'commission_validee');
+                    const comBanqueAgenceValidee = estLigneValidee(ligne, 'com_banque_agence_validee');
                     const comBanqueValidee = estLigneValidee(ligne, 'com_banque_validee');
-                    const toutValide = commissionValidee && comBanqueValidee;
+                    const toutValide = commissionAgenceValidee && commissionValidee && comBanqueAgenceValidee && comBanqueValidee;
+                    const Cellule = ({
+                      largeur, montant, valide, champ, precis,
+                    }: {
+                      largeur: string; montant: number; valide: boolean; champ: ChampValidation; precis?: boolean;
+                    }) => (
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        className={`${largeur} flex items-center justify-end gap-2 cursor-pointer select-none`}
+                      >
+                        <span className={`text-sm tabular-nums ${valide ? 'text-emerald-300' : 'text-amber-400'}`}>
+                          {precis ? formatCurrencyPrecis(montant) : formatCurrency(montant)}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={valide}
+                          onChange={(e) => void basculerValidation(ligne, champ, e.target.checked)}
+                          className="w-5 h-5 shrink-0 rounded accent-emerald-500 cursor-pointer"
+                        />
+                      </label>
+                    );
                     return (
                       <div
                         key={ligne.id}
@@ -2230,39 +2291,10 @@ export default function Dashboard({
                             <div className="text-sm text-white font-semibold truncate">{ligne.nom}</div>
                           )}
                         </div>
-                        <span className="w-24 text-right text-sm text-white tabular-nums">
-                          {formatCurrency(ligne.montant)}
-                        </span>
-                        <label
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-32 flex items-center justify-end gap-2 cursor-pointer select-none"
-                        >
-                          <span className={`text-sm tabular-nums ${commissionValidee ? 'text-emerald-300' : 'text-amber-400'}`}>
-                            {formatCurrency(ligne.commission)}
-                          </span>
-                          <input
-                            type="checkbox"
-                            checked={commissionValidee}
-                            onChange={(e) => void basculerValidation(ligne, 'commission_validee', e.target.checked)}
-                            className="w-5 h-5 shrink-0 rounded accent-emerald-500 cursor-pointer"
-                            title="Commission validée"
-                          />
-                        </label>
-                        <label
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-36 flex items-center justify-end gap-2 cursor-pointer select-none"
-                        >
-                          <span className={`text-sm tabular-nums ${comBanqueValidee ? 'text-emerald-300' : 'text-amber-400'}`}>
-                            {formatCurrencyPrecis(ligne.comBanque)}
-                          </span>
-                          <input
-                            type="checkbox"
-                            checked={comBanqueValidee}
-                            onChange={(e) => void basculerValidation(ligne, 'com_banque_validee', e.target.checked)}
-                            className="w-5 h-5 shrink-0 rounded accent-emerald-500 cursor-pointer"
-                            title="Commission Banque validée"
-                          />
-                        </label>
+                        <Cellule largeur="w-28" montant={ligne.montant} valide={commissionAgenceValidee} champ="commission_agence_validee" />
+                        <Cellule largeur="w-28" montant={ligne.commission} valide={commissionValidee} champ="commission_validee" />
+                        <Cellule largeur="w-32" montant={ligne.comBanqueAgence} valide={comBanqueAgenceValidee} champ="com_banque_agence_validee" precis />
+                        <Cellule largeur="w-32" montant={ligne.comBanque} valide={comBanqueValidee} champ="com_banque_validee" precis />
                       </div>
                     );
                   })
@@ -2270,9 +2302,9 @@ export default function Dashboard({
               </div>
 
               <p className="px-5 py-3 text-[11px] text-slate-500 border-t border-[#144447]/60 leading-relaxed">
-                Cliquez sur un client pour ouvrir sa fiche directement. Cochez commission et
-                commission Banque une fois reçues : la ligne passe au vert quand les deux le sont,
-                orange tant que l'une manque.
+                Cliquez sur un client pour ouvrir sa fiche directement. Cochez chacune des quatre
+                cases une fois reçue : la ligne passe au vert quand les quatre le sont, orange tant
+                qu'il en manque une.
               </p>
             </div>
           </div>
