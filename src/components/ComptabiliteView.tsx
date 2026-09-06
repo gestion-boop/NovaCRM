@@ -80,8 +80,13 @@ export default function ComptabiliteView() {
   const estDirectionCF = /grazia|melanie|gestion@immosphera\.fr/i.test(identite);
   const estConseilsFinances = /conseils?\s*finances?/i.test(activeAgency?.name || '');
 
-  const [anneeActive, setAnneeActive] = useState<'2026' | '2027'>('2026');
-  const [moisActuelOnglet, setMoisActuelOnglet] = useState('01');
+  // Onglets ouverts par défaut sur le mois/année en cours (demandé le 6
+  // septembre : « en fonction du mois, mets l'onglet qu'il faut »).
+  const [anneeActive, setAnneeActive] = useState<'2026' | '2027'>(() => {
+    const anneeCourante = String(new Date().getFullYear());
+    return anneeCourante === '2027' ? '2027' : '2026';
+  });
+  const [moisActuelOnglet, setMoisActuelOnglet] = useState(() => String(new Date().getMonth() + 1).padStart(2, '0'));
 
   // Corrections manuelles du solde de départ, par mois (agence active) :
   // « je veux pouvoir modifier chaque mois les soldes de départ pour
