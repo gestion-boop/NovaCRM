@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { Contact, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { matchesAgency } from '@/hooks/useContacts';
+import { useAuth } from '@/context/AuthContext';
+import { useApporteurs } from '@/hooks/useApporteurs';
 import { formatVille, ttcDepuisHt } from '@/lib/utils';
 import {
   ChampsSociete, ChampsConjoint, SOCIETE_VIDE, CONJOINT_VIDE, societeRenseignee,
@@ -163,6 +165,16 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   const [assignedTo, setAssignedTo] = useState('');
   const [comments, setComments] = useState('');
 
+  // Apporteur d'affaires (agent immobilier référent, Conciergerie ImmoSphera,
+  // 6 septembre) : uniquement pertinent quand clientType === 'Conciergerie'.
+  // Liste GÉRÉE (real_estate_referrers) — pas de texte libre.
+  const { activeAgency } = useAuth();
+  const { apporteurs, creerApporteur } = useApporteurs(activeAgency?.id || agencyId);
+  const [referrerId, setReferrerId] = useState('');
+  const [showNouvelApporteur, setShowNouvelApporteur] = useState(false);
+  const [nouvelApporteurNom, setNouvelApporteurNom] = useState('');
+  const [nouvelApporteurAgence, setNouvelApporteurAgence] = useState('');
+
   // Signalé : « insert or update on table "leads" violates foreign key
   // constraint "leads_assigned_to_fkey" » à la création d'un contact
   // ImmoSphera. La liste « Attribuer à » venait d'un fichier codé en dur
@@ -285,6 +297,10 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
     setMandateNumber(c?.mandateNumber || '');
     setAssignedTo(c?.assignedTo || '');
     setComments(c?.comments || '');
+    setReferrerId(c?.referrerId || '');
+    setShowNouvelApporteur(false);
+    setNouvelApporteurNom('');
+    setNouvelApporteurAgence('');
     setShowCoContact(conjointRenseigne(conj));
     setConjoint(conj);
     setShowCompany(societeRenseignee(soc));
@@ -418,6 +434,9 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         caDevisAVenir: caDevis.trim() === '' ? vide(0) : Number(caDevis.trim().replace(',', '.')),
         coBorrower: coBorrowerInfo || vide(''),
         assignedTo: assignedTo || vide(''),
+        // Apporteur d'affaires : uniquement significatif en Conciergerie,
+        // mais rien n'empêche d'enregistrer null ailleurs.
+        referrerId: clientType === 'Conciergerie' ? (referrerId || null) : null,
         // Courtage et banque : seulement sur Conseils Finances, où les cases
         // existent — ailleurs on n'écrit rien dans ces colonnes. Et seulement
         // si quelque chose y est (ou y était) renseigné : une fiche qui n'en
@@ -575,6 +594,86 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                   </div>
                 </div>
+
+                {/* Apporteur d'affaires : uniquement en Conciergerie — sans
+                    intérêt pour les autres types de fiche (demande du
+                    6 septembre : classement par agent immobilier référent). */}
+                {clientType === 'Conciergerie' && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-200">Apporteur d'affaires (agent immobilier)</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowNouvelApporteur((v) => !v)}
+                        className="text-[11px] font-bold text-[#F7BC5F] hover:text-[#F9C977]"
+                      >
+                        + Nouveau
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <select
+                        value={referrerId}
+                        onChange={(e) => setReferrerId(e.target.value)}
+                        className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 pr-7 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none"
+                      >
+                        <option value="">Aucun</option>
+                        {apporteurs.filter((a) => a.active).map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}{a.agencyName ? ` (${a.agencyName})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                    </div>
+                    {showNouvelApporteur && (
+                      <div className="mt-2 p-3 rounded-lg bg-[#07191b] border border-[#153c3f] space-y-2">
+                        <input
+                          type="text"
+                          placeholder="Nom de l'agent immobilier *"
+                          value={nouvelApporteurNom}
+                          onChange={(e) => setNouvelApporteurNom(e.target.value)}
+                          className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Agence immobilière (optionnel)"
+                          value={nouvelApporteurAgence}
+                          onChange={(e) => setNouvelApporteurAgence(e.target.value)}
+                          className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setShowNouvelApporteur(false); setNouvelApporteurNom(''); setNouvelApporteurAgence(''); }}
+                            className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-slate-300 hover:text-white"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!nouvelApporteurNom.trim() || creerApporteur.isPending}
+                            onClick={() => {
+                              creerApporteur.mutate(
+                                { name: nouvelApporteurNom.trim(), agencyName: nouvelApporteurAgence.trim() || undefined },
+                                {
+                                  onSuccess: (created) => {
+                                    setReferrerId(created.id);
+                                    setShowNouvelApporteur(false);
+                                    setNouvelApporteurNom('');
+                                    setNouvelApporteurAgence('');
+                                  },
+                                }
+                              );
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 disabled:opacity-50"
+                          >
+                            Ajouter
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Type de contact */}
                 <div className="space-y-1.5">
