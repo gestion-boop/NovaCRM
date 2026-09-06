@@ -213,7 +213,7 @@ export default function Dashboard({
   // autre société n'a pas à voir ces chiffres. Ailleurs, rien ne change :
   // le rôle super admin décide, comme avant.
   const identite = `${userProfile?.displayName || currentUser?.displayName || ''} ${userProfile?.email || currentUser?.email || ''}`;
-  const estDirectionCF = /grazia|gestion@immosphera\.fr/i.test(identite);
+  const estDirectionCF = /grazia|melanie|gestion@immosphera\.fr/i.test(identite);
   const voitChiffresAgence = estConseilsFinances ? estDirectionCF : isSuperAdmin;
   const parPipelinePrincipal = estNovavisio || estConseilsFinances;
   // Le pipeline suivi, nommé dans les libellés des tuiles.
@@ -518,6 +518,15 @@ export default function Dashboard({
       .sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'));
   }, [collaborateurs, chiffreAffairesAgence]);
 
+  // Demandé le 6 septembre : seulement 5 cases nommées (Sylvain, Eric,
+  // Coralia, Lucie, Karine), dans cet ordre, plutôt que toute la liste
+  // triée par montant.
+  const prenomsCourtiersVises = ['Sylvain', 'Eric', 'Coralia', 'Lucie', 'Karine'];
+  const caCourtiersVises = useMemo(() => {
+    return prenomsCourtiersVises
+      .map((prenom) => caParCourtier.find((c) => sansAccents(c.prenom) === sansAccents(prenom)))
+      .filter((c): c is (typeof caParCourtier)[number] => Boolean(c));
+  }, [caParCourtier]);
 
   // On ne considère que les agences réellement affichées (l'agence active,
   // ou toutes celles présentes dans les dossiers si "Toutes les agences" est
@@ -1340,11 +1349,11 @@ export default function Dashboard({
       {estDirectionCF && estConseilsFinances && (
         <div className="space-y-2">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">CA par courtier</h3>
-          {caParCourtier.length === 0 ? (
+          {caCourtiersVises.length === 0 ? (
             <p className="text-xs text-slate-500 px-1">Aucun collaborateur rattaché à cette agence.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {caParCourtier.map((c) => (
+              {caCourtiersVises.map((c) => (
                 <div key={c.id} className="dash-card p-5 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 flex items-start justify-between gap-3 group">
                   <div className="space-y-1 min-w-0">
                     <span className="text-xs text-slate-400 font-medium tracking-wide block truncate" title={c.nom}>CA {c.prenom}</span>
