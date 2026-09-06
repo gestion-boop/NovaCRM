@@ -266,17 +266,21 @@ export default function ComptabiliteView() {
     setLigneActualOuverte(a.id);
   };
 
+  // Pas de date saisie (6 septembre : « quand on ne met pas de date, on met
+  // ces lignes prévisionnelles à l'intérieur ») : la ligne devient
+  // automatiquement prévisionnelle, casée au 1er du mois actif en attendant
+  // une vraie date (modifiable ensuite via le crayon une fois validée).
   const soumettreActual = () => {
     const credit = Number(formActual.credit.replace(',', '.')) || 0;
     const debit = Number(formActual.debit.replace(',', '.')) || 0;
-    if (!formActual.date || !formActual.label.trim() || (credit <= 0 && debit <= 0)) return;
+    if (!formActual.label.trim() || (credit <= 0 && debit <= 0)) return;
     const payload = {
-      date: formActual.date,
+      date: formActual.date || moisIsoActif,
       label: formActual.label.trim(),
       description: formActual.description.trim(),
       credit,
       debit,
-      previsionnel: formActual.previsionnel,
+      previsionnel: formActual.previsionnel || !formActual.date,
     };
     if (ligneActualOuverte === 'nouveau') {
       creerActual.mutate(payload);
@@ -284,6 +288,27 @@ export default function ComptabiliteView() {
       modifierActual.mutate({ id: ligneActualOuverte, ...payload });
     }
     setLigneActualOuverte(null);
+  };
+
+  // « Le choix entre les deux » (6 septembre) : sans date connue, une ligne
+  // peut aussi bien devenir une ligne récurrente/ponctuelle du tableau
+  // prévisionnel du bas plutôt qu'une ligne en attente du grand livre —
+  // on reprend le libellé et le montant déjà saisis pour ne pas les
+  // retaper dans l'autre formulaire.
+  const basculerVersTableauPrevisionnel = () => {
+    const credit = Number(formActual.credit.replace(',', '.')) || 0;
+    const debit = Number(formActual.debit.replace(',', '.')) || 0;
+    setLigneActualOuverte(null);
+    setForm({
+      label: formActual.label.trim(),
+      category: '',
+      kind: 'ponctuel',
+      sens: credit > 0 ? 'recette' : 'depense',
+      montant: String(credit > 0 ? credit : debit),
+      month: moisIsoActif,
+      endMonth: '',
+    });
+    setFormOuvert('nouveau');
   };
 
   const ouvrirNotePopover = (a: TreasuryActual) => {
@@ -857,6 +882,10 @@ export default function ComptabiliteView() {
                 autoFocus
                 className="w-full px-3 py-2 rounded-lg bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60"
               />
+              <p className="text-[10px] text-slate-500 mt-1">
+                Laissez vide si vous ne connaissez pas encore la date : vous choisirez juste en
+                dessous où ranger la ligne.
+              </p>
             </div>
 
             <div>
@@ -910,18 +939,50 @@ export default function ComptabiliteView() {
               Ligne prévisionnelle (pas encore sur le compte)
             </label>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setLigneActualOuverte(null)} className="px-4 py-2 text-xs text-slate-400 hover:text-white">
-                Annuler
-              </button>
-              <button
-                onClick={soumettreActual}
-                disabled={creerActual.isPending || modifierActual.isPending}
-                className="px-4 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-50 text-slate-950 text-xs font-bold"
-              >
-                {ligneActualOuverte === 'nouveau' ? 'Ajouter' : 'Enregistrer'}
-              </button>
-            </div>
+            {/* Sans date, deux destinations possibles (6 septembre : « on a
+                le choix soit de les mettre dans le tableau prévisionnel,
+                soit de l'intégrer dans le tableau du haut, il faut qu'on ait
+                le choix pour les deux ») — avec une date, le comportement
+                habituel (un seul bouton) reste inchangé. */}
+            {ligneActualOuverte === 'nouveau' && !formActual.date ? (
+              <div className="space-y-2 pt-2">
+                <p className="text-[10px] text-slate-500">Pas de date : où ranger cette ligne ?</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={basculerVersTableauPrevisionnel}
+                    disabled={!formActual.label.trim() || (Number(formActual.credit.replace(',', '.')) || 0) <= 0 && (Number(formActual.debit.replace(',', '.')) || 0) <= 0}
+                    className="flex-1 px-3 py-2 rounded-xl bg-sky-500/15 border border-sky-500/40 text-sky-300 text-xs font-bold hover:bg-sky-500/25 disabled:opacity-40"
+                  >
+                    🔁 Tableau prévisionnel (récurrent/ponctuel)
+                  </button>
+                  <button
+                    onClick={soumettreActual}
+                    disabled={creerActual.isPending || !formActual.label.trim() || (Number(formActual.credit.replace(',', '.')) || 0) <= 0 && (Number(formActual.debit.replace(',', '.')) || 0) <= 0}
+                    className="flex-1 px-3 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-40 text-slate-950 text-xs font-bold"
+                  >
+                    ⏳ Grand livre (en attente)
+                  </button>
+                </div>
+                <div className="flex justify-end pt-1">
+                  <button onClick={() => setLigneActualOuverte(null)} className="px-4 py-1.5 text-xs text-slate-400 hover:text-white">
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={() => setLigneActualOuverte(null)} className="px-4 py-2 text-xs text-slate-400 hover:text-white">
+                  Annuler
+                </button>
+                <button
+                  onClick={soumettreActual}
+                  disabled={creerActual.isPending || modifierActual.isPending}
+                  className="px-4 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-50 text-slate-950 text-xs font-bold"
+                >
+                  {ligneActualOuverte === 'nouveau' ? 'Ajouter' : 'Enregistrer'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
