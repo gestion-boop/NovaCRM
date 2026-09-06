@@ -520,11 +520,21 @@ export default function Dashboard({
 
   // Demandé le 6 septembre : seulement 5 cases nommées (Sylvain, Eric,
   // Coralia, Lucie, Karine), dans cet ordre, plutôt que toute la liste
-  // triée par montant.
+  // triée par montant. On compare sur tous les mots du nom (pas juste le
+  // premier) car « full_name » n'est pas toujours saisi « Prénom Nom » —
+  // « Nom Prénom » ne doit pas faire disparaître la case de quelqu'un.
   const prenomsCourtiersVises = ['Sylvain', 'Eric', 'Coralia', 'Lucie', 'Karine'];
   const caCourtiersVises = useMemo(() => {
     return prenomsCourtiersVises
-      .map((prenom) => caParCourtier.find((c) => sansAccents(c.prenom) === sansAccents(prenom)))
+      .map((prenom) => {
+        const trouve = caParCourtier.find((c) =>
+          sansAccents(c.nom).split(/\s+/).includes(sansAccents(prenom))
+        );
+        // Le prénom affiché est celui visé, pas c.prenom (premier mot de
+        // « full_name ») : si le nom est saisi « Nom Prénom », le premier
+        // mot serait le nom de famille, pas « Sylvain ».
+        return trouve ? { ...trouve, prenom } : undefined;
+      })
       .filter((c): c is (typeof caParCourtier)[number] => Boolean(c));
   }, [caParCourtier]);
 
