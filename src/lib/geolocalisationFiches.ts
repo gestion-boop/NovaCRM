@@ -33,10 +33,13 @@ export async function geolocaliserFiche(leadId: string, company: unknown): Promi
   // faute de frappe), on retombe sur code postal + ville pour placer au
   // moins le point dans la bonne commune.
   const c = (company ?? {}) as AdresseFiche;
-  let point = await geocodeCity(adresse);
+  // Code postal attendu passé à l'API Adresse (paramètre `postcode`) : sans
+  // lui, une adresse mal formée peut matcher une rue au même nom ailleurs
+  // en France, à des centaines de kilomètres (voir geocodeCity).
+  let point = await geocodeCity(adresse, false, c.postal_code);
   if (!point) {
     const repli = [c.postal_code, c.city].filter((v) => typeof v === 'string' && v.trim()).join(' ');
-    if (repli) point = await geocodeCity(repli);
+    if (repli) point = await geocodeCity(repli, false, c.postal_code);
   }
   if (!point) return null;
   const { error } = await supabase

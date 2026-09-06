@@ -54,16 +54,30 @@ function isValidFrancePoint(point: GeoPoint): boolean {
  * appel direct à l'API Adresse du gouvernement français (api-adresse.data.gouv.fr) :
  * gratuite, sans clé, CORS ouvert, et référence pour les adresses FR.
  */
-export async function geocodeCity(value: string, forceRefresh = false): Promise<GeoPoint | null> {
+export async function geocodeCity(value: string, forceRefresh = false, codePostalAttendu?: string | null): Promise<GeoPoint | null> {
   const query = value.trim();
   if (!query) return null;
 
   const cache = getCache();
-  const key = normalizeKey(query);
+  // Le code postal attendu fait partie de la clé de cache : sans ça, une
+  // adresse mal orthographiée mise en cache une première fois avec un
+  // mauvais résultat (voir bug ci-dessous) resterait fausse pour toujours,
+  // même une fois la recherche corrigée côté API.
+  const key = normalizeKey(query) + (codePostalAttendu ? `|cp:${codePostalAttendu.trim()}` : '');
   if (!forceRefresh && cache[key]) return cache[key];
 
   try {
-    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(query)}&limit=1`);
+    // Bug constaté (6 septembre, Sylvain : « le client est dans le nord,
+    // l'adresse est dans le sud ») : DS Menuiserie, adresse « 66 avenue
+    // d'espagne, 11100, Narbonne », s'est retrouvé géocodé du côté de
+    // Saumur (~500 km plus au nord) — la recherche plein texte de l'API
+    // Adresse a matché une rue similaire ailleurs en France sans qu'on ait
+    // de garde-fou. On restreint donc la recherche au code postal attendu
+    // quand on le connaît (paramètre `postcode` de l'API), ce qui élimine
+    // ce type de faux positif à la source.
+    const params = new URLSearchParams({ q: query, limit: '1' });
+    if (codePostalAttendu?.trim()) params.set('postcode', codePostalAttendu.trim());
+    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?${params.toString()}`);
     if (!res.ok) return null;
     const json = await res.json();
     const feature = json?.features?.[0];
