@@ -21,6 +21,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const Contacts = lazy(() => import('./components/Contacts'));
 const Clients = lazy(() => import('./components/leads/Clients'));
 const Pipeline = lazy(() => import('./components/Pipeline'));
+const ComptabiliteView = lazy(() => import('./components/ComptabiliteView'));
 import NouveauLeadModal from './components/NouveauLeadModal';
 import TutorialModal from './components/TutorialModal';
 import ProductTour, { TourStep } from './components/ProductTour';
@@ -1032,6 +1033,15 @@ function App() {
             <Clients
               onSelectContact={(contactId) => openClientProfile(contactId)}
             />
+          )}
+
+          {/* Comptabilité (6 septembre, Conseils Finances) — la garde
+              menu/agence/rôle est aussi vérifiée côté contenu dans le
+              composant lui-même (même principe que CarteProspectionView). */}
+          {currentNav === 'comptabilite' && (
+            <div className="p-3 sm:p-6">
+              <ComptabiliteView />
+            </div>
           )}
 
           {currentNav === 'pipeline' && (
