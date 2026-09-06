@@ -483,7 +483,14 @@ export default function Dashboard({
           if (new Date(d.archivedAt).getFullYear() === anneeCourante) {
             parConseillerAnnee.set(d.advisorId, (parConseillerAnnee.get(d.advisorId) || 0) + montant);
           }
-          const commission = Number(d.advisorCommissionTtc) || 0;
+          // Conseils Finances : « Commission des courtiers » vient du champ
+          // Honoraires courtier de la fiche client (calculé automatiquement
+          // par taux, modifiable), pas de la commission saisie à
+          // l'archivage — celle-ci reste réservée à Novavisio (« Commission
+          // Natacha »).
+          const commission = estConseilsFinances
+            ? Number(d.honorairesCourtier) || 0
+            : Number(d.advisorCommissionTtc) || 0;
           if (commission > 0) {
             commissionParConseiller.set(
               d.advisorId,
