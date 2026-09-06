@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Calculator, Plus } from 'lucide-react';
+import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTreasuryLines } from '@/hooks/useTreasuryLines';
-import { useTreasuryActuals } from '@/hooks/useTreasuryActuals';
+import { useTreasuryActuals, TreasuryActual } from '@/hooks/useTreasuryActuals';
 import { formatCurrencyPrecis } from '@/lib/utils';
 
-const MOIS_ONGLETS = ['01', '02', '03', '04', '05', '06', '07', '08', '09'];
+const MOIS_ONGLETS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 const NOMS_MOIS_COURT: Record<string, string> = {
   '01': 'Janv.', '02': 'Févr.', '03': 'Mars', '04': 'Avr.', '05': 'Mai',
   '06': 'Juin', '07': 'Juil.', '08': 'Août', '09': 'Sept.', '10': 'Oct.', '11': 'Nov.', '12': 'Déc.',
@@ -47,10 +47,29 @@ const formVide = (moisParDefaut: string): FormLigne => ({
   label: '', category: '', kind: 'recurrent', sens: 'depense', montant: '', month: moisParDefaut, endMonth: '',
 });
 
+interface FormActual {
+  date: string;
+  label: string;
+  description: string;
+  credit: string;
+  debit: string;
+}
+
+const formActualVide = (dateParDefaut: string): FormActual => ({
+  date: dateParDefaut, label: '', description: '', credit: '0', debit: '0',
+});
+
 export default function ComptabiliteView() {
   const { userProfile, currentUser, activeAgency } = useAuth();
   const { lines, creerLigne, modifierLigne } = useTreasuryLines(activeAgency.id);
-  const { actuals, isLoading: actualsChargement } = useTreasuryActuals(activeAgency.id);
+  const {
+    actuals,
+    isLoading: actualsChargement,
+    creerActual,
+    modifierActual,
+    supprimerActual,
+    dupliquerJusquaDecembre,
+  } = useTreasuryActuals(activeAgency.id);
 
   // Double garde (menu ET contenu, même principe que CarteProspectionView.tsx) :
   // « que par les super admins, Mélanie et Sylvain, c'est tout ».
@@ -90,6 +109,11 @@ export default function ComptabiliteView() {
   const [formOuvert, setFormOuvert] = useState<string | null>(null); // null = fermé, 'nouveau' ou id d'une ligne éditée
   const [form, setForm] = useState<FormLigne>(() => formVide(moisIso(new Date())));
 
+  // Formulaire distinct pour les lignes du grand livre réel (treasury_actuals) :
+  // null = fermé, 'nouveau' ou id de la ligne éditée.
+  const [ligneActualOuverte, setLigneActualOuverte] = useState<string | null>(null);
+  const [formActual, setFormActual] = useState<FormActual>(() => formActualVide(`2026-${moisActuelOnglet}-01`));
+
   const categories = useMemo(() => {
     const set = new Set<string>(CATEGORIES_SUGGEREES);
     lines.forEach((l) => set.add(l.category));
@@ -126,6 +150,47 @@ export default function ComptabiliteView() {
     setFormOuvert(null);
   };
 
+  const ouvrirNouvelActual = () => {
+    setFormActual(formActualVide(`2026-${moisActuelOnglet}-01`));
+    setLigneActualOuverte('nouveau');
+  };
+
+  const ouvrirModifierActual = (a: TreasuryActual) => {
+    setFormActual({
+      date: a.date.slice(0, 10),
+      label: a.label,
+      description: a.description,
+      credit: String(a.credit || 0),
+      debit: String(a.debit || 0),
+    });
+    setLigneActualOuverte(a.id);
+  };
+
+  const soumettreActual = () => {
+    const credit = Number(formActual.credit.replace(',', '.')) || 0;
+    const debit = Number(formActual.debit.replace(',', '.')) || 0;
+    if (!formActual.date || !formActual.label.trim() || (credit <= 0 && debit <= 0)) return;
+    const payload = {
+      date: formActual.date,
+      label: formActual.label.trim(),
+      description: formActual.description.trim(),
+      credit,
+      debit,
+    };
+    if (ligneActualOuverte === 'nouveau') {
+      creerActual.mutate(payload);
+    } else if (ligneActualOuverte) {
+      modifierActual.mutate({ id: ligneActualOuverte, ...payload });
+    }
+    setLigneActualOuverte(null);
+  };
+
+  const supprimerActualAvecConfirmation = (id: string) => {
+    if (window.confirm('Supprimer définitivement cette ligne du grand livre ?')) {
+      supprimerActual.mutate(id);
+    }
+  };
+
   return (
     <div className="space-y-6 bg-[#07191b] border-2 border-[#2a6a6f] rounded-2xl p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -139,6 +204,12 @@ export default function ComptabiliteView() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F7BC5F] text-slate-950 text-xs font-bold hover:bg-[#F9C977]"
           >
             <Plus className="w-3.5 h-3.5" /> Nouvelle ligne
+          </button>
+          <button
+            onClick={ouvrirNouvelActual}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-[#2a6a6f] text-slate-200 text-xs font-bold hover:bg-white/10"
+          >
+            <Plus className="w-3.5 h-3.5" /> Ajouter au grand livre
           </button>
         </div>
       </div>
@@ -182,24 +253,84 @@ export default function ComptabiliteView() {
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Crédit</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Débit</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Solde théorique</th>
+                  <th className="text-right px-2 py-2 bg-[#0a1e20]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2a6a6f]/70">
                 {actualsDuMoisActif.map((a) => (
-                  <tr key={a.id} className="hover:bg-white/5">
+                  <tr key={a.id} className="group hover:bg-white/5">
                     <td className="px-3 py-1.5 text-slate-400 whitespace-nowrap text-xs">
                       {new Date(a.date).toLocaleDateString('fr-FR')}
                     </td>
                     <td className="px-3 py-1.5 text-slate-200 text-xs">{a.label}</td>
                     <td className="px-3 py-1.5 text-slate-500 text-xs">{a.description}</td>
-                    <td className={`px-3 py-1.5 text-right tabular-nums text-xs ${a.credit > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
-                      {a.credit > 0 ? formatCurrencyPrecis(a.credit) : '—'}
+                    <td className="px-3 py-1.5 text-xs">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className={`tabular-nums ${a.credit > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
+                          {a.credit > 0 ? formatCurrencyPrecis(a.credit) : '—'}
+                        </span>
+                        {a.credit > 0 && (
+                          <button
+                            onClick={() => modifierActual.mutate({ id: a.id, creditConfirme: !a.creditConfirme })}
+                            title={a.creditConfirme ? 'Paiement confirmé' : 'Confirmer le paiement'}
+                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                              a.creditConfirme
+                                ? 'bg-emerald-500 text-white'
+                                : 'border border-slate-600 text-slate-600 hover:border-emerald-500 hover:text-emerald-400'
+                            }`}
+                          >
+                            <Check className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
-                    <td className={`px-3 py-1.5 text-right tabular-nums text-xs ${a.debit > 0 ? 'text-red-400' : 'text-slate-600'}`}>
-                      {a.debit > 0 ? formatCurrencyPrecis(a.debit) : '—'}
+                    <td className="px-3 py-1.5 text-xs">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className={`tabular-nums ${a.debit > 0 ? 'text-red-400' : 'text-slate-600'}`}>
+                          {a.debit > 0 ? formatCurrencyPrecis(a.debit) : '—'}
+                        </span>
+                        {a.debit > 0 && (
+                          <button
+                            onClick={() => modifierActual.mutate({ id: a.id, debitConfirme: !a.debitConfirme })}
+                            title={a.debitConfirme ? 'Paiement confirmé' : 'Confirmer le paiement'}
+                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                              a.debitConfirme
+                                ? 'bg-emerald-500 text-white'
+                                : 'border border-slate-600 text-slate-600 hover:border-emerald-500 hover:text-emerald-400'
+                            }`}
+                          >
+                            <Check className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className={`px-3 py-1.5 text-right tabular-nums text-xs font-bold ${a.soldeApres >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>
                       {formatCurrencyPrecis(a.soldeApres)}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => ouvrirModifierActual(a)}
+                          title="Modifier"
+                          className="text-slate-400 hover:text-[#F7BC5F]"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => dupliquerJusquaDecembre.mutate(a)}
+                          title="Dupliquer jusqu'à décembre"
+                          className="text-slate-400 hover:text-sky-400"
+                        >
+                          <CopyPlus className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => supprimerActualAvecConfirmation(a.id)}
+                          title="Supprimer"
+                          className="text-slate-400 hover:text-red-400"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -335,6 +466,81 @@ export default function ComptabiliteView() {
                 className="px-4 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-50 text-slate-950 text-xs font-bold"
               >
                 {formOuvert === 'nouveau' ? 'Ajouter' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Formulaire d'ajout / modification d'une ligne du grand livre réel (treasury_actuals) */}
+      {ligneActualOuverte && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setLigneActualOuverte(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-[#07191b] border-2 border-[#2a6a6f] shadow-2xl p-5 space-y-4">
+            <h3 className="text-base font-bold text-white">
+              {ligneActualOuverte === 'nouveau' ? 'Ajouter au grand livre' : 'Modifier la ligne'}
+            </h3>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Date</label>
+              <input
+                type="date" value={formActual.date}
+                onChange={(e) => setFormActual((f) => ({ ...f, date: e.target.value }))}
+                autoFocus
+                className="w-full px-3 py-2 rounded-lg bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Libellé</label>
+              <input
+                type="text" value={formActual.label}
+                onChange={(e) => setFormActual((f) => ({ ...f, label: e.target.value }))}
+                placeholder="ex : Virement client, Prélèvement loyer…"
+                className="w-full px-3 py-2 rounded-lg bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Description</label>
+              <input
+                type="text" value={formActual.description}
+                onChange={(e) => setFormActual((f) => ({ ...f, description: e.target.value }))}
+                placeholder="optionnel"
+                className="w-full px-3 py-2 rounded-lg bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Crédit (€)</label>
+                <input
+                  type="text" inputMode="decimal" value={formActual.credit}
+                  onChange={(e) => setFormActual((f) => ({ ...f, credit: e.target.value }))}
+                  placeholder="0"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Débit (€)</label>
+                <input
+                  type="text" inputMode="decimal" value={formActual.debit}
+                  onChange={(e) => setFormActual((f) => ({ ...f, debit: e.target.value }))}
+                  placeholder="0"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0a1e20] border border-[#144447]/60 text-white text-sm focus:outline-none focus:border-[#F7BC5F]/60"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setLigneActualOuverte(null)} className="px-4 py-2 text-xs text-slate-400 hover:text-white">
+                Annuler
+              </button>
+              <button
+                onClick={soumettreActual}
+                disabled={creerActual.isPending || modifierActual.isPending}
+                className="px-4 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-50 text-slate-950 text-xs font-bold"
+              >
+                {ligneActualOuverte === 'nouveau' ? 'Ajouter' : 'Enregistrer'}
               </button>
             </div>
           </div>
