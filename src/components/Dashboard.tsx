@@ -267,6 +267,7 @@ export default function Dashboard({
         devis: 0, devisNb: 0, recurrence: 0, recurrenceNb: 0,
         parConseiller: new Map<string, number>(), commissionParConseiller: new Map<string, number>(),
         parConseillerAnnee: new Map<string, number>(), parConseillerAVenir: new Map<string, number>(),
+        comBanqueParConseiller: new Map<string, number>(),
       };
     }
 
@@ -370,6 +371,11 @@ export default function Dashboard({
     // chiffre d'affaires de l'agence. Les deux ne se déduisent pas l'un de
     // l'autre — on les compte séparément.
     const commissionParConseiller = new Map<string, number>();
+    // Commission Banque (leads.com_banque, saisie sur la fiche du client) :
+    // demandée le 6 septembre pour s'ajouter, sur la case CA de chaque
+    // courtier, à sa commission — même règle que commissionParConseiller
+    // (comptée à l'archivage).
+    const comBanqueParConseiller = new Map<string, number>();
     // Réalisé de l'année en cours, conseiller par conseiller : c'est ce qui
     // remplit l'objectif de l'année de chaque collaborateur (Conseils
     // Finances, 5 septembre). Daté par l'archivage, comme le réalisé de
@@ -464,6 +470,13 @@ export default function Dashboard({
               (commissionParConseiller.get(d.advisorId) || 0) + commission
             );
           }
+          const comBanque = Number(d.comBanque) || 0;
+          if (comBanque > 0) {
+            comBanqueParConseiller.set(
+              d.advisorId,
+              (comBanqueParConseiller.get(d.advisorId) || 0) + comBanque
+            );
+          }
         }
       }
       else {
@@ -484,6 +497,7 @@ export default function Dashboard({
       pipelineTrouve: true, dansLePipeline, horsEtape, nomsConnus: [],
       repartitionAVenir, horsPipelineMontant, horsPipelineNb, devis, devisNb,
       recurrence, recurrenceNb, parConseiller, commissionParConseiller, parConseillerAnnee, parConseillerAVenir,
+      comBanqueParConseiller,
       // Archivés d'abord — c'est ce qui est déjà compté — puis par montant.
       lignes: lignes.sort(
         (a, b) => Number(b.archive) - Number(a.archive) || b.montant - a.montant || a.nom.localeCompare(b.nom, 'fr')
@@ -528,7 +542,12 @@ export default function Dashboard({
         const nom = collaborateurs.find((u) => u.id === id)?.name || 'Collaborateur sans compte';
         const archive = chiffreAffairesAgence.parConseiller.get(id) || 0;
         const aVenir = chiffreAffairesAgence.parConseillerAVenir.get(id) || 0;
-        return { id, nom, prenom: nom.split(' ')[0], archive, aVenir, total: archive + aVenir };
+        const commission = chiffreAffairesAgence.commissionParConseiller.get(id) || 0;
+        const comBanque = chiffreAffairesAgence.comBanqueParConseiller.get(id) || 0;
+        return {
+          id, nom, prenom: nom.split(' ')[0], archive, aVenir, total: archive + aVenir,
+          commission, comBanque,
+        };
       })
       .sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'));
   }, [collaborateurs, chiffreAffairesAgence]);
@@ -1388,6 +1407,17 @@ export default function Dashboard({
                         ? 'Aucun dossier à partir de Montage dossier'
                         : `${formatCurrency(c.aVenir)} en cours + ${formatCurrency(c.archive)} archivé, à partir de Montage dossier`}
                     </span>
+                    {/* Demandé le 6 septembre : la commission du courtier
+                        (advisor_commission_ttc, tous ses dossiers archivés)
+                        et, en dessous, la commission Banque (com_banque). */}
+                    <div className="pt-1 mt-1 border-t border-white/5 space-y-0.5">
+                      <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
+                        Commission des courtiers : <span className="text-slate-200">{formatCurrency(c.commission)}</span>
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
+                        Commission Banque : <span className="text-slate-200">{formatCurrency(c.comBanque)}</span>
+                      </span>
+                    </div>
                   </div>
                   <div className="w-10 h-10 shrink-0 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300">
                     <TrendingUp className="w-5 h-5" />

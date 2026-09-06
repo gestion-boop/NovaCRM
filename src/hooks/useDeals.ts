@@ -35,6 +35,10 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
       item.advisor_commission_ttc === null || item.advisor_commission_ttc === undefined
         ? undefined
         : Number(item.advisor_commission_ttc),
+    comBanque:
+      item.com_banque === null || item.com_banque === undefined
+        ? undefined
+        : Number(item.com_banque),
     mandateNumber: (item.mandate_number as string) || undefined,
     caDevisAVenir:
       item.pending_quote_amount === null || item.pending_quote_amount === undefined
