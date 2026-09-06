@@ -117,12 +117,16 @@ export interface Deal {
   // honorairesCourtier. C'est ce champ — pas comBanque — qui alimente la
   // case « Commission Banque » de chaque courtier.
   comBanqueCourtier?: number;
-  // Case à cocher « commission validée » / « commission Banque validée »
-  // (leads.commission_validee / com_banque_validee) — demandé le 6
-  // septembre pour le tableau détaillé de chaque courtier : vert une fois
-  // pointé/reçu, orange tant que ce n'est pas fait.
+  // Cases à cocher du tableau détaillé de chaque courtier (6 septembre) :
+  // vert une fois pointé/reçu, orange tant que ce n'est pas fait. Quatre
+  // lignes distinctes, chacune vérifiable séparément : la part de l'agence
+  // (commission_agence_validee, com_banque_agence_validee) et celle du
+  // courtier (commission_validee, com_banque_validee) — « pour être sûr de
+  // tout vérifier correctement ».
   commissionValidee: boolean;
   comBanqueValidee: boolean;
+  commissionAgenceValidee: boolean;
+  comBanqueAgenceValidee: boolean;
   // Numéro de mandat (leads.mandate_number) — affiché dans le détail du
   // chiffre d'affaires pour retrouver le dossier d'un coup d'œil.
   mandateNumber?: string;

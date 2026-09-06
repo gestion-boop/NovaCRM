@@ -49,6 +49,8 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
         : Number(item.com_banque_courtier),
     commissionValidee: Boolean(item.commission_validee),
     comBanqueValidee: Boolean(item.com_banque_validee),
+    commissionAgenceValidee: Boolean(item.commission_agence_validee),
+    comBanqueAgenceValidee: Boolean(item.com_banque_agence_validee),
     mandateNumber: (item.mandate_number as string) || undefined,
     caDevisAVenir:
       item.pending_quote_amount === null || item.pending_quote_amount === undefined
