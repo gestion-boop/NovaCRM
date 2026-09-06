@@ -215,6 +215,13 @@ export default function Dashboard({
   const identite = `${userProfile?.displayName || currentUser?.displayName || ''} ${userProfile?.email || currentUser?.email || ''}`;
   const estDirectionCF = /grazia|melanie|gestion@immosphera\.fr/i.test(identite);
   const voitChiffresAgence = estConseilsFinances ? estDirectionCF : isSuperAdmin;
+  // « Toutes les sociétés » (id 'all') n'a pas de nom qui matche
+  // /conseils?\s*finances?/i, donc les blocs réservés à la direction CF
+  // (Sylvain/Mélanie) disparaissaient dès qu'on quittait l'agence Conseils
+  // Finances seule pour la vue consolidée. Les chiffres sous-jacents restent
+  // corrects sur « all » (calculés par agence puis sommés) : c'est
+  // uniquement l'affichage de ces blocs qu'il faut garder visible ici.
+  const estVueDirectionCF = estConseilsFinances || activeAgency?.id === 'all';
   const parPipelinePrincipal = estNovavisio || estConseilsFinances;
   // Le pipeline suivi, nommé dans les libellés des tuiles.
   const nomPipelineVise = estConseilsFinances
@@ -1135,7 +1142,7 @@ export default function Dashboard({
             haut, la même que le cercle et la fenêtre de détail). Pour les
             super admins de Conseils Finances, la tuile ImmoSphera (tout ce
             qui est dans le pipeline) ne s'affiche donc pas. */}
-        {estDirectionCF && estConseilsFinances && (
+        {estDirectionCF && estVueDirectionCF && (
           <div
             role="button"
             tabIndex={0}
@@ -1356,7 +1363,7 @@ export default function Dashboard({
           case en haut du tableau de bord, CA Sylvain, ou le nom du courtier ».
           Une case par personne, même règle que le CA de l'agence (archivés +
           à partir de Montage dossier), la plus grosse en premier. */}
-      {estDirectionCF && estConseilsFinances && (
+      {estDirectionCF && estVueDirectionCF && (
         <div className="space-y-2">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">CA par courtier</h3>
           {caCourtiersVises.length === 0 ? (
@@ -1389,7 +1396,7 @@ export default function Dashboard({
           retrouve le sien tout en haut de son propre tableau de bord. Le
           réalisé est celui de l'année en cours, dossiers archivés et
           confirmés, attribués à la personne. */}
-      {estDirectionCF && estConseilsFinances && goalAgencyId && (
+      {estDirectionCF && estVueDirectionCF && goalAgencyId && (
         <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg space-y-4">
           <div>
             <h3 className="font-bold text-sm text-white">Objectifs de l'année {currentYear} — par collaborateur</h3>
