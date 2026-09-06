@@ -19,6 +19,10 @@ export interface TreasuryActual {
   debitConfirme: boolean;
   color?: string | null;
   notes?: string | null;
+  // Distinct des « notes » (6 septembre) : une zone à part pour taper une
+  // formule ou un calcul (« 150+200-30 »), affiché tel quel — l'app se
+  // contente de proposer le résultat calculé au moment de la saisie.
+  comment?: string | null;
   previsionnel: boolean;
 }
 
@@ -36,6 +40,7 @@ function ligneVersActual(row: Record<string, unknown>): TreasuryActual {
     debitConfirme: Boolean(row.debit_confirme),
     color: (row.color as string | null) ?? null,
     notes: (row.notes as string | null) ?? null,
+    comment: (row.comment as string | null) ?? null,
     previsionnel: Boolean(row.previsionnel),
   };
 }
@@ -80,6 +85,7 @@ export function useTreasuryActuals(agencyId: string) {
       monthSheet?: string;
       color?: string | null;
       notes?: string | null;
+      comment?: string | null;
       previsionnel?: boolean;
     }) => {
       const { error: sbError } = await supabase.from('treasury_actuals' as any).insert({
@@ -92,6 +98,7 @@ export function useTreasuryActuals(agencyId: string) {
         month_sheet: ligne.monthSheet || moisDepuisDate(ligne.date),
         color: ligne.color ?? null,
         notes: ligne.notes ?? null,
+        comment: ligne.comment ?? null,
         previsionnel: ligne.previsionnel ?? false,
       } as any);
       if (sbError) throw new Error(sbError.message);
@@ -115,6 +122,7 @@ export function useTreasuryActuals(agencyId: string) {
       debitConfirme?: boolean;
       color?: string | null;
       notes?: string | null;
+      comment?: string | null;
       previsionnel?: boolean;
     }) => {
       const update: Record<string, unknown> = {};
@@ -130,6 +138,7 @@ export function useTreasuryActuals(agencyId: string) {
       if (patch.debitConfirme !== undefined) update.debit_confirme = patch.debitConfirme;
       if (patch.color !== undefined) update.color = patch.color;
       if (patch.notes !== undefined) update.notes = patch.notes;
+      if (patch.comment !== undefined) update.comment = patch.comment;
       if (patch.previsionnel !== undefined) update.previsionnel = patch.previsionnel;
       const { error: sbError } = await supabase.from('treasury_actuals' as any).update(update as any).eq('id', id);
       if (sbError) throw new Error(sbError.message);

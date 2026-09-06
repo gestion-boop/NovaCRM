@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2, StickyNote, Palette } from 'lucide-react';
+import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2, StickyNote, Palette, Sigma } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTreasuryLines } from '@/hooks/useTreasuryLines';
 import { useTreasuryActuals, TreasuryActual } from '@/hooks/useTreasuryActuals';
@@ -212,6 +212,11 @@ export default function ComptabiliteView() {
   const [couleurPickerOuvert, setCouleurPickerOuvert] = useState<string | null>(null);
   const [notePopoverOuvert, setNotePopoverOuvert] = useState<string | null>(null);
   const [valeurNoteEdition, setValeurNoteEdition] = useState('');
+  // Case « Commentaire » séparée des notes (6 septembre) : on peut y taper
+  // un petit calcul (additions/soustractions) et voir le résultat tout de
+  // suite, sans quitter la ligne.
+  const [commentPopoverOuvert, setCommentPopoverOuvert] = useState<string | null>(null);
+  const [valeurCommentEdition, setValeurCommentEdition] = useState('');
 
   // Correction manuelle du solde de départ du mois actif.
   const [correctionOuvertureOuverte, setCorrectionOuvertureOuverte] = useState(false);
@@ -338,11 +343,43 @@ export default function ComptabiliteView() {
     setValeurNoteEdition(a.notes || '');
     setNotePopoverOuvert(a.id);
     setCouleurPickerOuvert(null);
+    setCommentPopoverOuvert(null);
   };
 
   const enregistrerNote = (id: string) => {
     modifierActual.mutate({ id, notes: valeurNoteEdition.trim() || null });
     setNotePopoverOuvert(null);
+  };
+
+  const ouvrirCommentPopover = (a: TreasuryActual) => {
+    setValeurCommentEdition(a.comment || '');
+    setCommentPopoverOuvert(a.id);
+    setCouleurPickerOuvert(null);
+    setNotePopoverOuvert(null);
+  };
+
+  const enregistrerComment = (id: string) => {
+    modifierActual.mutate({ id, comment: valeurCommentEdition.trim() || null });
+    setCommentPopoverOuvert(null);
+  };
+
+  // Petit calculateur (6 septembre : « je pourrais faire des formules car
+  // parfois je suis sous à faire des additions soustractions ») : on
+  // n'évalue JAMAIS le texte tel quel (pas de eval() sur de la saisie
+  // libre) — seuls les chiffres, + - * / . , et parenthèses sont acceptés,
+  // tout le reste renvoie « pas de résultat ». Le texte tapé reste stocké
+  // tel quel dans le commentaire ; seul un aperçu du résultat est affiché.
+  const resultatFormule = (texte: string): number | null => {
+    const nettoye = texte.trim().replace(/,/g, '.');
+    if (!nettoye || !/^[0-9+\-*/().\s]+$/.test(nettoye)) return null;
+    if (!/[0-9]/.test(nettoye)) return null;
+    try {
+      // eslint-disable-next-line no-new-func
+      const resultat = Function(`"use strict"; return (${nettoye});`)();
+      return typeof resultat === 'number' && Number.isFinite(resultat) ? resultat : null;
+    } catch {
+      return null;
+    }
   };
 
   const supprimerActualAvecConfirmation = (id: string) => {
@@ -539,11 +576,16 @@ export default function ComptabiliteView() {
           <div className="overflow-y-auto overflow-x-auto custom-scrollbar rounded-xl border-2 border-[#2a6a6f] max-h-[70vh]">
             <table className="w-full text-xs border-collapse">
               <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0a1e20] text-[10px] uppercase tracking-widest text-slate-500 border-b-2 border-[#2a6a6f]">
+                {/* Liserés verticaux entre colonnes (6 septembre) : la
+                    largeur de chaque colonne reste libre (pas de largeur
+                    fixée en dur, elle suit ce qu'il y a dedans), seul un
+                    trait vertical vient séparer les colonnes entre elles. */}
+                <tr className="bg-[#0a1e20] text-[10px] uppercase tracking-widest text-slate-500 border-b-2 border-[#2a6a6f] divide-x divide-[#2a6a6f]/50">
                   <th className="text-left px-3 py-2 bg-[#0a1e20]">Date</th>
                   <th className="text-left px-3 py-2 bg-[#0a1e20]">Libellé</th>
                   <th className="text-left px-3 py-2 bg-[#0a1e20]">Description</th>
-                  <th className="text-left px-3 py-2 bg-[#0a1e20] min-w-[160px]">Note</th>
+                  <th className="text-left px-3 py-2 bg-[#0a1e20]">Note</th>
+                  <th className="text-left px-3 py-2 bg-[#0a1e20] text-sky-300/80">Commentaire</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Crédit</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Débit</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Solde théorique</th>
@@ -560,7 +602,7 @@ export default function ComptabiliteView() {
                 {actualsDuMoisActif.map((a, idx) => (
                   <tr
                     key={a.id}
-                    className={`group hover:bg-white/5 relative ${!a.color && idx % 2 === 1 ? 'bg-white/[0.035]' : ''}`}
+                    className={`group hover:bg-white/5 relative divide-x divide-[#2a6a6f]/25 ${!a.color && idx % 2 === 1 ? 'bg-white/[0.035]' : ''}`}
                     style={a.color ? { borderLeft: `5px solid ${a.color}`, backgroundColor: `${a.color}38` } : undefined}
                   >
                     <td className="px-3 py-1.5 text-slate-400 whitespace-nowrap text-xs">
@@ -578,7 +620,32 @@ export default function ComptabiliteView() {
                           {a.notes}
                         </div>
                       ) : (
-                        <span className="text-slate-700">—</span>
+                        <button
+                          onClick={() => ouvrirNotePopover(a)}
+                          title="Cliquer pour ajouter une note"
+                          className="text-slate-600 hover:text-[#F9C977] italic text-[11px]"
+                        >
+                          + Ajouter une note
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 text-xs">
+                      {a.comment ? (
+                        <button
+                          onClick={() => ouvrirCommentPopover(a)}
+                          title="Cliquer pour modifier le commentaire"
+                          className="max-w-[140px] truncate text-left text-sky-200 hover:text-sky-100 underline decoration-dotted underline-offset-2 block"
+                        >
+                          {a.comment}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => ouvrirCommentPopover(a)}
+                          title="Cliquer pour ajouter un commentaire (calculs +, -, *, / possibles)"
+                          className="text-slate-600 hover:text-sky-300 italic text-[11px]"
+                        >
+                          + Commentaire
+                        </button>
                       )}
                     </td>
                     <td className="px-3 py-1.5 text-xs">
@@ -630,7 +697,7 @@ export default function ComptabiliteView() {
                     <td className="px-2 py-1.5">
                       <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity relative">
                         <button
-                          onClick={() => { setCouleurPickerOuvert(couleurPickerOuvert === a.id ? null : a.id); setNotePopoverOuvert(null); }}
+                          onClick={() => { setCouleurPickerOuvert(couleurPickerOuvert === a.id ? null : a.id); setNotePopoverOuvert(null); setCommentPopoverOuvert(null); }}
                           title="Couleur de la ligne"
                           className="text-slate-400 hover:text-[#F7BC5F]"
                         >
@@ -686,6 +753,44 @@ export default function ComptabiliteView() {
                               <button
                                 onClick={() => enregistrerNote(a.id)}
                                 className="px-2 py-1 rounded-lg bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 text-[10px] font-bold"
+                              >
+                                Enregistrer
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <button
+                          onClick={() => (commentPopoverOuvert === a.id ? setCommentPopoverOuvert(null) : ouvrirCommentPopover(a))}
+                          title={a.comment ? a.comment : 'Ajouter un commentaire (calculs possibles)'}
+                          className={a.comment ? 'text-sky-300' : 'text-slate-500 hover:text-sky-300'}
+                        >
+                          <Sigma className="w-3.5 h-3.5" />
+                        </button>
+                        {commentPopoverOuvert === a.id && (
+                          <div
+                            className="absolute right-0 top-full mt-1 z-30 w-60 p-2 rounded-lg bg-[#07191b] border-2 border-[#2a6a6f] shadow-xl space-y-2"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <textarea
+                              autoFocus
+                              value={valeurCommentEdition}
+                              onChange={(e) => setValeurCommentEdition(e.target.value)}
+                              placeholder="Commentaire libre ou calcul, ex : 150+200-30"
+                              rows={3}
+                              className="w-full px-2 py-1.5 rounded bg-[#0a1e20] border border-[#144447]/60 text-white text-xs resize-none focus:outline-none focus:border-sky-400/60"
+                            />
+                            {resultatFormule(valeurCommentEdition) !== null && (
+                              <p className="text-[11px] text-sky-300 font-bold">
+                                = {formatCurrencyPrecis(resultatFormule(valeurCommentEdition) as number)}
+                              </p>
+                            )}
+                            <div className="flex justify-end gap-2">
+                              <button onClick={() => setCommentPopoverOuvert(null)} className="text-[10px] text-slate-400 hover:text-white">
+                                Annuler
+                              </button>
+                              <button
+                                onClick={() => enregistrerComment(a.id)}
+                                className="px-2 py-1 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-[10px] font-bold"
                               >
                                 Enregistrer
                               </button>
