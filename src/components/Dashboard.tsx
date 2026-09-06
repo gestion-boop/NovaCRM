@@ -2337,7 +2337,7 @@ export default function Dashboard({
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
+              className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl"
             >
               <div className="flex items-start justify-between gap-4 p-5 border-b border-[#144447]/60">
                 <div>
@@ -2356,11 +2356,18 @@ export default function Dashboard({
                 </button>
               </div>
 
+              {/* Demandé le 6 septembre : « pour tout ce qui est à venir, tu
+                  peux faire aussi comme l'autre colonne, histoire de
+                  dispatcher un peu les montants » — même répartition à 4
+                  colonnes (agence / courtier) que le détail réalisé, mais
+                  sans case à cocher : rien n'est encore dû tant que ce n'est
+                  pas archivé et signé. */}
               <div className="flex items-center gap-3 px-5 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#144447]/40">
                 <span className="flex-1">Client</span>
-                <span className="w-24 text-right">Honoraires</span>
-                <span className="w-24 text-right">Commission</span>
-                <span className="w-28 text-right">Com. Banque</span>
+                <span className="w-24 text-right">Comm. agence</span>
+                <span className="w-24 text-right">Comm. courtier</span>
+                <span className="w-28 text-right">Banque agence</span>
+                <span className="w-28 text-right">Banque courtier</span>
               </div>
 
               <div className="overflow-y-auto custom-scrollbar divide-y divide-[#144447]/40">
@@ -2391,6 +2398,9 @@ export default function Dashboard({
                       </span>
                       <span className="w-24 text-right text-sm text-slate-300 tabular-nums">
                         {formatCurrency(ligne.commission)}
+                      </span>
+                      <span className="w-28 text-right text-sm text-slate-300 tabular-nums">
+                        {formatCurrencyPrecis(ligne.comBanqueAgence)}
                       </span>
                       <span className="w-28 text-right text-sm text-slate-300 tabular-nums">
                         {formatCurrencyPrecis(ligne.comBanque)}
