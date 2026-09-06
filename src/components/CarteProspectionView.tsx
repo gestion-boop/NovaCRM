@@ -131,7 +131,7 @@ function ficheSurvol(
       <div style="height:6px;background:${couleur}"></div>
       <div style="padding:14px 16px 15px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
-          <p style="margin:0;font-size:17px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.01em">${echapper(nom)}</p>
+          <p style="margin:0;font-size:17px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.01em;white-space:normal;word-break:break-word;min-width:0;flex:1">${echapper(nom)}</p>
           <span style="flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;padding:5px 10px;border-radius:999px;background:${couleur}22;color:${couleur};border:1px solid ${couleur}55;white-space:nowrap">${echapper(etat)}</span>
         </div>
         ${etape ? `<p style="margin:5px 0 0;font-size:12.5px;color:#7c9ba0;letter-spacing:0.02em">${echapper(etape)}</p>` : ''}
@@ -389,6 +389,11 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
           padding: 0;
           border-radius: 14px;
           animation: carteprospection-fiche 0.14s ease-out;
+          /* Leaflet met white-space:nowrap par défaut sur ses infobulles :
+             un nom un peu long était alors coupé net par le overflow:hidden
+             de la fiche au lieu de passer à la ligne. */
+          white-space: normal;
+          max-width: none;
         }
         .leaflet-tooltip.nova-carte-fiche::before { display: none; }
         @keyframes carteprospection-fiche {
