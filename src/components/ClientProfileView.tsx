@@ -4584,7 +4584,12 @@ export default function ClientProfileView({
             {/* Demandé le 2 septembre : la commission du conseiller AU-DESSUS
                 de celle de l'agence, puis la récurrence — trois montants
                 distincts, saisis à la main au moment d'archiver. */}
-            {estNovavisio && (
+            {/* Demandé le 6 septembre (Conseils Finances) : la case
+                « Commission des courtiers » du tableau de bord restait à
+                0 € — ce champ n'existait qu'à l'archivage Novavisio, donc
+                advisor_commission_ttc n'était jamais saisi sur ces
+                dossiers. */}
+            {(estNovavisio || estConseilsFinances) && (
               <div className="mb-4">
                 <label htmlFor="archive-commission-conseiller" className="block text-xs font-semibold text-slate-400 mb-1.5">
                   Commission {prenomConseiller ? `de ${prenomConseiller}` : 'du conseiller'}, TTC
