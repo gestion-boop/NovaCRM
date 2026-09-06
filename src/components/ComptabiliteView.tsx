@@ -429,17 +429,28 @@ export default function ComptabiliteView() {
         </div>
 
         {previsionnelsDuMoisActif.length > 0 && (
-          <div className="rounded-xl border-2 border-dashed border-[#F7BC5F]/60 bg-[#F7BC5F]/5 p-3 space-y-2">
-            <h4 className="text-xs font-bold text-[#F7BC5F]">
+          <div className="rounded-xl border-2 border-dashed border-[#F7BC5F]/60 bg-[#F7BC5F]/5 p-3 space-y-2.5">
+            <h4 className="text-xs font-bold text-[#F7BC5F] flex items-center gap-1.5">
               ⏳ Lignes prévisionnelles — en attente de validation
+              <span className="text-[10px] font-normal text-[#F7BC5F]/60">({previsionnelsDuMoisActif.length})</span>
             </h4>
-            <div className="divide-y divide-[#F7BC5F]/20">
-              {previsionnelsDuMoisActif.map((a) => (
-                <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-xs">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-slate-400 whitespace-nowrap">{new Date(a.date).toLocaleDateString('fr-FR')}</span>
-                    <span className="text-slate-200 truncate">{a.label}</span>
-                    {a.notes && <span className="text-slate-500 italic truncate">« {a.notes} »</span>}
+            {/* Retouche visuelle (6 septembre) : rangées alternées + fond
+                carte pour chaque ligne, plutôt qu'un simple texte serré sur
+                une ligne, plus lisible avec plusieurs lignes en attente. */}
+            <div className="space-y-1">
+              {previsionnelsDuMoisActif.map((a, idx) => (
+                <div
+                  key={a.id}
+                  className={`flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2 text-xs ${
+                    idx % 2 === 1 ? 'bg-[#F7BC5F]/[0.07]' : 'bg-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <span className="text-slate-400 whitespace-nowrap font-semibold">{new Date(a.date).toLocaleDateString('fr-FR')}</span>
+                    <span className="text-slate-100 truncate">{a.label}</span>
+                    {a.notes && (
+                      <span className="text-slate-500 italic truncate max-w-[220px]" title={a.notes}>« {a.notes} »</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className={`font-bold tabular-nums ${a.credit > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -447,7 +458,7 @@ export default function ComptabiliteView() {
                     </span>
                     <button
                       onClick={() => modifierActual.mutate({ id: a.id, previsionnel: false })}
-                      className="px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold hover:bg-emerald-500/30"
+                      className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold hover:bg-emerald-500/30 whitespace-nowrap"
                     >
                       ✓ Valider
                     </button>
@@ -479,6 +490,7 @@ export default function ComptabiliteView() {
                   <th className="text-left px-3 py-2 bg-[#0a1e20]">Date</th>
                   <th className="text-left px-3 py-2 bg-[#0a1e20]">Libellé</th>
                   <th className="text-left px-3 py-2 bg-[#0a1e20]">Description</th>
+                  <th className="text-left px-3 py-2 bg-[#0a1e20] min-w-[160px]">Note</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Crédit</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Débit</th>
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Solde théorique</th>
@@ -486,10 +498,15 @@ export default function ComptabiliteView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2a6a6f]/70">
-                {actualsDuMoisActif.map((a) => (
+                {/* Lignes alternées (6 septembre : « une plus foncée, une
+                    plus claire ») pour repérer une ligne d'un coup d'œil sur
+                    un grand livre qui peut compter beaucoup de mouvements —
+                    une couleur choisie par l'utilisateur (a.color) prime
+                    toujours sur cette alternance. */}
+                {actualsDuMoisActif.map((a, idx) => (
                   <tr
                     key={a.id}
-                    className="group hover:bg-white/5 relative"
+                    className={`group hover:bg-white/5 relative ${!a.color && idx % 2 === 1 ? 'bg-white/[0.035]' : ''}`}
                     style={a.color ? { borderLeft: `3px solid ${a.color}`, backgroundColor: `${a.color}14` } : undefined}
                   >
                     <td className="px-3 py-1.5 text-slate-400 whitespace-nowrap text-xs">
@@ -497,6 +514,19 @@ export default function ComptabiliteView() {
                     </td>
                     <td className="px-3 py-1.5 text-slate-200 text-xs">{a.label}</td>
                     <td className="px-3 py-1.5 text-slate-500 text-xs">{a.description}</td>
+                    <td className="px-3 py-1.5 text-xs">
+                      {a.notes ? (
+                        <div
+                          onClick={() => ouvrirNotePopover(a)}
+                          title="Cliquer pour modifier la note"
+                          className="max-h-12 overflow-y-auto custom-scrollbar text-slate-400 italic leading-snug cursor-pointer hover:text-slate-200 whitespace-pre-wrap pr-1"
+                        >
+                          {a.notes}
+                        </div>
+                      ) : (
+                        <span className="text-slate-700">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-1.5 text-xs">
                       <div className="flex items-center justify-end gap-1.5">
                         <span className={`tabular-nums ${a.credit > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
