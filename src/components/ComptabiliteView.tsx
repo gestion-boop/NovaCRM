@@ -3,6 +3,7 @@ import { Calculator, Plus, Check, Pencil, CopyPlus, Trash2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext';
 import { useTreasuryLines } from '@/hooks/useTreasuryLines';
 import { useTreasuryActuals, TreasuryActual } from '@/hooks/useTreasuryActuals';
+import { useTreasuryMonthOverrides } from '@/hooks/useTreasuryMonthOverrides';
 import { TreasuryLine } from '@/types';
 import { formatCurrencyPrecis } from '@/lib/utils';
 
@@ -71,6 +72,7 @@ export default function ComptabiliteView() {
     supprimerActual,
     dupliquerJusquaDecembre,
   } = useTreasuryActuals(activeAgency.id);
+  const { overrides, definirOverride, supprimerOverride } = useTreasuryMonthOverrides(activeAgency.id);
 
   // Double garde (menu ET contenu, même principe que CarteProspectionView.tsx) :
   // « que par les super admins, Mélanie et Sylvain, c'est tout ».
@@ -81,17 +83,39 @@ export default function ComptabiliteView() {
   const [anneeActive, setAnneeActive] = useState<'2026' | '2027'>('2026');
   const [moisActuelOnglet, setMoisActuelOnglet] = useState('01');
 
+  // Corrections manuelles du solde de départ, par mois (agence active) :
+  // « je veux pouvoir modifier chaque mois les soldes de départ pour
+  // corriger si besoin ». Clé "année-mois", ex. "2026-03".
+  const overridesParMois = useMemo(() => {
+    const map = new Map<string, number>();
+    overrides.forEach((o) => map.set(`${o.year}-${o.month}`, o.soldeOuverture));
+    return map;
+  }, [overrides]);
+
   // Solde bancaire théorique cumulé : on part de la toute première ligne du
   // grand livre (le report d'ouverture) et on accumule crédit - débit dans
   // l'ordre chronologique complet, tous mois ET toutes années confondus (le
   // solde de clôture 2026 devient naturellement le solde d'ouverture 2027).
+  // Une correction manuelle sur un mois réinitialise le solde cumulé à ce
+  // point précis dans la passe unique : elle se propage donc naturellement
+  // à tous les mois suivants, jusqu'à la prochaine correction éventuelle.
   const actualsAvecSolde = useMemo(() => {
     let solde = 0;
+    let dernierMoisCle: string | null = null;
     return actuals.map((a) => {
+      const annee = a.date.slice(0, 4);
+      const moisCle = `${annee}-${a.monthSheet}`;
+      if (moisCle !== dernierMoisCle) {
+        const override = overridesParMois.get(moisCle);
+        if (override !== undefined) {
+          solde = override;
+        }
+        dernierMoisCle = moisCle;
+      }
       solde += a.credit - a.debit;
       return { ...a, soldeApres: solde };
     });
-  }, [actuals]);
+  }, [actuals, overridesParMois]);
 
   const actualsDuMoisActif = useMemo(
     () => actualsAvecSolde.filter((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive)),
@@ -107,12 +131,15 @@ export default function ComptabiliteView() {
     [lines, moisIsoActif]
   );
 
+  const overrideMoisActif = overridesParMois.get(`${anneeActive}-${moisActuelOnglet}`);
+
   const soldeOuvertureMoisActif = useMemo(() => {
+    if (overrideMoisActif !== undefined) return overrideMoisActif;
     const idxPremier = actualsAvecSolde.findIndex((a) => a.monthSheet === moisActuelOnglet && a.date.startsWith(anneeActive));
     if (idxPremier === -1) return 0;
     if (idxPremier === 0) return actualsAvecSolde[0].soldeApres - (actualsAvecSolde[0].credit - actualsAvecSolde[0].debit);
     return actualsAvecSolde[idxPremier - 1].soldeApres;
-  }, [actualsAvecSolde, moisActuelOnglet, anneeActive]);
+  }, [actualsAvecSolde, moisActuelOnglet, anneeActive, overrideMoisActif]);
 
   const soldeClotureMoisActif = actualsDuMoisActif.length > 0
     ? actualsDuMoisActif[actualsDuMoisActif.length - 1].soldeApres
@@ -125,6 +152,10 @@ export default function ComptabiliteView() {
   // null = fermé, 'nouveau' ou id de la ligne éditée.
   const [ligneActualOuverte, setLigneActualOuverte] = useState<string | null>(null);
   const [formActual, setFormActual] = useState<FormActual>(() => formActualVide(`2026-01-01`));
+
+  // Correction manuelle du solde de départ du mois actif.
+  const [correctionOuvertureOuverte, setCorrectionOuvertureOuverte] = useState(false);
+  const [valeurCorrectionOuverture, setValeurCorrectionOuverture] = useState('');
 
   const categories = useMemo(() => {
     const set = new Set<string>(CATEGORIES_SUGGEREES);
@@ -222,6 +253,25 @@ export default function ComptabiliteView() {
     }
   };
 
+  const overrideActifDetail = overrides.find((o) => o.year === Number(anneeActive) && o.month === moisActuelOnglet);
+
+  const ouvrirCorrectionOuverture = () => {
+    setValeurCorrectionOuverture(String(soldeOuvertureMoisActif));
+    setCorrectionOuvertureOuverte(true);
+  };
+
+  const soumettreCorrectionOuverture = () => {
+    const valeur = Number(valeurCorrectionOuverture.replace(',', '.'));
+    if (!Number.isFinite(valeur)) return;
+    definirOverride.mutate({ year: Number(anneeActive), month: moisActuelOnglet, soldeOuverture: valeur });
+    setCorrectionOuvertureOuverte(false);
+  };
+
+  const reinitialiserCorrectionOuverture = () => {
+    if (overrideActifDetail) supprimerOverride.mutate(overrideActifDetail.id);
+    setCorrectionOuvertureOuverte(false);
+  };
+
   return (
     <div className="space-y-6 bg-[#07191b] border-2 border-[#2a6a6f] rounded-2xl p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -269,11 +319,55 @@ export default function ComptabiliteView() {
             Solde bancaire théorique — Grand livre {moisActuelOnglet} · {NOMS_MOIS_COURT[moisActuelOnglet]}
           </h3>
           <div className="flex items-center gap-4 text-xs">
-            <span className="text-slate-400">
+            <span className="relative flex items-center gap-1.5 text-slate-400">
               {moisActuelOnglet === '01' ? 'Solde de départ : ' : 'Solde ouverture : '}
               <span className={`font-bold ${soldeOuvertureMoisActif >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {formatCurrencyPrecis(soldeOuvertureMoisActif)}
               </span>
+              {overrideActifDetail && (
+                <span className="text-[10px] font-bold" style={{ color: '#F9C977' }}>(corrigé)</span>
+              )}
+              <button
+                onClick={ouvrirCorrectionOuverture}
+                title="Corriger le solde de départ de ce mois"
+                className="text-slate-500 hover:text-[#F7BC5F]"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+              {overrideActifDetail && (
+                <button
+                  onClick={reinitialiserCorrectionOuverture}
+                  title="Revenir au calcul automatique"
+                  className="text-[10px] text-slate-500 hover:text-[#F7BC5F] underline"
+                >
+                  ↺ Réinitialiser
+                </button>
+              )}
+              {correctionOuvertureOuverte && (
+                <div
+                  className="absolute left-0 top-full mt-2 z-20 flex items-center gap-2 p-2 rounded-lg bg-[#0a1e20] border-2 border-[#2a6a6f] shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="number" step="0.01" autoFocus value={valeurCorrectionOuverture}
+                    onChange={(e) => setValeurCorrectionOuverture(e.target.value)}
+                    className="w-28 px-2 py-1 rounded bg-[#07191b] border border-[#144447]/60 text-white text-xs focus:outline-none focus:border-[#F7BC5F]/60"
+                  />
+                  <button
+                    onClick={soumettreCorrectionOuverture}
+                    disabled={definirOverride.isPending}
+                    className="px-2 py-1 rounded-lg bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-50 text-slate-950 text-[10px] font-bold whitespace-nowrap"
+                  >
+                    Enregistrer
+                  </button>
+                  <button
+                    onClick={() => setCorrectionOuvertureOuverte(false)}
+                    className="text-[10px] text-slate-400 hover:text-white"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              )}
             </span>
             <span className="text-slate-400">
               Solde clôture :{' '}
