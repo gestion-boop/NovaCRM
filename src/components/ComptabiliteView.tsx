@@ -184,7 +184,7 @@ export default function ComptabiliteView() {
   };
 
   return (
-    <div className="space-y-6 bg-[#07191b] border border-[#1b4e52] rounded-2xl p-4 sm:p-6">
+    <div className="space-y-6 bg-[#07191b] border-2 border-[#2a6a6f] rounded-2xl p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Calculator className="w-5 h-5 text-[#F7BC5F]" />
@@ -201,7 +201,7 @@ export default function ComptabiliteView() {
       </div>
 
       {/* Solde bancaire théorique — grand livre du mois actif */}
-      <div className="rounded-2xl border border-[#144447]/60 bg-[#0a1e20]/60 p-4 space-y-3">
+      <div className="rounded-2xl border-2 border-[#2a6a6f] bg-[#0a1e20]/60 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-bold text-white">
             Solde bancaire théorique — Grand livre {moisActuelOnglet} · {NOMS_MOIS_COURT[moisActuelOnglet]}
@@ -229,10 +229,10 @@ export default function ComptabiliteView() {
             Aucune donnée réelle importée pour ce mois.
           </p>
         ) : (
-          <div className="overflow-y-auto overflow-x-auto custom-scrollbar rounded-xl border border-[#144447]/50 max-h-[70vh]">
+          <div className="overflow-y-auto overflow-x-auto custom-scrollbar rounded-xl border-2 border-[#2a6a6f] max-h-[70vh]">
             <table className="w-full text-xs border-collapse">
               <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0a1e20] text-[10px] uppercase tracking-widest text-slate-500">
+                <tr className="bg-[#0a1e20] text-[10px] uppercase tracking-widest text-slate-500 border-b-2 border-[#2a6a6f]">
                   <th className="text-left px-3 py-2 bg-[#0a1e20]">Date</th>
                   <th className="text-left px-3 py-2 bg-[#0a1e20]">Libellé</th>
                   <th className="text-left px-3 py-2 bg-[#0a1e20]">Description</th>
@@ -241,7 +241,7 @@ export default function ComptabiliteView() {
                   <th className="text-right px-3 py-2 bg-[#0a1e20]">Solde théorique</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#144447]/30">
+              <tbody className="divide-y divide-[#2a6a6f]/70">
                 {actualsDuMoisActif.map((a) => (
                   <tr key={a.id} className="hover:bg-white/5">
                     <td className="px-3 py-1.5 text-slate-400 whitespace-nowrap text-xs">
@@ -269,10 +269,10 @@ export default function ComptabiliteView() {
       {isLoading ? (
         <p className="text-sm text-slate-500">Chargement…</p>
       ) : (
-        <div className="overflow-x-auto custom-scrollbar rounded-2xl border border-[#144447]/60">
+        <div className="overflow-x-auto custom-scrollbar rounded-2xl border-2 border-[#2a6a6f]">
           <table className="w-full text-sm border-collapse min-w-[1200px]">
             <thead>
-              <tr className="bg-[#0a1e20] text-[10px] uppercase tracking-widest text-slate-500">
+              <tr className="bg-[#0a1e20] text-[10px] uppercase tracking-widest text-slate-500 border-b-2 border-[#2a6a6f]">
                 <th className="text-left px-4 py-2 sticky left-0 bg-[#0a1e20] z-10 min-w-[220px]">Catégorie / ligne</th>
                 <th className="text-center px-2 py-2 w-16">Type</th>
                 {mois.map((m, i) => (
@@ -281,7 +281,7 @@ export default function ComptabiliteView() {
                 <th className="w-10" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#144447]/40">
+            <tbody className="divide-y divide-[#2a6a6f]/70">
               {lignesParCategorie.length === 0 ? (
                 <tr>
                   <td colSpan={mois.length + 3} className="p-8 text-center text-sm text-slate-500">
@@ -344,28 +344,28 @@ export default function ComptabiliteView() {
               )}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-[#144447] bg-[#0a1e20]">
+              <tr className="border-t-2 border-[#2a6a6f] bg-[#0a1e20]">
                 <td className="px-4 py-2 text-xs font-bold text-emerald-400 sticky left-0 bg-[#0a1e20]" colSpan={2}>Total recettes</td>
                 {recettesParMois.map((v, i) => (
                   <td key={i} className="text-right px-3 py-2 text-xs font-bold text-emerald-400 tabular-nums">{formatCurrencyPrecis(v)}</td>
                 ))}
                 <td />
               </tr>
-              <tr className="bg-[#0a1e20]">
+              <tr className="bg-[#0a1e20] border-t border-[#2a6a6f]/70">
                 <td className="px-4 py-2 text-xs font-bold text-red-400 sticky left-0 bg-[#0a1e20]" colSpan={2}>Total dépenses</td>
                 {depensesParMois.map((v, i) => (
                   <td key={i} className="text-right px-3 py-2 text-xs font-bold text-red-400 tabular-nums">{formatCurrencyPrecis(v)}</td>
                 ))}
                 <td />
               </tr>
-              <tr className="bg-[#0a1e20] border-t border-[#144447]/60">
+              <tr className="bg-[#0a1e20] border-t-2 border-[#2a6a6f]">
                 <td className="px-4 py-2 text-xs font-bold text-white sticky left-0 bg-[#0a1e20]" colSpan={2}>Solde du mois</td>
                 {totalParMois.map((v, i) => (
                   <td key={i} className={`text-right px-3 py-2 text-xs font-bold tabular-nums ${v >= 0 ? 'text-[#F9C977]' : 'text-red-400'}`}>{formatCurrencyPrecis(v)}</td>
                 ))}
                 <td />
               </tr>
-              <tr className="bg-[#0a1e20]/80">
+              <tr className="bg-[#0a1e20]/80 border-t border-[#2a6a6f]/70">
                 <td className="px-4 py-2 text-[11px] text-slate-500 sticky left-0 bg-[#0a1e20]/80" colSpan={2}>Cumul (depuis le début de cette vue)</td>
                 {cumulParMois.map((v, i) => (
                   <td key={i} className={`text-right px-3 py-2 text-[11px] tabular-nums ${v >= 0 ? 'text-slate-400' : 'text-red-400/80'}`}>{formatCurrencyPrecis(v)}</td>
@@ -385,7 +385,7 @@ export default function ComptabiliteView() {
       </p>
 
       {/* Onglets mois du grand livre réel, en bas de la vue */}
-      <div className="sticky bottom-0 flex flex-wrap gap-1.5 justify-center pt-3 border-t border-[#144447]/60 bg-[#07191b]">
+      <div className="sticky bottom-0 flex flex-wrap gap-1.5 justify-center pt-3 border-t-2 border-[#2a6a6f] bg-[#07191b]">
         {MOIS_ONGLETS.map((m) => (
           <button
             key={m}
@@ -404,7 +404,7 @@ export default function ComptabiliteView() {
       {/* Formulaire d'ajout / modification */}
       {formOuvert && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setFormOuvert(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-[#07191b] border border-[#1b4e52] shadow-2xl p-5 space-y-4">
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-[#07191b] border-2 border-[#2a6a6f] shadow-2xl p-5 space-y-4">
             <h3 className="text-base font-bold text-white">
               {formOuvert === 'nouveau' ? 'Nouvelle ligne' : 'Modifier la ligne'}
             </h3>
