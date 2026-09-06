@@ -303,17 +303,19 @@ export default function Dashboard({
     // L'étape, elle, sait toujours à quel pipeline elle appartient.
     const pipelineParEtape = new Map<string, string>();
     stagesWithPosition.forEach((s) => { pipelineParEtape.set(s.id, s.pipeline_id); });
-    // Conseils Finances (5 septembre) : « le CA à venir devrait être à
-    // partir de Montage dossier » (d'abord demandé à partir d'Accord banque /
-    // Rendez-vous, puis avancé à cette étape). Position de cette étape dans
+    // Conseils Finances : le CA à venir de l'agence compte à partir de
+    // l'étape Accord banque / Rendez-vous (règle d'origine du 5 septembre,
+    // un temps avancée à Montage dossier, puis redemandée le 6 septembre
+    // « il faut que cela soit comptabilisé du moment que le dossier passe à
+    // l'étape Accord banque / Rendez-vous »). Position de cette étape dans
     // chaque pipeline, et position de chaque étape — même lecture que la
-    // tuile Volume financier plus haut. Reconnue à son nom (« Montage
-    // dossier », « Montage bancaire »…), la première si plusieurs.
+    // tuile Volume financier plus haut. Reconnue à son nom (« Accord
+    // banque », « Rendez-vous »…), la première si plusieurs.
     const seuilDepart = new Map<string, number>();
     const positionEtape = new Map<string, number>();
     stagesWithPosition.forEach((s) => {
       positionEtape.set(`${s.pipeline_id}::${s.name}`, s.position);
-      if (/montage/i.test(s.name)) {
+      if (/accord\s*banque/i.test(s.name) || /rendez.?vous/i.test(s.name)) {
         const actuel = seuilDepart.get(s.pipeline_id);
         if (actuel === undefined || s.position < actuel) seuilDepart.set(s.pipeline_id, s.position);
       }
@@ -387,8 +389,9 @@ export default function Dashboard({
     const anneeCourante = new Date().getFullYear();
     const parConseillerAnnee = new Map<string, number>();
     // « CA à venir » conseiller par conseiller — sur Conseils Finances, les
-    // dossiers à partir de Montage dossier : « ceux qui appartiennent aux
-    // courtiers, Sylvain compris, une case en haut du tableau de bord ».
+    // dossiers à partir d'Accord banque / Rendez-vous : « ceux qui
+    // appartiennent aux courtiers, Sylvain compris, une case en haut du
+    // tableau de bord ».
     const parConseillerAVenir = new Map<string, number>();
     // Demandé le 2 septembre : « quand je clique dans la colonne chiffre
     // d'affaires d'agence, je voudrais un tableau avec le nom et prénom des
@@ -429,8 +432,8 @@ export default function Dashboard({
         if (!etape.includes('factur') && !etape.includes('regler')) return;
       }
       // Conseils Finances : un dossier vivant ne compte qu'à partir de
-      // l'étape Montage dossier (le CA à venir). Un dossier archivé, lui,
-      // compte toujours (archiveHorsRegles ci-dessus).
+      // l'étape Accord banque / Rendez-vous (le CA à venir). Un dossier
+      // archivé, lui, compte toujours (archiveHorsRegles ci-dessus).
       if (estConseilsFinances && !archiveHorsRegles) {
         const seuil = seuilDepart.get(pipelineReel);
         const position = positionEtape.get(`${pipelineReel}::${d.stage}`);
@@ -566,7 +569,7 @@ export default function Dashboard({
   // qui appartiennent aux courtiers, Sylvain Grazia compris : rajouter une
   // case en haut du tableau de bord, CA Sylvain, ou le nom du courtier ». Une
   // case par personne de l'agence : ses dossiers archivés et confirmés, plus
-  // ses dossiers à partir de Montage dossier — la même règle que le
+  // ses dossiers à partir d'Accord banque / Rendez-vous — la même règle que le
   // CA de l'agence. Une personne sans compte dans la liste mais qui porte des
   // dossiers apparaît quand même, plutôt que de perdre son chiffre.
   const caParCourtier = useMemo(() => {
@@ -1083,7 +1086,7 @@ export default function Dashboard({
                       </span>
                     )}
                     <span className="text-slate-500 font-normal block mt-0.5">
-                      Archivé et signé seulement, à partir de l'étape Montage dossier, honoraires agence TTC saisis sur la fiche (pas de hors taxes sur Conseils Finances)
+                      Archivé et signé seulement, honoraires agence TTC saisis sur la fiche (pas de hors taxes sur Conseils Finances)
                       {chiffreAffairesAgence.sansMontant > 0 && ` · ${chiffreAffairesAgence.sansMontant} sans honoraires`}
                     </span>
                   </>
@@ -1171,8 +1174,8 @@ export default function Dashboard({
               </div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.comptessAVenir === 0
-                  ? "Aucun de vos dossiers à partir de l'étape Montage dossier"
-                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Montage dossier, honoraires agence TTC`}
+                  ? "Aucun de vos dossiers à partir de l'étape Accord banque / Rendez-vous"
+                  : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Accord banque / Rendez-vous, honoraires agence TTC`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300">
@@ -1240,8 +1243,8 @@ export default function Dashboard({
               </div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.comptessAVenir === 0
-                  ? "Aucun dossier à partir de l'étape Montage dossier"
-                  : `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Montage dossier, honoraires agence TTC — compris dans le CA de l'agence`}
+                  ? "Aucun dossier à partir de l'étape Accord banque / Rendez-vous"
+                  : `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Accord banque / Rendez-vous, honoraires agence TTC — pas dans le chiffre d'affaires de l'agence tant que non archivé et signé`}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
@@ -1460,7 +1463,7 @@ export default function Dashboard({
                     <div className="text-xl font-black text-sky-300 tracking-tight">{formatCurrency(c.total)}</div>
                     <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                       {c.total === 0
-                        ? 'Aucun dossier archivé et signé à partir de Montage dossier'
+                        ? 'Aucun dossier archivé et signé'
                         : `${formatCurrency(c.archive)} archivé + ${formatCurrency(c.commission)} commission + ${formatCurrency(c.comBanque)} commission Banque`}
                     </span>
                     {/* Le CA à venir (encore vivant, pas archivé) reste
@@ -1701,7 +1704,7 @@ export default function Dashboard({
             <h3 className="font-bold text-sm text-white">CA à venir</h3>
             <p className="text-xs text-slate-400">
               {estConseilsFinances
-                ? "Honoraires agence TTC des dossiers à partir de Montage dossier, par colonne."
+                ? "Honoraires agence TTC des dossiers à partir de Accord banque / Rendez-vous, par colonne."
                 : `Commission agence HT encore ${dansPipelineVise}, par colonne.`}
             </p>
           </div>
