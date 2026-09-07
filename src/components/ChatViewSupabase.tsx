@@ -2909,7 +2909,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                   <textarea
                                     value={editingConvMsgText}
                                     onChange={(e) => setEditingConvMsgText(e.target.value)}
-                                    className="bg-black/20 rounded-lg p-2 text-xs text-inherit border border-black/20 focus:outline-none resize-none"
+                                    className="bg-transparent rounded-lg p-2 text-xs text-inherit border border-black/20 focus:outline-none resize-none"
                                     rows={2}
                                     autoFocus
                                   />
@@ -3505,7 +3505,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             <textarea
                               value={editingChannelMsgText}
                               onChange={(e) => setEditingChannelMsgText(e.target.value)}
-                              className="bg-black/20 rounded-lg p-2 text-xs text-inherit border border-black/20 focus:outline-none resize-none"
+                              className="bg-transparent rounded-lg p-2 text-xs text-inherit border border-black/20 focus:outline-none resize-none"
                               rows={2}
                               autoFocus
                             />
