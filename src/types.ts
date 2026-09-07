@@ -81,6 +81,15 @@ export interface Contact {
   // Conciergerie ImmoSphera (6 septembre) : `leads.referrer_id`, référence
   // vers `real_estate_referrers`. Liste gérée, pas de texte libre.
   referrerId?: string | null;
+  // Lien Vendeur ↔ Acquéreur (ImmoSphera, Transactions V2, 7 septembre) :
+  // « rattacher la fiche client acquéreur à la fiche client vendeur et
+  // pouvoir naviguer entre les deux, pour éviter qu'il y ait trop de cases
+  // contact dans la pipeline ». Facultatif — l'agent choisit de lier ou
+  // non. `leads.linked_lead_id`, référence vers une autre fiche `leads`.
+  // Affiché dans les deux sens (voir ClientProfileView) : posé sur la
+  // fiche Acquéreur, il fait apparaître automatiquement l'Acquéreur sur la
+  // fiche Vendeur visée (recherche inverse par linkedLeadId === mon id).
+  linkedLeadId?: string | null;
 }
 
 export interface PipelineDef {
