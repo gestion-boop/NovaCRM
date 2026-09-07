@@ -747,15 +747,31 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
       // n'exclut pas les dossiers archivés comme le fait `deals` — sans ce
       // `!deal.archivedAt`, un client archivé réapparaissait dans le
       // pipeline dès qu'on changeait d'agence.
-      return allDeals.filter(
+      const base = allDeals.filter(
         (deal) =>
           deal.agencyId ===
           currentAgencyId &&
           !deal.archivedAt
       );
+
+      // Signalé (7 septembre) : « il faut que les utilisateurs de
+      // ImmoSphera ne voient que leur propre dossier » dans Transactions
+      // V2 — trop de cartes, trop peu lisible dès qu'un agent regarde le
+      // pipeline complet de l'agence. Restreint aux dossiers dont il/elle
+      // est l'agent (assigned_to, repli sur created_by — voir advisorId
+      // dans useDeals.ts), sauf pour le super admin qui garde la vue
+      // complète (déjà celui qui voit les totaux agence ci-dessous).
+      if (activePipeline?.id === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID && !canManageStructure) {
+        return base.filter((deal) => deal.advisorId === currentUser?.uid);
+      }
+
+      return base;
     }, [
       allDeals,
       currentAgencyId,
+      activePipeline?.id,
+      canManageStructure,
+      currentUser?.uid,
     ]);
 
   // Ticket #114 : chaque colonne refaisait `agencyDeals.filter(...)` sur
@@ -2060,6 +2076,15 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                   (estAgenceNovavisio(currentAgencyId) && couleurEtapeNovavisio(stage)) ||
                   STAGE_ACCENT_COLORS[stageIndex % STAGE_ACCENT_COLORS.length];
 
+                // Transactions V2 (ImmoSphera) : `agencyDeals` est déjà
+                // restreint aux dossiers du conseiller pour un non-admin
+                // (voir plus haut) — `stageTotal` ne porte donc plus que
+                // SES dossiers à lui, et peut s'afficher sans rien
+                // dévoiler du reste de l'agence. Demandé le 7 septembre :
+                // « il faut que le montant des dossiers s'additionne tous
+                // en haut de la colonne ».
+                const estVueDossiersPropres = activePipeline.id === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID && !canManageStructure;
+
                 return (
                   <PipelineColumn
                     key={stage}
@@ -2067,8 +2092,8 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                     stageDeals={stageDeals}
                     stageTotal={stageTotal}
                     stageAdvisorHt={stageAdvisorHt}
-                    estSuperAdmin={canManageStructure}
-                    libelleMontant={estConseilsFinances ? 'Honoraires agence, TTC' : 'Commission agence, hors taxes'}
+                    estSuperAdmin={canManageStructure || estVueDossiersPropres}
+                    libelleMontant={estVueDossiersPropres ? 'Montant de tes dossiers' : estConseilsFinances ? 'Honoraires agence, TTC' : 'Commission agence, hors taxes'}
                     stageMonHt={stageMonHt}
                     accentColor={accentColor}
                     canManageStructure={canManageStructure}
