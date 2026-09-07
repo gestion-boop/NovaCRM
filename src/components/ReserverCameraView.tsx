@@ -1,54 +1,104 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, Plus, Clock, MapPin, Hash, Briefcase, FileText } from 'lucide-react';
-import { CameraReservation } from '@/types';
+import React, { useState } from 'react';
+import { Camera, Plus, Clock, MapPin, Hash, Briefcase, CheckCircle2, XCircle } from 'lucide-react';
 import CameraReservationModal from './CameraReservationModal';
+import { useCameraReservations, StoredCameraReservation, formatReservationDateFr } from '@/hooks/useCameraReservations';
 
-// Demande explicite (30/08/2026) : "supprime définitivement les deux
-// réservations de démonstration... cela ne sert à rien" — ces deux
-// entrées n'ont jamais été de vraies réservations (aucune table Supabase
-// derrière ce composant, tout vit en localStorage par appareil, voir
-// useState ci-dessous) : c'était un jeu de données factice codé en dur,
-// resservi par défaut à quiconque n'avait jamais encore utilisé cet écran.
-// Tableau vidé — voir aussi OLD_SEED_IDS plus bas pour les appareils qui
-// avaient déjà ces deux entrées enregistrées dans leur localStorage.
-const SEED_RESERVATIONS: CameraReservation[] = [];
-const OLD_SEED_IDS = ['cr-1', 'cr-2'];
+// Correctif (7 septembre, signalé « on ne voit pas trop bien la date qui
+// est demandée, et il faudrait un bouton valider/refuser ») : cet écran
+// (celui qu'ouvre la notification « demande de réservation ») ne lisait
+// QUE le localStorage de l'appareil — une liste factice, jamais
+// synchronisée avec la vraie table Supabase `camera_reservations`. Un
+// admin cliquant sur la notification de Christophe n'avait donc aucune
+// chance de voir sa demande ni de la valider depuis ici. Passe désormais
+// par le même hook partagé que la fenêtre de réservation (données réelles,
+// temps réel), avec Valider/Refuser directement sur la carte pour les
+// admins caméra (Sylvain, Mélanie), sans avoir à rouvrir une autre fenêtre.
 
 export interface ReserverCameraViewProps {
   onOpenModal?: () => void;
 }
 
+const ReviewRow: React.FC<{ res: StoredCameraReservation }> = ({ res }) => {
+  const { isCameraAdmin, reviewingId, reviewReservation } = useCameraReservations();
+  const [showRefusePanel, setShowRefusePanel] = useState(false);
+  const [refuseReason, setRefuseReason] = useState('');
+  const [altSlots, setAltSlots] = useState<string[]>(['', '', '']);
+  const isPending = res.status === 'En attente';
+  const busy = reviewingId === res.id;
+
+  if (!isCameraAdmin || !isPending) return null;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-white/10 space-y-2.5">
+      {showRefusePanel && (
+        <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 space-y-2">
+          <textarea
+            rows={2}
+            placeholder="Motif du refus (optionnel)..."
+            value={refuseReason}
+            onChange={(e) => setRefuseReason(e.target.value)}
+            className="w-full bg-[#050f14] border border-[#182e38] rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500/40 resize-none"
+          />
+          <p className="text-[10px] text-slate-400">Proposer d'autres créneaux (facultatif) :</p>
+          {altSlots.map((slot, i) => (
+            <input
+              key={i}
+              type="text"
+              placeholder={`Proposition ${i + 1} (ex. mardi 9 sept. 14h-15h)`}
+              value={slot}
+              onChange={(e) => setAltSlots((prev) => prev.map((s, j) => (j === i ? e.target.value : s)))}
+              className="w-full bg-[#050f14] border border-[#182e38] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500/40"
+            />
+          ))}
+        </div>
+      )}
+      <div className="flex items-center justify-end gap-2">
+        {showRefusePanel ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowRefusePanel(false)}
+              className="px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void reviewReservation(res, false, { reason: refuseReason, alternativeSlots: altSlots })}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 disabled:opacity-40 flex items-center gap-2"
+            >
+              <XCircle className="w-3.5 h-3.5" /> Confirmer le refus
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setShowRefusePanel(true)}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 disabled:opacity-40 flex items-center gap-2"
+            >
+              <XCircle className="w-3.5 h-3.5" /> Refuser
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void reviewReservation(res, true)}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 flex items-center gap-2"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" /> Valider
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenModal }) => {
-  const [reservations, setReservations] = useState<CameraReservation[]>(() => {
-    try {
-      const saved = localStorage.getItem('novasphere_camera_reservations_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved) as CameraReservation[];
-        // Retire les deux entrées de démo si elles sont encore présentes
-        // (appareil qui avait déjà ouvert cet écran avant leur suppression
-        // ci-dessus) — ne touche à rien d'autre qu'un utilisateur aurait
-        // ajouté de son côté.
-        return parsed.filter((r) => !OLD_SEED_IDS.includes(r.id));
-      }
-    } catch (e) {
-      console.warn('Erreur lecture réservations caméra:', e);
-    }
-    return SEED_RESERVATIONS;
-  });
-
+  const { reservations, loading, error } = useCameraReservations();
   const [showModal, setShowModal] = useState(false);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('novasphere_camera_reservations_v1', JSON.stringify(reservations));
-    } catch (e) {
-      console.warn('Erreur sauvegarde réservations:', e);
-    }
-  }, [reservations]);
-
-  const handleAddReservation = (newRes: CameraReservation) => {
-    setReservations([newRes, ...reservations]);
-  };
 
   const handleTriggerOpen = () => {
     if (onOpenModal) {
@@ -58,13 +108,17 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
     }
   };
 
+  // En attente d'abord (ce qui a besoin d'une action), puis le reste par
+  // date décroissante — pour ne pas noyer une demande urgente au milieu
+  // de réservations déjà traitées.
+  const sorted = [...reservations].sort((a, b) => {
+    if (a.status === 'En attente' && b.status !== 'En attente') return -1;
+    if (b.status === 'En attente' && a.status !== 'En attente') return 1;
+    return b.startDate.localeCompare(a.startDate);
+  });
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 text-white animate-fade-in">
-      {/* View Header */}
-      {/* Signalé (30/08/2026, capture à l'appui) : "on ne voit pas les
-          textes" — bg-white/5 (5% d'opacité) laissait la photo de fond de
-          page passer à travers, comme sur Notes/Documents/Agenda/Support —
-          même correctif : fond opaque. */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0a1e20]/95 p-6 rounded-3xl border border-white/10">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0 shadow-lg shadow-purple-950/40">
@@ -85,13 +139,20 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
         </button>
       </div>
 
-      {/* Reservations List */}
+      {error && (
+        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs">{error}</div>
+      )}
+
       <div className="space-y-3">
         <h2 className="text-sm font-extrabold text-slate-300 uppercase tracking-wider px-1">
-          Réservations enregistrées ({reservations.length})
+          Réservations enregistrées ({sorted.length})
         </h2>
 
-        {reservations.length === 0 ? (
+        {loading ? (
+          <div className="p-12 text-center text-slate-400 bg-[#0a1e20]/95 rounded-3xl border border-white/10">
+            <p className="text-sm font-semibold">Chargement...</p>
+          </div>
+        ) : sorted.length === 0 ? (
           <div className="p-12 text-center text-slate-400 bg-[#0a1e20]/95 rounded-3xl border border-white/10 space-y-3">
             <Camera className="w-10 h-10 text-slate-500 mx-auto" />
             <p className="text-sm font-semibold">Aucune réservation de caméra enregistrée.</p>
@@ -103,70 +164,89 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
             </button>
           </div>
         ) : (
-          reservations.map((r) => (
+          sorted.map((r) => (
             <div
               key={r.id}
-              className="p-5 bg-[#09151c] border border-[#182e38] hover:border-purple-500/40 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all shadow-md group"
+              className={`p-5 bg-[#09151c] border rounded-2xl transition-all shadow-md group ${
+                r.status === 'En attente' ? 'border-[#F7BC5F]/40' : 'border-[#182e38] hover:border-purple-500/40'
+              }`}
             >
-              <div className="flex items-start gap-3.5">
-                <div className="p-3 rounded-xl bg-purple-950/40 text-purple-300 border border-purple-500/30 shrink-0 mt-0.5">
-                  <Camera className="w-5 h-5" />
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="p-3 rounded-xl bg-purple-950/40 text-purple-300 border border-purple-500/30 shrink-0 mt-0.5">
+                    <Camera className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-purple-400 bg-purple-950/60 border border-purple-500/30 px-2.5 py-0.5 rounded-full">
+                        {r.equipmentName}
+                      </span>
+                      {r.mandateNumber && (
+                        <span className="text-[10px] font-bold text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <Hash className="w-2.5 h-2.5" /> Mandat: {r.mandateNumber}
+                        </span>
+                      )}
+                    </div>
+
+                    {r.propertyAddress && (
+                      <h3 className="font-bold text-white text-base flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        {r.propertyAddress}
+                      </h3>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-0.5">
+                      {/* Demande explicite (7 septembre) : « on ne voit pas
+                          trop bien la date qui est demandée » — date en
+                          toutes lettres au lieu du format brut AAAA-MM-JJ. */}
+                      <span className="flex items-center gap-1.5 text-slate-200 font-semibold">
+                        <Clock className="w-3.5 h-3.5 text-purple-400" />
+                        {formatReservationDateFr(r)}
+                      </span>
+                      <span>Agent : <strong className="text-white">{r.agentName}</strong></span>
+                      {r.projectName && (
+                        <span className="flex items-center gap-1 text-slate-400">
+                          <Briefcase className="w-3.5 h-3.5 text-slate-500" />
+                          Projet : {r.projectName}
+                        </span>
+                      )}
+                    </div>
+
+                    {r.note && (
+                      <p className="text-xs text-slate-400 italic bg-white/5 p-2 rounded-lg border border-white/5 mt-2">
+                        "{r.note}"
+                      </p>
+                    )}
+                    {r.status === 'Refusée' && r.refusalReason && (
+                      <p className="text-xs text-rose-300 bg-rose-500/5 p-2 rounded-lg border border-rose-500/20 mt-2">
+                        {r.refusalReason}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-400 bg-purple-950/60 border border-purple-500/30 px-2.5 py-0.5 rounded-full">
-                      {r.equipmentName}
-                    </span>
-                    {r.mandateNumber && (
-                      <span className="text-[10px] font-bold text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md flex items-center gap-1">
-                        <Hash className="w-2.5 h-2.5" /> Mandat: {r.mandateNumber}
-                      </span>
-                    )}
-                  </div>
 
-                  <h3 className="font-bold text-white text-base">{r.propertyAddress}</h3>
-
-                  <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-0.5">
-                    <span className="flex items-center gap-1.5 text-slate-300 font-medium">
-                      <Clock className="w-3.5 h-3.5 text-purple-400" />
-                      {r.startDate} {r.endDate ? `-> ${r.endDate}` : ''}
-                    </span>
-                    <span>Agent : <strong className="text-white">{r.agentName}</strong></span>
-                    {r.projectName && (
-                      <span className="flex items-center gap-1 text-slate-400">
-                        <Briefcase className="w-3.5 h-3.5 text-slate-500" />
-                        Projet : {r.projectName}
-                      </span>
-                    )}
-                  </div>
-
-                  {r.note && (
-                    <p className="text-xs text-slate-400 italic bg-white/5 p-2 rounded-lg border border-white/5 mt-2">
-                      "{r.note}"
-                    </p>
-                  )}
+                <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full border ${
+                    r.status === 'Confirmée'
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      : r.status === 'Refusée'
+                      ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                      : 'bg-[#F7BC5F]/15 text-[#F9C977] border-[#F7BC5F]/30'
+                  }`}>
+                    {r.status}
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
-                <span className={`text-xs font-bold px-3 py-1 rounded-full border ${
-                  r.status === 'Confirmée'
-                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                    : 'bg-[#F7BC5F]/15 text-[#F9C977] border-[#F7BC5F]/30'
-                }`}>
-                  {r.status}
-                </span>
-              </div>
+              <ReviewRow res={r} />
             </div>
           ))
         )}
       </div>
 
-      {/* Internal Modal fallback if opened directly in this component */}
       <CameraReservationModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        onAddReservation={handleAddReservation}
       />
     </div>
   );

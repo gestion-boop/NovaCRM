@@ -1,117 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { TEAM_MEMBERS } from '@/data/teamMembers';
 import {
   Camera, X, ChevronLeft, ChevronRight, Clock, MapPin, Calendar,
   Hash, Briefcase, CheckCircle2, XCircle, Video, Film, Package, Clapperboard, Send
 } from 'lucide-react';
 import { CameraReservation } from '@/types';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
-
-// Seuls Sylvain Grazia et Mélanie Grazia reçoivent la demande et peuvent
-// l'approuver / la refuser.
-const CAMERA_ADMIN_UIDS = [
-  '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29', // Sylvain Grazia
-  '15bcec53-de3e-40b8-8b7e-bb6874836f29', // Mélanie Grazia
-];
-
-// Table Supabase réelle (déjà utilisée en production, synchronisée avec
-// Google Calendar par un autre système) : status = 'pending' | 'accepted' | 'refused'.
-const EQUIPMENT_KEY_TO_LABEL: Record<string, string> = {
-  giraffe: 'Caméra Giraffe',
-  dji: 'Caméra DJI',
-  x4: 'Caméra X4',
-  cm: 'Community Manager',
-};
-const EQUIPMENT_LABEL_TO_KEY: Record<string, string> = {
-  'Caméra Giraffe': 'giraffe',
-  'Caméra DJI': 'dji',
-  'Caméra X4': 'x4',
-  'Community Manager': 'cm',
-};
-
-interface CameraReservationSupaRow {
-  id: string;
-  agency_id: string | null;
-  user_id: string;
-  title: string | null;
-  description: string | null;
-  start_at: string;
-  end_at: string;
-  status: 'pending' | 'accepted' | 'refused';
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  refusal_reason: string | null;
-  created_at: string;
-}
-
-const STATUS_LABEL: Record<string, StoredCameraReservation['status']> = {
-  pending: 'En attente',
-  accepted: 'Confirmée',
-  refused: 'Refusée',
-};
-
-function parseDescription(raw: string | null): { equipment?: Record<string, boolean>; lieu?: string; mandat?: string; projet?: string; note?: string } {
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-function fmtLocalDate(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-function fmtLocalTime(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-function rowToStored(row: CameraReservationSupaRow): StoredCameraReservation {
-  const desc = parseDescription(row.description);
-  const equipmentList = Object.entries(desc.equipment || {})
-    .filter(([, v]) => !!v)
-    .map(([k]) => EQUIPMENT_KEY_TO_LABEL[k] || k);
-  const member = TEAM_MEMBERS.find((m) => m.id === row.user_id);
-  const date = fmtLocalDate(row.start_at);
-
-  return {
-    id: row.id,
-    equipmentName: equipmentList.join(', ') || 'Matériel',
-    agentName: member?.name || 'Utilisateur',
-    propertyAddress: desc.lieu || '',
-    startDate: `${date} ${fmtLocalTime(row.start_at)}`,
-    endDate: `${fmtLocalDate(row.end_at)} ${fmtLocalTime(row.end_at)}`,
-    status: STATUS_LABEL[row.status] || 'En attente',
-    mandateNumber: desc.mandat || '',
-    projectName: desc.projet || '',
-    note: desc.note || '',
-    equipmentList,
-    startTime: fmtLocalTime(row.start_at),
-    endTime: fmtLocalTime(row.end_at),
-    location: desc.lieu || '',
-    agencyId: row.agency_id || '',
-    createdByUserId: row.user_id,
-    createdByEmail: '',
-    createdAt: row.created_at,
-  };
-}
+import {
+  useCameraReservations,
+  StoredCameraReservation,
+  EQUIPMENT_LABEL_TO_KEY,
+  formatReservationDateFr,
+} from '@/hooks/useCameraReservations';
 
 interface CameraReservationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddReservation?: (res: CameraReservation) => void;
-}
-
-
-interface StoredCameraReservation extends CameraReservation {
-  agencyId: string;
-  createdByUserId: string;
-  createdByEmail: string;
-  createdAt: string;
 }
 
 export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
@@ -121,8 +27,15 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 }) => {
   const { currentUser, activeAgency, userProfile } = useAuth();
 
-  const [reservations, setReservations] = useState<StoredCameraReservation[]>([]);
-  const [loadingReservations, setLoadingReservations] = useState(false);
+  const {
+    reservations,
+    loading: loadingReservations,
+    error: loadError,
+    isCameraAdmin,
+    pendingReservations,
+    reviewingId,
+    reviewReservation,
+  } = useCameraReservations();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -140,7 +53,6 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   const [projectName, setProjectName] = useState('');
   const [note, setNote] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
-  const [reviewingId, setReviewingId] = useState<string | null>(null);
   // Ticket #19 (nouvelle base) : le contrôle d'une réservation se faisait
   // uniquement depuis une ligne compacte avec deux icônes minuscules — on
   // ouvre maintenant une fenêtre détaillée dédiée, avec un vrai bouton
@@ -152,6 +64,13 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   const [dayEvents, setDayEvents] = useState<{ title: string; time: string }[] | null>(null);
   const [loadingDayEvents, setLoadingDayEvents] = useState(false);
   const [calendarNeedsAuth, setCalendarNeedsAuth] = useState(false);
+  // Demande explicite (7 septembre) : « qu'on ait trois propositions au
+  // cas où, pour pallier aux besoins » — en refusant, l'admin peut
+  // suggérer jusqu'à 3 créneaux de remplacement, repris dans la
+  // notification envoyée au demandeur.
+  const [showRefusePanel, setShowRefusePanel] = useState(false);
+  const [refuseReason, setRefuseReason] = useState('');
+  const [altSlots, setAltSlots] = useState<string[]>(['', '', '']);
 
   const loadDayEvents = async (dateStr: string, tokenOverride?: string) => {
     setLoadingDayEvents(true);
@@ -184,106 +103,10 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   useEffect(() => {
     if (detailReservation) void loadDayEvents(detailReservation.startDate);
     else { setDayEvents(null); setCalendarNeedsAuth(false); }
+    setShowRefusePanel(false);
+    setRefuseReason('');
+    setAltSlots(['', '', '']);
   }, [detailReservation]);
-
-  const isCameraAdmin = !!currentUser && CAMERA_ADMIN_UIDS.includes(currentUser.uid);
-  const pendingReservations = reservations.filter((r) => r.status === 'En attente');
-
-  const notifyCameraAdmins = async (res: StoredCameraReservation) => {
-    try {
-      await Promise.all(
-        CAMERA_ADMIN_UIDS.map((uid) =>
-          supabase.rpc('create_notification', {
-            _user_id: uid,
-            _type: 'camera_reservation_request',
-            _title: '🎥 Demande de réservation matériel',
-            _message: `${res.agentName} demande à réserver ${res.equipmentName} le ${res.startDate.slice(0, 10)} (${res.startTime}-${res.endTime}).`,
-            _entity_type: 'camera_reservation',
-            _entity_id: null,
-            _agency_id: res.agencyId || null,
-            _metadata: {},
-          } as any)
-        )
-      );
-    } catch (e) {
-      console.warn('Notification admins caméra impossible :', e);
-    }
-  };
-
-  const notifyRequester = async (res: StoredCameraReservation, approved: boolean) => {
-    if (!res.createdByUserId) return;
-    try {
-      await supabase.rpc('create_notification', {
-        _user_id: res.createdByUserId,
-        _type: approved ? 'camera_reservation_approved' : 'camera_reservation_rejected',
-        _title: approved ? '✅ Réservation confirmée' : '❌ Réservation refusée',
-        _message: approved
-          ? `Votre réservation "${res.equipmentName}" du ${res.startDate.slice(0, 10)} a été validée.`
-          : `Votre réservation "${res.equipmentName}" du ${res.startDate.slice(0, 10)} a été refusée.`,
-        _entity_type: 'camera_reservation',
-        _entity_id: null,
-        _agency_id: res.agencyId || null,
-        _metadata: {},
-      } as any);
-    } catch (e) {
-      console.warn('Notification demandeur caméra impossible :', e);
-    }
-  };
-
-  const handleReviewReservation = async (res: StoredCameraReservation, approve: boolean) => {
-    if (!currentUser) return;
-    setReviewingId(res.id);
-    try {
-      const { error } = await supabase
-        .from('camera_reservations' as any)
-        .update({
-          status: approve ? 'accepted' : 'refused',
-          reviewed_by: currentUser.uid,
-          reviewed_at: new Date().toISOString(),
-        } as any)
-        .eq('id', res.id);
-      if (error) throw error;
-      setReservations((current) =>
-        current.map((r) => (r.id === res.id ? { ...r, status: approve ? 'Confirmée' : 'Refusée' } : r))
-      );
-      await notifyRequester(res, approve);
-    } catch (e) {
-      console.error('Erreur validation réservation caméra :', e);
-      setSubmitError("Impossible de mettre à jour cette réservation.");
-    } finally {
-      setReviewingId(null);
-    }
-  };
-
-  const loadReservations = async () => {
-    setLoadingReservations(true);
-    setSubmitError(null);
-    try {
-      const { data, error } = await supabase
-        .from('camera_reservations' as any)
-        .select('*')
-        .order('start_at', { ascending: true });
-      if (error) throw error;
-      setReservations(((data ?? []) as any[]).map((r) => rowToStored(r as CameraReservationSupaRow)));
-    } catch (error) {
-      console.error('Erreur chargement réservations caméra :', error);
-      setSubmitError("Impossible de charger le planning du matériel.");
-    } finally {
-      setLoadingReservations(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!isOpen || !currentUser) return;
-    void loadReservations();
-
-    const channel = supabase
-      .channel('camera_reservations_modal')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'camera_reservations' }, () => loadReservations())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, currentUser?.uid]);
 
   if (!isOpen) return null;
 
@@ -433,17 +256,23 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
       } as any);
       if (insertError) throw insertError;
 
-      setReservations((current) => [...current, newRes]);
+      // La liste se rafraîchit toute seule via l'abonnement temps réel du
+      // hook partagé (useCameraReservations) — plus besoin de la mettre à
+      // jour ici à la main.
 
       if (onAddReservation) {
         onAddReservation(newRes);
       }
 
-      // Un trigger côté base notifie déjà certains cas, mais pas Sylvain de
-      // façon fiable (constaté en usage réel) — on notifie explicitement les
-      // deux admins ici pour garantir que Sylvain ET Mélanie reçoivent
-      // toujours la demande.
-      void notifyCameraAdmins(newRes);
+      // Correctif (7 septembre) : cet appel client faisait doublon avec DEUX
+      // déclencheurs base identiques (`on_camera_reservation_created` et
+      // `trg_camera_reservation_created`, tous deux appelant la même
+      // fonction) — jusqu'à 3 notifications pour une seule demande, avec un
+      // lien cassé (`/agenda?...`, jamais résolu) pour la version base. Le
+      // doublon base a été supprimé et son lien corrigé (`/reserver-camera`,
+      // voir ce même correctif côté SQL) ; il couvre déjà fiablement tous
+      // les super admins + Mélanie (camera_reservation_approvers()), donc
+      // cet appel n'est plus nécessaire.
 
       setIsSuccess(true);
 
@@ -531,9 +360,9 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
           </div>
         ) : (
           <>
-            {submitError && (
+            {(submitError || loadError) && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs">
-                {submitError}
+                {submitError || loadError}
               </div>
             )}
 
@@ -871,12 +700,10 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
               </div>
               <div className="flex items-center gap-2.5">
                 <Calendar className="w-4 h-4 text-slate-500 shrink-0" />
-                <span>
-                  {detailReservation.startDate.slice(0, 10)} · {detailReservation.startTime}–{detailReservation.endTime}
-                  {detailReservation.endDate && detailReservation.endDate.slice(0, 10) !== detailReservation.startDate.slice(0, 10)
-                    ? ` → ${detailReservation.endDate.slice(0, 10)}`
-                    : ''}
-                </span>
+                {/* Demande explicite (7 septembre) : « on ne voit pas trop
+                    bien la date qui est demandée » — date en toutes lettres
+                    au lieu du format brut AAAA-MM-JJ. */}
+                <span className="font-semibold text-white">{formatReservationDateFr(detailReservation)}</span>
               </div>
               {detailReservation.propertyAddress && (
                 <div className="flex items-center gap-2.5">
@@ -941,29 +768,79 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
               )}
             </div>
 
+            {/* Demande explicite (7 septembre) : « qu'on ait trois
+                propositions au cas où, pour pallier aux besoins » — en
+                refusant, proposer jusqu'à 3 créneaux de remplacement,
+                repris dans la notification envoyée au demandeur. */}
+            {showRefusePanel && (
+              <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 space-y-2.5">
+                <p className="text-[11px] font-bold text-rose-300 uppercase tracking-wider">Refuser cette demande</p>
+                <textarea
+                  rows={2}
+                  placeholder="Motif du refus (optionnel)..."
+                  value={refuseReason}
+                  onChange={(e) => setRefuseReason(e.target.value)}
+                  className="w-full bg-[#050f14] border border-[#182e38] rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500/40 resize-none"
+                />
+                <p className="text-[10px] text-slate-400">Proposer d'autres créneaux (facultatif) :</p>
+                {altSlots.map((slot, i) => (
+                  <input
+                    key={i}
+                    type="text"
+                    placeholder={`Proposition ${i + 1} (ex. mardi 9 sept. 14h-15h)`}
+                    value={slot}
+                    onChange={(e) => setAltSlots((prev) => prev.map((s, j) => (j === i ? e.target.value : s)))}
+                    className="w-full bg-[#050f14] border border-[#182e38] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500/40"
+                  />
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-[#142832]">
-              <button
-                type="button"
-                onClick={async () => {
-                  await handleReviewReservation(detailReservation, false);
-                  setDetailReservation(null);
-                }}
-                disabled={reviewingId === detailReservation.id}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 disabled:opacity-40 flex items-center gap-2"
-              >
-                <XCircle className="w-4 h-4" /> Refuser
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  await handleReviewReservation(detailReservation, true);
-                  setDetailReservation(null);
-                }}
-                disabled={reviewingId === detailReservation.id}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 flex items-center gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4" /> Valider
-              </button>
+              {showRefusePanel ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowRefusePanel(false)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await reviewReservation(detailReservation, false, { reason: refuseReason, alternativeSlots: altSlots });
+                      setDetailReservation(null);
+                    }}
+                    disabled={reviewingId === detailReservation.id}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 disabled:opacity-40 flex items-center gap-2"
+                  >
+                    <XCircle className="w-4 h-4" /> Confirmer le refus
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowRefusePanel(true)}
+                    disabled={reviewingId === detailReservation.id}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 disabled:opacity-40 flex items-center gap-2"
+                  >
+                    <XCircle className="w-4 h-4" /> Refuser
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await reviewReservation(detailReservation, true);
+                      setDetailReservation(null);
+                    }}
+                    disabled={reviewingId === detailReservation.id}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Valider
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
