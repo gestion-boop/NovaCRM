@@ -136,6 +136,17 @@ export function usePushNotifications() {
           url: '/',
           badge: 1,
           badgeType: 'message',
+          // Signalé (Diane, 7 septembre) : « tout est bien configuré,
+          // toujours aucune notification » — alors que le serveur confirmait
+          // un envoi accepté (201) par Apple à chaque test. Cause : le
+          // service worker (voir sw.js, isFocusedOnContext) masque
+          // volontairement la bannière quand une fenêtre de l'app est déjà
+          // ouverte sur la page ciblée par la notif — un test envoie
+          // toujours `url: '/'`, donc si on clique "Tester" en étant sur
+          // l'accueil (cas le plus courant), la bannière était supprimée en
+          // silence, alors qu'un test doit TOUJOURS s'afficher. Ce tag
+          // dédié dit au service worker de ne jamais l'appliquer ici.
+          tag: 'novasphere-test',
         },
       });
       if (error) throw error;
