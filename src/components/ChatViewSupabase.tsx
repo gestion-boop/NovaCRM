@@ -2374,24 +2374,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setMemberPickerQuery('');
     setMembersLoading(true);
     try {
-      const [{ data: members }, { data: profiles }] = await Promise.all([
+      // Correctif (7 septembre, « Philippe Serra ») : cette fonction avait
+      // sa propre requête profils, indépendante de ensureProfilesLoaded()
+      // — donc `agencyIdsByUid` (nécessaire à memberablePeople pour ne
+      // proposer que les membres de la bonne agence) restait vide tant que
+      // la modale "Nouvelle conversation"/"Nouveau dossier" n'avait pas été
+      // ouverte au moins une fois.
+      const [{ data: members }] = await Promise.all([
         supabase.from('chat_project_members').select('*').eq('project_id', projectId),
-        allProfiles.length > 0
-          ? Promise.resolve({ data: null })
-          : supabase.from('profiles').select('id, full_name, email'),
+        ensureProfilesLoaded(),
       ]);
 
       setProjectMembers((members as ChatProjectMember[]) || []);
-
-      if (profiles) {
-        setAllProfiles(
-          (profiles as { id: string; full_name: string | null; email: string | null }[]).map((p) => ({
-            uid: p.id,
-            displayName: p.full_name || p.email || 'Utilisateur',
-            email: p.email || '',
-          }))
-        );
-      }
     } finally {
       setMembersLoading(false);
     }
@@ -2532,9 +2526,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   const membersModalProject = projects.find((p) => p.id === membersModalProjectId) || null;
+  // Signalé (7 septembre, « Philippe Serra ») : deux comptes du même nom
+  // existent (un par agence — voir agency_members), et le sélecteur les
+  // proposait TOUS les deux, quelle que soit l'agence du dossier. Un
+  // dossier appartenant à une agence précise (agency_id non nul — le
+  // groupe partagé "3 Entités" reste, lui, ouvert à tout le monde) ne
+  // propose plus que les personnes membres de CETTE agence.
   const memberablePeople = allProfiles.filter(
     (p) =>
       !projectMembers.some((m) => m.user_id === p.uid) &&
+      (!membersModalProject?.agency_id || (agencyIdsByUid[p.uid] || []).includes(membersModalProject.agency_id)) &&
       (p.displayName.toLowerCase().includes(memberPickerQuery.toLowerCase()) ||
         p.email.toLowerCase().includes(memberPickerQuery.toLowerCase()))
   );
@@ -4120,6 +4121,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1">
                 {allProfiles
                   .filter((p) => p.uid !== currentUser?.uid)
+                  // Signalé (7 septembre, « Philippe Serra ») : le dossier
+                  // n'appartient qu'à `activeAgency` (voir texte au-dessus) —
+                  // ne proposer que les comptes réellement membres de CETTE
+                  // agence, pas tous les comptes de l'app.
+                  .filter((p) => (agencyIdsByUid[p.uid] || []).includes(activeAgency.id))
                   .filter((p) =>
                     p.displayName.toLowerCase().includes(newProjectQuery.toLowerCase())
                     || (p.email || '').toLowerCase().includes(newProjectQuery.toLowerCase()))
