@@ -178,8 +178,17 @@ self.addEventListener("push", (event) => {
       // Si une fenêtre de l'app est ouverte ET consulte déjà la page liée
       // à cette notification, on n'affiche PAS de bannière : l'utilisateur
       // est en train de lire le contenu, comme sur iOS Messages.
+      //
+      // Signalé (Diane, 7 septembre) : le bouton "Tester une alerte" envoie
+      // toujours `url: '/'` sans conversation_id/lead_id — donc si on
+      // clique "Tester" en étant sur l'accueil de l'app (le cas le plus
+      // probable), la logique ci-dessous croyait qu'on "lisait déjà" la
+      // page ciblée et supprimait la bannière en silence, alors que le
+      // serveur confirmait bien l'envoi (accepté par Apple/Google). Un test
+      // manuel doit TOUJOURS s'afficher, quelle que soit la page ouverte —
+      // reconnu par son tag dédié, posé par use-push-notifications.ts.
       const targetUrl = new URL(data.url || "/", self.location.origin);
-      const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const all = data.tag === "novasphere-test" ? [] : await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       const isFocusedOnContext = all.some((c) => {
         if (!c.focused || c.visibilityState !== "visible") return false;
         try {
