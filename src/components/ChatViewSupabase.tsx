@@ -2898,19 +2898,23 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               perdue qui écrase le texte en colonne étroite.
                               92 % sur téléphone, la valeur d'avant à partir du
                               format tablette : sur ordinateur, rien ne bouge. */}
-                          <div className={`flex items-end gap-1.5 max-w-[92%] sm:max-w-[80%] ${mine ? 'flex-row-reverse' : ''}`} {...gestesMessage(m.id)}>
-                            <div className={`px-3.5 py-2 rounded-2xl text-sm ${
+                          <div className={`flex items-end gap-1.5 ${isEditing ? 'w-full max-w-full' : 'max-w-[92%] sm:max-w-[80%]'} ${mine ? 'flex-row-reverse' : ''}`} {...gestesMessage(m.id)}>
+                            <div className={`px-3.5 py-2 rounded-2xl text-sm ${isEditing ? 'w-full' : ''} ${
                               mine ? 'bg-[#F7BC5F] text-slate-950 font-medium' : 'bg-[#0b1c1e] border border-[#153c3f] text-white'
                             }`}>
                               {!mine && <p className="text-[10px] font-bold text-[#F7BC5F] mb-0.5">{author?.displayName || 'Utilisateur'}</p>}
 
                               {isEditing ? (
-                                <div className="flex flex-col gap-2 min-w-[200px]">
+                                // Demandé (7 septembre) : « le texte soit beaucoup
+                                // plus grand [...] qu'il prenne la largeur de
+                                // l'écran » — zone d'édition pleine largeur, texte
+                                // à la même taille que le reste du chat (text-sm).
+                                <div className="flex flex-col gap-2 w-full">
                                   <textarea
                                     value={editingConvMsgText}
                                     onChange={(e) => setEditingConvMsgText(e.target.value)}
-                                    className="bg-transparent rounded-lg p-2 text-xs text-inherit border border-black/20 focus:outline-none resize-none"
-                                    rows={2}
+                                    className="bg-transparent rounded-lg p-2.5 text-sm text-inherit border border-black/20 focus:outline-none resize-none w-full"
+                                    rows={4}
                                     autoFocus
                                   />
                                   <div className="flex justify-end gap-2">
@@ -3483,8 +3487,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       {/* Même correctif de largeur que côté conversations
                           directes (voir le commentaire là-haut) — les canaux
                           étaient encore plus étroits : 70 %. */}
-                      <div className={`flex items-end gap-1.5 max-w-[92%] sm:max-w-[70%] ${mine ? 'flex-row-reverse' : ''}`} {...gestesMessage(m.id)}>
-                      <div className={`px-3.5 py-2 rounded-2xl text-sm ${
+                      <div className={`flex items-end gap-1.5 ${isEditing ? 'w-full max-w-full' : 'max-w-[92%] sm:max-w-[70%]'} ${mine ? 'flex-row-reverse' : ''}`} {...gestesMessage(m.id)}>
+                      <div className={`px-3.5 py-2 rounded-2xl text-sm ${isEditing ? 'w-full' : ''} ${
                         mine
                           ? 'bg-[#F7BC5F] text-slate-950 font-medium'
                           : 'bg-[#0b1c1e] border border-[#153c3f] text-white'
@@ -3501,12 +3505,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             directes ci-dessus — même "format cohérent" des deux
                             côtés du chat. */}
                         {isEditing ? (
-                          <div className="flex flex-col gap-2 min-w-[200px]">
+                          <div className="flex flex-col gap-2 w-full">
                             <textarea
                               value={editingChannelMsgText}
                               onChange={(e) => setEditingChannelMsgText(e.target.value)}
-                              className="bg-transparent rounded-lg p-2 text-xs text-inherit border border-black/20 focus:outline-none resize-none"
-                              rows={2}
+                              className="bg-transparent rounded-lg p-2.5 text-sm text-inherit border border-black/20 focus:outline-none resize-none w-full"
+                              rows={4}
                               autoFocus
                             />
                             <div className="flex justify-end gap-2">

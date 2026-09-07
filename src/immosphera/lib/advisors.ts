@@ -38,10 +38,10 @@ export const advisors: Advisor[] = [
   },
   {
     id: "pauline",
-    name: "Pauline Casanova",
+    name: "Pauline Segura",
     role: "Conseillère Immobilier",
     photo: paulinePhotoUrl,
-    email: "pauline.casanova@immosphera.fr",
+    email: "pauline.s@immosphera.fr",
     phone: "+33 7 62 34 10 78",
     cardUrl: "https://cartedevisite.pro/pauline-casanova",
   },
