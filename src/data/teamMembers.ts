@@ -172,17 +172,15 @@ export const TEAM_MEMBERS: TeamMember[] = [
     avatarUrl: '/team/coralia_ortega.png',
     status: 'Actif',
   },
-  {
-    id: '1d7ae155-b4e6-43f2-91c5-8737598d1e5d',
-    name: 'Philippe Serra',
-    email: 'p.serra@conseilfinances.fr',
-    role: 'Gérant & Associé',
-    agencyId: '30f96ea9-41da-41c2-a95e-f5e7898f8d8e',
-    phone: '06 50 88 25 92',
-    avatar: 'PS',
-    avatarUrl: '/team/philippe_serra.png',
-    status: 'Actif',
-  },
+  // Philippe Serra (Conseils Finances) retiré de l'équipe le 7 septembre :
+  // « il est dans Novavisio, on le garde que pour les stats dans Conseils
+  // Finances ». Son compte CF (profiles e673a796…) et son agency_members
+  // CF ont été retirés côté base — ses dossiers déjà attribués restent
+  // comptés dans les stats CF (via leads.agency_id/assigned_to, indépendant
+  // de cette liste et de agency_members), mais il n'apparaît plus dans
+  // l'annuaire Équipe ni dans les listes d'attribution. Son vrai compte
+  // reste celui de Novavisio (voir plus bas dans ce fichier si présent, ou
+  // profiles 6db20980-c0a1-4c18-a7ce-23e0f5d39916).
   {
     id: 'd62f8712-425e-4a32-b709-dc11fc8234d2',
     name: 'Muriel Goepfert',

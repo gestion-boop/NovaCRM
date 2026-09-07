@@ -954,6 +954,9 @@ function App() {
               // silencieusement le bon contactId — il ne manquait qu'un
               // accès direct et visible DEPUIS la fiche elle-même.
               onOpenNova={openNovaPopup}
+              // Lien Vendeur ↔ Acquéreur (7 septembre) : navigue vers la
+              // fiche liée sans quitter le composant.
+              onSelectContact={(contactId) => openClientProfile(contactId)}
             />
           ) : (
             <>

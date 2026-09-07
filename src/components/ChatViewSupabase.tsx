@@ -490,6 +490,50 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid, tab]);
 
+  // Signalé (7 septembre, Isabelle — « valable pour tous ») : aucune pastille
+  // non-lu nulle part côté Projets (ni sur l'onglet, ni sur un canal précis),
+  // contrairement aux Conversations. Les messages de canal (`chat_messages`)
+  // n'ont pas de table `message_receipts` : leur statut lu/non-lu vit dans
+  // leur propre colonne JSONB `read_by` (déjà utilisée par loadMessages pour
+  // marquer lu à l'ouverture d'un canal) — on la relit ici pour tous les
+  // canaux accessibles, plutôt qu'un seul à la fois.
+  const [unreadByChannel, setUnreadByChannel] = useState<Record<string, number>>({});
+  const loadUnreadByChannel = async () => {
+    if (!currentUser) return;
+    const channelIds = Object.values(channelsByProject).flat().map((c) => c.id);
+    if (channelIds.length === 0) { setUnreadByChannel({}); return; }
+    try {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('id, channel, sender_id, read_by')
+        .in('channel', channelIds)
+        .neq('sender_id', currentUser.uid)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      (data || []).forEach((row: any) => {
+        const lu = Array.isArray(row.read_by) && row.read_by.some((x: any) => x?.userId === currentUser.uid);
+        if (lu) return;
+        counts[row.channel] = (counts[row.channel] || 0) + 1;
+      });
+      setUnreadByChannel(counts);
+    } catch {
+      // Best-effort : pas de badge plutôt que de casser l'écran.
+    }
+  };
+
+  useEffect(() => {
+    if (!currentUser) return;
+    loadUnreadByChannel();
+    const channel = supabase
+      .channel(`chat_channel_unread_${currentUser.uid}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => loadUnreadByChannel())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.uid, channelsByProject]);
+
   // Signalé (29/08/2026) : "quand on met des liens dans les discussions, ça
   // serait bien qu'on les souligne pour qu'on puisse y accéder directement
   // à un clic" — détecte les URL dans un message texte et les rend
@@ -1332,8 +1376,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             .eq('id', ligne.conversation_id);
         }
       } else if (ligne.channel_id) {
+        const messageId = crypto.randomUUID();
         const { error } = await supabase.from('chat_messages').insert({
-          id: crypto.randomUUID(),
+          id: messageId,
           channel: ligne.channel_id,
           sender_id: currentUser.uid,
           is_deleted: false,
@@ -1355,7 +1400,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           // `messages` (conversations directes), où la base s'en charge.
           const { data: canal } = await supabase
             .from('chat_channels').select('*').eq('id', ligne.channel_id).maybeSingle();
-          if (canal) await notifierMembresDuDossier(canal as ChatChannel, ligne.body);
+          if (canal) await notifierMembresDuDossier(canal as ChatChannel, ligne.body, messageId);
         }
       } else {
         erreur = 'Ni canal ni conversation.';
@@ -2076,7 +2121,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // `create_notification` deja en place partout ailleurs — pas de second
   // systeme, et aucun declencheur base n'existe sur `chat_messages` (celui
   // documente plus haut ne porte que sur `messages`, cf. sendConvMessage).
-  const notifierMembresDuDossier = async (canal: ChatChannel, apercu: string) => {
+  const notifierMembresDuDossier = async (canal: ChatChannel, apercu: string, messageId?: string) => {
     if (!currentUser) return;
     try {
       const { data: membres } = await supabase
@@ -2094,6 +2139,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       if (destinataires.length === 0) return;
 
       const projet = projects.find((p) => p.id === canal.project_id);
+      // Signalé (7 septembre, Isabelle — « valable pour tous ») : le clic
+      // sur la notification d'un message de Projet n'amenait jamais au
+      // message, juste à la liste — parce que le lien envoyé ici était
+      // toujours `/messagerie`, sans jamais désigner le message précis.
+      // `?highlight=<id>` est exactement ce que ChatViewSupabase sait déjà
+      // résoudre (voir l'effet sur `initialHighlightMessageId` plus haut) :
+      // il retrouve le canal via `chat_messages` et ouvre directement dessus.
+      const url = messageId ? `/messagerie?highlight=${messageId}` : '/messagerie';
       await Promise.all(
         destinataires.map((uid) =>
           supabase.rpc('create_notification', {
@@ -2104,7 +2157,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             _entity_type: 'chat_channel',
             _entity_id: canal.id,
             _agency_id: /^[0-9a-f-]{36}$/i.test(activeAgency.id) ? activeAgency.id : null,
-            _metadata: { url: '/messagerie' },
+            _metadata: { url },
           } as any)
         )
       );
@@ -2122,6 +2175,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     const body = draft.trim();
     setDraft('');
     try {
+    const messageId = crypto.randomUUID();
     await supabase.from('chat_messages').insert({
       // Signalé : "les Novadji dans les messages ne se mettent pas" — en
       // creusant, la colonne `id` de `chat_messages` n'a pas de valeur par
@@ -2130,7 +2184,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       // (violait la contrainte NOT NULL). Fourni explicitement ici aussi,
       // en plus du correctif base, pour ne plus jamais dépendre d'un défaut
       // serveur pour cette colonne.
-      id: crypto.randomUUID(),
+      id: messageId,
       channel: activeChannel.id,
       data: { body, sender_id: currentUser.uid, sender_name: displayName, created_at: new Date().toISOString() },
       // Bug remonté : sans ces colonnes réelles (avant, seulement dans le
@@ -2141,7 +2195,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
     } as any);
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
-    await notifierMembresDuDossier(activeChannel, body);
+    await notifierMembresDuDossier(activeChannel, body, messageId);
     } finally {
       sendingChannelRef.current = false;
     }
@@ -2150,8 +2204,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const sendNovaChannelMessage = async (novaSrc: string) => {
     if (!activeChannel || !currentUser) return;
     setShowChannelNovaPicker(false);
+    const messageId = crypto.randomUUID();
     await supabase.from('chat_messages').insert({
-      id: crypto.randomUUID(),
+      id: messageId,
       channel: activeChannel.id,
       data: { body: novaSrc, sender_id: currentUser.uid, sender_name: displayName, created_at: new Date().toISOString() },
       sender_id: currentUser.uid,
@@ -2159,7 +2214,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
     } as any);
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
-    await notifierMembresDuDossier(activeChannel, 'a envoye une mini-expression');
+    await notifierMembresDuDossier(activeChannel, 'a envoye une mini-expression', messageId);
   };
 
   // ── Gestion des canaux (admin uniquement) ─────────────────────────────
@@ -2234,9 +2289,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // enfants ou non — seul le chevron, séparé, replie/déplie ses
   // sous-dossiers, sans quoi un dossier-canal deviendrait impossible à
   // consulter lui-même.
+  // Pastille d'un canal : son propre total, plus celui de ses sous-dossiers
+  // (repliés, ils ne doivent pas faire disparaître un non-lu qu'ils contiennent).
+  const unreadCanalRecursif = (channelId: string): number => {
+    const enfants = Object.values(channelsByProject).flat().filter((e) => e.parent_channel_id === channelId);
+    return (unreadByChannel[channelId] || 0) + enfants.reduce((sum, e) => sum + unreadCanalRecursif(e.id), 0);
+  };
+
   const renderCanal = (c: ChatChannel, fratrie: ChatChannel[], i: number): React.ReactNode => {
     const enfants = (channelsByProject[c.project_id] || []).filter((e) => e.parent_channel_id === c.id);
     const aDesEnfants = enfants.length > 0;
+    const canalUnread = unreadCanalRecursif(c.id);
     return (
       <div key={c.id} className="space-y-1">
         <div className="group flex items-center gap-1">
@@ -2256,7 +2319,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             }`}
           >
             {aDesEnfants ? <Folder className="w-3.5 h-3.5 shrink-0" /> : <Hash className="w-3.5 h-3.5 shrink-0" />}
-            <span className="truncate">{c.name}</span>
+            <span className="truncate flex-1">{c.name}</span>
+            {canalUnread > 0 && (
+              <span className="shrink-0 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-[#F7BC5F] text-slate-950">
+                {canalUnread > 9 ? '9+' : canalUnread}
+              </span>
+            )}
           </button>
           {isSuperAdmin && (
             <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
@@ -2306,24 +2374,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setMemberPickerQuery('');
     setMembersLoading(true);
     try {
-      const [{ data: members }, { data: profiles }] = await Promise.all([
+      // Correctif (7 septembre, « Philippe Serra ») : cette fonction avait
+      // sa propre requête profils, indépendante de ensureProfilesLoaded()
+      // — donc `agencyIdsByUid` (nécessaire à memberablePeople pour ne
+      // proposer que les membres de la bonne agence) restait vide tant que
+      // la modale "Nouvelle conversation"/"Nouveau dossier" n'avait pas été
+      // ouverte au moins une fois.
+      const [{ data: members }] = await Promise.all([
         supabase.from('chat_project_members').select('*').eq('project_id', projectId),
-        allProfiles.length > 0
-          ? Promise.resolve({ data: null })
-          : supabase.from('profiles').select('id, full_name, email'),
+        ensureProfilesLoaded(),
       ]);
 
       setProjectMembers((members as ChatProjectMember[]) || []);
-
-      if (profiles) {
-        setAllProfiles(
-          (profiles as { id: string; full_name: string | null; email: string | null }[]).map((p) => ({
-            uid: p.id,
-            displayName: p.full_name || p.email || 'Utilisateur',
-            email: p.email || '',
-          }))
-        );
-      }
     } finally {
       setMembersLoading(false);
     }
@@ -2464,9 +2526,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   const membersModalProject = projects.find((p) => p.id === membersModalProjectId) || null;
+  // Signalé (7 septembre, « Philippe Serra ») : deux comptes du même nom
+  // existent (un par agence — voir agency_members), et le sélecteur les
+  // proposait TOUS les deux, quelle que soit l'agence du dossier. Un
+  // dossier appartenant à une agence précise (agency_id non nul — le
+  // groupe partagé "3 Entités" reste, lui, ouvert à tout le monde) ne
+  // propose plus que les personnes membres de CETTE agence.
   const memberablePeople = allProfiles.filter(
     (p) =>
       !projectMembers.some((m) => m.user_id === p.uid) &&
+      (!membersModalProject?.agency_id || (agencyIdsByUid[p.uid] || []).includes(membersModalProject.agency_id)) &&
       (p.displayName.toLowerCase().includes(memberPickerQuery.toLowerCase()) ||
         p.email.toLowerCase().includes(memberPickerQuery.toLowerCase()))
   );
@@ -2623,6 +2692,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             // et le badge global du menu, pour rester cohérent partout).
             const tabUnread = t.id === 'conversations'
               ? Object.values(unreadByConversation).reduce((sum, n) => sum + n, 0)
+              : t.id === 'projets'
+              ? Object.values(unreadByChannel).reduce((sum, n) => sum + n, 0)
               : 0;
             return (
               <button
@@ -2704,8 +2775,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       )}
                       {project.name}
                     </span>
-                    <span className="text-[10px] text-slate-400 shrink-0 ml-2">
-                      {(channelsByProject[project.id] || []).length} canaux
+                    <span className="flex items-center gap-1.5 shrink-0 ml-2">
+                      {(() => {
+                        const projetUnread = (channelsByProject[project.id] || [])
+                          .filter((c) => !c.parent_channel_id)
+                          .reduce((sum, c) => sum + unreadCanalRecursif(c.id), 0);
+                        return projetUnread > 0 ? (
+                          <span className="min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-[#F7BC5F] text-slate-950">
+                            {projetUnread > 9 ? '9+' : projetUnread}
+                          </span>
+                        ) : null;
+                      })()}
+                      <span className="text-[10px] text-slate-400">
+                        {(channelsByProject[project.id] || []).length} canaux
+                      </span>
                     </span>
                   </button>
                   <button
@@ -4038,6 +4121,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1">
                 {allProfiles
                   .filter((p) => p.uid !== currentUser?.uid)
+                  // Signalé (7 septembre, « Philippe Serra ») : le dossier
+                  // n'appartient qu'à `activeAgency` (voir texte au-dessus) —
+                  // ne proposer que les comptes réellement membres de CETTE
+                  // agence, pas tous les comptes de l'app.
+                  .filter((p) => (agencyIdsByUid[p.uid] || []).includes(activeAgency.id))
                   .filter((p) =>
                     p.displayName.toLowerCase().includes(newProjectQuery.toLowerCase())
                     || (p.email || '').toLowerCase().includes(newProjectQuery.toLowerCase()))

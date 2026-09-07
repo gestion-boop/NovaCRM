@@ -140,6 +140,9 @@ export function supabaseLeadToContact(item: Record<string, unknown>): Contact {
         ? undefined
         : Number(item.com_banque_courtier),
     referrerId: (item.referrer_id as string) || undefined,
+    // Lien Vendeur ↔ Acquéreur (7 septembre, ImmoSphera Transactions V2) :
+    // `leads.linked_lead_id`, référence vers une autre fiche `leads`.
+    linkedLeadId: (item.linked_lead_id as string) || undefined,
     companyName: ((item.company as Record<string, unknown> | null)?.name as string) || undefined,
     companyAddress: ((item.company as Record<string, unknown> | null)?.address as string) || undefined,
     companySiret: ((item.company as Record<string, unknown> | null)?.siret as string) || undefined,
@@ -331,6 +334,8 @@ export const useContacts = () => {
         // Apporteur d'affaires (Conciergerie ImmoSphera, 6 septembre) :
         // référent choisi dans la liste gérée `real_estate_referrers`.
         referrer_id: newContact.referrerId || null,
+        // Lien Vendeur ↔ Acquéreur (7 septembre) : autre fiche `leads`.
+        linked_lead_id: newContact.linkedLeadId || null,
       };
 
       const { data, error: sbError } = await supabase
@@ -530,6 +535,10 @@ export const useContacts = () => {
 
       if (updates.referrerId !== undefined) {
         patch.referrer_id = updates.referrerId || null;
+      }
+
+      if (updates.linkedLeadId !== undefined) {
+        patch.linked_lead_id = updates.linkedLeadId || null;
       }
 
       patch.updated_at = new Date().toISOString();
