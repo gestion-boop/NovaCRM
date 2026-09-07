@@ -887,6 +887,18 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           pipeList = pipeList.filter((p) => !hiddenPipelineIds.has(p.id));
         }
 
+        // Demande explicite (7 septembre) : « je veux que les utilisateurs
+        // ne voient que leur pipeline dans le menu déroulant, même ceux
+        // qu'ils ont créé » — maintenant qu'ils peuvent créer leur propre
+        // pipeline (voir handleCreatePipeline), il ne doit pas polluer le
+        // menu de tout le monde. Un non-admin ne voit que les pipelines
+        // partagés (sans propriétaire — ceux créés à l'initialisation de
+        // l'agence, ex. Transactions V2) et ceux qu'il a lui-même créés ;
+        // le super admin continue de tout voir.
+        if (!canManageStructure) {
+          pipeList = pipeList.filter((p: any) => !p.owner_id || p.owner_id === currentUser.uid);
+        }
+
         const pipeIds = pipeList.map((p) => p.id);
         const { data: stagesData } = pipeIds.length
           ? await supabase
@@ -1111,7 +1123,12 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
   const handleCreatePipeline = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!canManageStructure || !newPipelineName.trim() || currentAgencyId === 'all') {
+    // Demande explicite (7 septembre) : « je veux aussi qu'ils puissent
+    // créer leur propre pipeline » — ouvert à tout utilisateur connecté,
+    // plus seulement au super admin. `owner_id` (ci-dessous) reste posé sur
+    // le créateur, ce qui le rend visible seulement à lui (et à
+    // l'administrateur) dans le menu déroulant — voir le filtre plus haut.
+    if (!currentUser || !newPipelineName.trim() || currentAgencyId === 'all') {
       return;
     }
 
@@ -1965,7 +1982,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
             </button>
           )}
 
-          {canManageStructure && (
+          {!!currentUser && (
             <button
               onClick={() => {
                 setError(null);
