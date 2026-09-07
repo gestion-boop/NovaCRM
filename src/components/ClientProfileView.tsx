@@ -171,11 +171,15 @@ export default function ClientProfileView({
   onComposeMail,
   initialTab,
   onOpenNova,
+  onSelectContact,
 }: {
   clientId: string;
   onBack: () => void;
   highlightPulse?: number;
   onComposeMail?: (email: string) => void;
+  // Lien Vendeur ↔ Acquéreur (7 septembre) : navigation en un clic vers la
+  // fiche liée, sans quitter le composant (App.tsx transmet openClientProfile).
+  onSelectContact?: (contactId: string) => void;
   // Signalé : "clic sur la notif du message du client doit envoyer sur le
   // chat Espace Client de la fiche" — auparavant la fiche s'ouvrait
   // toujours sur l'onglet RDV par défaut, quel que soit le contexte du
@@ -522,6 +526,29 @@ export default function ClientProfileView({
   // Apporteur d'affaires (agent immobilier référent, 6 septembre) :
   // uniquement chargé/affiché pour les fiches Conciergerie.
   const { apporteurs: apporteursDisponibles } = useApporteurs(IMMOSPHERA_AGENCY_ID);
+
+  // Lien Vendeur ↔ Acquéreur (7 septembre, ImmoSphera Transactions V2) :
+  // « rattacher la fiche client acquéreur à la fiche client vendeur ».
+  // Facultatif, limité aux fiches de ce pipeline précis — comme confirmé.
+  const estTransactionsV2 = matchesAgency(client?.agencyId, IMMOSPHERA_AGENCY_ID) && client?.pipeline === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID;
+  const fichesLiablesTransactionsV2 = React.useMemo(
+    () =>
+      allContacts.filter(
+        (c) =>
+          c.id !== client?.id &&
+          matchesAgency(c.agencyId, IMMOSPHERA_AGENCY_ID) &&
+          c.pipeline === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID
+      ),
+    [allContacts, client?.id]
+  );
+  const ficheLieePrincipale = client?.linkedLeadId
+    ? allContacts.find((c) => c.id === client.linkedLeadId) || null
+    : null;
+  // Recherche inverse : toute fiche qui pointe VERS celle-ci (ex. sur la
+  // fiche du Vendeur, les Acquéreurs qui l'ont choisi comme « Vendeur lié »).
+  const fichesLieesInverse = client
+    ? allContacts.filter((c) => c.linkedLeadId === client.id)
+    : [];
 
 
   // Novavisio, demandé le 2 septembre : « remettre le CA agence en TTC, et tu
@@ -2679,6 +2706,47 @@ export default function ClientProfileView({
                         </option>
                       ))}
                     </select>
+                  </div>
+                )}
+                {/* Lien Vendeur ↔ Acquéreur (7 septembre) : facultatif,
+                    limité aux fiches ImmoSphera du pipeline Transactions
+                    V2 — l'agent choisit de lier ou non. */}
+                {estTransactionsV2 && (
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Fiche liée (Vendeur/Acquéreur)</label>
+                    <select
+                      value={client.linkedLeadId || ''}
+                      onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { linkedLeadId: e.target.value || null } })}
+                      className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                    >
+                      <option value="">Aucune</option>
+                      {fichesLiablesTransactionsV2.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    {ficheLieePrincipale && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectContact?.(ficheLieePrincipale.id)}
+                        className="mt-1.5 text-[10px] text-[#F7BC5F] hover:underline flex items-center gap-1"
+                      >
+                        → Voir la fiche de {ficheLieePrincipale.name}
+                      </button>
+                    )}
+                    {fichesLieesInverse.length > 0 && (
+                      <div className="mt-1.5 space-y-1">
+                        {fichesLieesInverse.map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => onSelectContact?.(c.id)}
+                            className="block text-[10px] text-[#F7BC5F] hover:underline"
+                          >
+                            → Fiche liée : {c.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
