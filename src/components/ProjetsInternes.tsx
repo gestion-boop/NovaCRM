@@ -37,6 +37,14 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 
 interface ProjetsInternesProps {
   agencyId: string;
+  // Signalé (8 septembre) : cliquer sur la notification d'un message posté
+  // sur une carte de projet interne n'amenait qu'à la liste des projets, pas
+  // à la carte elle-même — l'utilisateur devait retrouver le bon projet puis
+  // la bonne carte à la main. Même principe que `initialHighlightMessageId`
+  // côté Chat : la notification transmet l'id de la tâche, on retrouve son
+  // projet et on l'ouvre directement dessus.
+  initialOpenTaskId?: string | null;
+  onOpenTaskConsumed?: () => void;
 }
 
 interface StoredInternalProject
@@ -84,6 +92,8 @@ export const ProjetsInternes: React.FC<
   ProjetsInternesProps
 > = ({
   agencyId,
+  initialOpenTaskId,
+  onOpenTaskConsumed,
 }) => {
   const {
     currentUser,
@@ -166,6 +176,31 @@ export const ProjetsInternes: React.FC<
   // Projets internes (phase 1) : tableau kanban des tâches d'un projet
   // ouvert — la liste des projets elle-même (ci-dessus) reste inchangée.
   const [openBoard, setOpenBoard] = useState<StoredInternalProject | null>(null);
+  // Tâche à ouvrir directement une fois son projet trouvé (voir
+  // `initialOpenTaskId` ci-dessus) — transmise à InternalProjectBoard qui
+  // se charge d'ouvrir sa fiche détail dès que ses tâches sont chargées.
+  const [taskToOpen, setTaskToOpen] = useState<string | null>(null);
+  useEffect(() => {
+    if (!initialOpenTaskId || projects.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('internal_project_tasks')
+        .select('board_id')
+        .eq('id', initialOpenTaskId)
+        .maybeSingle();
+      if (cancelled) return;
+      const boardId = (data as { board_id?: string } | null)?.board_id;
+      const projet = boardId ? projects.find((p) => p.id === boardId) : undefined;
+      if (projet) {
+        setOpenBoard(projet);
+        setTaskToOpen(initialOpenTaskId);
+        setPageTab('projet');
+      }
+      onOpenTaskConsumed?.();
+    })();
+    return () => { cancelled = true; };
+  }, [initialOpenTaskId, projects]);
 
   // Demande explicite : le statut À faire/En cours/À vérifier/Terminé
   // existe déjà au niveau de chaque CARTE de projet (via son tableau
@@ -813,6 +848,8 @@ export const ProjetsInternes: React.FC<
           boardTitle={openBoard.title}
           agencyId={openBoard.agencyId}
           users={users}
+          initialOpenTaskId={taskToOpen}
+          onOpenTaskConsumed={() => setTaskToOpen(null)}
           onBack={() => setOpenBoard(null)}
           onRenamed={(title) => {
             // Le titre renommé depuis l'intérieur du projet doit se refléter
