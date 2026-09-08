@@ -795,6 +795,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
                         }
                         title={ev.busy === false ? 'Disponible' : 'Occupé'}
                       >
+                        {ev.isCameraReservation && <Camera className="w-2.5 h-2.5 inline-block mr-0.5 -mt-px" />}
                         {ev.time} {ev.title}
                       </div>
                     ))}
@@ -912,7 +913,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
                       className={`absolute left-1 right-1 rounded p-1.5 overflow-hidden shadow-md cursor-pointer z-10 border ${ev.busy === false ? 'opacity-60 border-dashed' : ''}`}
                       title={ev.busy === false ? 'Disponible' : 'Occupé'}
                     >
-                      <div className="text-[10px] font-bold leading-tight line-clamp-1">{ev.title}</div>
+                      <div className="text-[10px] font-bold leading-tight line-clamp-1 flex items-center gap-1">
+                        {ev.isCameraReservation && <Camera className="w-2.5 h-2.5 shrink-0" />}
+                        {ev.title}
+                      </div>
                       <div className="text-[9px] opacity-80 mt-0.5">{ev.allDay ? 'Toute la journée' : `${ev.time}${ev.endTime ? ` - ${ev.endTime}` : ''}`}</div>
                     </div>
                   );
@@ -1070,7 +1074,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
                       style={{ backgroundColor: ev.isCameraReservation ? '#9333ea' : 'rgb(var(--calendar-accent-color-rgb))' }}
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="text-[15px] font-semibold text-white truncate">{ev.title}</div>
+                      <div className="text-[15px] font-semibold text-white truncate flex items-center gap-1.5">
+                        {ev.isCameraReservation && <Camera className="w-3.5 h-3.5 text-[#9333ea] shrink-0" />}
+                        {ev.title}
+                      </div>
                       {ev.location && (
                         <div className="flex items-center gap-1 text-xs text-gray-400 truncate">
                           <MapPin className="w-3 h-3 shrink-0" />
