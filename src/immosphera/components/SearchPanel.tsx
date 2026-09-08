@@ -8,11 +8,9 @@ import {
   Tag,
   Key as KeyIcon,
   Sparkles,
-  Heart,
   Map as MapIcon,
   ArrowLeft,
   Plus,
-  FileText,
   Users,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
@@ -22,12 +20,15 @@ import { createLocationIndex } from "@/immosphera/lib/locationNormalization";
 
 const RENT_RANGES = ["< 500 €", "500-800 €", "800-1200 €", "1200-1800 €", "> 1800 €"];
 
+// Onglet "Propal clients" (Ma sélection) retiré (8 septembre, demande
+// explicite) — la sélection elle-même (bouton cœur sur une fiche bien,
+// barre flottante "Générer le lien") reste disponible, seul cet onglet de
+// filtre disparaît.
 const PANEL_CHIPS = [
   { chip: "", label: "Tous", icon: LayoutGrid },
   { chip: "Ventes", label: "Ventes", icon: Tag },
   { chip: "Locations", label: "Locations", icon: KeyIcon },
   { chip: "Nouveautés 15J", label: "Nouveautés", icon: Sparkles },
-  { chip: "Propal clients", label: "Ma sélection", icon: Heart },
 ] as const;
 
 const PILL_BASE =
@@ -275,10 +276,6 @@ export function SearchPanel({
         )}
 
         <span className="mx-1 h-7 w-px shrink-0 bg-border" aria-hidden="true" />
-        <button type="button" onClick={() => navigate("/immosphera/propals")} className={`${PILL_BASE} ${PILL_IDLE}`}>
-          <FileText className="h-3.5 w-3.5" />
-          Propals
-        </button>
         <button
           type="button"
           onClick={() => navigate("/immosphera/partenaires")}
