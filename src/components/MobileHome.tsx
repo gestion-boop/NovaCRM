@@ -77,6 +77,10 @@ interface SpaceDef {
   // Tuile pointant vers un lien externe (site, extranet...) plutôt qu'un
   // écran de l'appli — même champ que TileItemNode.externalUrl côté desktop.
   externalUrl?: string;
+  // Dossier verrouillé (façon dossier iPhone) : s'ouvre en plein écran sur
+  // ses cartes au lieu de naviguer directement — voir lockedMobileSpaces.
+  isFolder?: boolean;
+  children?: SpaceDef[];
 }
 
 // Forme minimale d'un verrou tel qu'enregistré par AccueilGrid.tsx (type
@@ -261,44 +265,63 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     return () => { active = false; void supabase.removeChannel(channel); };
   }, [activeAgency?.id]);
 
-  // Aplatit les verrous en raccourcis mobiles : le mobile n'a pas de notion
-  // de dossier, donc un dossier verrouillé devient autant de raccourcis
-  // individuels que d'éléments qu'il impose ; une tuile verrouillée seule
-  // devient un raccourci unique. Résout l'icône via LOCKED_ICON_MAP (même
-  // logique que ICON_MAP côté desktop), repli sur Folder si inconnue.
+  // Convertit les verrous du super admin en raccourcis mobiles — VRAIS
+  // dossiers (façon dossier iPhone), pas des tuiles éclatées à plat : « je
+  // veux que ça soit la même chose comme les produits iPhone ». Un dossier
+  // verrouillé devient UNE tuile-dossier sur la grille ; il s'ouvre en
+  // plein écran sur ses cartes au toucher, exactement comme sur l'accueil
+  // desktop. Résout l'icône via LOCKED_ICON_MAP (même logique que ICON_MAP
+  // côté desktop), repli sur Folder si inconnue.
+  const toSpaceDef = (v: VerrouMobile, fallbackId: string): SpaceDef | null => {
+    const id = v.id || fallbackId;
+    // Une tuile verrouillée pointe soit vers un écran de l'appli
+    // (navTarget), soit vers un lien externe (externalUrl, ex. Giraffe360,
+    // Netty...) — les deux comptent comme un raccourci exploitable côté
+    // mobile ; seule une entrée totalement vide (ni l'un ni l'autre) est
+    // ignorée.
+    if (!id || (!v.navTarget && !v.externalUrl)) return null;
+    return {
+      id,
+      label: v.title || id,
+      icon: (v.iconName && LOCKED_ICON_MAP[v.iconName]) || Folder,
+      nav: v.navTarget || '',
+      externalUrl: v.externalUrl || undefined,
+      gradient: v.gradient || 'from-[#334155] to-[#1e293b]',
+      locked: true,
+    };
+  };
   const lockedMobileSpaces: SpaceDef[] = useMemo(() => {
     const out: SpaceDef[] = [];
-    const pushOne = (v: VerrouMobile, fallbackId: string) => {
-      const id = v.id || fallbackId;
-      // Une tuile verrouillée pointe soit vers un écran de l'appli
-      // (navTarget), soit vers un lien externe (externalUrl, ex. Giraffe360,
-      // Netty...) — les deux comptent comme un raccourci exploitable côté
-      // mobile ; seule une entrée totalement vide (ni l'un ni l'autre) est
-      // ignorée.
-      if (!id || (!v.navTarget && !v.externalUrl)) return;
-      out.push({
-        id,
-        label: v.title || id,
-        icon: (v.iconName && LOCKED_ICON_MAP[v.iconName]) || Folder,
-        nav: v.navTarget || '',
-        externalUrl: v.externalUrl || undefined,
-        gradient: v.gradient || 'from-[#334155] to-[#1e293b]',
-        locked: true,
-      });
-    };
     Object.entries(lockedTiles).forEach(([lockId, lock]) => {
       // `isFolder` n'est en pratique jamais renseigné par AccueilGrid sur un
       // verrou (vérifié en base) : on détecte un dossier verrouillé à la
       // seule présence de `children`, pas à ce champ.
       if (Array.isArray(lock.children) && lock.children.length) {
-        lock.children.forEach((child, i) => pushOne(child, `${lockId}-${i}`));
+        const children = lock.children
+          .map((child, i) => toSpaceDef(child, `${lockId}-${i}`))
+          .filter((s): s is SpaceDef => !!s);
+        if (children.length === 0) return;
+        out.push({
+          id: lock.id || lockId,
+          label: lock.title || lockId,
+          icon: (lock.iconName && LOCKED_ICON_MAP[lock.iconName]) || Folder,
+          nav: '',
+          gradient: lock.gradient || 'from-[#334155] to-[#1e293b]',
+          locked: true,
+          isFolder: true,
+          children,
+        });
       } else {
-        pushOne(lock, lockId);
+        const space = toSpaceDef(lock, lockId);
+        if (space) out.push(space);
       }
     });
     return out;
   }, [lockedTiles]);
   const lockedSpaceIds = useMemo(() => new Set(lockedMobileSpaces.map((s) => s.id)), [lockedMobileSpaces]);
+  // Dossier verrouillé actuellement ouvert en plein écran (façon dossier
+  // iPhone) — null quand aucun n'est ouvert.
+  const [openLockedFolder, setOpenLockedFolder] = useState<SpaceDef | null>(null);
 
   // ── Mes espaces : catalogue complet + config visible/ordre persistée ──
   const ALL_SPACES: SpaceDef[] = useMemo(() => [
@@ -699,6 +722,12 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                           editMode={editMode}
                           onActivate={() => {
                             if (editMode) return;
+                            // Dossier verrouillé (façon dossier iPhone) : s'ouvre
+                            // en plein écran sur ses cartes, ne navigue pas.
+                            if (space.isFolder) {
+                              setOpenLockedFolder(space);
+                              return;
+                            }
                             // Raccourci verrouillé pointant vers un lien externe
                             // (ex. Giraffe360, Netty...) plutôt qu'un écran de
                             // l'appli — même distinction que sur AccueilGrid.
@@ -853,6 +882,55 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </div>
         </div>
       )}
+
+      {/* Dossier verrouillé ouvert (façon dossier iPhone) : ses cartes sont
+          affichées en plein écran, chacune tapable directement — imposées
+          par le super admin, elles ne sont ni déplaçables ni supprimables
+          d'ici (pas de mode édition dans cette vue). */}
+      {openLockedFolder && (
+        <div
+          className="fixed inset-0 z-[75] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 safe-area-top safe-area-bottom"
+          onClick={() => setOpenLockedFolder(null)}
+        >
+          <div
+            className="w-full max-w-md bg-[#0a1e20] border border-[#144447]/60 rounded-3xl p-6 max-h-[75vh] flex flex-col animate-drawer-up-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4 shrink-0">
+              <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                <Lock className="w-4 h-4 text-slate-400" />
+                {openLockedFolder.label}
+              </h3>
+              <button onClick={() => setOpenLockedFolder(null)} className="p-2 rounded-xl bg-white/5 text-slate-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto -mx-1 px-1">
+              <div className="grid grid-cols-3 gap-3 pb-1">
+                {(openLockedFolder.children || []).map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setOpenLockedFolder(null);
+                      if (c.externalUrl) {
+                        window.open(c.externalUrl, '_blank', 'noopener,noreferrer');
+                      } else {
+                        onNavigate(c.nav);
+                      }
+                    }}
+                    className="flex flex-col items-center gap-2 py-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
+                  >
+                    <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${c.gradient} flex items-center justify-center`}>
+                      <c.icon className="w-5 h-5 text-white" />
+                    </div>
+                    <span className="text-[11px] font-semibold text-slate-200 text-center">{c.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -934,7 +1012,18 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
         )
       )}
       <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${space.gradient} flex items-center justify-center relative shadow-md`}>
-        <Icon className="w-7 h-7 text-white" />
+        {space.isFolder && space.children?.length ? (
+          // Aperçu façon dossier iPhone : mini-grille des 4 premières icônes
+          // du dossier plutôt qu'une seule icône générique de dossier.
+          <div className="grid grid-cols-2 gap-1 p-2">
+            {space.children.slice(0, 4).map((c, ci) => {
+              const ChildIcon = c.icon;
+              return <ChildIcon key={ci} className="w-3 h-3 text-white/90" />;
+            })}
+          </div>
+        ) : (
+          <Icon className="w-7 h-7 text-white" />
+        )}
         {!!space.badge && space.badge > 0 && (
           <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-black min-w-5 h-5 px-1 rounded-full flex items-center justify-center ring-2 ring-[#0b1c1e]">
             {space.badge > 9 ? '9+' : space.badge}
