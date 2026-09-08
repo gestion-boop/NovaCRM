@@ -267,6 +267,13 @@ const NOVA_WALLPAPERS = Array.from({ length: 13 }, (_, i) => {
   };
 });
 
+// Demande explicite (8 septembre) : « désactive le système vocal de Nova
+// pour l'instant, on garde que le système bureau » — coupe les 3 points
+// d'entrée (dictée micro, mode vocal en direct "nébuleuse", lecture à voix
+// haute des réponses) sans retirer le code, pour pouvoir le réactiver
+// d'un coup en repassant ce drapeau à true.
+const VOICE_FEATURES_ENABLED = false;
+
 const NOVA_WALLPAPER_STORAGE_KEY = 'novasphere:novaai-wallpaper';
 const NOVA_WALLPAPER_OPACITY_STORAGE_KEY = 'novasphere:novaai-wallpaper-opacity';
 
@@ -2837,6 +2844,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                         .map((a) => a.details)
                         .join('\n\n');
                       const speakableText = [m.text, summaryDetails].filter((t) => t?.trim()).join('\n\n');
+                      if (!VOICE_FEATURES_ENABLED) return null;
                       return (
                       <button
                         type="button"
@@ -3384,28 +3392,32 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           rows={1}
           className="flex-1 bg-transparent outline-none text-sm text-[#1a1230] placeholder-[#1a1230]/50 resize-none py-1.5 max-h-[45vh] custom-scrollbar"
         />
-        <button
-          type="button"
-          onClick={toggleHeroVoiceInput}
-          title={heroListening ? 'Arrêter la dictée' : 'Dictée vocale'}
-          className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-colors mb-0.5 ${
-            heroListening ? 'bg-rose-500/20 text-rose-600 animate-pulse' : 'bg-black/5 hover:bg-black/10 text-[#1a1230]'
-          }`}
-        >
-          {heroListening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-4 h-4" />}
-        </button>
+        {VOICE_FEATURES_ENABLED && (
+          <button
+            type="button"
+            onClick={toggleHeroVoiceInput}
+            title={heroListening ? 'Arrêter la dictée' : 'Dictée vocale'}
+            className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-colors mb-0.5 ${
+              heroListening ? 'bg-rose-500/20 text-rose-600 animate-pulse' : 'bg-black/5 hover:bg-black/10 text-[#1a1230]'
+            }`}
+          >
+            {heroListening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-4 h-4" />}
+          </button>
+        )}
         {/* Demande explicite : "le logo en bas, entre le micro et le bouton
             Envoyer" — même raccourci vers le mode vocal (nébuleuse) que
             l'icône du bandeau du haut, mais directement à portée de main
             pendant la saisie. */}
-        <button
-          type="button"
-          onClick={enterVoiceMode}
-          title="Mode vocal — parler avec Nova en direct"
-          className="w-9 h-9 shrink-0 rounded-full overflow-hidden bg-gradient-to-br from-[#F7BC5F] to-[#B8863F] hover:brightness-110 shadow-md transition-all mb-0.5"
-        >
-          <img src="/nova-mascotte.png" alt="Nova" className="w-full h-full object-cover scale-110" />
-        </button>
+        {VOICE_FEATURES_ENABLED && (
+          <button
+            type="button"
+            onClick={enterVoiceMode}
+            title="Mode vocal — parler avec Nova en direct"
+            className="w-9 h-9 shrink-0 rounded-full overflow-hidden bg-gradient-to-br from-[#F7BC5F] to-[#B8863F] hover:brightness-110 shadow-md transition-all mb-0.5"
+          >
+            <img src="/nova-mascotte.png" alt="Nova" className="w-full h-full object-cover scale-110" />
+          </button>
+        )}
         <button
           type="submit"
           title="Envoyer"
@@ -3419,14 +3431,16 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       {/* Demande explicite : "mode Commercial/Bureau" — depuis le chat
           texte (mode Bureau), lien pour repasser en mode Commercial vocal
           et en faire le mode par défaut à la prochaine ouverture sur
-          mobile. */}
-      <button
-        type="button"
-        onClick={switchToCommercialMode}
-        className="md:hidden z-10 mt-2 text-xs text-[#1a1230]/60 hover:text-[#1a1230] underline underline-offset-2"
-      >
-        Passer en mode Commercial (vocal)
-      </button>
+          mobile. Masqué tant que le vocal est désactivé. */}
+      {VOICE_FEATURES_ENABLED && (
+        <button
+          type="button"
+          onClick={switchToCommercialMode}
+          className="md:hidden z-10 mt-2 text-xs text-[#1a1230]/60 hover:text-[#1a1230] underline underline-offset-2"
+        >
+          Passer en mode Commercial (vocal)
+        </button>
+      )}
 
       {wallpaperDrawer}
 

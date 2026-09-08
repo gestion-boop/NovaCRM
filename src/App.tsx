@@ -219,9 +219,13 @@ function App() {
   const [novaAutoVoice, setNovaAutoVoice] = useState(false);
   const openNovaMobile = () => {
     setNovaExpandedFromPopup(false);
-    let mode = 'commercial';
-    try { mode = localStorage.getItem('novasphere:nova-mobile-mode') || 'commercial'; } catch { /* ignore */ }
-    setNovaAutoVoice(mode === 'commercial');
+    // Demande explicite (8 septembre) : « désactive le système vocal de
+    // Nova pour l'instant, on garde que le système bureau » — ce mode
+    // (mémorisé par appareil, "Commercial" = vocal par défaut la toute
+    // première fois) ouvrait directement en mode vocal. Forcé sur Bureau
+    // tant que le vocal est désactivé (voir VOICE_FEATURES_ENABLED dans
+    // AssistantIAView.tsx), quelle que soit la préférence déjà enregistrée.
+    setNovaAutoVoice(false);
     setNovaOpen(true);
   };
   const openNovaForDeal = (dealTitle: string) => {
