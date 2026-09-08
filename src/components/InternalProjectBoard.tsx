@@ -314,9 +314,14 @@ interface InternalProjectBoardProps {
   // stagiaire (RLS l'interdit déjà, mais on évite aussi de montrer un
   // bouton qui échouerait systématiquement).
   canCreateTasks?: boolean;
+  // Ouvre directement la fiche détail de cette tâche dès qu'elle est
+  // chargée — voir ProjetsInternes.tsx, `initialOpenTaskId` (clic sur une
+  // notification de message posté sur une carte).
+  initialOpenTaskId?: string | null;
+  onOpenTaskConsumed?: () => void;
 }
 
-export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scope, boardTitle, agencyId, users, onBack, onRenamed, canCreateTasks = true }) => {
+export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scope, boardTitle, agencyId, users, onBack, onRenamed, canCreateTasks = true, initialOpenTaskId, onOpenTaskConsumed }) => {
   const [title, setTitle] = useState(boardTitle);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(boardTitle);
@@ -381,6 +386,12 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
   const [activeDragTask, setActiveDragTask] = useState<InternalTask | null>(null);
   const [showAddFor, setShowAddFor] = useState<InternalTaskStatus | null>(null);
   const [openTask, setOpenTask] = useState<InternalTask | null>(null);
+  useEffect(() => {
+    if (!initialOpenTaskId || isLoading) return;
+    const tache = tasks.find((t) => t.id === initialOpenTaskId);
+    if (tache) setOpenTask(tache);
+    onOpenTaskConsumed?.();
+  }, [initialOpenTaskId, isLoading, tasks]);
 
   // Demande explicite : "pouvoir assigner un utilisateur... plutôt que de
   // les faire un par un [si] plusieurs projets [tâches]" — mode sélection

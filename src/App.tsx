@@ -164,6 +164,10 @@ function App() {
     } catch { /* noop */ }
   }, [currentNav]);
   const [highlightMessageId, setHighlightMessageId] = useState<string | null>(initialHighlightMessageId);
+  // Même principe qu'au-dessus, côté projets internes (voir
+  // NotificationsView.tsx, onOpenInternalTask) : ouvre directement le
+  // projet + la carte visée au lieu de la liste générique.
+  const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
   const [novaAIPrompt, setNovaAIPrompt] = useState<string | null>(null);
   // Nova IA s'affiche désormais en superposition de l'interface principale
   // (quelle qu'elle soit, généralement l'accueil) au lieu de la remplacer
@@ -1069,7 +1073,11 @@ function App() {
           )}
 
           {currentNav === 'projets-internes' && (
-            <ProjetsInternes agencyId={activeAgency.id} />
+            <ProjetsInternes
+              agencyId={activeAgency.id}
+              initialOpenTaskId={highlightTaskId}
+              onOpenTaskConsumed={() => setHighlightTaskId(null)}
+            />
           )}
 
           {currentNav === 'agenda' && <AgendaView createSignal={agendaCreateSignal} />}
@@ -1517,6 +1525,12 @@ function App() {
                   openClientProfile(null);
                   setHighlightMessageId(messageId);
                   setCurrentNav('chat');
+                }}
+                onOpenInternalTask={(taskId) => {
+                  setNotificationsPanelOpen(false);
+                  openClientProfile(null);
+                  setHighlightTaskId(taskId);
+                  setCurrentNav('projets-internes');
                 }}
               />
             </div>
