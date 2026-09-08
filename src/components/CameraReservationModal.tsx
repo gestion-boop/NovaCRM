@@ -602,11 +602,19 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                 <div>
                   <label className="block text-xs font-bold text-white mb-1.5 flex items-center gap-1.5">
                     <Hash className="w-3.5 h-3.5 text-purple-400" />
-                    <span>N° mandat *</span>
+                    <span>N° mandat (optionnel)</span>
                   </label>
+                  {/* Signalé (8 septembre, Mélanie, ImmoSphera/NovaVisio) :
+                      « la réservation ne fonctionne pas » — en réalité, ce
+                      champ obligatoire bloquait silencieusement l'envoi du
+                      formulaire (validation HTML native, sans message
+                      clair) dès qu'une réservation n'était pas rattachée à
+                      un mandat précis (tournage interne, contenu NovaVisio,
+                      etc.). Toutes les autres infos restent facultatives
+                      sauf le matériel et les horaires — pas de raison
+                      d'exiger un mandat pour réserver la caméra. */}
                   <input
                     type="text"
-                    required
                     placeholder="Ex : 2024-001"
                     value={mandateNumber}
                     onChange={(e) => setMandateNumber(e.target.value)}
