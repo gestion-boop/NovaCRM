@@ -11,7 +11,6 @@ import {
   MapPin,
   Maximize,
   BedDouble,
-  Share2,
   Plus,
   ExternalLink,
   Edit,
@@ -29,7 +28,6 @@ import {
 } from "lucide-react";
 import { VirtualTourIcon, Giraffe360Icon, WebsiteIcon } from "@/immosphera/components/PropertyIcons";
 import React, { useState, useEffect, useRef } from "react";
-import { ShareModal } from "@/immosphera/components/ShareModal";
 import { TourShareModal } from "@/immosphera/components/TourShareModal";
 import { PropertyFormModal } from "@/immosphera/components/PropertyFormModal";
 import { AdvisorModal } from "@/immosphera/components/AdvisorModal";
@@ -295,7 +293,6 @@ export default function PropertyDetail() {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [shareOpen, setShareOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [advisorOpen, setAdvisorOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -836,9 +833,6 @@ export default function PropertyDetail() {
           <Button className="w-full primary-gold" onClick={handleAddToPropal}>
             <Plus className="mr-2 h-4 w-4" /> Ajouter à une proposition
           </Button>
-          <Button variant="outline" className="w-full" onClick={() => setShareOpen(true)}>
-            <Share2 className="mr-2 h-4 w-4" /> Partager
-          </Button>
           {property.giraffe_url && (
             <a href={property.giraffe_url} target="_blank" rel="noreferrer">
               <Button variant="outline" className="w-full justify-start">
@@ -878,7 +872,6 @@ export default function PropertyDetail() {
         </div>
       )}
 
-      <ShareModal open={shareOpen} onOpenChange={setShareOpen} propertyId={property.id} />
       <PropertyFormModal open={editOpen} onOpenChange={setEditOpen} editingProperty={property} />
       <AdvisorModal advisor={selectedAdvisor} open={advisorOpen} onOpenChange={setAdvisorOpen} />
       <ConfirmDeleteModal property={property} open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} />

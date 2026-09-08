@@ -1,0 +1,257 @@
+import { useCallback, useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
+import { TEAM_MEMBERS } from '@/data/teamMembers';
+import { CameraReservation } from '@/types';
+
+// Signalé (7 septembre) : « on ne voit pas trop bien la date qui est
+// demandée, et il faudrait un bouton valider/refuser ». En creusant :
+// ReserverCameraView.tsx (l'écran ouvert par la notification « demande de
+// réservation ») ne lisait QUE le localStorage de l'appareil — une liste
+// factice, par device, jamais synchronisée avec la vraie table Supabase
+// `camera_reservations` que CameraReservationModal.tsx utilise réellement.
+// Un admin cliquant sur la notification de Christophe n'avait donc AUCUNE
+// chance de voir sa demande ni de la valider depuis cet écran. Toute la
+// logique de lecture/validation est centralisée ici, partagée par les deux
+// écrans, pour ne plus jamais diverger.
+
+// Seuls Sylvain Grazia et Mélanie Grazia reçoivent la demande et peuvent
+// l'approuver / la refuser.
+export const CAMERA_ADMIN_UIDS = [
+  '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29', // Sylvain Grazia
+  '15bcec53-de3e-40b8-8b7e-bb6874836f29', // Mélanie Grazia
+];
+
+export const EQUIPMENT_KEY_TO_LABEL: Record<string, string> = {
+  giraffe: 'Caméra Giraffe',
+  dji: 'Caméra DJI',
+  x4: 'Caméra X4',
+  cm: 'Community Manager',
+};
+export const EQUIPMENT_LABEL_TO_KEY: Record<string, string> = {
+  'Caméra Giraffe': 'giraffe',
+  'Caméra DJI': 'dji',
+  'Caméra X4': 'x4',
+  'Community Manager': 'cm',
+};
+
+interface CameraReservationSupaRow {
+  id: string;
+  agency_id: string | null;
+  user_id: string;
+  title: string | null;
+  description: string | null;
+  start_at: string;
+  end_at: string;
+  status: 'pending' | 'accepted' | 'refused';
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  refusal_reason: string | null;
+  created_at: string;
+}
+
+const STATUS_LABEL: Record<string, StoredCameraReservation['status']> = {
+  pending: 'En attente',
+  accepted: 'Confirmée',
+  refused: 'Refusée',
+};
+
+function parseDescription(raw: string | null): { equipment?: Record<string, boolean>; lieu?: string; mandat?: string; projet?: string; note?: string } {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function fmtLocalDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function fmtLocalTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// Date lisible pour un humain, ex. « lundi 8 septembre, 09:00 – 10:00 » —
+// demandé explicitement : « on ne voit pas trop bien la date demandée ».
+export function formatReservationDateFr(res: Pick<StoredCameraReservation, 'startDate' | 'startTime' | 'endTime' | 'endDate'>): string {
+  const startIso = res.startDate.replace(' ', 'T');
+  const start = new Date(startIso);
+  if (Number.isNaN(start.getTime())) return res.startDate;
+  const dateLabel = start.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' });
+  const sameDay = res.endDate ? res.endDate.slice(0, 10) === res.startDate.slice(0, 10) : true;
+  const range = `${res.startTime || res.startDate.slice(-5)} – ${res.endTime || res.endDate.slice(-5)}`;
+  return sameDay ? `${dateLabel}, ${range}` : `${dateLabel} ${res.startTime} → ${res.endDate.slice(0, 10)} ${res.endTime}`;
+}
+
+export interface StoredCameraReservation extends CameraReservation {
+  agencyId: string;
+  createdByUserId: string;
+  createdByEmail: string;
+  createdAt: string;
+  refusalReason?: string;
+}
+
+function rowToStored(row: CameraReservationSupaRow): StoredCameraReservation {
+  const desc = parseDescription(row.description);
+  const equipmentList = Object.entries(desc.equipment || {})
+    .filter(([, v]) => !!v)
+    .map(([k]) => EQUIPMENT_KEY_TO_LABEL[k] || k);
+  const member = TEAM_MEMBERS.find((m) => m.id === row.user_id);
+  const date = fmtLocalDate(row.start_at);
+
+  return {
+    id: row.id,
+    equipmentName: equipmentList.join(', ') || 'Matériel',
+    agentName: member?.name || 'Utilisateur',
+    propertyAddress: desc.lieu || '',
+    startDate: `${date} ${fmtLocalTime(row.start_at)}`,
+    endDate: `${fmtLocalDate(row.end_at)} ${fmtLocalTime(row.end_at)}`,
+    status: STATUS_LABEL[row.status] || 'En attente',
+    mandateNumber: desc.mandat || '',
+    projectName: desc.projet || '',
+    note: desc.note || '',
+    equipmentList,
+    startTime: fmtLocalTime(row.start_at),
+    endTime: fmtLocalTime(row.end_at),
+    location: desc.lieu || '',
+    agencyId: row.agency_id || '',
+    createdByUserId: row.user_id,
+    createdByEmail: '',
+    createdAt: row.created_at,
+    refusalReason: row.refusal_reason || undefined,
+  };
+}
+
+export function useCameraReservations() {
+  const { currentUser } = useAuth();
+  const [reservations, setReservations] = useState<StoredCameraReservation[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+
+  const isCameraAdmin = !!currentUser && CAMERA_ADMIN_UIDS.includes(currentUser.uid);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: sbError } = await supabase
+        .from('camera_reservations' as any)
+        .select('*')
+        .order('start_at', { ascending: true });
+      if (sbError) throw sbError;
+      setReservations(((data ?? []) as any[]).map((r) => rowToStored(r as CameraReservationSupaRow)));
+    } catch (e) {
+      console.error('Erreur chargement réservations caméra :', e);
+      setError('Impossible de charger le planning du matériel.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    void load();
+    const channel = supabase
+      .channel('camera_reservations_shared')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'camera_reservations' }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUser?.uid, load]);
+
+  const notifyRequester = async (res: StoredCameraReservation, approved: boolean, message?: string) => {
+    if (!res.createdByUserId) return;
+    try {
+      await supabase.rpc('create_notification', {
+        _user_id: res.createdByUserId,
+        _type: approved ? 'camera_reservation_approved' : 'camera_reservation_rejected',
+        _title: approved ? '✅ Réservation confirmée' : '❌ Réservation refusée',
+        _message:
+          message ||
+          (approved
+            ? `Votre réservation "${res.equipmentName}" du ${res.startDate.slice(0, 10)} a été validée.`
+            : `Votre réservation "${res.equipmentName}" du ${res.startDate.slice(0, 10)} a été refusée.`),
+        _entity_type: 'camera_reservation',
+        _entity_id: null,
+        _agency_id: res.agencyId || null,
+        _metadata: { url: '/reserver-camera' },
+      } as any);
+    } catch (e) {
+      console.warn('Notification demandeur caméra impossible :', e);
+    }
+  };
+
+  // `alternativeSlots` : jusqu'à 3 propositions de rechange en cas de refus
+  // (demande explicite : « qu'on ait trois propositions au cas où, pour
+  // pallier aux besoins ») — simple texte libre par créneau (ex.
+  // « Mardi 9 sept. 14h-15h »), stocké dans refusal_reason et repris tel
+  // quel dans la notification envoyée au demandeur.
+  const reviewReservation = async (
+    res: StoredCameraReservation,
+    approve: boolean,
+    options?: { reason?: string; alternativeSlots?: string[] },
+  ) => {
+    if (!currentUser) return;
+    setReviewingId(res.id);
+    try {
+      const alternatives = (options?.alternativeSlots || []).filter((s) => s.trim());
+      const refusalReason = approve
+        ? null
+        : [options?.reason?.trim(), alternatives.length ? `Autres créneaux proposés : ${alternatives.join(' • ')}` : null]
+            .filter(Boolean)
+            .join(' — ') || null;
+
+      const { error: sbError } = await supabase
+        .from('camera_reservations' as any)
+        .update({
+          status: approve ? 'accepted' : 'refused',
+          reviewed_by: currentUser.uid,
+          reviewed_at: new Date().toISOString(),
+          refusal_reason: refusalReason,
+        } as any)
+        .eq('id', res.id);
+      if (sbError) throw sbError;
+
+      setReservations((current) =>
+        current.map((r) => (r.id === res.id ? { ...r, status: approve ? 'Confirmée' : 'Refusée', refusalReason: refusalReason || undefined } : r))
+      );
+
+      const message = approve
+        ? undefined
+        : `Votre réservation "${res.equipmentName}" du ${res.startDate.slice(0, 10)} a été refusée.${
+            refusalReason ? ` ${refusalReason}` : ''
+          }`;
+      await notifyRequester(res, approve, message);
+    } catch (e) {
+      console.error('Erreur validation réservation caméra :', e);
+      setError("Impossible de mettre à jour cette réservation.");
+    } finally {
+      setReviewingId(null);
+    }
+  };
+
+  // Signalé (7 septembre) : la notification des admins à la création d'une
+  // demande était auparavant envoyée ICI, en plus de DEUX déclencheurs base
+  // identiques — jusqu'à 3 notifications par demande. Les doublons base ont
+  // été supprimés et le déclencheur restant corrigé (lien `/reserver-camera`
+  // au lieu d'un `/agenda?...` jamais résolu) ; il couvre déjà fiablement
+  // tous les super admins + Mélanie (voir camera_reservation_approvers()
+  // côté SQL), donc plus besoin de dupliquer l'envoi ici.
+
+  const pendingReservations = reservations.filter((r) => r.status === 'En attente');
+
+  return {
+    reservations,
+    pendingReservations,
+    loading,
+    error,
+    setError,
+    isCameraAdmin,
+    reviewingId,
+    reviewReservation,
+    reload: load,
+  };
+}
