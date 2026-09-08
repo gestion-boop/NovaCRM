@@ -1257,6 +1257,24 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // dans les dossiers, et déduplique par sécurité (garde la 1ère occurrence).
   const existsRecursive = (items: TileItemNode[], id: string): boolean =>
     items.some((t) => t.id === id || (t.children ? existsRecursive(t.children, id) : false));
+  // Signalé (8 septembre) : « la tuile Communication qui revient, et la
+  // tuile Carte (Novavisio) qui se retrouve tout en bas » — même famille de
+  // bug que "plusieurs fois le dossier Amanda" ci-dessus, mais pour les
+  // tuiles VERROUILLÉES : le contenu imposé par un verrou (agency_ui_settings
+  // .home_layout.lockedTiles) n'est injecté qu'à l'AFFICHAGE (voir applyLocks
+  // plus bas), jamais stocké dans la grille brute de l'utilisateur — la
+  // réconciliation la croyait donc "manquante" à CHAQUE chargement et en
+  // reposait une copie à la racine, tout en bas. `lockedTilesRef` (alimentée
+  // dès que lockedTiles charge, voir plus bas) laisse reconcilierGrille
+  // reconnaître ces id comme déjà couverts, sans jamais les dupliquer.
+  const lockedTilesRef = useRef<Record<string, Verrou>>({});
+  const idsCouvertsParVerrou = (id: string): boolean => {
+    for (const [lockId, lock] of Object.entries(lockedTilesRef.current)) {
+      if (lockId === id) return true;
+      if ((lock.children || []).some((c) => c.id === id)) return true;
+    }
+    return false;
+  };
   const dedupeRecursive = (items: TileItemNode[], seen = new Set<string>()): TileItemNode[] =>
     items
       .filter((t) => {
@@ -1294,11 +1312,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // dernière sauvegarde n'y apparaissait donc jamais.
   const reconcilierGrille = (grille: TileItemNode[]): TileItemNode[] => {
     let base = grille;
+    // "Manquant" = absent de la grille brute ET pas déjà couvert par un
+    // verrou (auquel cas applyLocks l'injectera tout seul, à sa vraie place,
+    // sans jamais passer par ici — voir idsCouvertsParVerrou plus haut).
+    const estAbsent = (id: string) => !existsRecursive(base, id) && !idsCouvertsParVerrou(id);
     // Nouvelle tuile "Immosphera 360" : l'ajouter aussi pour les grilles déjà
     // personnalisées/enregistrées qui ne l'ont pas encore, sinon changer
     // seulement INITIAL_TILES n'a aucun effet (cf. commentaire normalizeTile
     // plus haut sur ce même principe).
-    if (!existsRecursive(base, 'immosphera360')) {
+    if (estAbsent('immosphera360')) {
       const immoTile = INITIAL_TILES.find((t) => t.id === 'immosphera360');
       if (immoTile) base = [...base, immoTile];
     }
@@ -1307,7 +1329,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // filtrée plus loin par canSeeImmospheraExtras, ici on s'assure juste
     // qu'elles existent QUELQUE PART dans la grille sauvegardée (racine ou
     // dans un dossier).
-    const missingExtras = IMMOSPHERA_EXTRA_TILE_IDS.filter((id) => !existsRecursive(base, id));
+    const missingExtras = IMMOSPHERA_EXTRA_TILE_IDS.filter((id) => estAbsent(id));
     if (missingExtras.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingExtras.includes(t.id));
       base = [...base, ...extraTiles];
@@ -1316,21 +1338,21 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // canSeeConseilsFinances ; ici on garantit seulement sa présence dans
     // les grilles déjà personnalisées, sans quoi ajouter la tuile à
     // INITIAL_TILES n'aurait aucun effet pour les comptes existants.
-    const missingConseils = CONSEILS_EXTRA_TILE_IDS.filter((id) => !existsRecursive(base, id));
+    const missingConseils = CONSEILS_EXTRA_TILE_IDS.filter((id) => estAbsent(id));
     if (missingConseils.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingConseils.includes(t.id));
       base = [...base, ...extraTiles];
     }
     // Même principe pour la tuile "Carte" (Novavisio) — visibilité réelle
     // filtrée plus loin par canSeeNovavisio.
-    const missingNovavisio = NOVAVISIO_EXTRA_TILE_IDS.filter((id) => !existsRecursive(base, id));
+    const missingNovavisio = NOVAVISIO_EXTRA_TILE_IDS.filter((id) => estAbsent(id));
     if (missingNovavisio.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingNovavisio.includes(t.id));
       base = [...base, ...extraTiles];
     }
     // Nouvelle tuile "Pipeline interne" (raccourci vers Projets internes) —
     // même principe, pour les grilles déjà personnalisées/enregistrées.
-    if (!existsRecursive(base, 'projets-internes')) {
+    if (estAbsent('projets-internes')) {
       const pipelineInterneTile = INITIAL_TILES.find((t) => t.id === 'projets-internes');
       if (pipelineInterneTile) base = [...base, pipelineInterneTile];
     }
@@ -1341,7 +1363,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // elle est automatiquement ajoutée aux grilles déjà personnalisées qui
     // ne l'ont pas encore. Plus besoin d'écrire un bloc dédié à chaque
     // nouveau module : juste une entrée dans INITIAL_TILES suffit.
-    const missingNavTiles = NAV_ITEMS.filter((item) => item.id !== 'accueil' && !existsRecursive(base, item.id))
+    const missingNavTiles = NAV_ITEMS.filter((item) => item.id !== 'accueil' && estAbsent(item.id))
       .map((item) => findInitialTile(item.id))
       .filter((t): t is TileItemNode => Boolean(t));
     if (missingNavTiles.length > 0) {
@@ -1379,7 +1401,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // `removeQuickBarDuplicates`, hissée au niveau module — même retrait
     // forcé appliqué aussi à une grille reçue du serveur, voir plus bas).
     base = removeQuickBarDuplicates(base);
-    if (!existsRecursive(base, 'annonce')) {
+    if (estAbsent('annonce')) {
       const annonceTile = INITIAL_TILES.find((t) => t.id === 'annonce');
       if (annonceTile) base = [...base, annonceTile];
     }
@@ -1391,7 +1413,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // _TILE_IDS ci-dessus qui ne cherche qu'au premier niveau) — sa
     // visibilité réelle, elle, est bien filtrée via ce même
     // IMMOSPHERA_EXTRA_TILE_IDS plus loin (canSeeImmospheraExtras).
-    if (!existsRecursive(base, 'statistiques-etiquettes')) {
+    if (estAbsent('statistiques-etiquettes')) {
       const statsTile = findInitialTile('statistiques-etiquettes');
       if (statsTile) base = [...base, statsTile];
     }
@@ -1834,6 +1856,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Paramètres) pour qu'un verrouillage posé par le super admin s'applique
   // immédiatement, sans recharger, chez tous les membres déjà connectés.
   const [lockedTiles, setLockedTiles] = useState<Record<string, Verrou>>({});
+  useEffect(() => { lockedTilesRef.current = lockedTiles; }, [lockedTiles]);
   useEffect(() => {
     if (!activeAgency?.id) return;
     let active = true;
