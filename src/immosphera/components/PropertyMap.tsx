@@ -365,6 +365,16 @@ export function PropertyMap({ properties, partners = [], hoveredId, searchLocati
     })();
   }, [searchLocation, searchRadius]);
 
+  // Demande explicite (8 septembre) : « la barre du bas doit correspondre à
+  // celle du haut » — la ville et le rayon étaient déjà repris (ci-dessus),
+  // mais pas le type de bien : choisir "Maison" en haut n'avait aucun effet
+  // ici, la carte gardait son propre filtre "Tous" par défaut. Même
+  // principe : simple reprise, l'utilisateur garde la main pour changer le
+  // type juste sur la carte ensuite si besoin.
+  useEffect(() => {
+    if (filters?.selectedType) setTypeFilter(filters.selectedType);
+  }, [filters?.selectedType]);
+
   // Pan to center
   useEffect(() => {
     const map = mapRef.current;
@@ -443,7 +453,7 @@ export function PropertyMap({ properties, partners = [], hoveredId, searchLocati
           <form onSubmit={handleSearch} className="flex gap-2">
             <input
               type="text"
-              placeholder="Ville..."
+              placeholder="Ville ou quartier..."
               value={mapCity}
               onChange={(e) => setMapCity(e.target.value)}
               className="h-8 px-3 text-xs rounded-full border border-border bg-background"

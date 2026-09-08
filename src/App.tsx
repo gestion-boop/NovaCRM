@@ -164,6 +164,10 @@ function App() {
     } catch { /* noop */ }
   }, [currentNav]);
   const [highlightMessageId, setHighlightMessageId] = useState<string | null>(initialHighlightMessageId);
+  // Même principe qu'au-dessus, côté projets internes (voir
+  // NotificationsView.tsx, onOpenInternalTask) : ouvre directement le
+  // projet + la carte visée au lieu de la liste générique.
+  const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
   const [novaAIPrompt, setNovaAIPrompt] = useState<string | null>(null);
   // Nova IA s'affiche désormais en superposition de l'interface principale
   // (quelle qu'elle soit, généralement l'accueil) au lieu de la remplacer
@@ -219,9 +223,13 @@ function App() {
   const [novaAutoVoice, setNovaAutoVoice] = useState(false);
   const openNovaMobile = () => {
     setNovaExpandedFromPopup(false);
-    let mode = 'commercial';
-    try { mode = localStorage.getItem('novasphere:nova-mobile-mode') || 'commercial'; } catch { /* ignore */ }
-    setNovaAutoVoice(mode === 'commercial');
+    // Demande explicite (8 septembre) : « désactive le système vocal de
+    // Nova pour l'instant, on garde que le système bureau » — ce mode
+    // (mémorisé par appareil, "Commercial" = vocal par défaut la toute
+    // première fois) ouvrait directement en mode vocal. Forcé sur Bureau
+    // tant que le vocal est désactivé (voir VOICE_FEATURES_ENABLED dans
+    // AssistantIAView.tsx), quelle que soit la préférence déjà enregistrée.
+    setNovaAutoVoice(false);
     setNovaOpen(true);
   };
   const openNovaForDeal = (dealTitle: string) => {
@@ -1065,7 +1073,11 @@ function App() {
           )}
 
           {currentNav === 'projets-internes' && (
-            <ProjetsInternes agencyId={activeAgency.id} />
+            <ProjetsInternes
+              agencyId={activeAgency.id}
+              initialOpenTaskId={highlightTaskId}
+              onOpenTaskConsumed={() => setHighlightTaskId(null)}
+            />
           )}
 
           {currentNav === 'agenda' && <AgendaView createSignal={agendaCreateSignal} />}
@@ -1513,6 +1525,12 @@ function App() {
                   openClientProfile(null);
                   setHighlightMessageId(messageId);
                   setCurrentNav('chat');
+                }}
+                onOpenInternalTask={(taskId) => {
+                  setNotificationsPanelOpen(false);
+                  openClientProfile(null);
+                  setHighlightTaskId(taskId);
+                  setCurrentNav('projets-internes');
                 }}
               />
             </div>

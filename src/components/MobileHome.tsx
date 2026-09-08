@@ -9,11 +9,24 @@ import {
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, CloudSun,
   ChevronRight, Bell, MessageSquare, Users, GitFork, FileText, Mail, BarChart2,
   Headphones, Calendar, FileEdit, UserPlus, Folder, Plus, X, UserPlus2,
-  ChevronDown, ChevronUp, Megaphone,
+  ChevronDown, ChevronUp, Megaphone, Camera, Lock, Zap, Home as HomeIcon, Globe,
+  ExternalLink, Bookmark, Target, Shield, Award, Sparkles, CheckSquare, Image as ImageIcon, MapPin, Settings,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
+import { supabase } from '@/lib/supabase';
+
+// Même table de correspondance nom → icône que AccueilGrid.tsx (ICON_MAP) —
+// nécessaire pour rendre correctement une tuile verrouillée par le super
+// admin, dont l'icône est choisie sur desktop et stockée par son nom
+// (`iconName`, une chaîne), jamais vue jusqu'ici côté mobile.
+const LOCKED_ICON_MAP: Record<string, React.ElementType> = {
+  Bell, MessageSquare, Calendar, Mail, Users, Headphones,
+  GitFork, FileText, FileEdit, UserPlus, BarChart2, Zap,
+  HomeIcon, Camera, Settings, Folder, Globe, ExternalLink,
+  Bookmark, Target, Shield, Award, Sparkles, CheckSquare, ImageIcon, MapPin, Megaphone,
+};
 
 interface MobileHomeProps {
   onNavigate: (nav: string) => void;
@@ -57,6 +70,22 @@ interface SpaceDef {
   nav: string;
   gradient: string;
   badge?: number;
+  // Raccourci imposé par un verrou super admin (agency_ui_settings
+  // .home_layout.lockedTiles, même mécanisme que AccueilGrid côté desktop) :
+  // ne peut pas être retiré de la grille par un utilisateur normal.
+  locked?: boolean;
+}
+
+// Forme minimale d'un verrou tel qu'enregistré par AccueilGrid.tsx (type
+// `Verrou` là-bas) — on ne relit ici que ce dont mobile a besoin.
+interface VerrouMobile {
+  id?: string;
+  title?: string;
+  iconName?: string;
+  gradient?: string;
+  navTarget?: string;
+  isFolder?: boolean;
+  children?: VerrouMobile[];
 }
 
 // « mail » retiré d'ici le 5 septembre (voir plus bas, ALL_SPACES) : la
@@ -185,6 +214,75 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const normalizeAgencyName = (v?: string) => (v || '').trim().toLowerCase();
   const agencyLogo = AGENCY_LOGO_BY_NAME[normalizeAgencyName(activeAgency?.name)] || AGENCY_LOGO_BY_NAME['novasphere'];
 
+  // ── Dossiers/tuiles verrouillés par le super admin (port du mécanisme
+  // desktop d'AccueilGrid.tsx sur "Mes espaces" mobile) ───────────────────
+  // Demandé le 8 septembre : « les dossiers verrouillés avec les raccourcis
+  // sur le téléphone portable ». Même lecture Supabase qu'AccueilGrid
+  // (agency_ui_settings.home_layout.lockedTiles), avec synchro en direct.
+  // Nom de canal Realtime UNIQUE par instance (crypto.randomUUID) — leçon du
+  // crash de production de useCameraReservations.ts cette même session :
+  // réutiliser un nom fixe entre plusieurs instances montées casse
+  // `.subscribe()`.
+  const [lockedTiles, setLockedTiles] = useState<Record<string, VerrouMobile>>({});
+  useEffect(() => {
+    if (!activeAgency?.id) return;
+    let active = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from('agency_ui_settings')
+        .select('home_layout')
+        .eq('agency_id', activeAgency.id)
+        .maybeSingle();
+      if (!active) return;
+      if (error) { console.warn('Erreur chargement tuiles verrouillées (mobile) :', error); return; }
+      const locked = (data?.home_layout as any)?.lockedTiles;
+      if (locked && typeof locked === 'object') setLockedTiles(locked);
+    })();
+    const channelName = `agency_ui_settings_home_layout_mobile_${activeAgency.id}_${crypto.randomUUID()}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agency_ui_settings', filter: `agency_id=eq.${activeAgency.id}` },
+        (payload) => {
+          const locked = (payload.new as any)?.home_layout?.lockedTiles;
+          setLockedTiles(locked && typeof locked === 'object' ? locked : {});
+        }
+      )
+      .subscribe();
+    return () => { active = false; void supabase.removeChannel(channel); };
+  }, [activeAgency?.id]);
+
+  // Aplatit les verrous en raccourcis mobiles : le mobile n'a pas de notion
+  // de dossier, donc un dossier verrouillé devient autant de raccourcis
+  // individuels que d'éléments qu'il impose ; une tuile verrouillée seule
+  // devient un raccourci unique. Résout l'icône via LOCKED_ICON_MAP (même
+  // logique que ICON_MAP côté desktop), repli sur Folder si inconnue.
+  const lockedMobileSpaces: SpaceDef[] = useMemo(() => {
+    const out: SpaceDef[] = [];
+    const pushOne = (v: VerrouMobile, fallbackId: string) => {
+      const id = v.id || fallbackId;
+      if (!id || !v.navTarget) return;
+      out.push({
+        id,
+        label: v.title || id,
+        icon: (v.iconName && LOCKED_ICON_MAP[v.iconName]) || Folder,
+        nav: v.navTarget,
+        gradient: v.gradient || 'from-[#334155] to-[#1e293b]',
+        locked: true,
+      });
+    };
+    Object.entries(lockedTiles).forEach(([lockId, lock]) => {
+      if (lock.isFolder && Array.isArray(lock.children) && lock.children.length) {
+        lock.children.forEach((child, i) => pushOne(child, `${lockId}-${i}`));
+      } else {
+        pushOne(lock, lockId);
+      }
+    });
+    return out;
+  }, [lockedTiles]);
+  const lockedSpaceIds = useMemo(() => new Set(lockedMobileSpaces.map((s) => s.id)), [lockedMobileSpaces]);
+
   // ── Mes espaces : catalogue complet + config visible/ordre persistée ──
   const ALL_SPACES: SpaceDef[] = useMemo(() => [
     { id: 'clients', label: 'Clients', icon: Users, nav: 'clients', gradient: 'from-[#a8421e] to-[#451a03]' },
@@ -201,12 +299,22 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     { id: 'projets-internes', label: 'Projets internes', icon: Folder, nav: 'projets-internes', gradient: 'from-[#92400e] to-[#451a03]' },
     { id: 'chat', label: 'Chat', icon: MessageSquare, nav: 'chat', gradient: 'from-[#0891b2] to-[#155e75]', badge: unreadMessagesCount },
     { id: 'rappels', label: 'Rappels', icon: Bell, nav: 'rappels', gradient: 'from-[#9f1239] to-[#4c0519]', badge: unreadRemindersCount },
+    // Signalé (8 septembre) : absente du catalogue mobile — sur téléphone,
+    // impossible d'ajouter cette tuile à "Mes espaces" faute d'exister ici,
+    // alors qu'elle est disponible depuis toujours sur AccueilGrid (desktop).
+    // Même violet que sur l'agenda (voir AgendaView.tsx, #9333ea).
+    { id: 'reserver-camera', label: 'Réserver caméra', icon: Camera, nav: 'reserver-camera', gradient: 'from-[#9333ea] to-[#581c87]' },
     // Ticket #255 : accès rapide à la création d'annonce, réservé aux
     // administrateurs (même règle que ParametresView.tsx : role === 'super_admin').
     ...(userProfile?.role === 'super_admin'
       ? [{ id: 'annonce', label: 'Annonce', icon: Megaphone, nav: 'parametres', gradient: 'from-[#F7BC5F] to-[#78350F]' }]
       : []),
-  ], [unreadMessagesCount, unreadRemindersCount, userProfile?.role]);
+    // Raccourcis imposés par un verrou super admin (voir lockedMobileSpaces
+    // ci-dessus) — fusionnés ici pour profiter tel quel du mécanisme
+    // `fillMissing` existant, qui les place automatiquement dans une case
+    // vide chez tout le monde sans déplacer les tuiles déjà en place.
+    ...lockedMobileSpaces,
+  ], [unreadMessagesCount, unreadRemindersCount, userProfile?.role, lockedMobileSpaces]);
 
   // Grille à positions libres (façon écran d'accueil iPhone) : chaque case
   // contient soit un id de tuile, soit `null` (case vide) — contrairement à
@@ -312,7 +420,12 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
 
   // Masquer une tuile vide simplement sa case (elle ne comble plus
   // automatiquement le trou, contrairement à l'ancienne liste compacte).
-  const hideSpace = (id: string) => setCellIds((cur) => cur.map((x) => (x === id ? null : x)));
+  // Une tuile imposée par un verrou super admin ne peut pas être retirée par
+  // un utilisateur normal — même règle que sur AccueilGrid (desktop).
+  const hideSpace = (id: string) => {
+    if (lockedSpaceIds.has(id)) return;
+    setCellIds((cur) => cur.map((x) => (x === id ? null : x)));
+  };
   const addSpace = (id: string) => {
     setCellIds((cur) => {
       const firstEmpty = cur.indexOf(null);
@@ -750,13 +863,26 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
       }`}
     >
       {editMode && !isDragging && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onHide(); }}
-          className="absolute top-1 left-1 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-sm font-black shadow-md z-10"
-          title="Masquer"
-        >
-          −
-        </button>
+        space.locked ? (
+          // Imposée par un verrou super admin (voir lockedMobileSpaces) :
+          // pas de croix de suppression, juste un indicateur — même règle
+          // que sur AccueilGrid où une tuile verrouillée ne peut pas être
+          // retirée par un utilisateur normal.
+          <span
+            className="absolute top-1 left-1 w-6 h-6 rounded-full bg-slate-600 text-white flex items-center justify-center shadow-md z-10"
+            title="Imposée par l'administrateur"
+          >
+            <Lock className="w-3 h-3" />
+          </span>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); onHide(); }}
+            className="absolute top-1 left-1 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-sm font-black shadow-md z-10"
+            title="Masquer"
+          >
+            −
+          </button>
+        )
       )}
       <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${space.gradient} flex items-center justify-center relative shadow-md`}>
         <Icon className="w-7 h-7 text-white" />

@@ -48,6 +48,7 @@ interface RealNotificationRow {
   is_read: boolean;
   created_at: string;
   agency_id: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface NotificationsViewProps {
@@ -59,6 +60,11 @@ interface NotificationsViewProps {
   // clic sur une notif "message" ne faisait que naviguer vers l'onglet Chat
   // générique (liste des projets), sans jamais ouvrir la bonne conversation.
   onOpenMessage?: (messageId: string) => void;
+  // Signalé (8 septembre) : « cliquer sur la notif d'un message dans un
+  // projet ne m'amène pas directement au projet ». Même principe
+  // qu'onOpenMessage, mais pour une carte de projet interne : ouvre
+  // directement son projet + sa fiche détail au lieu de la liste générique.
+  onOpenInternalTask?: (taskId: string) => void;
 }
 
 interface ChatMessageRow {
@@ -129,6 +135,7 @@ type NotificationItem = {
   // défaut de la fiche client.
   contactTab?: 'espace-client';
   messageId?: string;
+  taskId?: string;
   rawType: string;
 
   priority:
@@ -209,6 +216,7 @@ export const NotificationsView: React.FC<
   onNavigate,
   onOpenContact,
   onOpenMessage,
+  onOpenInternalTask,
 }) => {
   const {
     currentUser,
@@ -467,6 +475,13 @@ export const NotificationsView: React.FC<
         // (`?highlight=<id>` ou `&highlight_message=<id>`) — c'est ce qui
         // permet d'ouvrir directement la bonne conversation au clic.
         messageId: n.link?.match(/[?&]highlight(?:_message)?=([0-9a-f-]{36})/)?.[1],
+        // Id de la CARTE de projet interne (voir useTaskMessages.ts, qui
+        // pose `_metadata: { url: '/projets-internes', task_id: taskId }`)
+        // — c'est ce qui permet d'ouvrir directement le bon projet/la bonne
+        // carte au lieu de la liste générique des projets.
+        taskId: (n.entity_type === 'internal_task' || n.entity_type === 'internal_task_message')
+          ? ((n.metadata as { task_id?: string } | null)?.task_id || (n.entity_type === 'internal_task' ? n.entity_id || undefined : undefined))
+          : undefined,
         rawType: n.type,
         priority: n.type === 'lead_assigned' || n.type === 'task_assigned' ? 'important' : 'normal',
       } as NotificationItem));
@@ -695,6 +710,8 @@ export const NotificationsView: React.FC<
               onOpenContact(notification.contactId, notification.contactTab);
             } else if (notification.navTarget === 'chat' && notification.messageId && onOpenMessage) {
               onOpenMessage(notification.messageId);
+            } else if (notification.navTarget === 'projets-internes' && notification.taskId && onOpenInternalTask) {
+              onOpenInternalTask(notification.taskId);
             } else {
               onNavigate(notification.navTarget);
             }
