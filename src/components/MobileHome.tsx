@@ -366,7 +366,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const GRID_SLOTS = 24;
   const CELL_STORAGE_KEY = 'novasphere_mobile_spaces_grid_v1';
 
-  const ALL_SPACE_IDS = ALL_SPACES.map((s) => s.id);
+  const ALL_SPACE_IDS = useMemo(() => ALL_SPACES.map((s) => s.id), [ALL_SPACES]);
 
   const [cellIds, setCellIds] = useState<(string | null)[]>(() => {
     // Ajoute dans les cases vides les tuiles du catalogue qui manqueraient
@@ -436,13 +436,27 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   // revoit donc plus jamais passer les verrous chargés après coup. On rejoue
   // le même comblement des cases vides à chaque fois que la liste des
   // raccourcis verrouillés change.
+  //
+  // Bug trouvé le 8 septembre (suite) : « je n'ai pas le dossier Immosphera,
+  // banques, assurances » — les comptes concernés avaient déjà, dans leur
+  // grille enregistrée, les CARTES individuelles de ces dossiers ajoutées
+  // par la toute première version buguée de cette fonctionnalité (celle qui
+  // aplatissait au lieu de créer un vrai dossier — ids comme
+  // "immosphera-partenaires", "immosphera-netty"...). Ces ids ne
+  // correspondent plus à rien dans ALL_SPACES (le dossier remplaçant, lui,
+  // porte l'id du VERROU, pas de ses enfants) : ils restaient comptés comme
+  // « case occupée » sans jamais s'afficher, ce qui privait la nouvelle
+  // tuile-dossier de toute case libre où se placer. On purge donc aussi les
+  // ids devenus orphelins (absents d'ALL_SPACES) avant de combler.
   useEffect(() => {
-    if (lockedMobileSpaces.length === 0) return;
     setCellIds((cur) => {
-      const present = new Set(cur.filter(Boolean));
+      const validIds = new Set(ALL_SPACE_IDS);
+      const cleaned = cur.map((id) => (id && !validIds.has(id) ? null : id));
+      const present = new Set(cleaned.filter(Boolean));
       const missing = lockedMobileSpaces.map((s) => s.id).filter((id) => !present.has(id));
-      if (missing.length === 0) return cur;
-      const next = [...cur];
+      const changed = missing.length > 0 || cleaned.some((id, i) => id !== cur[i]);
+      if (!changed) return cur;
+      const next = [...cleaned];
       let i = 0;
       for (const id of missing) {
         while (i < next.length && next[i] !== null) i++;
@@ -451,7 +465,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
       }
       return next;
     });
-  }, [lockedMobileSpaces]);
+  }, [lockedMobileSpaces, ALL_SPACE_IDS]);
 
   const visibleIds = cellIds.filter((id): id is string => !!id);
   const visibleSpaces = visibleIds
