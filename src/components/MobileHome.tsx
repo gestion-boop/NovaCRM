@@ -723,7 +723,21 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   // étaler sur plusieurs pages sans jamais revoir le bouton
                   // "Ajouter".
                   const collapsed = !editMode && !showAllSpaces && filledCount > 6;
-                  const visibleCount = collapsed ? 5 : slotCount;
+                  // Bug trouvé (8 septembre) : « j'ai juste Passerelle,
+                  // c'est tout » — un dossier verrouillé ajouté après coup
+                  // (voir l'effet de comblement plus haut) tombe dans une
+                  // case vide QUELCONQUE de la grille personnelle de chacun,
+                  // parfois bien après les 5 premières. Replié, il restait
+                  // alors caché derrière la flèche "Voir plus" — alors qu'un
+                  // dossier verrouillé, imposé par le super admin, doit
+                  // rester visible comme sur desktop, pas optionnel. On
+                  // étend donc le repli jusqu'à couvrir la dernière case
+                  // verrouillée occupée, jamais moins que 5.
+                  const lastLockedIndex = cellIds.reduce(
+                    (last, id, i) => (id && lockedSpaceIds.has(id) ? i : last),
+                    -1
+                  );
+                  const visibleCount = collapsed ? Math.max(5, lastLockedIndex + 1) : slotCount;
 
                   const tiles = cellIds.slice(0, visibleCount).map((id, i) => {
                     const space = id ? ALL_SPACES.find((s) => s.id === id) : undefined;
