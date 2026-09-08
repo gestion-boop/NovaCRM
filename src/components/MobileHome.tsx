@@ -74,6 +74,9 @@ interface SpaceDef {
   // .home_layout.lockedTiles, même mécanisme que AccueilGrid côté desktop) :
   // ne peut pas être retiré de la grille par un utilisateur normal.
   locked?: boolean;
+  // Tuile pointant vers un lien externe (site, extranet...) plutôt qu'un
+  // écran de l'appli — même champ que TileItemNode.externalUrl côté desktop.
+  externalUrl?: string;
 }
 
 // Forme minimale d'un verrou tel qu'enregistré par AccueilGrid.tsx (type
@@ -84,8 +87,13 @@ interface VerrouMobile {
   iconName?: string;
   gradient?: string;
   navTarget?: string;
+  // Non fiable en pratique : AccueilGrid n'enregistre PAS ce champ sur les
+  // verrous existants (vérifié en base le 8 septembre — tous à `null` alors
+  // que `children` est bien rempli). On détecte donc un dossier verrouillé à
+  // la présence de `children`, jamais à `isFolder` seul.
   isFolder?: boolean;
   children?: VerrouMobile[];
+  externalUrl?: string;
 }
 
 // « mail » retiré d'ici le 5 septembre (voir plus bas, ALL_SPACES) : la
@@ -262,18 +270,27 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     const out: SpaceDef[] = [];
     const pushOne = (v: VerrouMobile, fallbackId: string) => {
       const id = v.id || fallbackId;
-      if (!id || !v.navTarget) return;
+      // Une tuile verrouillée pointe soit vers un écran de l'appli
+      // (navTarget), soit vers un lien externe (externalUrl, ex. Giraffe360,
+      // Netty...) — les deux comptent comme un raccourci exploitable côté
+      // mobile ; seule une entrée totalement vide (ni l'un ni l'autre) est
+      // ignorée.
+      if (!id || (!v.navTarget && !v.externalUrl)) return;
       out.push({
         id,
         label: v.title || id,
         icon: (v.iconName && LOCKED_ICON_MAP[v.iconName]) || Folder,
-        nav: v.navTarget,
+        nav: v.navTarget || '',
+        externalUrl: v.externalUrl || undefined,
         gradient: v.gradient || 'from-[#334155] to-[#1e293b]',
         locked: true,
       });
     };
     Object.entries(lockedTiles).forEach(([lockId, lock]) => {
-      if (lock.isFolder && Array.isArray(lock.children) && lock.children.length) {
+      // `isFolder` n'est en pratique jamais renseigné par AccueilGrid sur un
+      // verrou (vérifié en base) : on détecte un dossier verrouillé à la
+      // seule présence de `children`, pas à ce champ.
+      if (Array.isArray(lock.children) && lock.children.length) {
         lock.children.forEach((child, i) => pushOne(child, `${lockId}-${i}`));
       } else {
         pushOne(lock, lockId);
@@ -682,6 +699,13 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                           editMode={editMode}
                           onActivate={() => {
                             if (editMode) return;
+                            // Raccourci verrouillé pointant vers un lien externe
+                            // (ex. Giraffe360, Netty...) plutôt qu'un écran de
+                            // l'appli — même distinction que sur AccueilGrid.
+                            if (space.externalUrl) {
+                              window.open(space.externalUrl, '_blank', 'noopener,noreferrer');
+                              return;
+                            }
                             // Ticket #255 : la tuile "Annonce" ouvre directement
                             // Paramètres → Annonces (même mécanisme que sur desktop).
                             if (space.id === 'annonce') {
