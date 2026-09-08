@@ -780,11 +780,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
                         // pour se lire SUR la couleur d'accent, pas sur un fond
                         // délavé.
                         className={`text-[9px] px-1.5 py-0.5 rounded truncate border ${ev.busy === false ? 'opacity-60 border-dashed' : ''}`}
-                        style={{
-                          backgroundColor: 'rgb(var(--calendar-accent-color-rgb))',
-                          color: 'var(--calendar-accent-text-color)',
-                          borderColor: 'rgb(var(--calendar-accent-color-rgb))',
-                        }}
+                        style={
+                          // Demande explicite (8 septembre) : « la couleur
+                          // violette du bouton » pour la réservation caméra
+                          // — mêmes teintes que le module (purple-600),
+                          // seule exception à la couleur d'accent unique.
+                          ev.isCameraReservation
+                            ? { backgroundColor: '#9333ea', color: '#ffffff', borderColor: '#9333ea' }
+                            : {
+                                backgroundColor: 'rgb(var(--calendar-accent-color-rgb))',
+                                color: 'var(--calendar-accent-text-color)',
+                                borderColor: 'rgb(var(--calendar-accent-color-rgb))',
+                              }
+                        }
                         title={ev.busy === false ? 'Disponible' : 'Occupé'}
                       >
                         {ev.time} {ev.title}
@@ -893,9 +901,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
                       style={{
                         top: `${top}px`,
                         height: `${heightPx}px`,
-                        backgroundColor: 'rgb(var(--calendar-accent-color-rgb))',
-                        color: 'var(--calendar-accent-text-color)',
-                        borderColor: 'rgb(var(--calendar-accent-color-rgb))',
+                        ...(ev.isCameraReservation
+                          ? { backgroundColor: '#9333ea', color: '#ffffff', borderColor: '#9333ea' }
+                          : {
+                              backgroundColor: 'rgb(var(--calendar-accent-color-rgb))',
+                              color: 'var(--calendar-accent-text-color)',
+                              borderColor: 'rgb(var(--calendar-accent-color-rgb))',
+                            }),
                       }}
                       className={`absolute left-1 right-1 rounded p-1.5 overflow-hidden shadow-md cursor-pointer z-10 border ${ev.busy === false ? 'opacity-60 border-dashed' : ''}`}
                       title={ev.busy === false ? 'Disponible' : 'Occupé'}
@@ -969,9 +981,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
                   style={{
                     top: `${top}px`,
                     height: '76px',
-                    backgroundColor: 'rgb(var(--calendar-accent-color-rgb))',
-                    color: 'var(--calendar-accent-text-color)',
-                    borderColor: 'rgb(var(--calendar-accent-color-rgb))',
+                    ...(ev.isCameraReservation
+                      ? { backgroundColor: '#9333ea', color: '#ffffff', borderColor: '#9333ea' }
+                      : {
+                          backgroundColor: 'rgb(var(--calendar-accent-color-rgb))',
+                          color: 'var(--calendar-accent-text-color)',
+                          borderColor: 'rgb(var(--calendar-accent-color-rgb))',
+                        }),
                   }}
                   className="absolute left-2 right-4 rounded-lg p-3 overflow-hidden shadow-lg cursor-pointer z-10 border"
                 >
@@ -1051,7 +1067,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
                   >
                     <span
                       className={`w-1 self-stretch rounded-full shrink-0 ${ev.busy === false ? 'opacity-50' : ''}`}
-                      style={{ backgroundColor: 'rgb(var(--calendar-accent-color-rgb))' }}
+                      style={{ backgroundColor: ev.isCameraReservation ? '#9333ea' : 'rgb(var(--calendar-accent-color-rgb))' }}
                     />
                     <div className="min-w-0 flex-1">
                       <div className="text-[15px] font-semibold text-white truncate">{ev.title}</div>
