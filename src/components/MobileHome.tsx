@@ -388,6 +388,31 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     localStorage.setItem(CELL_STORAGE_KEY, JSON.stringify(cellIds));
   }, [cellIds]);
 
+  // Bug trouvé (8 septembre) : les dossiers verrouillés n'apparaissaient
+  // jamais sur mobile malgré l'ajout à ALL_SPACES — `fillMissing` (ci-dessus)
+  // ne s'exécute qu'UNE fois, à l'initialisation de `cellIds`, avant que le
+  // chargement Supabase de `lockedTiles` (async) n'ait eu le temps de
+  // résoudre. Une grille déjà enregistrée (cas de tout le monde ici) ne
+  // revoit donc plus jamais passer les verrous chargés après coup. On rejoue
+  // le même comblement des cases vides à chaque fois que la liste des
+  // raccourcis verrouillés change.
+  useEffect(() => {
+    if (lockedMobileSpaces.length === 0) return;
+    setCellIds((cur) => {
+      const present = new Set(cur.filter(Boolean));
+      const missing = lockedMobileSpaces.map((s) => s.id).filter((id) => !present.has(id));
+      if (missing.length === 0) return cur;
+      const next = [...cur];
+      let i = 0;
+      for (const id of missing) {
+        while (i < next.length && next[i] !== null) i++;
+        if (i >= next.length) { next.push(id); i = next.length; continue; }
+        next[i] = id;
+      }
+      return next;
+    });
+  }, [lockedMobileSpaces]);
+
   const visibleIds = cellIds.filter((id): id is string => !!id);
   const visibleSpaces = visibleIds
     .map((id) => ALL_SPACES.find((s) => s.id === id))
