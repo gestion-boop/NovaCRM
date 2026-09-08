@@ -155,8 +155,17 @@ export function useCameraReservations() {
   useEffect(() => {
     if (!currentUser) return;
     void load();
+    // Planté en production (8 septembre) : « cannot add postgres_changes
+    // callbacks ... after subscribe() ». Ce hook est appelé par plusieurs
+    // composants à la fois (CameraReservationModal, ReserverCameraView, et
+    // une instance par carte de réservation dans ReviewRow) — chacun créait
+    // un canal Realtime portant EXACTEMENT le même nom fixe
+    // (`camera_reservations_shared`), ce que Supabase refuse dès la
+    // deuxième tentative. Un identifiant unique par instance de hook
+    // (crypto.randomUUID()) règle le problème définitivement.
+    const channelName = `camera_reservations_${crypto.randomUUID()}`;
     const channel = supabase
-      .channel('camera_reservations_shared')
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'camera_reservations' }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(channel); };

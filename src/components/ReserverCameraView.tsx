@@ -18,8 +18,16 @@ export interface ReserverCameraViewProps {
   onOpenModal?: () => void;
 }
 
-const ReviewRow: React.FC<{ res: StoredCameraReservation }> = ({ res }) => {
-  const { isCameraAdmin, reviewingId, reviewReservation } = useCameraReservations();
+// Reçoit isCameraAdmin/reviewingId/reviewReservation en props plutôt que de
+// rappeler useCameraReservations() ici : une carte par réservation aurait
+// sinon fait autant d'instances du hook (autant de chargements et
+// d'abonnements Realtime redondants) que de lignes affichées.
+const ReviewRow: React.FC<{
+  res: StoredCameraReservation;
+  isCameraAdmin: boolean;
+  reviewingId: string | null;
+  reviewReservation: ReturnType<typeof useCameraReservations>['reviewReservation'];
+}> = ({ res, isCameraAdmin, reviewingId, reviewReservation }) => {
   const [showRefusePanel, setShowRefusePanel] = useState(false);
   const [refuseReason, setRefuseReason] = useState('');
   const [altSlots, setAltSlots] = useState<string[]>(['', '', '']);
@@ -97,7 +105,7 @@ const ReviewRow: React.FC<{ res: StoredCameraReservation }> = ({ res }) => {
 };
 
 export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenModal }) => {
-  const { reservations, loading, error } = useCameraReservations();
+  const { reservations, loading, error, isCameraAdmin, reviewingId, reviewReservation } = useCameraReservations();
   const [showModal, setShowModal] = useState(false);
 
   const handleTriggerOpen = () => {
@@ -238,7 +246,7 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
                 </div>
               </div>
 
-              <ReviewRow res={r} />
+              <ReviewRow res={r} isCameraAdmin={isCameraAdmin} reviewingId={reviewingId} reviewReservation={reviewReservation} />
             </div>
           ))
         )}
