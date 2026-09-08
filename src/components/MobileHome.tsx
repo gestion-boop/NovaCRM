@@ -9,7 +9,7 @@ import {
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, CloudSun,
   ChevronRight, Bell, MessageSquare, Users, GitFork, FileText, Mail, BarChart2,
   Headphones, Calendar, FileEdit, UserPlus, Folder, Plus, X, UserPlus2,
-  ChevronDown, ChevronUp, Megaphone,
+  ChevronDown, ChevronUp, Megaphone, Camera,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
@@ -201,6 +201,11 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     { id: 'projets-internes', label: 'Projets internes', icon: Folder, nav: 'projets-internes', gradient: 'from-[#92400e] to-[#451a03]' },
     { id: 'chat', label: 'Chat', icon: MessageSquare, nav: 'chat', gradient: 'from-[#0891b2] to-[#155e75]', badge: unreadMessagesCount },
     { id: 'rappels', label: 'Rappels', icon: Bell, nav: 'rappels', gradient: 'from-[#9f1239] to-[#4c0519]', badge: unreadRemindersCount },
+    // Signalé (8 septembre) : absente du catalogue mobile — sur téléphone,
+    // impossible d'ajouter cette tuile à "Mes espaces" faute d'exister ici,
+    // alors qu'elle est disponible depuis toujours sur AccueilGrid (desktop).
+    // Même violet que sur l'agenda (voir AgendaView.tsx, #9333ea).
+    { id: 'reserver-camera', label: 'Réserver caméra', icon: Camera, nav: 'reserver-camera', gradient: 'from-[#9333ea] to-[#581c87]' },
     // Ticket #255 : accès rapide à la création d'annonce, réservé aux
     // administrateurs (même règle que ParametresView.tsx : role === 'super_admin').
     ...(userProfile?.role === 'super_admin'
