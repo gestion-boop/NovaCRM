@@ -656,6 +656,19 @@ function App() {
     setSelectedClientProfileId(contactId);
     setSelectedClientProfileTab(contactId ? tab : undefined);
   };
+  // Signalé (9 septembre, capture à l'appui) : ouvrir une fiche client ne
+  // remontait pas en haut — le pipeline/les onglets (Tâches, Notes...)
+  // restaient hors champ tant qu'on n'avait pas fait défiler soi-même.
+  // Cause : ClientProfileView ne gère plus son propre défilement (retiré
+  // lors d'un correctif mobile antérieur, voir son commentaire) — c'est
+  // <main> ci-dessous qui défile pour toute l'appli, et rien ne remettait
+  // sa position à zéro à l'ouverture d'une fiche. `selectedClientProfileId`
+  // est LE seul état commun à tous les points d'entrée (recherche, liste de
+  // contacts, notif...), donc le bon endroit où réagir une fois pour tous.
+  const mainRef = React.useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (selectedClientProfileId) mainRef.current?.scrollTo({ top: 0 });
+  }, [selectedClientProfileId]);
   const [highlightPulse, setHighlightPulse] = useState(0);
   const [mailFullScreen, setMailFullScreen] = useState(false);
   const [mailComposeTo, setMailComposeTo] = useState<string | null>(null);
@@ -893,7 +906,7 @@ function App() {
           // teinte toujours plus marquée hors Accueil, mais le curseur
           // redevient réellement perceptible partout.
           bgImage ? (currentNav === 'accueil' ? 'bg-[#071015]/35' : 'bg-[#071015]/55') : 'bg-[#071015]'
-        }`}>
+        }`} ref={mainRef}>
           {/* Ticket #17 : ce fond n'apparaissait pas sur mobile — un ancêtre
               du layout applique une transformation CSS (animations de page,
               barres iOS) qui transforme un `position:fixed` imbriqué en
