@@ -1,0 +1,27 @@
+-- Audit global demandé (9 septembre) : « dans projet interne, tout message
+-- posté dans le chat, l'autre utilisateur ne reçoit rien — pas de
+-- notification push, sauf la bonne réception dans la clochette ».
+--
+-- Cause trouvée et reproduite directement : `public.invoke_send_push`
+-- existait en DEUX versions (5 paramètres, et 7 paramètres avec
+-- `_conversation_id`/`_lead_id` en plus, tous deux avec valeurs par
+-- défaut). Un appel avec exactement 5 arguments — c'est le cas de TOUTES
+-- les fonctions qui déclenchent un push (create_notification,
+-- tg_chat_message_after_insert, tg_internal_task_message_notify,
+-- notify_new_message, notify_support_*, tg_reaction_notify,
+-- tg_lead_stage_moved_notify, et 6 autres) — est AMBIGU pour Postgres :
+--   ERROR: 42725: function invoke_send_push(...) is not unique
+-- Cette erreur était systématiquement avalée par le `EXCEPTION WHEN
+-- OTHERS THEN NULL` posé (à raison, pour ne jamais faire échouer l'action
+-- principale) autour de chaque appel — la notification en clochette se
+-- créait donc normalement, mais AUCUN push n'était jamais réellement
+-- tenté, sans qu'aucune erreur ne remonte nulle part. Reproduit et confirmé
+-- en conditions réelles avant correctif (appel direct → "not unique"),
+-- puis reproduit à nouveau APRÈS correctif (appel direct → succès, envoi
+-- confirmé dans les logs de la fonction send-push).
+--
+-- Correctif : supprimer la version à 5 paramètres, redondante — la version
+-- à 7 paramètres couvre exactement le même usage grâce à ses valeurs par
+-- défaut sur les deux derniers paramètres. Aucune des 14 fonctions
+-- appelantes n'a besoin d'être modifiée.
+drop function if exists public.invoke_send_push(uuid[], text, text, text, text);
