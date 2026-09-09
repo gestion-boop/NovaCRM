@@ -4,6 +4,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
+import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 
 // Demande explicite : "je veux qu'on ait la possibilité de créer d'autres
 // colonnes kanban comme si c'était une nouvelle interface, comme des
@@ -21,6 +22,15 @@ interface Card { id: string; boardId: string; columnId: string; title: string; d
 
 const KanbanBoardsView: React.FC<{ agencyId: string }> = ({ agencyId }) => {
   const { currentUser } = useAuth();
+  // Audit responsive tablette (9 septembre) : les boutons de suppression
+  // (tableau/colonne/carte) n'étaient visibles qu'au survol (`opacity-0
+  // group-hover:opacity-100`) — sur une tablette tactile (iPad, pas de
+  // souris, donc pas de survol), ils restaient invisibles ET inatteignables.
+  // Même correctif déjà appliqué à ChatViewSupabase.tsx : toujours visibles
+  // dès qu'aucune souris fine n'est détectée (mobile OU pointeur tactile).
+  const isMobile = useIsMobile();
+  const isCoarsePointer = useIsCoarsePointer();
+  const pointeurTactile = isMobile || isCoarsePointer;
   const [boards, setBoards] = useState<Board[]>([]);
   const [loadingBoards, setLoadingBoards] = useState(true);
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
@@ -228,7 +238,7 @@ const KanbanBoardsView: React.FC<{ agencyId: string }> = ({ agencyId }) => {
                 </button>
                 <button
                   onClick={() => void deleteBoard(b.id)}
-                  className="absolute top-3 right-3 w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 hover:bg-rose-500/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  className={`absolute top-3 right-3 w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 hover:bg-rose-500/20 flex items-center justify-center transition-opacity ${pointeurTactile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                   title="Supprimer le tableau"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -246,7 +256,7 @@ const KanbanBoardsView: React.FC<{ agencyId: string }> = ({ agencyId }) => {
                 </button>
                 <button
                   onClick={() => void deleteBoard(b.id)}
-                  className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 hover:bg-rose-500/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                  className={`w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 hover:bg-rose-500/20 flex items-center justify-center transition-opacity shrink-0 ${pointeurTactile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                   title="Supprimer le tableau"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -329,7 +339,7 @@ const KanbanBoardsView: React.FC<{ agencyId: string }> = ({ agencyId }) => {
                         </span>
                         <div className="flex items-center gap-1 shrink-0">
                           <span className="text-[10px] text-gray-500 font-mono">{columnCards.length}</span>
-                          <button onClick={() => void deleteColumn(col.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-rose-500/10 text-gray-500 hover:text-rose-300">
+                          <button onClick={() => void deleteColumn(col.id)} className={`transition-opacity p-1 rounded hover:bg-rose-500/10 text-gray-500 hover:text-rose-300 ${pointeurTactile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
@@ -352,7 +362,7 @@ const KanbanBoardsView: React.FC<{ agencyId: string }> = ({ agencyId }) => {
                               }}
                             >
                               <p className="text-sm text-white break-words flex-1 min-w-0">{card.title}</p>
-                              <button onClick={() => void deleteCard(card.id)} className="opacity-0 group-hover/card:opacity-100 transition-opacity shrink-0 text-gray-500 hover:text-rose-300">
+                              <button onClick={() => void deleteCard(card.id)} className={`transition-opacity shrink-0 text-gray-500 hover:text-rose-300 ${pointeurTactile ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100'}`}>
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
