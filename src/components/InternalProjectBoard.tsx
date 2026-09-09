@@ -17,6 +17,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } 
 import { CSS } from '@dnd-kit/utilities';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { pickVoiceMimeType } from '@/lib/audioRecording';
 import { ChevronLeft, Plus, Trash2, Calendar, X, Loader2, User, CheckSquare, Image as ImageIcon, Mic, Square, Send, Paperclip, MessageCircle, Eye, Users as UsersIcon, Check, Pencil } from 'lucide-react';
 import { InternalTask, InternalTaskStatus } from '@/types';
 import { NovaSphereUserProfile, useAuth } from '@/context/AuthContext';
@@ -974,8 +975,7 @@ const TaskDetailModal: React.FC<{
   const startRecordingChat = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      let mimeType = 'audio/webm';
-      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+      const mimeType = pickVoiceMimeType();
       const recorder = new MediaRecorder(stream, { mimeType });
       chatMediaRecorderRef.current = recorder;
       chatAudioChunksRef.current = [];
