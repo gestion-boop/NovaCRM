@@ -10,7 +10,7 @@ import {
   eachDayOfInterval, parseISO, isToday
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import {
   fetchGoogleCalendarEvents,
   createGoogleCalendarEvent,
@@ -112,6 +112,14 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
   // colonnes sur un téléphone), hauteur figée à 90 % de l'écran, et un en-tête
   // de trois lignes avant le premier rendez-vous. Voir plus bas.
   const isMobile = useIsMobile();
+  // Audit responsive tablette (9 septembre) : la protection anti-écrasement
+  // de la vue Semaine (largeur mini + défilement horizontal, voir
+  // renderWeekView) ne s'appliquait qu'en dessous de 768px — une tablette
+  // tactile en portrait (iPad ~768-834px) tombe juste au-dessus de ce seuil
+  // et se voyait donc traitée comme un grand écran de bureau : la grille de
+  // 7 jours s'écrasait sans aucune échappatoire au défilement.
+  const isCoarsePointer = useIsCoarsePointer();
+  const ecraseSemaine = isMobile || isCoarsePointer;
   const dernierCreateSignal = useRef(createSignal ?? 0);
   const { currentUser, userProfile, activeAgency } = useAuth();
 
@@ -822,8 +830,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
       // Sept colonnes d'heures sur 390 px sont illisibles : sur téléphone, la
       // grille garde une largeur minimale et défile horizontalement, plutôt
       // que d'écraser chaque jour sur 50 px.
-      <div className={`flex flex-col h-full bg-[#0E1A20] rounded-xl border border-white/10 relative ${isMobile ? 'overflow-x-auto' : 'overflow-hidden'}`}>
-        <div className={isMobile ? 'min-w-[680px] flex flex-col h-full' : 'contents'}>
+      <div className={`flex flex-col h-full bg-[#0E1A20] rounded-xl border border-white/10 relative ${ecraseSemaine ? 'overflow-x-auto' : 'overflow-hidden'}`}>
+        <div className={ecraseSemaine ? 'min-w-[680px] flex flex-col h-full' : 'contents'}>
         <div className="flex shrink-0">
           {/* Time column header */}
           <div className="w-16 border-r border-b border-white/10 bg-white/5 shrink-0"></div>
