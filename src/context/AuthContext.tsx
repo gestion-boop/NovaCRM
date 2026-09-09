@@ -21,7 +21,16 @@ type AppCurrentUser = {
   getIdToken: () => Promise<string>;
 };
 
-export type NovaSphereRole = 'super_admin' | 'admin' | 'manager' | 'agent' | 'user' | 'intern' | 'client_guest';
+// Audit (9 septembre) : « Laetitia Pioche dit qu'elle n'a aucun contact ».
+// Ses 8 fiches sont bien attribuées en base — la piste retenue est ce
+// mapping de rôle, qui ne reconnaissait pas 'commercial', LA valeur
+// réellement stockée dans user_roles.role pour l'immense majorité des
+// comptes non-admin (vérifié : l'enum côté base est bien
+// {super_admin, commercial, intern, client_guest, admin} — 'manager' et
+// 'agent' ci-dessous n'existent nulle part en base). Un compte 'commercial'
+// se voyait donc silencieusement rétrogradé à 'user' à chaque connexion
+// (voir buildProfileFromSupabaseUser plus bas).
+export type NovaSphereRole = 'super_admin' | 'admin' | 'manager' | 'agent' | 'commercial' | 'user' | 'intern' | 'client_guest';
 
 export interface NovaSphereUserProfile {
   uid: string;
@@ -269,7 +278,7 @@ function buildProfileFromSupabaseUser(user: AppCurrentUser, data?: Record<string
         ? data.displayName.trim()
         : user.displayName?.trim() || normalizeEmail(user.email),
     photoURL: typeof data?.photoURL === 'string' ? data.photoURL : user.photoURL || null,
-    role: data?.role === 'super_admin' || data?.role === 'admin' || data?.role === 'manager' || data?.role === 'agent' || data?.role === 'user' || data?.role === 'intern' || data?.role === 'client_guest' ? String(data.role) as NovaSphereRole : 'user',
+    role: data?.role === 'super_admin' || data?.role === 'admin' || data?.role === 'manager' || data?.role === 'agent' || data?.role === 'commercial' || data?.role === 'user' || data?.role === 'intern' || data?.role === 'client_guest' ? String(data.role) as NovaSphereRole : 'user',
     agencyIds,
     primaryAgencyId: typeof data?.primaryAgencyId === 'string' ? data.primaryAgencyId : agencyIds[0],
     active: data?.active === true,

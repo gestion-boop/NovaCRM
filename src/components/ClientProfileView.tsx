@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { assemblerDictee } from '@/lib/dictee';
+import { pickVoiceMimeType } from '@/lib/audioRecording';
 import { AGENCIES, NoteItem, DocItem, Task } from '@/types';
 import TransactionChecklistModal, {
   STAGE_CHECKLISTS,
@@ -1509,8 +1510,7 @@ export default function ClientProfileView({
   const handleStartRecordingChat = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      let mimeType = 'audio/webm';
-      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+      const mimeType = pickVoiceMimeType();
       const recorder = new MediaRecorder(stream, { mimeType });
       chatMediaRecorderRef.current = recorder;
       chatAudioChunksRef.current = [];

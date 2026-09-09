@@ -37,6 +37,10 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
+  Bell,
+  BellOff,
+  Smartphone,
+  Monitor,
 } from 'lucide-react';
 
 import { AGENCIES } from '@/types';
@@ -223,7 +227,7 @@ interface EditForm {
 const EMPTY_EDIT: EditForm = { fullName: '', email: '', jobTitle: '', phone: '', rsacNumber: '', rcProInsurance: '', businessCards: [] };
 
 export const EquipeView: React.FC<EquipeViewProps> = ({ onNavigate, onComposeMail, onOpenContact }) => {
-  const { userProfile, currentUser } = useAuth();
+  const { userProfile, currentUser, activeAgency } = useAuth();
   const isSuperAdmin = userProfile?.role === 'super_admin';
 
   // Ticket "Clients invités" (4/13) : nouvel onglet à côté de l'annuaire.
@@ -241,6 +245,16 @@ export const EquipeView: React.FC<EquipeViewProps> = ({ onNavigate, onComposeMai
   const [rolesById, setRolesById] = useState<Record<string, string>>({});
   const [agenciesById, setAgenciesById] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
+
+  // Signalé (9 septembre, Sylvain — Natacha ne reçoit pas ses notifications
+  // sur son téléphone) : « peut-être mettre des trackers pour voir si cette
+  // option est activée ». Rien ne permettait jusqu'ici de le voir depuis
+  // l'appli (RLS restreint push_subscriptions à son propriétaire) — visible
+  // uniquement pour un super admin, via une RPC dédiée qui n'expose que le
+  // nombre d'appareils/le user-agent, jamais les clés de souscription.
+  const [pushStatusById, setPushStatusById] = useState<
+    Record<string, { deviceCount: number; lastUpdated: string | null; userAgents: string[] }>
+  >({});
 
   const [search, setSearch] = useState('');
   const [agencyFilter, setAgencyFilter] = useState<string>('all');
@@ -306,6 +320,31 @@ export const EquipeView: React.FC<EquipeViewProps> = ({ onNavigate, onComposeMai
     })();
     return () => { cancelled = true; };
   }, [directoryReloadKey]);
+
+  useEffect(() => {
+    if (!isSuperAdmin || !activeAgency?.id) { setPushStatusById({}); return; }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.rpc('get_team_push_status', { _agency_id: activeAgency.id });
+      if (cancelled) return;
+      if (error) { console.warn('Erreur chargement statut notifications push :', error); return; }
+      const map: Record<string, { deviceCount: number; lastUpdated: string | null; userAgents: string[] }> = {};
+      (data || []).forEach((row: any) => {
+        map[row.user_id] = {
+          deviceCount: row.device_count,
+          lastUpdated: row.last_updated,
+          userAgents: row.user_agents || [],
+        };
+      });
+      setPushStatusById(map);
+    })();
+    return () => { cancelled = true; };
+  }, [isSuperAdmin, activeAgency?.id, directoryReloadKey]);
+
+  // Reconnaît, très grossièrement, un user-agent mobile — pour repérer d'un
+  // coup d'œil un membre dont TOUS les appareils inscrits sont des
+  // ordinateurs (cas exact de Natacha : une seule souscription, Windows).
+  const isMobileUserAgent = (ua: string) => /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
 
   const members: DirectoryMember[] = useMemo(() => {
     // Signalé : un membre de TEAM_MEMBERS invité APRÈS coup obtient un id
@@ -970,6 +1009,85 @@ export const EquipeView: React.FC<EquipeViewProps> = ({ onNavigate, onComposeMai
                     <span className="text-white text-sm">Assurance RC Pro : {selected.rcProInsurance}</span>
                   </div>
                 )}
+
+                {/* Signalé (9 septembre) : « Natacha ne reçoit pas ses
+                    notifications sur son téléphone, peut-être mettre des
+                    trackers pour voir si cette option est activée » — seul
+                    moyen jusqu'ici de le vérifier : interroger la base à la
+                    main. Visible uniquement pour un super admin (voir
+                    get_team_push_status, RPC dédiée qui n'expose que le
+                    nombre d'appareils/le user-agent, jamais les clés de
+                    souscription). */}
+                {isSuperAdmin && (() => {
+                  const status = pushStatusById[selected.id];
+                  const hasMobile = !!status?.userAgents.some(isMobileUserAgent);
+                  return (
+                    <div className={`flex items-start gap-3 p-3 rounded-xl border ${
+                      status && status.deviceCount > 0
+                        ? hasMobile
+                          ? 'bg-emerald-500/10 border-emerald-500/25'
+                          : 'bg-amber-500/10 border-amber-500/25'
+                        : 'bg-red-500/10 border-red-500/25'
+                    }`}>
+                      {status && status.deviceCount > 0 ? (
+                        <Bell className={`w-4 h-4 shrink-0 mt-0.5 ${hasMobile ? 'text-emerald-400' : 'text-amber-400'}`} />
+                      ) : (
+                        <BellOff className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-white">
+                          {!status || status.deviceCount === 0
+                            ? 'Notifications push : jamais activées'
+                            : `Notifications push : ${status.deviceCount} appareil${status.deviceCount > 1 ? 's' : ''}${!hasMobile ? ' — aucun mobile' : ''}`}
+                        </p>
+                        {status && status.deviceCount > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {status.userAgents.map((ua, i) => (
+                              <p key={i} className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                                {isMobileUserAgent(ua) ? (
+                                  <Smartphone className="w-3 h-3 shrink-0" />
+                                ) : (
+                                  <Monitor className="w-3 h-3 shrink-0" />
+                                )}
+                                <span className="truncate">{ua}</span>
+                              </p>
+                            ))}
+                            {status.lastUpdated && (
+                              <p className="text-[10px] text-slate-500">
+                                Dernière activité : {new Date(status.lastUpdated).toLocaleString('fr-FR')}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {(!status || !hasMobile) && (
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            {!status || status.deviceCount === 0
+                              ? "Ce membre n'a jamais accepté les notifications, sur aucun appareil."
+                              : "Aucun téléphone n'a activé les notifications — seulement un ordinateur. Sur le téléphone : Rappels & Alertes → \"Activer les alertes\"."}
+                          </p>
+                        )}
+                        {/* Audit (9 septembre) : un iPhone abonné (présent ci-dessus,
+                            envois acceptés côté serveur) ne reçoit RIEN si Safari
+                            n'a pas été utilisé en mode "écran d'accueil" — une
+                            restriction propre à iOS, invisible depuis les logs
+                            serveur. C'est la cause la plus probable pour un membre
+                            qui a un iPhone dans la liste ci-dessus mais dit ne rien
+                            recevoir. */}
+                        {status && status.userAgents.some((ua) => /iPhone|iPad/i.test(ua)) && (
+                          <p className="text-[11px] text-amber-300/90 mt-1.5 flex items-start gap-1">
+                            <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                            <span>
+                              iPhone détecté : si rien n'arrive malgré un abonnement actif, vérifier que
+                              Nova CRM a bien été ajouté à l'écran d'accueil (Safari → Partager → « Sur
+                              l'écran d'accueil ») — sur iOS, un onglet/favori Safari ne reçoit jamais
+                              de notification, même acceptée par Apple côté serveur.
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {selected.dbRole === 'intern' && (
                   <InternStageCard userId={selected.id} isSuperAdmin={isSuperAdmin} currentUser={currentUser} />
