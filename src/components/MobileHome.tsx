@@ -579,8 +579,17 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   // <main> dans App.tsx — l'ajouter une deuxième fois ici cumulait les deux
   // et poussait tout le contenu (jusqu'au bouton "Créer un lead") largement
   // hors de l'écran sur les appareils à encoche / îlot dynamique.
+  // Signalé (9 septembre, capture à l'appui) : un « trou » en bas de l'écran
+  // — en réalité la dernière ligne de tuiles ("Blocs - Notes", etc.) coincée
+  // entre le bouton flottant "Créer un lead" et la barre de navigation en
+  // dessous, tous les deux `fixed`. Le padding bas du contenu (`pb-4`,
+  // 1rem) ne réservait de la place pour AUCUN des deux — bien trop court
+  // face au bouton (positionné à 6.5rem du bas + sa propre hauteur) et à la
+  // barre de nav flottante en dessous. Porté à une valeur qui dégage
+  // franchement les deux, sans toucher au `pt-4` volontairement laissé tel
+  // quel juste au-dessus (voir commentaire).
   return (
-    <div className="min-h-full p-4 sm:p-6 pb-4 pt-4 flex flex-col gap-4">
+    <div className="min-h-full p-4 sm:p-6 pb-[calc(11rem+env(safe-area-inset-bottom,0px))] pt-4 flex flex-col gap-4">
       {/* En-tête */}
       <div className="flex items-center justify-between pt-1">
         <div className="min-w-0">
