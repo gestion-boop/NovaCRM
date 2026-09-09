@@ -1066,6 +1066,24 @@ export const EquipeView: React.FC<EquipeViewProps> = ({ onNavigate, onComposeMai
                               : "Aucun téléphone n'a activé les notifications — seulement un ordinateur. Sur le téléphone : Rappels & Alertes → \"Activer les alertes\"."}
                           </p>
                         )}
+                        {/* Audit (9 septembre) : un iPhone abonné (présent ci-dessus,
+                            envois acceptés côté serveur) ne reçoit RIEN si Safari
+                            n'a pas été utilisé en mode "écran d'accueil" — une
+                            restriction propre à iOS, invisible depuis les logs
+                            serveur. C'est la cause la plus probable pour un membre
+                            qui a un iPhone dans la liste ci-dessus mais dit ne rien
+                            recevoir. */}
+                        {status && status.userAgents.some((ua) => /iPhone|iPad/i.test(ua)) && (
+                          <p className="text-[11px] text-amber-300/90 mt-1.5 flex items-start gap-1">
+                            <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                            <span>
+                              iPhone détecté : si rien n'arrive malgré un abonnement actif, vérifier que
+                              Nova CRM a bien été ajouté à l'écran d'accueil (Safari → Partager → « Sur
+                              l'écran d'accueil ») — sur iOS, un onglet/favori Safari ne reçoit jamais
+                              de notification, même acceptée par Apple côté serveur.
+                            </span>
+                          </p>
+                        )}
                       </div>
                     </div>
                   );
