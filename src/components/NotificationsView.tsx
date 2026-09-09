@@ -271,6 +271,26 @@ export const NotificationsView: React.FC<
     sendTest: sendTestPush,
   } = usePushNotifications();
 
+  // Audit (9 septembre) : « Sylvain et d'autres utilisateurs ne reçoivent
+  // pas les notifications sur iPhone ». Vérifié côté serveur (logs de
+  // send-push) : chaque envoi vers leurs iPhone est accepté par Apple
+  // (status 201) à chaque fois, sans une seule erreur — le problème n'est
+  // ni le serveur, ni l'abonnement (bien enregistré en base), ni le code
+  // d'envoi. C'est une restriction d'iOS/Safari elle-même, peu connue :
+  // depuis iOS 16.4, Safari n'affiche JAMAIS une notification push — même
+  // acceptée par Apple — si le site est ouvert comme un simple onglet ou
+  // favori. Ça ne fonctionne QUE si l'appli a été ajoutée à l'écran
+  // d'accueil et est ouverte DEPUIS cette icône (mode "standalone"). Rien
+  // dans l'appli n'avertissait de cette condition — l'utilisateur pouvait
+  // activer les alertes avec succès (permission accordée, abonnement créé)
+  // sans jamais recevoir la moindre notification, pour une raison invisible
+  // depuis l'appli elle-même.
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone =
+    typeof window !== 'undefined' &&
+    (window.matchMedia?.('(display-mode: standalone)').matches || (window.navigator as any).standalone === true);
+  const needsHomeScreenInstall = isIOS && !isStandalone;
+
   const [
     testFeedback,
     setTestFeedback,
@@ -619,6 +639,15 @@ export const NotificationsView: React.FC<
             <p className="text-xs text-gray-400">
               Recevez les messages du chat, alertes dossiers et réservations en temps réel sur votre smartphone.
             </p>
+
+            {needsHomeScreenInstall && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-400" />
+                <span>
+                  <strong>Sur iPhone, les notifications ne fonctionnent que si l'appli est ajoutée à l'écran d'accueil</strong> — même en activant les alertes ici, rien n'arrivera depuis Safari (un onglet ou un favori). Ouvre le menu Partager <span className="whitespace-nowrap">(⬆️)</span> puis « Sur l'écran d'accueil », et lance ensuite Nova CRM depuis cette icône.
+                </span>
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-2">
               {!pushSubscribed && pushSupported && (
