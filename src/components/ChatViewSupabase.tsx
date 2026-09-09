@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { pickVoiceMimeType } from '@/lib/audioRecording';
 import { useAuth } from '@/context/AuthContext';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { AGENCIES } from '@/types';
@@ -1599,8 +1600,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const handleStartRecordingChannel = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      let mimeType = 'audio/webm';
-      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+      const mimeType = pickVoiceMimeType();
       const recorder = new MediaRecorder(stream, { mimeType });
       channelMediaRecorderRef.current = recorder;
       channelAudioChunksRef.current = [];
@@ -1660,8 +1660,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const handleStartRecordingConv = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      let mimeType = 'audio/webm';
-      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+      const mimeType = pickVoiceMimeType();
       const recorder = new MediaRecorder(stream, { mimeType });
       convMediaRecorderRef.current = recorder;
       convAudioChunksRef.current = [];

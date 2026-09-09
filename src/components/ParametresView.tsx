@@ -20,6 +20,7 @@ import { requestWorkspaceAccessToken, getCachedAccessToken, reconnectGoogleWorks
 import { updateCssAccentVars, updateCssCalendarAccentVars } from '@/utils/theme';
 import { supabase } from '@/lib/supabase';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { NAV_ITEMS } from './Sidebar';
 
 interface ParametresViewProps {
@@ -570,7 +571,22 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => readStorage('novasphere:notifications-enabled', true));
   const [notificationSound, setNotificationSound] = useState(() => readStorage('novasphere:notification-sound', false));
-  const [pushEnabled, setPushEnabled] = useState(() => readStorage('novasphere:push-enabled', false));
+  // Signalé (9 septembre) — audit à la demande de Sylvain (« uniformise les
+  // choses pour tous ») : ce bouton ne faisait QUE demander la permission au
+  // navigateur et enregistrer un booléen dans le localStorage — sans jamais
+  // écrire dans `push_subscriptions` (ni appeler `pushManager.subscribe`).
+  // Il pouvait donc afficher « activé » alors qu'aucun abonnement réel
+  // n'existait en base, exactement le genre d'état trompeur qui a fait
+  // chercher pourquoi Natacha ne recevait rien. Remplacé par le même hook
+  // que Rappels & Alertes (`usePushNotifications`, déjà correct et
+  // fonctionnel) : une seule vraie source de vérité désormais, ce bouton et
+  // celui de la clochette reflètent et pilotent le même abonnement.
+  const pushNotif = usePushNotifications();
+  const pushEnabled = pushNotif.subscribed;
+  const togglePush = async (value: boolean) => {
+    if (value) await pushNotif.subscribe();
+    else await pushNotif.unsubscribe();
+  };
   const [dailyReminder, setDailyReminder] = useState(true);
 
   const [announcement, setAnnouncement] = useState('');
@@ -1108,14 +1124,6 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
     setDailyReminder(value);
     try { await api('/api/settings/daily-reminders', { method: 'PATCH', body: JSON.stringify({ enabled: value }) }); }
     catch (error) { const err = error as Error; setDailyReminder(previous); notify(`Erreur : ${err.message}`); }
-  }
-
-  async function togglePush(value: boolean) {
-    if (value && 'Notification' in window) {
-      const result = await Notification.requestPermission();
-      if (result !== 'granted') { setPushEnabled(false); writeStorage('novasphere:push-enabled', false); return notify("L'autorisation de notifications a été refusée par le navigateur."); }
-    }
-    setPushEnabled(value); writeStorage('novasphere:push-enabled', value);
   }
 
   async function publishAnnouncement() {
@@ -1830,7 +1838,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
       );
 
       case 'notifications': {
-        const rows: Array<[string, string, boolean, (v: boolean) => void, React.ComponentType<{ className?: string }>]> = [['Activer les notifications','Affiche le badge sur la cloche.',notificationsEnabled,(v:boolean)=>{setNotificationsEnabled(v);writeStorage('novasphere:notifications-enabled',v);},Bell],['Son à la réception','Joue un son pour les nouvelles notifications.',notificationSound,(v:boolean)=>{setNotificationSound(v);writeStorage('novasphere:notification-sound',v);},Volume2],['Notifications push (mobile / bureau)','Demande réellement la permission au navigateur.',pushEnabled,togglePush,Smartphone],['Rappel quotidien des tâches & RDV','Synchronisé dans profiles.push_daily_reminders.',dailyReminder,setDailyPush,CalendarClock]];
+        const rows: Array<[string, string, boolean, (v: boolean) => void, React.ComponentType<{ className?: string }>]> = [['Activer les notifications','Affiche le badge sur la cloche.',notificationsEnabled,(v:boolean)=>{setNotificationsEnabled(v);writeStorage('novasphere:notifications-enabled',v);},Bell],['Son à la réception','Joue un son pour les nouvelles notifications.',notificationSound,(v:boolean)=>{setNotificationSound(v);writeStorage('novasphere:notification-sound',v);},Volume2],['Notifications push (mobile / bureau)','Sur CET appareil précis — à activer séparément sur chaque téléphone/ordinateur.',pushEnabled,togglePush,Smartphone],['Rappel quotidien des tâches & RDV','Synchronisé dans profiles.push_daily_reminders.',dailyReminder,setDailyPush,CalendarClock]];
         return <div className="divide-y divide-[#173d40]">{rows.map(([title,desc,checked,setter,Icon])=><div key={title} className="py-4 flex items-center gap-4"><Icon className="w-5 h-5 text-slate-400"/><div className="flex-1"><p className="text-sm font-semibold text-white">{title}</p><p className="text-xs text-slate-400 mt-0.5">{desc}</p></div><Toggle checked={checked} onChange={setter}/></div>)}</div>;
       }
 

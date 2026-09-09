@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { assemblerDictee } from '@/lib/dictee';
+import { pickVoiceMimeType } from '@/lib/audioRecording';
 import { useAuth } from '@/context/AuthContext';
 import { useLeadChat, LeadMessage } from '@/hooks/useLeadChat';
 import { toast } from 'sonner';
@@ -136,8 +137,7 @@ const ClientGuestShell: React.FC = () => {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      let mimeType = 'audio/webm';
-      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+      const mimeType = pickVoiceMimeType();
       const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
