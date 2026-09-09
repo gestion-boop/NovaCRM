@@ -1312,10 +1312,35 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // dernière sauvegarde n'y apparaissait donc jamais.
   const reconcilierGrille = (grille: TileItemNode[]): TileItemNode[] => {
     let base = grille;
+    // Signalé (9 septembre, Sylvain) : « le dossier Communication se
+    // recrée chez des utilisateurs alors qu'on a le chat tout en haut »
+    // — cause trouvée : masquer TOUT le dossier (handleDeleteTile) retire
+    // ses cartes AVEC lui, sans les ajouter individuellement à la liste des
+    // tuiles masquées. Au chargement suivant, ses cartes qui sont aussi des
+    // modules de NAV_ITEMS (ex. "Support" — pas "Chat"/"Mail", déjà
+    // filtrés par removeQuickBarDuplicates) paraissent alors « manquantes »
+    // comme une tuile toute neuve, et reviennent seules à la racine : ça
+    // ressemble à des restes du dossier soi-disant supprimé qui repoussent.
+    // On calcule donc la liste des ids masqués ICI, en amont, aplatie
+    // récursivement (les cartes d'un dossier masqué comptent comme
+    // masquées elles aussi) et on l'intègre à `estAbsent` — plus aucun bloc
+    // ci-dessous, générique ou dédié, ne peut donc réinjecter par erreur ce
+    // qu'un dossier masqué emportait avec lui.
+    let hiddenIds = new Set<string>();
+    try {
+      const hiddenRaw = localStorage.getItem('novasphere_hidden_tiles_v1');
+      const flattenIds = (items: TileItemNode[]): string[] =>
+        items.flatMap((t) => [t.id, ...(t.children ? flattenIds(t.children) : [])]);
+      hiddenIds = new Set(flattenIds(hiddenRaw ? JSON.parse(hiddenRaw) : []));
+    } catch {
+      /* ignore */
+    }
     // "Manquant" = absent de la grille brute ET pas déjà couvert par un
     // verrou (auquel cas applyLocks l'injectera tout seul, à sa vraie place,
-    // sans jamais passer par ici — voir idsCouvertsParVerrou plus haut).
-    const estAbsent = (id: string) => !existsRecursive(base, id) && !idsCouvertsParVerrou(id);
+    // sans jamais passer par ici — voir idsCouvertsParVerrou plus haut) ET
+    // pas emporté par un dossier que l'utilisateur a lui-même masqué.
+    const estAbsent = (id: string) =>
+      !existsRecursive(base, id) && !idsCouvertsParVerrou(id) && !hiddenIds.has(id);
     // Nouvelle tuile "Immosphera 360" : l'ajouter aussi pour les grilles déjà
     // personnalisées/enregistrées qui ne l'ont pas encore, sinon changer
     // seulement INITIAL_TILES n'a aucun effet (cf. commentaire normalizeTile
