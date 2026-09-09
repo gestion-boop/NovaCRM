@@ -1238,7 +1238,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // resterait haute et vide.
   const convTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const channelTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const HAUTEUR_MAX_SAISIE = 132;
+  // Signalé (9 septembre, capture à l'appui) : « on ne peut pas mieux taper
+  // les SMS » sur mobile — le plafond de hauteur était le même sur mobile
+  // que sur desktop, alors qu'un écran de téléphone masque déjà la moitié
+  // de l'écran avec le clavier : quelques lignes visibles seulement avant
+  // que ça défile. Relevé sur mobile uniquement (desktop inchangé).
+  const isMobileSaisie = useIsMobile();
+  const HAUTEUR_MAX_SAISIE = isMobileSaisie ? 220 : 132;
   const ajusterHauteur = (zone: HTMLTextAreaElement | null) => {
     if (!zone) return;
     zone.style.height = 'auto';
