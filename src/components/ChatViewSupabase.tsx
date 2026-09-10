@@ -983,6 +983,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // Un rAF force le saut au prochain paint, puis un rattrapage après le
   // rendu complet (images) garantit qu'on atterrit bien tout en bas.
   useEffect(() => {
+    // Signalé (10 septembre, Sylvain/Pauline) : « ça ne va pas dans le bon
+    // message » en cliquant sur une notification. Cause trouvée : CET effet
+    // (scroll-tout-en-bas, avec son propre rattrapage à 150ms conçu pour
+    // gagner toute course de mise en page) et celui du rebond sur le message
+    // ciblé plus haut (scrollIntoView, voir highlightedMessageId) dépendent
+    // tous les deux de `convMessages.length` — ils se déclenchent donc sur
+    // le MÊME rendu à l'ouverture d'une conversation depuis une
+    // notification, et celui-ci, pensé pour être increvable, l'emportait
+    // systématiquement : on atterrissait toujours en bas de la conversation
+    // (le message le plus récent), jamais sur le message visé par la
+    // notification s'il ne s'agissait pas déjà du dernier.
+    if (highlightedMessageId) return;
     const pane = convScrollRef.current;
     if (!pane) return;
     const frame = window.requestAnimationFrame(() => {
@@ -995,7 +1007,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       window.cancelAnimationFrame(frame);
       window.clearTimeout(settle);
     };
-  }, [convMessages.length, activeConversationId]);
+  }, [convMessages.length, activeConversationId, highlightedMessageId]);
 
   const sendConvMessage = async () => {
     const body = convDraft.trim();
@@ -1117,13 +1129,34 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (!currentUser) return;
     const existing = (convReactions[messageId] || []).find((r) => r.userId === currentUser.uid);
     setShowConvReactionPickerFor(null);
-    if (existing && existing.emoji === emoji) {
-      await supabase.from('message_reactions' as any).delete().eq('message_id', messageId).eq('user_id', currentUser.uid);
-    } else {
-      await supabase.from('message_reactions' as any).upsert(
-        { message_id: messageId, user_id: currentUser.uid, emoji } as any,
-        { onConflict: 'message_id,user_id' }
-      );
+    // Signalé (10 septembre, Sylvain → Natacha, sur ordinateur) : « je mets
+    // un pouce et rien ». Deux causes trouvées :
+    // 1. L'erreur de l'upsert/delete n'était jamais lue (`await ...` sans
+    //    récupérer `error`) — un refus RLS ou réseau ne faisait RIEN
+    //    apparaître, ni la pastille, ni le moindre message.
+    // 2. La pastille n'apparaissait qu'après le `loadConvMessages` complet
+    //    (tout le lot de messages récents rechargé) : sur une connexion
+    //    lente ce délai pouvait donner l'impression que le clic n'avait rien
+    //    fait. Mise à jour optimiste de `convReactions` en plus du rechargement,
+    //    annulée si la requête échoue réellement.
+    const previous = convReactions[messageId] || [];
+    const optimistic = existing
+      ? existing.emoji === emoji
+        ? previous.filter((r) => r.userId !== currentUser.uid)
+        : previous.map((r) => (r.userId === currentUser.uid ? { ...r, emoji } : r))
+      : [...previous, { userId: currentUser.uid, emoji }];
+    setConvReactions((v) => ({ ...v, [messageId]: optimistic }));
+    const { error } =
+      existing && existing.emoji === emoji
+        ? await supabase.from('message_reactions' as any).delete().eq('message_id', messageId).eq('user_id', currentUser.uid)
+        : await supabase.from('message_reactions' as any).upsert(
+            { message_id: messageId, user_id: currentUser.uid, emoji } as any,
+            { onConflict: 'message_id,user_id' }
+          );
+    if (error) {
+      setConvReactions((v) => ({ ...v, [messageId]: previous }));
+      toast.error("La réaction n'a pas pu être enregistrée.");
+      return;
     }
     if (activeConversationId) loadConvMessages(activeConversationId);
   };
