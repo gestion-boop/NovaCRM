@@ -36,6 +36,16 @@ function rowToMessage(row: Record<string, unknown>): TaskMessage {
   };
 }
 
+// Audit global (10 septembre) : « les messages historiques... met un peu
+// plus de temps ». Cette requête n'avait ni `.limit()` ni pagination —
+// TOUT l'historique de la carte était retéléchargé et re-rendu à chaque
+// ouverture de l'onglet Chat ET à chaque événement temps réel sur la
+// tâche (le canal juste en dessous invalide la requête sur le moindre
+// insert/update/delete). Même correctif déjà en place ailleurs
+// (ChatViewSupabase.tsx, RECENT_MESSAGES_PAGE) : on ne charge plus que les
+// messages les plus récents.
+const RECENT_TASK_MESSAGES_PAGE = 60;
+
 export const useTaskMessages = (taskId: string | null) => {
   const queryClient = useQueryClient();
   const queryKey = ['internal-task-messages', taskId];
@@ -48,9 +58,10 @@ export const useTaskMessages = (taskId: string | null) => {
         .from('messages')
         .select('*')
         .eq('task_id', taskId as string)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(RECENT_TASK_MESSAGES_PAGE);
       if (error) throw new Error(error.message);
-      return ((data as Record<string, unknown>[]) || []).map(rowToMessage);
+      return ((data as Record<string, unknown>[]) || []).map(rowToMessage).reverse();
     },
   });
 

@@ -907,7 +907,11 @@ const TaskDetailModal: React.FC<{
   const { entries: activityEntries } = useTaskActivity(task.id);
   // Ticket "Refonte fiche tâche" (6/6) : chat par tâche.
   const { currentUser, userProfile } = useAuth();
-  const { messages: chatMessages, send: sendChatMessage } = useTaskMessages(task.id);
+  // Audit (10 septembre) : « ça ne charge pas » — cet onglet affichait
+  // "Aucun message pour l'instant." pendant le chargement lui-même,
+  // indiscernable d'une conversation réellement vide (isLoading était
+  // récupéré par le hook mais jamais utilisé ici).
+  const { messages: chatMessages, isLoading: chatMessagesLoading, send: sendChatMessage } = useTaskMessages(task.id);
   const [chatDraft, setChatDraft] = useState('');
   const [sendingChat, setSendingChat] = useState(false);
   const [uploadingChatMedia, setUploadingChatMedia] = useState(false);
@@ -1231,7 +1235,11 @@ const TaskDetailModal: React.FC<{
             {tab === 'chat' && (
               <div className="flex flex-col flex-1 min-h-0">
                 <div ref={chatScrollRef} className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
-                  {chatMessages.length === 0 && (
+                  {chatMessagesLoading ? (
+                    <div className="flex items-center justify-center gap-2 py-8 text-gray-500 text-xs">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Chargement…
+                    </div>
+                  ) : chatMessages.length === 0 && (
                     <p className="text-xs text-gray-500 text-center py-8">Aucun message pour l'instant.</p>
                   )}
                   {chatMessages.map((m) => {
