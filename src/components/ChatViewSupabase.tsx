@@ -2727,9 +2727,33 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // cinquantaine de pixels au-dessus des touches.
   const [clavierOuvert, setClavierOuvert] = useState(false);
   const rembourrageBarre = clavierOuvert ? { paddingBottom: '0.75rem' } : undefined;
+  // Signalé (10 septembre, Sylvain Grazia, Android) : « j'ai un espace tout
+  // en bas, ce n'est pas figé au niveau du remplissage de l'écran ».
+  //
+  // Ce correctif (commentaire ci-dessus, "hauteurVisible") a été écrit pour
+  // UNE cause précise et vraie sur iPhone : Safari iOS ne redimensionne
+  // jamais la page quand le clavier s'ouvre, il se pose par-dessus — d'où
+  // le besoin de recaler la hauteur à la main sur `visualViewport`.
+  // Android Chrome n'a PAS ce problème : son clavier redimensionne bien la
+  // vraie fenêtre (et 100dvh, posé à la racine dans App.tsx, suit déjà ce
+  // redimensionnement tout seul). Ce correctif s'appliquait pourtant à
+  // TOUT mobile (`isMobile`, pas seulement iOS) : sur Android, il fige la
+  // hauteur du chat sur l'instantané de `visualViewport.height` pris à
+  // l'ouverture — un instant où la barre d'adresse Chrome peut être
+  // affichée (fenêtre plus petite) — et ne la corrige plus forcément si
+  // cette barre se rétracte ensuite (aucun nouvel événement resize/scroll
+  // sur `visualViewport` ne se déclenche nécessairement, l'app ne fait pas
+  // défiler la PAGE elle-même). Résultat : un bandeau vide, figé, en bas
+  // de l'écran — exactement le symptôme décrit, et qui touchait donc
+  // potentiellement tout utilisateur Android, pas seulement Sylvain.
+  //
+  // Réservé désormais à iOS, la seule plateforme qui en a réellement
+  // besoin — Android garde `h-full` (100dvh), qui suit nativement la vraie
+  // fenêtre visible sans jamais se figer.
+  const isIOSClavier = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv || !isMobile || !isActive) {
+    if (!vv || !isMobile || !isActive || !isIOSClavier) {
       setHauteurVisible(null);
       setClavierOuvert(false);
       return;
@@ -2748,7 +2772,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       vv.removeEventListener('resize', appliquer);
       vv.removeEventListener('scroll', appliquer);
     };
-  }, [isMobile, isActive]);
+  }, [isMobile, isActive, isIOSClavier]);
 
   return (
     <div
