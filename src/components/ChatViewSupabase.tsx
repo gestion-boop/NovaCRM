@@ -999,7 +999,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const sendConvMessage = async () => {
     const body = convDraft.trim();
-    if (!body || !activeConversationId || !currentUser) return;
+    if (!activeConversationId || !currentUser) return;
+    if (!body) {
+      // Audit (10 septembre, Sylvain → Natacha) : « le vocal n'est pas
+      // parti, il a dû le refaire ». Cause trouvée : un vocal enregistré
+      // reste en attente de réécoute (convVocalPret) jusqu'au clic sur le
+      // bouton dédié de son aperçu — mais CE bouton-ci (composeur
+      // principal) et la touche Entrée restent actifs pendant ce temps, et
+      // ce garde-fou, écrit pour le texte, renvoyait alors silencieusement
+      // sans rien envoyer ni prévenir : on a l'impression d'avoir appuyé
+      // sur "Envoyer" pour rien. On fait maintenant réellement partir le
+      // vocal en attente dans ce cas, au lieu de l'ignorer.
+      if (convVocalPret) void envoyerVocalConv();
+      return;
+    }
     // Deux envois ne peuvent plus se chevaucher : `setConvDraft('')` ne prend
     // effet qu'au rendu suivant, donc deux appels dans le même tic lisaient
     // tous les deux le même brouillon et écrivaient deux fois en base
@@ -1523,13 +1536,25 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
    */
   const insertConvMessage = async (kind: 'image' | 'voice', attachmentUrl: string, attachmentDuration?: number): Promise<string | null> => {
     if (!activeConversationId || !currentUser) return 'Conversation introuvable.';
-    const { error } = await supabase.from('messages').insert({
-      conversation_id: activeConversationId,
-      user_id: currentUser.uid,
-      kind,
-      attachment_url: attachmentUrl,
-      attachment_duration: attachmentDuration ?? null,
-    } as any);
+    // Audit (10 septembre) : cet insert n'avait pas le filet try/catch que
+    // sendConvMessage a (voir son commentaire "Réseau coupé en plein
+    // envoi") — une coupure réseau ici levait une exception au lieu de
+    // renvoyer { error }, qui ressortait comme un rejet de promesse jamais
+    // rattrapé (l'appelant n'a pas de .catch) : le bouton "Envoyer"
+    // semblait n'avoir rien fait, sans le moindre message d'erreur.
+    let error: { message: string } | null = null;
+    try {
+      const res = await supabase.from('messages').insert({
+        conversation_id: activeConversationId,
+        user_id: currentUser.uid,
+        kind,
+        attachment_url: attachmentUrl,
+        attachment_duration: attachmentDuration ?? null,
+      } as any);
+      error = res.error;
+    } catch (e) {
+      error = { message: (e as Error)?.message || "Erreur réseau pendant l'envoi." };
+    }
     if (error) return error.message;
     await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', activeConversationId);
     loadConversations(true);
@@ -1565,22 +1590,31 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
    */
   const insertChannelMedia = async (kind: 'image' | 'voice', attachmentUrl: string, attachmentDuration?: number): Promise<string | null> => {
     if (!activeChannel || !currentUser) return 'Canal introuvable.';
-    const { error } = await supabase.from('chat_messages').insert({
-      id: crypto.randomUUID(),
-      channel: activeChannel.id,
-      sender_id: currentUser.uid,
-      is_deleted: false,
-      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
-      data: {
-        body: '',
-        kind,
-        attachmentUrl,
-        attachmentDuration: attachmentDuration ?? null,
+    // Audit (10 septembre) : même filet que insertConvMessage (voir son
+    // commentaire) — sans lui, une coupure réseau ici devenait un rejet de
+    // promesse jamais rattrapé au lieu de remonter un message d'erreur.
+    let error: { message: string } | null = null;
+    try {
+      const res = await supabase.from('chat_messages').insert({
+        id: crypto.randomUUID(),
+        channel: activeChannel.id,
         sender_id: currentUser.uid,
-        sender_name: displayName,
-        created_at: new Date().toISOString(),
-      },
-    } as any);
+        is_deleted: false,
+        read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
+        data: {
+          body: '',
+          kind,
+          attachmentUrl,
+          attachmentDuration: attachmentDuration ?? null,
+          sender_id: currentUser.uid,
+          sender_name: displayName,
+          created_at: new Date().toISOString(),
+        },
+      } as any);
+      error = res.error;
+    } catch (e) {
+      error = { message: (e as Error)?.message || "Erreur réseau pendant l'envoi." };
+    }
     if (error) return error.message;
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
     return null;
@@ -1649,6 +1683,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const envoyerVocalChannel = async () => {
     if (!channelVocalPret) return;
+    // Audit (10 septembre) : même verrou que sendMessage (double appui/
+    // double déclenchement) — le vocal n'avait AUCUNE protection contre un
+    // second appel pendant que le premier était encore en vol.
+    if (sendingChannelRef.current) return;
+    sendingChannelRef.current = true;
     setUploadingChannelMedia(true);
     try {
       const erreur = await insertChannelMedia('voice', channelVocalPret.dataUrl, channelVocalPret.duree);
@@ -1660,6 +1699,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       setChannelVocalPret(null);
     } finally {
       setUploadingChannelMedia(false);
+      sendingChannelRef.current = false;
     }
   };
 
@@ -1711,6 +1751,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const envoyerVocalConv = async () => {
     if (!convVocalPret) return;
+    // Audit (10 septembre, Sylvain → Natacha) : même verrou que
+    // sendConvMessage (double appui/double déclenchement) — le vocal
+    // n'avait AUCUNE protection contre un second appel pendant que le
+    // premier était encore en vol (le bouton ne se désactive qu'au rendu
+    // suivant, comme pour le texte).
+    if (sendingConvRef.current) return;
+    sendingConvRef.current = true;
     setUploadingConvMedia(true);
     try {
       const erreur = await insertConvMessage('voice', convVocalPret.dataUrl, convVocalPret.duree);
@@ -1721,6 +1768,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       setConvVocalPret(null);
     } finally {
       setUploadingConvMedia(false);
+      sendingConvRef.current = false;
     }
   };
 
@@ -2035,22 +2083,31 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         (r) => r.sender_id !== currentUser.uid && !(Array.isArray(r.read_by) && r.read_by.some((x: any) => x.userId === currentUser.uid))
       );
       if (toMarkRead.length > 0) {
-        await Promise.all(
-          toMarkRead.map((r) =>
-            supabase
-              .from('chat_messages')
-              .update({
-                read_by: [...(Array.isArray(r.read_by) ? r.read_by : []), { userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
-              } as any)
-              .eq('id', r.id)
-          )
-        );
-        await supabase
-          .from('notifications')
-          .update({ is_read: true })
-          .eq('user_id', currentUser.uid)
-          .eq('is_read', false)
-          .in('entity_id', toMarkRead.map((r) => r.id));
+        // Perf (10 septembre) : même correctif que loadReactionsAndReceiptsFor
+        // (conversations directes, 30/08/2026) — ces deux écritures ne
+        // conditionnent plus rien à l'écran (setMessages a déjà eu lieu
+        // au-dessus) : plus besoin de les attendre l'une après l'autre, ni
+        // de bloquer dessus du tout. Lancées en parallèle, sans attendre —
+        // ce sondage tourne toutes les 4s tant qu'un canal est ouvert,
+        // chaque aller-retour évité compte.
+        void Promise.all([
+          Promise.all(
+            toMarkRead.map((r) =>
+              supabase
+                .from('chat_messages')
+                .update({
+                  read_by: [...(Array.isArray(r.read_by) ? r.read_by : []), { userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
+                } as any)
+                .eq('id', r.id)
+            )
+          ),
+          supabase
+            .from('notifications')
+            .update({ is_read: true })
+            .eq('user_id', currentUser.uid)
+            .eq('is_read', false)
+            .in('entity_id', toMarkRead.map((r) => r.id)),
+        ]);
       }
     }
   };
@@ -2173,7 +2230,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   const sendMessage = async () => {
-    if (!draft.trim() || !activeChannel || !currentUser) return;
+    if (!activeChannel || !currentUser) return;
+    if (!draft.trim()) {
+      // Même correctif que sendConvMessage (voir son commentaire) : un
+      // vocal en attente (channelVocalPret) ne doit pas rester bloqué
+      // silencieusement si on utilise ce bouton/Entrée plutôt que celui de
+      // son aperçu.
+      if (channelVocalPret) void envoyerVocalChannel();
+      return;
+    }
     // Même garde que pour les conversations directes : voir sendConvMessage.
     if (sendingChannelRef.current) return;
     sendingChannelRef.current = true;
@@ -3530,7 +3595,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       </div>
                       <button
                         onClick={sendConvMessage}
-                        disabled={!convDraft.trim() || isRecordingConv}
+                        // Audit (10 septembre) : le bouton restait grisé tant
+                        // qu'aucun texte n'était tapé, MÊME avec un vocal en
+                        // attente de réécoute — on peut désormais l'envoyer
+                        // depuis ici (voir le commentaire dans
+                        // sendConvMessage), le bouton doit donc rester actif
+                        // dans ce cas.
+                        disabled={(!convDraft.trim() && !convVocalPret) || isRecordingConv}
                         className="w-11 h-11 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-30 text-slate-950"
                       >
                         <Send className="w-5 h-5 sm:w-4 sm:h-4" />
@@ -3963,7 +4034,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 </div>
                 <button
                   onClick={sendMessage}
-                  className="p-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950"
+                  // Audit (10 septembre) : ce bouton n'avait AUCUN garde-fou
+                  // `disabled`, contrairement à son équivalent en conversation
+                  // directe — un tap dessus sans texte tapé (le cas normal
+                  // juste après un enregistrement vocal) invoquait sendMessage
+                  // qui ne faisait rien de visible. Même logique désormais que
+                  // le composeur direct : actif si texte OU vocal en attente.
+                  disabled={(!draft.trim() && !channelVocalPret) || isRecordingChannel}
+                  className="p-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-30 text-slate-950"
                 >
                   <Send className="w-4 h-4" />
                 </button>
