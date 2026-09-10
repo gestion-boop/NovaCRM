@@ -983,6 +983,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // Un rAF force le saut au prochain paint, puis un rattrapage après le
   // rendu complet (images) garantit qu'on atterrit bien tout en bas.
   useEffect(() => {
+    // Signalé (10 septembre, Sylvain/Pauline) : « ça ne va pas dans le bon
+    // message » en cliquant sur une notification. Cause trouvée : CET effet
+    // (scroll-tout-en-bas, avec son propre rattrapage à 150ms conçu pour
+    // gagner toute course de mise en page) et celui du rebond sur le message
+    // ciblé plus haut (scrollIntoView, voir highlightedMessageId) dépendent
+    // tous les deux de `convMessages.length` — ils se déclenchent donc sur
+    // le MÊME rendu à l'ouverture d'une conversation depuis une
+    // notification, et celui-ci, pensé pour être increvable, l'emportait
+    // systématiquement : on atterrissait toujours en bas de la conversation
+    // (le message le plus récent), jamais sur le message visé par la
+    // notification s'il ne s'agissait pas déjà du dernier.
+    if (highlightedMessageId) return;
     const pane = convScrollRef.current;
     if (!pane) return;
     const frame = window.requestAnimationFrame(() => {
@@ -995,7 +1007,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       window.cancelAnimationFrame(frame);
       window.clearTimeout(settle);
     };
-  }, [convMessages.length, activeConversationId]);
+  }, [convMessages.length, activeConversationId, highlightedMessageId]);
 
   const sendConvMessage = async () => {
     const body = convDraft.trim();
