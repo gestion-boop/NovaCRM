@@ -2727,29 +2727,26 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // cinquantaine de pixels au-dessus des touches.
   const [clavierOuvert, setClavierOuvert] = useState(false);
   const rembourrageBarre = clavierOuvert ? { paddingBottom: '0.75rem' } : undefined;
-  // Signalé (10 septembre, Sylvain Grazia, Android) : « j'ai un espace tout
+  // Signalé (10 septembre, Sylvain Grazia, iPhone) : « j'ai un espace tout
   // en bas, ce n'est pas figé au niveau du remplissage de l'écran ».
   //
-  // Ce correctif (commentaire ci-dessus, "hauteurVisible") a été écrit pour
-  // UNE cause précise et vraie sur iPhone : Safari iOS ne redimensionne
-  // jamais la page quand le clavier s'ouvre, il se pose par-dessus — d'où
-  // le besoin de recaler la hauteur à la main sur `visualViewport`.
-  // Android Chrome n'a PAS ce problème : son clavier redimensionne bien la
-  // vraie fenêtre (et 100dvh, posé à la racine dans App.tsx, suit déjà ce
-  // redimensionnement tout seul). Ce correctif s'appliquait pourtant à
-  // TOUT mobile (`isMobile`, pas seulement iOS) : sur Android, il fige la
-  // hauteur du chat sur l'instantané de `visualViewport.height` pris à
-  // l'ouverture — un instant où la barre d'adresse Chrome peut être
-  // affichée (fenêtre plus petite) — et ne la corrige plus forcément si
-  // cette barre se rétracte ensuite (aucun nouvel événement resize/scroll
-  // sur `visualViewport` ne se déclenche nécessairement, l'app ne fait pas
-  // défiler la PAGE elle-même). Résultat : un bandeau vide, figé, en bas
-  // de l'écran — exactement le symptôme décrit, et qui touchait donc
-  // potentiellement tout utilisateur Android, pas seulement Sylvain.
+  // Fausse piste écartée : d'abord soupçonné comme un bug Android (ce
+  // correctif s'appliquait à tort à tout `isMobile`, pas seulement iOS —
+  // réservé à iOS depuis, ce qui reste juste en soi), mais Sylvain confirme
+  // utiliser un iPhone — donc ni la cause ni le correctif pour LUI.
   //
-  // Réservé désormais à iOS, la seule plateforme qui en a réellement
-  // besoin — Android garde `h-full` (100dvh), qui suit nativement la vraie
-  // fenêtre visible sans jamais se figer.
+  // Vraie cause : `hauteurVisible` restait appliqué EN PERMANENCE dès que
+  // le chat est actif sur iOS, clavier ouvert ou non — figeant la hauteur
+  // du conteneur sur le dernier `visualViewport.height` mesuré, y compris
+  // une fois le clavier refermé. Si cette dernière mesure ne correspondait
+  // plus exactement à l'écran réellement disponible (barre d'adresse
+  // Safari qui se rétracte/réapparaît, cas où aucun resize ne se
+  // redéclenche entre-temps), rien ne revenait jamais à `h-full` (100dvh) —
+  // la bande figée en bas persistait indéfiniment, même clavier fermé.
+  // Corrigé : `hauteurVisible` n'est appliqué QUE pendant que le clavier
+  // est réellement ouvert (`clavierOuvert`) ; dès qu'il se ferme, on
+  // relâche la main et `h-full`/100dvh reprend le dessus, qui suit
+  // nativement la vraie fenêtre visible sans jamais se figer.
   const isIOSClavier = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
   useEffect(() => {
     const vv = window.visualViewport;
@@ -2760,10 +2757,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     }
     const appliquer = () => {
       if (window.scrollY !== 0) window.scrollTo(0, 0);
-      setHauteurVisible(Math.round(vv.height));
       // Un clavier prend au moins un cinquième de l'écran ; en dessous, ce
       // n'est qu'une variation de barre système, pas un clavier.
-      setClavierOuvert(window.innerHeight - vv.height > window.innerHeight * 0.2);
+      const ouvert = window.innerHeight - vv.height > window.innerHeight * 0.2;
+      setClavierOuvert(ouvert);
+      setHauteurVisible(ouvert ? Math.round(vv.height) : null);
     };
     appliquer();
     vv.addEventListener('resize', appliquer);
