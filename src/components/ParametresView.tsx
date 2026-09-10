@@ -1839,7 +1839,21 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
 
       case 'notifications': {
         const rows: Array<[string, string, boolean, (v: boolean) => void, React.ComponentType<{ className?: string }>]> = [['Activer les notifications','Affiche le badge sur la cloche.',notificationsEnabled,(v:boolean)=>{setNotificationsEnabled(v);writeStorage('novasphere:notifications-enabled',v);},Bell],['Son à la réception','Joue un son pour les nouvelles notifications.',notificationSound,(v:boolean)=>{setNotificationSound(v);writeStorage('novasphere:notification-sound',v);},Volume2],['Notifications push (mobile / bureau)','Sur CET appareil précis — à activer séparément sur chaque téléphone/ordinateur.',pushEnabled,togglePush,Smartphone],['Rappel quotidien des tâches & RDV','Synchronisé dans profiles.push_daily_reminders.',dailyReminder,setDailyPush,CalendarClock]];
-        return <div className="divide-y divide-[#173d40]">{rows.map(([title,desc,checked,setter,Icon])=><div key={title} className="py-4 flex items-center gap-4"><Icon className="w-5 h-5 text-slate-400"/><div className="flex-1"><p className="text-sm font-semibold text-white">{title}</p><p className="text-xs text-slate-400 mt-0.5">{desc}</p></div><Toggle checked={checked} onChange={setter}/></div>)}</div>;
+        return (
+          <div>
+            <div className="divide-y divide-[#173d40]">{rows.map(([title,desc,checked,setter,Icon])=><div key={title} className="py-4 flex items-center gap-4"><Icon className="w-5 h-5 text-slate-400"/><div className="flex-1"><p className="text-sm font-semibold text-white">{title}</p><p className="text-xs text-slate-400 mt-0.5">{desc}</p></div><Toggle checked={checked} onChange={setter}/></div>)}</div>
+            {/* Signalé (10 septembre, Pauline) : "permission refusée" sur un
+                raccourci Chrome Android, sans savoir où corriger — la
+                permission de notification, une fois refusée, ne peut plus
+                être redemandée par l'appli (voir même correctif détaillé
+                dans NotificationsView.tsx, panneau de la cloche). */}
+            {pushNotif.permission === 'denied' && (
+              <p className="mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs">
+                Notifications bloquées pour Nova CRM sur cet appareil : le bouton ci-dessus ne suffira pas tant que ce n'est pas réautorisé manuellement. Sur Android Chrome, touche l'icône 🔒/ⓘ à côté de l'adresse du site → Autorisations → Notifications → Autoriser, puis recharge la page. Détail complet dans « Rappels & Alertes » (icône cloche).
+              </p>
+            )}
+          </div>
+        );
       }
 
       case 'automations': return (

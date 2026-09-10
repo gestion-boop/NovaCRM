@@ -290,6 +290,22 @@ export const NotificationsView: React.FC<
     typeof window !== 'undefined' &&
     (window.matchMedia?.('(display-mode: standalone)').matches || (window.navigator as any).standalone === true);
   const needsHomeScreenInstall = isIOS && !isStandalone;
+  // Signalé (10 septembre, Pauline) : « ça marque permission refusée » sur
+  // le raccourci Chrome Android, alors que « tout est bien mis en place ».
+  // Une fois qu'un utilisateur refuse (ou que Chrome/Android bloque après
+  // plusieurs demandes ignorées) la permission de notification pour le
+  // site, `Notification.requestPermission()` renvoie 'denied' SANS jamais
+  // réafficher la popup système — aucun code JS ne peut la redemander. Le
+  // bouton "Réactiver dans les réglages" ci-dessous appelait donc cette
+  // même fonction en boucle, sans jamais aboutir ni expliquer où se trouve
+  // le réglage à changer manuellement (spécifique à chaque navigateur).
+  // Absent aussi : le fait qu'un simple raccourci Chrome (icône ajoutée
+  // depuis "Ajouter à l'écran d'accueil" version raccourci, plutôt qu'une
+  // vraie installation d'appli/WebAPK) ne prend jamais en charge la
+  // pastille numérotée sur l'icône, quel que soit l'état des notifications
+  // — ce n'est pas un bug côté Nova CRM, Chrome ne l'implémente que pour
+  // les PWA installées comme applications.
+  const isAndroid = typeof navigator !== 'undefined' && /Android/.test(navigator.userAgent);
 
   const [
     testFeedback,
@@ -645,6 +661,24 @@ export const NotificationsView: React.FC<
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-400" />
                 <span>
                   <strong>Sur iPhone, les notifications ne fonctionnent que si l'appli est ajoutée à l'écran d'accueil</strong> — même en activant les alertes ici, rien n'arrivera depuis Safari (un onglet ou un favori). Ouvre le menu Partager <span className="whitespace-nowrap">(⬆️)</span> puis « Sur l'écran d'accueil », et lance ensuite Nova CRM depuis cette icône.
+                </span>
+              </div>
+            )}
+
+            {pushPermission === 'denied' && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-400" />
+                <span>
+                  <strong>Notifications bloquées pour Nova CRM dans ce navigateur.</strong> Une fois refusée (ou bloquée automatiquement après plusieurs demandes ignorées), la permission ne peut plus être redemandée depuis l'appli — le bouton ci-dessous ne suffira pas tant qu'elle n'est pas réautorisée manuellement :
+                  {isAndroid ? (
+                    <>
+                      {' '}sur Android Chrome, touche l'icône <span className="whitespace-nowrap">🔒 / ⓘ</span> à gauche de l'adresse du site (ou Menu ⋮ → Infos sur l'appli/le site), ouvre « Autorisations » → « Notifications » et choisis « Autoriser ». Si le raccourci a été ajouté simplement (pas une vraie installation d'appli), il ne pourra de toute façon jamais afficher de pastille numérotée sur l'icône — c'est une limite de Chrome, pas de Nova CRM.
+                    </>
+                  ) : (
+                    <>
+                      {' '}ouvre les réglages du site dans ton navigateur (icône 🔒 / ⓘ à côté de l'adresse), section Notifications, et choisis « Autoriser », puis recharge la page.
+                    </>
+                  )}
                 </span>
               </div>
             )}
