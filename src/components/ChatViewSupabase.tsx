@@ -2763,12 +2763,40 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       setClavierOuvert(ouvert);
       setHauteurVisible(ouvert ? Math.round(vv.height) : null);
     };
+    // Rattrapage (10 septembre, persiste après un premier correctif) :
+    // fermer le clavier via le petit bouton dédié du clavier iOS (plutôt
+    // qu'en perdant le focus autrement) ne redéclenche pas toujours
+    // `resize` sur `visualViewport` de façon fiable pendant l'animation —
+    // parfois un seul événement arrive, avec une valeur encore intermédiaire
+    // (mi-animation), jamais suivi d'un second qui corrigerait. Un
+    // rattrapage différé, une fois l'animation forcément terminée, sécurise
+    // la mesure finale — même principe que le rattrapage à 150ms déjà
+    // utilisé plus haut pour le défilement (repère "Ticket #9").
+    let settle: number | null = null;
+    const appliquerAvecRattrapage = () => {
+      appliquer();
+      if (settle) window.clearTimeout(settle);
+      settle = window.setTimeout(appliquer, 350);
+    };
     appliquer();
-    vv.addEventListener('resize', appliquer);
-    vv.addEventListener('scroll', appliquer);
+    vv.addEventListener('resize', appliquerAvecRattrapage);
+    vv.addEventListener('scroll', appliquerAvecRattrapage);
+    // Filet supplémentaire : la perte de focus d'un champ de saisie est le
+    // signal le plus direct qu'un clavier vient de se fermer, indépendant
+    // de `visualViewport` — capturé en phase de capture pour intercepter
+    // n'importe quel champ (texte des conversations ET des canaux).
+    const onBlurCapture = (e: FocusEvent) => {
+      const cible = e.target as HTMLElement | null;
+      if (cible?.tagName !== 'TEXTAREA') return;
+      if (settle) window.clearTimeout(settle);
+      settle = window.setTimeout(appliquer, 350);
+    };
+    document.addEventListener('focusout', onBlurCapture, true);
     return () => {
-      vv.removeEventListener('resize', appliquer);
-      vv.removeEventListener('scroll', appliquer);
+      vv.removeEventListener('resize', appliquerAvecRattrapage);
+      vv.removeEventListener('scroll', appliquerAvecRattrapage);
+      document.removeEventListener('focusout', onBlurCapture, true);
+      if (settle) window.clearTimeout(settle);
     };
   }, [isMobile, isActive, isIOSClavier]);
 
