@@ -3441,7 +3441,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     les autres icônes) — padding réduit et micro remis à une
                     taille cohérente avec les autres boutons, sans toucher
                     aux autres icônes (image/emoji/envoyer). */}
-                <div className="relative p-3 max-sm:pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
+                {/* Demande explicite (11 septembre) : « agrandis l'espace
+                    d'écriture du message sur la gauche et sur la droite,
+                    prends le maximum d'espace » — moins de marge horizontale
+                    sur mobile (le menu "+" a repris la place des icônes qui
+                    la justifiaient), inchangé sur ordinateur. */}
+                <div className="relative p-3 max-sm:px-1.5 max-sm:pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
                   <input ref={convImageInputRef} type="file" accept="image/*" hidden onChange={handleConvImageSelected} />
                   <input ref={convCameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleConvImageSelected} />
 
@@ -3543,7 +3548,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     }}
                     placeholder="Écrire un message..."
                     disabled={isRecordingConv}
-                    className="w-full resize-none bg-[#0b1c1e] border border-white/20 rounded-3xl px-5 py-2.5 text-sm text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F] disabled:opacity-40"
+                    className="w-full resize-none bg-[#0b1c1e] border border-white/20 rounded-3xl px-5 max-sm:px-4 py-2.5 text-sm text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F] disabled:opacity-40"
                   />
 
                   <div className="grid grid-cols-3 items-center">
@@ -3723,11 +3728,24 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           jusqu'ici qu'un seul bouton (Envoyer) : il a la place.
                           Voir le commentaire détaillé sur les états
                           showConvSchedule/convScheduled plus haut. */}
+                      {/* Demande explicite (11 septembre) : « j'ai toujours
+                          les icônes sur la droite, il faut que tu les
+                          enlèves » — l'horloge ci-dessous, maintenant
+                          accessible depuis le menu "+" (voir plus haut),
+                          restait EN PLUS affichée dans cette rangée sur
+                          mobile, redondante et grignotant l'espace de
+                          saisie. Le BOUTON est masqué sur mobile (visible
+                          sur ordinateur, pas de menu "+" là-bas — voir
+                          "pas desktop, car on a la place") ; le popup, lui,
+                          doit rester dans le DOM sur mobile (ouvert
+                          directement depuis le menu "+"), donc c'est le
+                          bouton seul qui porte `hidden sm:flex`, pas le
+                          conteneur. */}
                       <div className="relative" ref={convScheduleRef}>
                         <button
                           type="button"
                           onClick={() => setShowConvSchedule((v) => !v)}
-                          className="relative w-11 h-11 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                          className="relative w-11 h-11 sm:w-10 sm:h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                           title="Programmer l'envoi"
                         >
                           <Clock className="w-6 h-6 sm:w-5 sm:h-5" />
@@ -3927,7 +3945,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   directes (bloc `space-y-2.5` plus haut). Tant qu'aucun vocal
                   n'attend, ce conteneur n'a qu'un enfant : rendu identique à
                   avant, aucune classe des boutons n'a bougé. */}
-              <div className="relative p-4 max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
+              {/* Même correctif que côté conversations directes (11
+                  septembre) : moins de marge horizontale sur mobile. */}
+              <div className="relative p-4 max-sm:px-2 max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
                 {channelVocalPret && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/20">
                     <audio
@@ -4116,7 +4136,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                      défilement pour les rattraper. Avec `min-w-0`, le champ
                      accepte de rétrécir et tous les boutons restent visibles.
                      Sur ordinateur, rien ne change : la place ne manquait pas. */
-                  className="flex-1 min-w-0 resize-none bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F]"
+                  className="flex-1 min-w-0 resize-none bg-[#0b1c1e] border border-white/20 rounded-xl px-4 max-sm:px-3 py-2.5 text-sm text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F]"
                 />
                 {/* Image et vocal dans les canaux (31/08/2026) — les
                     conversations directes les avaient depuis toujours, les
@@ -4185,11 +4205,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     mais autant garder le même emplacement des deux côtés.
                     Voir le commentaire détaillé sur les états
                     showChannelSchedule/channelScheduled plus haut. */}
+                {/* Même correctif que côté conversations directes (11
+                    septembre) : bouton masqué sur mobile (accessible depuis
+                    le menu "+"), popup laissé dans le DOM. */}
                 <div className="relative" ref={channelScheduleRef}>
                   <button
                     type="button"
                     onClick={() => setShowChannelSchedule((v) => !v)}
-                    className="relative p-2.5 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                    className="relative p-2.5 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                     title="Programmer l'envoi"
                   >
                     <Clock className="w-4 h-4" />
