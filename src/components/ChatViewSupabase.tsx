@@ -3,12 +3,13 @@ import { createPortal } from 'react-dom';
 import {
   Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown, ChevronRight,
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
-  Image as ImageIcon, Smile, Mic, Square, Eye, ArrowLeft, Check, CheckCheck,
+  Image as ImageIcon, Smile, Mic, Mic2, Square, Eye, ArrowLeft, Check, CheckCheck,
   Clock, Camera,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
+import { assemblerDictee } from '@/lib/dictee';
 import { useAuth } from '@/context/AuthContext';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { AGENCIES } from '@/types';
@@ -1571,6 +1572,54 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setConvScheduled(await chargerMessagesProgrammes('conversation_id', activeConversationId));
     toast.success(`Message programmé pour le ${formaterEcheance(scheduledAt)}.`);
   };
+  // Demande explicite (11 septembre) : « dans le [menu] plus, rajoute la
+  // dictée vocale » — DIFFÉRENT du message vocal (bouton micro rouge
+  // ci-dessous, qui ENREGISTRE et ENVOIE un fichier audio) : ici la voix est
+  // transcrite en TEXTE, directement dans le champ de saisie, comme le
+  // clavier du téléphone. Même moteur (Web Speech API) et même assemblage
+  // anti-répétition que la dictée déjà en place dans les notes client (voir
+  // src/lib/dictee.ts, assemblerDictee — bug d'origine : Android répète la
+  // phrase à chaque mot ajouté si on la concatène naïvement).
+  const [isListeningConv, setIsListeningConv] = useState(false);
+  const [isListeningChannel, setIsListeningChannel] = useState(false);
+  const recognitionConvRef = useRef<any>(null);
+  const recognitionChannelRef = useRef<any>(null);
+  const toggleDictee = (
+    enCours: boolean,
+    setEnCours: (v: boolean) => void,
+    recognitionRef: React.MutableRefObject<any>,
+    texteActuel: string,
+    setTexte: (v: string) => void,
+  ) => {
+    const SpeechRecognitionApi = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionApi) {
+      toast.error("La dictée vocale n'est pas disponible sur ce navigateur.");
+      return;
+    }
+    if (enCours) {
+      try { recognitionRef.current?.stop(); } catch { /* noop */ }
+      setEnCours(false);
+      return;
+    }
+    try {
+      const recognition = new SpeechRecognitionApi();
+      recognition.lang = 'fr-FR';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      const texteDeBase = texteActuel.trim();
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        setTexte(assemblerDictee(event.results, texteDeBase));
+      };
+      recognition.onerror = () => setEnCours(false);
+      recognition.onend = () => setEnCours(false);
+      recognition.start();
+      recognitionRef.current = recognition;
+      setEnCours(true);
+    } catch {
+      setEnCours(false);
+    }
+  };
+
   const [isRecordingConv, setIsRecordingConv] = useState(false);
   const [recordingConvSeconds, setRecordingConvSeconds] = useState(0);
   // Même attente avant envoi que côté canal — voir le commentaire sur
@@ -3565,6 +3614,30 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               >
                                 <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
                               </button>
+                              {/* Demande explicite (11 septembre) : ajouter la
+                                  dictée vocale et l'envoi différé dans le menu
+                                  "+" mobile — "comme les vrais téléphones
+                                  portables". Uniquement mobile : sur
+                                  ordinateur les deux ont déjà leur propre
+                                  icône dans la barre, qui a la place. */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  fermerFeuille(() => setShowConvPlus(false));
+                                  toggleDictee(isListeningConv, setIsListeningConv, recognitionConvRef, convDraft, setConvDraft);
+                                }}
+                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                              >
+                                <Mic2 className={`w-5 h-5 ${isListeningConv ? 'text-rose-400 animate-pulse' : 'text-[#F7BC5F]'}`} />
+                                {isListeningConv ? 'Dictée en cours... (toucher pour arrêter)' : 'Dictée vocale'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvSchedule(true); }}
+                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                              >
+                                <Clock className="w-5 h-5 text-[#F7BC5F]" /> Envoi différé
+                              </button>
                             </div>
                           </div>,
                           document.body
@@ -3942,6 +4015,26 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                         >
                           <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
+                        </button>
+                        {/* Même ajout que côté conversations directes — voir
+                            le commentaire détaillé plus haut. */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            fermerFeuille(() => setShowChannelPlus(false));
+                            toggleDictee(isListeningChannel, setIsListeningChannel, recognitionChannelRef, draft, setDraft);
+                          }}
+                          className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                        >
+                          <Mic2 className={`w-5 h-5 ${isListeningChannel ? 'text-rose-400 animate-pulse' : 'text-[#F7BC5F]'}`} />
+                          {isListeningChannel ? 'Dictée en cours... (toucher pour arrêter)' : 'Dictée vocale'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { fermerFeuille(() => setShowChannelPlus(false)); setShowChannelSchedule(true); }}
+                          className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                        >
+                          <Clock className="w-5 h-5 text-[#F7BC5F]" /> Envoi différé
                         </button>
                       </div>
                     </div>,
