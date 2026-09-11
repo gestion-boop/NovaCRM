@@ -3446,7 +3446,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     prends le maximum d'espace » — moins de marge horizontale
                     sur mobile (le menu "+" a repris la place des icônes qui
                     la justifiaient), inchangé sur ordinateur. */}
-                <div className="relative p-3 max-sm:px-1 max-sm:pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
+                {/* Même correctif que côté canaux (11 septembre) : espace
+                    réduit au strict nécessaire sous la barre de saisie. */}
+                <div className="relative p-3 max-sm:px-1 max-sm:pb-[env(safe-area-inset-bottom,0px)] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
                   <input ref={convImageInputRef} type="file" accept="image/*" hidden onChange={handleConvImageSelected} />
                   <input ref={convCameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleConvImageSelected} />
 
@@ -3963,7 +3965,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   avant, aucune classe des boutons n'a bougé. */}
               {/* Même correctif que côté conversations directes (11
                   septembre) : moins de marge horizontale sur mobile. */}
-              <div className="relative p-4 max-sm:px-1 max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
+              {/* Signalé (11 septembre, capture à l'appui, canal « général »)
+                  : espace visible sous la barre de saisie sur mobile —
+                  réduit au strict nécessaire (juste la zone sûre du bas,
+                  sans marge ajoutée) plutôt que 1.5rem + zone sûre. */}
+              <div className="relative p-4 max-sm:px-1 max-sm:pb-[env(safe-area-inset-bottom,0px)] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
                 {channelVocalPret && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/20">
                     <audio
