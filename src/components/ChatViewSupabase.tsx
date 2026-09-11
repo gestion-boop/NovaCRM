@@ -1172,7 +1172,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const handleDeleteConvMsg = async (messageId: string) => {
     if (!confirm('Supprimer ce message ?')) return;
-    await supabase.from('messages').delete().eq('id', messageId);
+    // Signalé (11 septembre, Sylvain) : « impossible de le supprimer quand
+    // il est envoyé ». L'erreur éventuelle du `.delete()` n'était jamais
+    // lue — un refus (RLS, réseau) ne faisait rien apparaître ni disparaître,
+    // sans le moindre message. Retrait optimiste de l'affichage en plus
+    // (au lieu de dépendre du rechargement complet pour le faire
+    // disparaître), annulé si la suppression échoue réellement.
+    const before = convMessages;
+    setConvMessages((v) => v.filter((msg) => msg.id !== messageId));
+    const { error } = await supabase.from('messages').delete().eq('id', messageId);
+    if (error) {
+      setConvMessages(before);
+      toast.error("La suppression a échoué : " + error.message);
+      return;
+    }
     if (activeConversationId) loadConvMessages(activeConversationId);
   };
 
@@ -1196,7 +1209,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // affiché seulement si autorisé), ici c'est la confirmation + l'appel.
   const handleDeleteChannelMsg = async (messageId: string) => {
     if (!confirm('Supprimer ce message ?')) return;
-    await supabase.from('chat_messages').delete().eq('id', messageId);
+    // Même correctif que handleDeleteConvMsg ci-dessus.
+    const before = messages;
+    setMessages((v) => v.filter((msg) => msg.id !== messageId));
+    const { error } = await supabase.from('chat_messages').delete().eq('id', messageId);
+    if (error) {
+      setMessages(before);
+      toast.error("La suppression a échoué : " + error.message);
+      return;
+    }
     if (activeChannel) loadMessages(activeChannel.id);
   };
 
@@ -2727,28 +2748,78 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // cinquantaine de pixels au-dessus des touches.
   const [clavierOuvert, setClavierOuvert] = useState(false);
   const rembourrageBarre = clavierOuvert ? { paddingBottom: '0.75rem' } : undefined;
+  // Signalé (10 septembre, Sylvain Grazia, iPhone) : « j'ai un espace tout
+  // en bas, ce n'est pas figé au niveau du remplissage de l'écran ».
+  //
+  // Fausse piste écartée : d'abord soupçonné comme un bug Android (ce
+  // correctif s'appliquait à tort à tout `isMobile`, pas seulement iOS —
+  // réservé à iOS depuis, ce qui reste juste en soi), mais Sylvain confirme
+  // utiliser un iPhone — donc ni la cause ni le correctif pour LUI.
+  //
+  // Vraie cause : `hauteurVisible` restait appliqué EN PERMANENCE dès que
+  // le chat est actif sur iOS, clavier ouvert ou non — figeant la hauteur
+  // du conteneur sur le dernier `visualViewport.height` mesuré, y compris
+  // une fois le clavier refermé. Si cette dernière mesure ne correspondait
+  // plus exactement à l'écran réellement disponible (barre d'adresse
+  // Safari qui se rétracte/réapparaît, cas où aucun resize ne se
+  // redéclenche entre-temps), rien ne revenait jamais à `h-full` (100dvh) —
+  // la bande figée en bas persistait indéfiniment, même clavier fermé.
+  // Corrigé : `hauteurVisible` n'est appliqué QUE pendant que le clavier
+  // est réellement ouvert (`clavierOuvert`) ; dès qu'il se ferme, on
+  // relâche la main et `h-full`/100dvh reprend le dessus, qui suit
+  // nativement la vraie fenêtre visible sans jamais se figer.
+  const isIOSClavier = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv || !isMobile || !isActive) {
+    if (!vv || !isMobile || !isActive || !isIOSClavier) {
       setHauteurVisible(null);
       setClavierOuvert(false);
       return;
     }
     const appliquer = () => {
       if (window.scrollY !== 0) window.scrollTo(0, 0);
-      setHauteurVisible(Math.round(vv.height));
       // Un clavier prend au moins un cinquième de l'écran ; en dessous, ce
       // n'est qu'une variation de barre système, pas un clavier.
-      setClavierOuvert(window.innerHeight - vv.height > window.innerHeight * 0.2);
+      const ouvert = window.innerHeight - vv.height > window.innerHeight * 0.2;
+      setClavierOuvert(ouvert);
+      setHauteurVisible(ouvert ? Math.round(vv.height) : null);
+    };
+    // Rattrapage (10 septembre, persiste après un premier correctif) :
+    // fermer le clavier via le petit bouton dédié du clavier iOS (plutôt
+    // qu'en perdant le focus autrement) ne redéclenche pas toujours
+    // `resize` sur `visualViewport` de façon fiable pendant l'animation —
+    // parfois un seul événement arrive, avec une valeur encore intermédiaire
+    // (mi-animation), jamais suivi d'un second qui corrigerait. Un
+    // rattrapage différé, une fois l'animation forcément terminée, sécurise
+    // la mesure finale — même principe que le rattrapage à 150ms déjà
+    // utilisé plus haut pour le défilement (repère "Ticket #9").
+    let settle: number | null = null;
+    const appliquerAvecRattrapage = () => {
+      appliquer();
+      if (settle) window.clearTimeout(settle);
+      settle = window.setTimeout(appliquer, 350);
     };
     appliquer();
-    vv.addEventListener('resize', appliquer);
-    vv.addEventListener('scroll', appliquer);
-    return () => {
-      vv.removeEventListener('resize', appliquer);
-      vv.removeEventListener('scroll', appliquer);
+    vv.addEventListener('resize', appliquerAvecRattrapage);
+    vv.addEventListener('scroll', appliquerAvecRattrapage);
+    // Filet supplémentaire : la perte de focus d'un champ de saisie est le
+    // signal le plus direct qu'un clavier vient de se fermer, indépendant
+    // de `visualViewport` — capturé en phase de capture pour intercepter
+    // n'importe quel champ (texte des conversations ET des canaux).
+    const onBlurCapture = (e: FocusEvent) => {
+      const cible = e.target as HTMLElement | null;
+      if (cible?.tagName !== 'TEXTAREA') return;
+      if (settle) window.clearTimeout(settle);
+      settle = window.setTimeout(appliquer, 350);
     };
-  }, [isMobile, isActive]);
+    document.addEventListener('focusout', onBlurCapture, true);
+    return () => {
+      vv.removeEventListener('resize', appliquerAvecRattrapage);
+      vv.removeEventListener('scroll', appliquerAvecRattrapage);
+      document.removeEventListener('focusout', onBlurCapture, true);
+      if (settle) window.clearTimeout(settle);
+    };
+  }, [isMobile, isActive, isIOSClavier]);
 
   return (
     <div
@@ -3402,6 +3473,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     value={convDraft}
                     onChange={(e) => setConvDraft(e.target.value)}
                     onKeyDown={(e) => {
+                      // Signalé (11 septembre, Sylvain, iPhone) : « quand on va
+                      // à la ligne cela envoie le message » — sur mobile, il
+                      // n'y a pas de touche Maj physique pour faire
+                      // Maj+Entrée : Entrée est le SEUL moyen d'aller à la
+                      // ligne, donc Entrée=envoi y rend un message multi-ligne
+                      // impossible à écrire. Sur mobile, Entrée insère
+                      // simplement un retour à la ligne (comportement par
+                      // défaut du textarea, on ne fait rien de spécial) ;
+                      // seul le bouton d'envoi envoie. Sur ordinateur, Entrée
+                      // envoie toujours (Maj+Entrée pour la ligne), inchangé.
+                      if (isMobileSaisie) return;
                       // `isComposing` : sur clavier mobile et en saisie
                       // accentuée, Entrée peut arriver deux fois pour une
                       // seule frappe. `repeat` : touche maintenue enfoncée.
@@ -3922,7 +4004,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => {
-                    // Voir commentaire équivalent côté conversations directes.
+                    // Voir commentaire équivalent côté conversations directes
+                    // (Entrée = retour à la ligne sur mobile, envoi uniquement
+                    // via le bouton).
+                    if (isMobileSaisie) return;
                     if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.repeat) return;
                     e.preventDefault();
                     void sendMessage();
