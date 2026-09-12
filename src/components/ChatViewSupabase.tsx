@@ -3951,7 +3951,25 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         </div>
                       )}
                       </div>
-                      <span className="text-[10px] text-slate-500 mt-1">{formatTime(m.created_at)}</span>
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="text-[10px] text-slate-500">{formatTime(m.created_at)}</span>
+                        {/* Signalé (12 septembre, « dans les 3 agences, et les
+                            autres sûrement, on n'a plus les accusés de
+                            lecture ») : le statut lu/non-lu existait déjà
+                            (colonne read_by, déjà utilisée pour le badge non-
+                            lu — voir loadUnreadByChannel) mais n'a jamais été
+                            AFFICHÉ sur les messages d'un canal, contrairement
+                            aux conversations directes (convReadBy plus haut,
+                            même logique reprise ici : lu dès qu'un autre
+                            membre que moi apparaît dans read_by). */}
+                        {mine && (
+                          Array.isArray(m.read_by) && m.read_by.some((r) => r.userId !== currentUser?.uid) ? (
+                            <CheckCheck className="w-3.5 h-3.5 text-[#F7BC5F]" aria-label="Lu" />
+                          ) : (
+                            <Check className="w-3.5 h-3.5 text-slate-600" aria-label="Envoyé" />
+                          )
+                        )}
+                      </div>
                     </div>
                   );})
                 )}
