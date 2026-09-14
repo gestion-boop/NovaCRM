@@ -1402,6 +1402,7 @@ export type Database = {
           listing_url: string | null
           location: string | null
           longitude: number | null
+          mandate_number: string | null
           price: number | null
           property_type: Database["public"]["Enums"]["immosphera_property_type"]
           rooms: number | null
@@ -1433,6 +1434,7 @@ export type Database = {
           listing_url?: string | null
           location?: string | null
           longitude?: number | null
+          mandate_number?: string | null
           price?: number | null
           property_type?: Database["public"]["Enums"]["immosphera_property_type"]
           rooms?: number | null
@@ -1464,6 +1466,7 @@ export type Database = {
           listing_url?: string | null
           location?: string | null
           longitude?: number | null
+          mandate_number?: string | null
           price?: number | null
           property_type?: Database["public"]["Enums"]["immosphera_property_type"]
           rooms?: number | null

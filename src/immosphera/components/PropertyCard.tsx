@@ -120,6 +120,20 @@ export function PropertyCard({
               Match {matchScore}%
             </span>
           )}
+          {/* Demande explicite (15 septembre) : numéro de mandat en bas à
+              droite de la carte, pour identifier le bien lors de la visite
+              au casque VR (les biens y sont répertoriés par numéro de
+              mandat). Décalé au-dessus du badge "Match" quand les deux
+              sont présents, pour ne jamais se superposer. */}
+          {property.mandate_number && (
+            <span
+              className={`absolute right-3 px-2.5 py-1 rounded-full text-[11px] font-bold bg-card/90 text-card-foreground shadow ${
+                typeof matchScore === "number" ? "bottom-10" : "bottom-3"
+              }`}
+            >
+              Mandat {property.mandate_number}
+            </span>
+          )}
           {/* Heart */}
           {onTogglePropal && (
             <button
