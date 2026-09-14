@@ -67,7 +67,7 @@ const RAYON_CERCLE_M = 2200;
 const EMPTY_CONTACT = { nom: "", telephone: "", email: "", adresse: "", notes: "" };
 
 export default function Secteurs() {
-  const { user, isAdmin } = useAuth();
+  const { user, peutGererSecteurs } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -485,7 +485,7 @@ export default function Secteurs() {
 
       {/* Panneau latéral : secteurs (admin) + contacts */}
       <aside className="w-full md:w-96 shrink-0 border border-border rounded-2xl flex flex-col h-[80vh] overflow-y-auto">
-        {isAdmin && (
+        {peutGererSecteurs && (
           <div className="border-b border-border">
             <button
               className="w-full flex items-center gap-2 p-3 text-xs font-bold"
