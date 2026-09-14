@@ -16,6 +16,7 @@ import {
   type GeoPoint,
   type SuggestionCommune,
 } from "@/immosphera/lib/geo";
+import { createTeardropIcon, adresseTooltipHtml } from "@/immosphera/lib/mapPins";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Compass, Pencil, X, Check } from "lucide-react";
+import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Compass, Pencil, X, Check, Search, Trash2, ListChecks } from "lucide-react";
 
 // Demande explicite (14 septembre, v2 — après un premier essai à base de
 // polygones dessinés à la main) : « dans les équipes, dans les fiches des
@@ -69,7 +70,24 @@ type Contact = {
   created_at: string;
 };
 
-const COULEURS = ["#E0A21A", "#2f9e44", "#1971c2", "#e8590c", "#9c36b5", "#c92a2a", "#0c8599"];
+const COULEURS = [
+  "#E0A21A",
+  "#2f9e44",
+  "#1971c2",
+  "#e8590c",
+  "#9c36b5",
+  "#c92a2a",
+  "#0c8599",
+  // Couleurs plus foncées — demande explicite : « rajoute des couleurs
+  // un peu plus foncées »
+  "#8a6d1a",
+  "#1e5f2c",
+  "#144a80",
+  "#8a3a0c",
+  "#5c2170",
+  "#7a1a1a",
+  "#075662",
+];
 const RAYON_CERCLE_M = 2200;
 
 const EMPTY_CONTACT = { nom: "", telephone: "", email: "", adresse: "", notes: "" };
@@ -90,7 +108,20 @@ export default function Secteurs() {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [panneauOuvert, setPanneauOuvert] = useState(true);
-  const [centroides, setCentroides] = useState<Record<string, GeoPoint>>({});
+  // Demande explicite : « un bouton qui ouvre un popup plus grand pour
+  // supprimer des lieux avec une barre de recherche au cas où » — la liste
+  // en ligne dans le panneau devient vite illisible avec 20+ communes.
+  const [gererOuvertPour, setGererOuvertPour] = useState<string | null>(null);
+  const [filtreGererCommunes, setFiltreGererCommunes] = useState("");
+  // Couleur choisie dans le popup « Gérer les communes » (le sélecteur de
+  // couleur a été déplacé ici depuis le panneau latéral).
+  const [couleurEnEdition, setCouleurEnEdition] = useState<Record<string, string>>({});
+  // Le code postal résolu est gardé avec chaque point (pas seulement les
+  // coordonnées) — sert à afficher, à côté de chaque commune dans la liste
+  // "villages enregistrés", ce à quoi elle a réellement été résolue (voir
+  // plus bas) : rapporté « ça met Canet-en-Roussillon, je ne comprends pas
+  // pourquoi » — sans repère visible, une résolution erronée passe inaperçue.
+  const [centroides, setCentroides] = useState<Record<string, { point: GeoPoint; postcode: string | null }>>({});
 
   // Dessin de contour libre — conseiller pour lequel le dessin est en
   // cours (null = aucun), et les points déjà posés.
@@ -158,10 +189,14 @@ export default function Secteurs() {
           // la validation dans validerEtEnregistrerSecteur), mais une
           // donnée existante mal saisie avant cette règle ne doit pas
           // apparaître silencieusement.
-          return resultat && departementAutorise(resultat.postcode) ? ([entree, resultat.point] as const) : null;
+          return resultat && departementAutorise(resultat.postcode)
+            ? ([entree, { point: resultat.point, postcode: resultat.postcode }] as const)
+            : null;
         })
       );
-      const resultats = Object.fromEntries(paires.filter((p): p is readonly [string, GeoPoint] => p !== null));
+      const resultats = Object.fromEntries(
+        paires.filter((p): p is readonly [string, { point: GeoPoint; postcode: string | null }] => p !== null)
+      );
       if (Object.keys(resultats).length > 0) setCentroides((prev) => ({ ...prev, ...resultats }));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -304,7 +339,7 @@ export default function Secteurs() {
     secteurs.forEach((s) => {
       const conseiller = getAdvisorById(s.conseiller_id);
       s.codes_postaux.forEach((code) => {
-        const centre = centroides[code];
+        const centre = centroides[code]?.point;
         if (!centre) return;
         const cercle = L.circle([centre.lat, centre.lng], {
           radius: RAYON_CERCLE_M,
@@ -331,13 +366,13 @@ export default function Secteurs() {
       if (c.latitude == null || c.longitude == null) return;
       const secteur = c.secteur_id ? secteurParId.get(c.secteur_id) : null;
       const couleur = secteur?.couleur || "#495057";
-      const icon = L.divIcon({
-        className: "map-pin-contact",
-        html: `<span style="display:block;width:14px;height:14px;border-radius:50%;background:${couleur};border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35)"></span>`,
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
-      });
+      // Pin façon Google Maps + survol = adresse — demande explicite :
+      // « quand on rentre l'adresse du client, cela s'affiche dans la
+      // carte du secteur comme un point [...] et qu'on survole avec la
+      // souris [...] il y a automatiquement l'adresse du client ».
+      const icon = createTeardropIcon(couleur, { size: 26 });
       const marker = L.marker([c.latitude, c.longitude], { icon });
+      marker.bindTooltip(adresseTooltipHtml(c.adresse || "", c.nom), { direction: "top", offset: [0, -24] });
       marker.on("click", () => ouvrirFiche(c));
       marker.addTo(map);
       contactMarkersRef.current.push(marker);
@@ -350,7 +385,7 @@ export default function Secteurs() {
     const map = mapRef.current;
     if (!map) return;
     const points: [number, number][] = [];
-    secteurs.forEach((s) => s.codes_postaux.forEach((c) => centroides[c] && points.push([centroides[c].lat, centroides[c].lng])));
+    secteurs.forEach((s) => s.codes_postaux.forEach((c) => centroides[c] && points.push([centroides[c].point.lat, centroides[c].point.lng])));
     contacts.forEach((c) => c.latitude != null && c.longitude != null && points.push([c.latitude, c.longitude]));
     if (points.length > 0) map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 12 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -508,7 +543,13 @@ export default function Secteurs() {
       polygone?: GeoPoint[] | null;
     }) => {
       const agencyId = await resoudreAgencyId();
-      const payload: any = { agency_id: agencyId, conseiller_id: conseillerId, codes_postaux: codes, couleur };
+      const payload: any = {
+        agency_id: agencyId,
+        conseiller_id: conseillerId,
+        codes_postaux: codes,
+        couleur,
+        updated_at: new Date().toISOString(),
+      };
       if (polygone !== undefined) payload.polygone = polygone;
       const { error } = await supabase
         .from("immosphera_secteurs" as any)
@@ -561,8 +602,37 @@ export default function Secteurs() {
 
   // Autocomplete communes — demande explicite : « un fichier déroulant, on
   // peut cliquer plusieurs villes » plutôt que de taper à la main.
+  //
+  // Rapporté : « rien ne s'affiche » après avoir collé une longue liste de
+  // 26 communes séparées par des virgules — collée dans ce champ recherche
+  // (une seule commune à la fois) plutôt que dans le champ liste en
+  // dessous, elle ne matchait jamais rien et l'enregistrement suivant
+  // sauvegardait 0 commune. Détecte une virgule = liste collée, résout
+  // chaque nom séparément plutôt que de chercher la chaîne entière d'un
+  // coup (qui ne peut rien matcher).
   const rechercherEtSuggerer = async (conseillerId: string, texte: string) => {
     setRechercheCommune((prev) => ({ ...prev, [conseillerId]: texte }));
+    if (texte.includes(",")) {
+      const termes = texte.split(",").map((t) => t.trim()).filter(Boolean);
+      if (termes.length > 1) {
+        setSuggestionsCommune((prev) => ({ ...prev, [conseillerId]: [] }));
+        const resolues = await Promise.all(termes.map((t) => rechercherCommunes(t)));
+        const introuvables: string[] = [];
+        resolues.forEach((resultats, i) => {
+          if (resultats[0]) ajouterCommuneSuggeree(conseillerId, resultats[0]);
+          else introuvables.push(termes[i]);
+        });
+        setRechercheCommune((prev) => ({ ...prev, [conseillerId]: "" }));
+        if (introuvables.length > 0) {
+          toast({
+            title: "Certaines communes n'ont pas été trouvées",
+            description: introuvables.join(", "),
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+    }
     const resultats = await rechercherCommunes(texte);
     setSuggestionsCommune((prev) => ({ ...prev, [conseillerId]: resultats }));
   };
@@ -616,7 +686,8 @@ export default function Secteurs() {
     try {
       const horsZone: string[] = [];
       const introuvables: string[] = [];
-      const nouveauxCentroides: Record<string, GeoPoint> = {};
+      const valides: string[] = [];
+      const nouveauxCentroides: Record<string, { point: GeoPoint; postcode: string | null }> = {};
       // Géocodées en parallèle plutôt qu'une par une (voir le même
       // correctif sur l'effet de géocodage plus haut) : un secteur avec
       // beaucoup de communes mettait très longtemps à s'enregistrer.
@@ -631,12 +702,19 @@ export default function Secteurs() {
             horsZone.push(entree);
             return;
           }
-          nouveauxCentroides[entree] = resultat.point;
+          valides.push(entree);
+          nouveauxCentroides[entree] = { point: resultat.point, postcode: resultat.postcode };
         })
       );
+      // Rapporté : « quand je mets Lézignan, tous les villages ne se
+      // mettent pas quand je clique sur enregistrer » — l'ancienne version
+      // bloquait TOUT l'enregistrement si UNE SEULE entrée posait problème
+      // (introuvable, hors zone), même parmi 20+ communes valides. Enregistre
+      // maintenant celles qui sont valides, et prévient juste pour les
+      // autres au lieu de tout perdre.
       if (introuvables.length > 0 || horsZone.length > 0) {
         toast({
-          title: "Secteur non enregistré",
+          title: valides.length > 0 ? `${valides.length} commune${valides.length > 1 ? "s" : ""} enregistrée${valides.length > 1 ? "s" : ""}, le reste ignoré` : "Secteur non enregistré",
           description: [
             introuvables.length > 0 ? `Introuvable : ${introuvables.join(", ")}.` : "",
             horsZone.length > 0 ? `Hors ${DEPARTEMENTS_SECTEUR_LABEL} : ${horsZone.join(", ")}.` : "",
@@ -645,10 +723,10 @@ export default function Secteurs() {
             .join(" "),
           variant: "destructive",
         });
-        return;
+        if (valides.length === 0) return;
       }
       setCentroides((prev) => ({ ...prev, ...nouveauxCentroides }));
-      sauvegarderSecteurMutation.mutate({ conseillerId, codes: codesBruts, couleur });
+      sauvegarderSecteurMutation.mutate({ conseillerId, codes: valides, couleur });
     } finally {
       setValidationEnCours(null);
     }
@@ -744,55 +822,34 @@ export default function Secteurs() {
                       <div className="flex-1 min-w-0 space-y-1">
                         <p className="text-[11px] font-bold">{a.name}</p>
 
-                        {/* Autocomplete communes — demande explicite : « un
-                            fichier déroulant, on peut cliquer plusieurs
-                            villes » plutôt que de taper un nom à la main. */}
-                        <div className="relative">
-                          <Input
-                            value={rechercheCommune[a.id] ?? ""}
-                            onChange={(e) => rechercherEtSuggerer(a.id, e.target.value)}
-                            placeholder="Chercher une commune à ajouter..."
-                            className="h-7 text-[11px]"
-                          />
-                          {suggestions.length > 0 && (
-                            <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                              {suggestions.map((s) => (
-                                <button
-                                  key={`${s.nom}-${s.codePostal}`}
-                                  type="button"
-                                  onClick={() => ajouterCommuneSuggeree(a.id, s)}
-                                  className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-muted/60 flex items-center justify-between gap-2"
-                                >
-                                  <span>{s.nom}</span>
-                                  <span className="text-muted-foreground shrink-0">{s.codePostal}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Communes du même code postal — rapporté, détail
-                            vérifié à l'appui : « 11200 dessert 23 communes
-                            et villages [...] c'est ça que je veux comme
-                            proposition ». Un clic ajoute (par son nom, pas
-                            le code postal — voir ajouterCommuneSuggeree). */}
-                        {(communesVoisines[a.id]?.length ?? 0) > 0 && (
-                          <div className="flex flex-wrap gap-1 pt-0.5">
-                            {communesVoisines[a.id].map((v) => (
-                              <button
-                                key={`${v.nom}-${v.codePostal}`}
-                                type="button"
-                                onClick={() => {
-                                  ajouterCommuneSuggeree(a.id, v);
-                                  setCommunesVoisines((prev) => ({ ...prev, [a.id]: prev[a.id].filter((x) => x.nom !== v.nom) }));
-                                }}
-                                className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted hover:bg-muted/70 text-muted-foreground"
-                              >
-                                + {v.nom}
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                        {/* Ajout ET suppression des communes vivent
+                            maintenant ensemble dans le popup « Gérer les
+                            communes » — demande explicite : « il faudrait
+                            juste revoir l'incorporation des communes.
+                            Mettre les communes quand on a le panneau pop up
+                            comme ça on pourrait mieux voir ». Le bouton
+                            reste visible même à 0 commune, pour pouvoir en
+                            ajouter une première depuis le popup. */}
+                        {(() => {
+                          const listeActuelle = valeurCourante.split(",").map((s) => s.trim()).filter(Boolean);
+                          return (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] w-full justify-start"
+                              onClick={() => {
+                                setGererOuvertPour(a.id);
+                                setFiltreGererCommunes("");
+                              }}
+                            >
+                              <ListChecks className="h-3.5 w-3.5 mr-1.5" />
+                              {listeActuelle.length > 0
+                                ? `Voir les ${listeActuelle.length} commune${listeActuelle.length > 1 ? "s" : ""}`
+                                : "Gérer les communes"}
+                            </Button>
+                          );
+                        })()}
 
                         <Input
                           value={valeurCourante}
@@ -800,23 +857,11 @@ export default function Secteurs() {
                           placeholder="11100, Narbonne, 11160..."
                           className="h-7 text-[11px]"
                         />
+                        {/* Le choix de couleur vit désormais dans le popup
+                            « Gérer les communes » (avec la liste) — demande
+                            explicite : « ajoute les couleurs comme ça on
+                            les supprime dans l'autre interface ». */}
                         <div className="flex items-center gap-1 flex-wrap">
-                          {COULEURS.map((c) => (
-                            <button
-                              key={c}
-                              type="button"
-                              disabled={validationEnCours === a.id}
-                              onClick={() =>
-                                validerEtEnregistrerSecteur(
-                                  a.id,
-                                  valeurCourante.split(",").map((s) => s.trim()).filter(Boolean),
-                                  c
-                                )
-                              }
-                              className={`w-4 h-4 rounded-full border ${couleur === c ? "border-foreground" : "border-transparent"}`}
-                              style={{ background: c }}
-                            />
-                          ))}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -973,6 +1018,159 @@ export default function Secteurs() {
               {enregistrementContact ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enregistrer"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Gérer les communes d'un secteur — demande explicite : « un bouton
+          qui ouvre un popup plus grand pour supprimer des lieux avec une
+          barre de recherche au cas où ». */}
+      <Dialog open={gererOuvertPour !== null} onOpenChange={(v) => !v && setGererOuvertPour(null)}>
+        {/* z-[2000] : sans ça, la carte passait devant le popup — nos
+            propres repères sur la carte (titre, boussole, légende) sont en
+            z-[1000], bien au-dessus du z-50 par défaut du Dialog. */}
+        <DialogContent className="z-[2000] max-w-2xl w-[calc(100vw-2rem)] h-[85vh] max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
+              Communes {gererOuvertPour && `— ${getAdvisorById(gererOuvertPour)?.name || ""}`}
+            </DialogTitle>
+          </DialogHeader>
+          {gererOuvertPour &&
+            (() => {
+              const conseillerId = gererOuvertPour;
+              const valeurCourante = codesEnEdition[conseillerId] ?? (secteurParConseiller.get(conseillerId)?.codes_postaux.join(", ") || "");
+              const liste = valeurCourante.split(",").map((s) => s.trim()).filter(Boolean);
+              const filtre = filtreGererCommunes.trim().toLowerCase();
+              const listeFiltree = filtre ? liste.filter((entree) => entree.toLowerCase().includes(filtre)) : liste;
+              const retirer = (entree: string) =>
+                setCodesEnEdition((prev) => ({
+                  ...prev,
+                  [conseillerId]: liste.filter((e) => e !== entree).join(", "),
+                }));
+              const suggestionsAjout = suggestionsCommune[conseillerId] ?? [];
+              const voisinesAjout = communesVoisines[conseillerId] ?? [];
+              const secteurActuel = secteurParConseiller.get(conseillerId);
+              const couleurActuelle =
+                couleurEnEdition[conseillerId] ??
+                secteurActuel?.couleur ??
+                COULEURS[advisors.findIndex((a) => a.id === conseillerId) % COULEURS.length];
+              return (
+                <div className="flex-1 min-h-0 flex flex-col gap-3">
+                  {/* Ajout — autocomplete (« un fichier déroulant, on peut
+                      cliquer plusieurs villes ») déplacé ici depuis la
+                      barre latérale, plus à l'aise dans ce grand popup. */}
+                  <div className="relative shrink-0">
+                    <Input
+                      value={rechercheCommune[conseillerId] ?? ""}
+                      onChange={(e) => rechercherEtSuggerer(conseillerId, e.target.value)}
+                      placeholder="Chercher une commune à ajouter..."
+                      className="h-9 text-sm"
+                    />
+                    {suggestionsAjout.length > 0 && (
+                      <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {suggestionsAjout.map((s) => (
+                          <button
+                            key={`${s.nom}-${s.codePostal}`}
+                            type="button"
+                            onClick={() => ajouterCommuneSuggeree(conseillerId, s)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted/60 flex items-center justify-between gap-2"
+                          >
+                            <span>{s.nom}</span>
+                            <span className="text-muted-foreground shrink-0">{s.codePostal}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Communes du même code postal — « 11200 dessert 23
+                      communes et villages [...] c'est ça que je veux comme
+                      proposition ». */}
+                  {voisinesAjout.length > 0 && (
+                    <div className="flex flex-wrap gap-1 shrink-0">
+                      {voisinesAjout.map((v) => (
+                        <button
+                          key={`${v.nom}-${v.codePostal}`}
+                          type="button"
+                          onClick={() => {
+                            ajouterCommuneSuggeree(conseillerId, v);
+                            setCommunesVoisines((prev) => ({ ...prev, [conseillerId]: (prev[conseillerId] ?? []).filter((x) => x.nom !== v.nom) }));
+                          }}
+                          className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-muted hover:bg-muted/70 text-muted-foreground"
+                        >
+                          + {v.nom}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="relative shrink-0">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      value={filtreGererCommunes}
+                      onChange={(e) => setFiltreGererCommunes(e.target.value)}
+                      placeholder="Filtrer la liste..."
+                      className="h-9 pl-8 text-sm"
+                    />
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border p-2">
+                    {listeFiltree.length === 0 && (
+                      <p className="text-xs text-muted-foreground p-4 text-center">
+                        {liste.length === 0 ? "Aucune commune pour l'instant." : "Aucune commune ne correspond à ce filtre."}
+                      </p>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {listeFiltree.map((entree) => {
+                      const info = centroides[entree];
+                      return (
+                        <div key={entree} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-muted/40">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate">{entree}</p>
+                            {info?.postcode && <p className="text-[11px] text-muted-foreground">{info.postcode}</p>}
+                          </div>
+                          <Button size="sm" variant="ghost" className="text-destructive shrink-0" onClick={() => retirer(entree)}>
+                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Retirer
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    </div>
+                  </div>
+                  {/* Choix de couleur — déplacé ici depuis le panneau
+                      latéral, demande explicite : « ajoute les couleurs
+                      comme ça on les supprime dans l'autre interface, ajoute
+                      des couleurs un peu plus foncées ». */}
+                  <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                    {COULEURS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        disabled={validationEnCours === conseillerId}
+                        onClick={() => setCouleurEnEdition((prev) => ({ ...prev, [conseillerId]: c }))}
+                        className={`w-5 h-5 rounded-full border-2 ${couleurActuelle === c ? "border-foreground" : "border-transparent"}`}
+                        style={{ background: c }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-1 shrink-0">
+                    <p className="text-[11px] text-muted-foreground">
+                      {liste.length} commune{liste.length > 1 ? "s" : ""} au total
+                    </p>
+                    <Button
+                      size="sm"
+                      disabled={validationEnCours === conseillerId}
+                      onClick={async () => {
+                        await validerEtEnregistrerSecteur(conseillerId, liste, couleurActuelle);
+                        // Demande explicite : « quand on clic sur
+                        // enregistrer cela ferme le pop up »
+                        setGererOuvertPour(null);
+                      }}
+                    >
+                      {validationEnCours === conseillerId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Enregistrer"}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
         </DialogContent>
       </Dialog>
     </div>

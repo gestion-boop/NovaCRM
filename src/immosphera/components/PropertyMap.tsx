@@ -4,6 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { geocodeCity, distanceKm } from "@/immosphera/lib/geo";
+import { createTeardropIcon, adresseTooltipHtml } from "@/immosphera/lib/mapPins";
 import { computeMatchScore } from "@/immosphera/lib/matchScore";
 import type { SearchFilters } from "@/immosphera/components/SearchPanel";
 import { Phone, Mail, Building2 } from "lucide-react";
@@ -91,6 +92,9 @@ const CATEGORY_COLORS: Record<string, string> = {
   autre: "#6b7280",
 };
 
+// Pin façon Google Maps — demande explicite : « cela s'affiche [...]
+// comme un point ou un p comme Google Maps c'est peut-être plus joli
+// d'ailleurs ». Voir mapPins.ts, partagé avec la carte Secteurs.
 function createColoredIcon(color: string, isActive: boolean, status?: string, matchScore?: number | null) {
   const size = isActive ? 18 : 14;
   const hasStatus = status && status !== "active";
@@ -102,11 +106,9 @@ function createColoredIcon(color: string, isActive: boolean, status?: string, ma
     typeof matchScore === "number"
       ? `<span style="position:absolute;bottom:-12px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:8px;font-weight:800;padding:1px 4px;border-radius:4px;background:${matchScore >= 70 ? "#2f9e44" : matchScore >= 40 ? "#f59f00" : "#868e96"};color:white;line-height:1.2">${matchScore}%</span>`
       : "";
-  return L.divIcon({
-    className: "map-pin",
-    html: `<span style="position:relative;display:block;width:${size}px;height:${size}px;border-radius:50%;background:${hasStatus ? "#dc2626" : color};border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);transition:all 0.2s">${statusBadge}${matchBadge}</span>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
+  return createTeardropIcon(hasStatus ? "#dc2626" : color, {
+    size: isActive ? 32 : 26,
+    extraHtml: `${statusBadge}${matchBadge}`,
   });
 }
 
@@ -262,6 +264,10 @@ export function PropertyMap({ properties, partners = [], hoveredId, searchLocati
         `;
 
         marker.bindPopup(popupHtml);
+        // Survol = adresse en aperçu rapide, sans avoir à cliquer — demande
+        // explicite : « qu'on survole avec la souris [...] il y a
+        // automatiquement l'adresse du client ou l'adresse du Bien ».
+        marker.bindTooltip(adresseTooltipHtml(p.location || p.address || "", p.title), { direction: "top", offset: [0, -28] });
         marker.on("click", () => {
           setSelected(p);
           setSelectedPartner(null);
