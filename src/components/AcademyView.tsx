@@ -2,13 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText, PlayCircle, Plus, Search, Trash2, X, Loader2, Upload, Link as LinkIcon, Pencil,
   CheckCircle2, Circle, Users, ImagePlus, GraduationCap, LayoutGrid, List as ListIcon,
-  MoreVertical, ImageOff, Maximize2, Minimize2,
+  MoreVertical, ImageOff, Maximize2, Minimize2, Unlock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { getCachedAccessToken, requestWorkspaceAccessToken, reconnectGoogleWorkspace, isGoogleAuthError } from '@/lib/workspace';
-import { uploadDocumentToDrive } from '@/lib/documentDrive';
+import { getCachedAccessToken, requestWorkspaceAccessToken } from '@/lib/workspace';
 
 /**
  * Académy — catalogue de procédures (PDF et vidéos) d'une agence.
@@ -150,6 +149,59 @@ export default function AcademyView() {
   const [fond, setFond] = useState<string | null>(null);
   const [fondEnCours, setFondEnCours] = useState(false);
   const champFond = useRef<HTMLInputElement>(null);
+
+  // Demande explicite (15 septembre) : « fais en sorte que les fichiers
+  // déjà mis soient accessibles à tout le monde en lecture seule ». Les
+  // procédures déposées AVANT ce correctif vivent dans le Drive de
+  // l'agence, avec le partage par défaut du compte qui les a envoyées —
+  // pas forcément "Anyone with the link". Action ponctuelle, réservée aux
+  // super admins : ouvre chaque fichier Drive existant en lecture pour
+  // n'importe qui possédant le lien (Drive API permissions.create,
+  // type=anyone/role=reader), une bonne fois pour toutes — les nouveaux
+  // dépôts, eux, ne passent plus du tout par Drive (voir deposerFichier).
+  const [reparationEnCours, setReparationEnCours] = useState(false);
+  const rendrePublicsLesFichiersExistants = async () => {
+    const idsDrive = [...new Set(ressources.map((r) => r.drive_file_id).filter(Boolean))] as string[];
+    if (idsDrive.length === 0) {
+      toast.success('Aucun fichier Drive à ouvrir : déjà tout dans le nouveau stockage public.');
+      return;
+    }
+    if (!window.confirm(`Rendre les ${idsDrive.length} fichier(s) Drive existant(s) accessibles à tout le monde (lecture seule, sans connexion Google) ?`)) return;
+    setReparationEnCours(true);
+    try {
+      let token = getCachedAccessToken();
+      if (!token) token = await requestWorkspaceAccessToken();
+      if (!token) throw new Error('Connexion Google nécessaire pour cette réparation ponctuelle.');
+      let ok = 0;
+      const echecs: string[] = [];
+      for (const fileId of idsDrive) {
+        try {
+          const res = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions?supportsAllDrives=true&sendNotificationEmail=false`,
+            {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'anyone', role: 'reader' }),
+            }
+          );
+          if (res.ok) ok += 1;
+          else echecs.push(fileId);
+        } catch {
+          echecs.push(fileId);
+        }
+      }
+      if (echecs.length === 0) {
+        toast.success(`${ok} fichier(s) rendus accessibles à tous, sans connexion Google.`);
+      } else {
+        toast.error(`${ok} réussi(s), ${echecs.length} échec(s) — probablement des fichiers dont vous n'êtes pas propriétaire sur Drive.`);
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Impossible de lancer cette réparation.');
+    } finally {
+      setReparationEnCours(false);
+    }
+  };
 
   // Formulaire d'ajout / modification (super admins)
   const [formOuvert, setFormOuvert] = useState(false);
@@ -417,6 +469,37 @@ export default function AcademyView() {
     return supabase.storage.from('academy').getPublicUrl(chemin).data.publicUrl;
   };
 
+  /**
+   * Dépose un PDF (ou une vidéo) dans le MÊME compartiment public que les
+   * visuels de l'Académy — plus besoin du Drive de l'agence.
+   *
+   * Demande explicite (15 septembre) : « je voudrais simplement mettre des
+   * fichiers PDF à l'intérieur sans qu'il y ait une connexion particulière à
+   * Google, pour éviter la friction avec les personnes qui veulent se
+   * connecter dessus ». Jusqu'ici, `enregistrer` exigeait un token
+   * `requestWorkspaceAccessToken()` avant même de pouvoir déposer un fichier
+   * — la MOINDRE friction Google (token expiré, jamais connecté) bloquait
+   * l'ajout d'une simple procédure PDF, sans rapport avec Google Workspace.
+   * Le compartiment `academy` est déjà public en lecture (voir deposerImage
+   * ci-dessus) : un PDF y est donc directement consultable par tous, sans
+   * la moindre connexion.
+   */
+  const deposerFichier = async (fichier: File, prefixe: string): Promise<string> => {
+    const extension = (fichier.name.split('.').pop() || 'pdf').toLowerCase();
+    const chemin = `${activeAgency?.id}/fichiers/${prefixe}-${Date.now()}.${extension}`;
+    const { error } = await supabase.storage
+      .from('academy')
+      .upload(chemin, fichier, { contentType: fichier.type || 'application/octet-stream', upsert: true });
+    if (error) {
+      throw new Error(
+        error.message.toLowerCase().includes('bucket')
+          ? "Le stockage des visuels n'existe pas encore : la migration 20260902180000 doit être appliquée."
+          : error.message
+      );
+    }
+    return supabase.storage.from('academy').getPublicUrl(chemin).data.publicUrl;
+  };
+
   const changerFond = async (image: File) => {
     if (!activeAgency?.id || activeAgency.id === 'all') return;
     setFondEnCours(true);
@@ -640,19 +723,14 @@ export default function AcademyView() {
 
     setEnregistrement(true);
     try {
-      let driveId: string | null = enModification?.drive_file_id ?? null;
-      let driveLien: string | null = enModification?.drive_web_view_link ?? null;
-
-      if (fichier) {
-        // Même circuit que le Coffre Documents : le fichier part dans le Drive
-        // de l'agence, le CRM ne garde que le lien.
-        let token = getCachedAccessToken();
-        if (!token) token = await requestWorkspaceAccessToken();
-        if (!token) throw new Error('Connexion Google Drive nécessaire pour déposer un fichier.');
-        const envoi = await uploadDocumentToDrive(token, fichier, `${activeAgency.name} — Académy`);
-        driveId = envoi.fileId;
-        driveLien = envoi.fileUrl;
-      }
+      // Demande explicite (15 septembre) : plus de dépôt dans le Drive de
+      // l'agence (qui exigeait une connexion Google pour CHAQUE ajout) — le
+      // fichier part directement dans le compartiment public `academy`
+      // (voir deposerFichier ci-dessus), accessible à tous en lecture seule
+      // sans la moindre connexion. drive_file_id/drive_web_view_link ne sont
+      // plus renseignés pour un nouvel envoi (conservés tels quels si on
+      // modifie une ressource sans déposer de nouveau fichier).
+      const lienUploade = fichier ? await deposerFichier(fichier, `fichier-${Date.now()}`) : null;
 
       const imageUrl = couverture ? await deposerImage(couverture, 'couverture') : couvertureActuelle;
       const portraitUrl = portrait ? await deposerImage(portrait, 'portrait') : portraitActuel;
@@ -663,9 +741,9 @@ export default function AcademyView() {
         titre: titre.trim(),
         description: description.trim() || null,
         type,
-        drive_file_id: driveId,
-        drive_web_view_link: driveLien,
-        external_url: lienExterne.trim() || null,
+        drive_file_id: fichier ? null : (enModification?.drive_file_id ?? null),
+        drive_web_view_link: fichier ? null : (enModification?.drive_web_view_link ?? null),
+        external_url: lienUploade || lienExterne.trim() || null,
         duree: duree.trim() || null,
         image_url: imageUrl,
         auteur: auteur.trim() || null,
@@ -693,24 +771,14 @@ export default function AcademyView() {
       await charger();
     } catch (e: any) {
       console.error(e);
-      if (e?.code === 'google-reconnect' || isGoogleAuthError(e)) {
-        // Le fichier n'est pas parti : l'accès Google a expiré et n'a pas pu
-        // être renouvelé en silence. Un clic pour se reconnecter, la page
-        // revient ensuite ici même.
-        toast.error(e?.message || "Votre accès Google Drive a expiré.", {
-          duration: 12000,
-          action: { label: 'Reconnecter Google', onClick: () => { void reconnectGoogleWorkspace(); } },
-        });
-      } else {
-        toast.error(e?.message || "Impossible d'enregistrer cette ressource.");
-      }
+      toast.error(e?.message || "Impossible d'enregistrer cette ressource.");
     } finally {
       setEnregistrement(false);
     }
   };
 
   const supprimer = async (r: Ressource) => {
-    if (!window.confirm(`Supprimer « ${r.titre} » de l'Académy ? Le fichier reste dans le Drive.`)) return;
+    if (!window.confirm(`Supprimer « ${r.titre} » de l'Académy ? Le fichier reste disponible via son lien direct.`)) return;
     const { data, error } = await supabase
       .from('academy_resources' as any)
       .delete()
@@ -881,6 +949,17 @@ export default function AcademyView() {
                   {fondEnCours ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
                   Image de fond
                 </button>
+                {ressources.some((r) => r.drive_file_id) && (
+                  <button
+                    onClick={() => void rendrePublicsLesFichiersExistants()}
+                    disabled={reparationEnCours}
+                    title="Ouvrir en lecture les anciens fichiers Drive, sans connexion Google pour les lire"
+                    className="px-3.5 py-2.5 rounded-full bg-white/90 hover:bg-white border border-black/10 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-md disabled:opacity-60"
+                  >
+                    {reparationEnCours ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />}
+                    Rendre les fichiers existants publics
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -1585,7 +1664,7 @@ export default function AcademyView() {
                 >
                   <Upload className="w-4 h-4 text-[#F7BC5F] shrink-0" />
                   <span className="truncate">
-                    {fichier ? fichier.name : "Déposer un fichier dans le Drive de l'agence"}
+                    {fichier ? fichier.name : 'Déposer un PDF ou une vidéo'}
                   </span>
                 </button>
               </div>
