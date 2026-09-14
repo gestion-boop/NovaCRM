@@ -485,8 +485,18 @@ export default function AcademyView() {
    * la moindre connexion.
    */
   const deposerFichier = async (fichier: File, prefixe: string): Promise<string> => {
+    // Signalé (15 septembre, erreur 400 au dépôt d'un PDF) : le vrai motif
+    // Supabase (taille dépassée, type refusé...) était masqué derrière un
+    // message générique. Vérification de taille faite ICI, avant l'envoi,
+    // avec un message exploitable — 200 Mo est la limite posée sur ce
+    // compartiment (voir la policy de stockage), donc inutile de tenter
+    // l'envoi d'un fichier plus gros pour se le faire dire par le serveur.
+    const LIMITE_OCTETS = 200 * 1024 * 1024;
+    if (fichier.size > LIMITE_OCTETS) {
+      throw new Error(`Ce fichier fait ${Math.round(fichier.size / 1024 / 1024)} Mo : la limite est de 200 Mo.`);
+    }
     const extension = (fichier.name.split('.').pop() || 'pdf').toLowerCase();
-    const chemin = `${activeAgency?.id}/fichiers/${prefixe}-${Date.now()}.${extension}`;
+    const chemin = `${activeAgency?.id}/fichiers/${prefixe}.${extension}`;
     const { error } = await supabase.storage
       .from('academy')
       .upload(chemin, fichier, { contentType: fichier.type || 'application/octet-stream', upsert: true });
@@ -494,7 +504,7 @@ export default function AcademyView() {
       throw new Error(
         error.message.toLowerCase().includes('bucket')
           ? "Le stockage des visuels n'existe pas encore : la migration 20260902180000 doit être appliquée."
-          : error.message
+          : `Le dépôt du fichier a échoué : ${error.message}`
       );
     }
     return supabase.storage.from('academy').getPublicUrl(chemin).data.publicUrl;
