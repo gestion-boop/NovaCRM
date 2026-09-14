@@ -561,8 +561,37 @@ export default function Secteurs() {
 
   // Autocomplete communes — demande explicite : « un fichier déroulant, on
   // peut cliquer plusieurs villes » plutôt que de taper à la main.
+  //
+  // Rapporté : « rien ne s'affiche » après avoir collé une longue liste de
+  // 26 communes séparées par des virgules — collée dans ce champ recherche
+  // (une seule commune à la fois) plutôt que dans le champ liste en
+  // dessous, elle ne matchait jamais rien et l'enregistrement suivant
+  // sauvegardait 0 commune. Détecte une virgule = liste collée, résout
+  // chaque nom séparément plutôt que de chercher la chaîne entière d'un
+  // coup (qui ne peut rien matcher).
   const rechercherEtSuggerer = async (conseillerId: string, texte: string) => {
     setRechercheCommune((prev) => ({ ...prev, [conseillerId]: texte }));
+    if (texte.includes(",")) {
+      const termes = texte.split(",").map((t) => t.trim()).filter(Boolean);
+      if (termes.length > 1) {
+        setSuggestionsCommune((prev) => ({ ...prev, [conseillerId]: [] }));
+        const resolues = await Promise.all(termes.map((t) => rechercherCommunes(t)));
+        const introuvables: string[] = [];
+        resolues.forEach((resultats, i) => {
+          if (resultats[0]) ajouterCommuneSuggeree(conseillerId, resultats[0]);
+          else introuvables.push(termes[i]);
+        });
+        setRechercheCommune((prev) => ({ ...prev, [conseillerId]: "" }));
+        if (introuvables.length > 0) {
+          toast({
+            title: "Certaines communes n'ont pas été trouvées",
+            description: introuvables.join(", "),
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+    }
     const resultats = await rechercherCommunes(texte);
     setSuggestionsCommune((prev) => ({ ...prev, [conseillerId]: resultats }));
   };
