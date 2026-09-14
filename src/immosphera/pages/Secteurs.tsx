@@ -84,6 +84,7 @@ export default function Secteurs() {
   const secteurLayersRef = useRef<L.Circle[]>([]);
   const polygoneLayersRef = useRef<L.Polygon[]>([]);
   const draftLayerRef = useRef<L.Polygon | L.Polyline | null>(null);
+  const pointsMarkersRef = useRef<L.Marker[]>([]);
   const contactMarkersRef = useRef<L.Marker[]>([]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -221,6 +222,37 @@ export default function Secteurs() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pointsDraft, dessinActif]);
+
+  // Points du contour en cours — déplaçables (glisser) et supprimables (clic)
+  // demande explicite : « pourrait-on mettre des points et les bouger ? ou
+  // les effacer ? »
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    pointsMarkersRef.current.forEach((m) => m.remove());
+    pointsMarkersRef.current = [];
+    if (!dessinActif) return;
+    const couleur = secteurParConseiller.get(dessinActif)?.couleur || "#E0A21A";
+    pointsDraft.forEach((point, index) => {
+      const icon = L.divIcon({
+        className: "point-contour",
+        html: `<span style="display:block;width:14px;height:14px;border-radius:50%;background:${couleur};border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:grab"></span>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      });
+      const marker = L.marker([point.lat, point.lng], { icon, draggable: true, title: "Glisser pour déplacer, clic pour supprimer" });
+      marker.on("dragend", () => {
+        const pos = marker.getLatLng();
+        setPointsDraft((prev) => prev.map((p, i) => (i === index ? { lat: pos.lat, lng: pos.lng } : p)));
+      });
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        setPointsDraft((prev) => prev.filter((_, i) => i !== index));
+      });
+      marker.addTo(map);
+      pointsMarkersRef.current.push(marker);
+    });
+  }, [pointsDraft, dessinActif, secteurParConseiller]);
 
   // Contours enregistrés (un polygone par secteur qui en a un)
   useEffect(() => {
@@ -464,7 +496,10 @@ export default function Secteurs() {
 
   const demarrerDessin = (conseillerId: string) => {
     setDessinActif(conseillerId);
-    setPointsDraft([]);
+    // Reprend le contour existant s'il y en a déjà un (déplaçable/
+    // supprimable comme les nouveaux points) plutôt que de repartir de
+    // zéro et écraser ce qui était tracé.
+    setPointsDraft(secteurParConseiller.get(conseillerId)?.polygone ?? []);
   };
   const annulerDessin = () => {
     setDessinActif(null);
@@ -724,7 +759,7 @@ export default function Secteurs() {
                           {enTrainDeDessiner ? (
                             <>
                               <span className="text-[10px] text-muted-foreground">
-                                Clique sur la carte ({pointsDraft.length} pt{pointsDraft.length > 1 ? "s" : ""})
+                                Clique pour ajouter, glisse pour déplacer, clique un point pour l'effacer ({pointsDraft.length} pt{pointsDraft.length > 1 ? "s" : ""})
                               </span>
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 ml-auto" onClick={terminerDessin}>
                                 <Check className="h-3 w-3 mr-1" /> Terminer
@@ -742,7 +777,7 @@ export default function Secteurs() {
                                 disabled={dessinActif !== null}
                                 onClick={() => demarrerDessin(a.id)}
                               >
-                                <Pencil className="h-3 w-3 mr-1" /> Dessiner un contour
+                                <Pencil className="h-3 w-3 mr-1" /> {secteur?.polygone ? "Modifier le contour" : "Dessiner un contour"}
                               </Button>
                               {secteur?.polygone && (
                                 <Button
