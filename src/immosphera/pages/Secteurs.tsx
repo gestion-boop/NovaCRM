@@ -148,8 +148,9 @@ export default function Secteurs() {
     // par le client) : « est-ce que tu peux présenter les cartes comme ça ?
     // ça serait plus sympa. » Fond CARTO Voyager (plus épuré que l'OSM
     // brut) via une clé API fournie par le client — VITE_CARTO_API_KEY,
-    // jamais commitée (voir .env.example). Sans clé configurée, on retombe
-    // sur OpenStreetMap standard plutôt que de casser la carte ("API key
+    // jamais commitée (voir .env.example), configurée côté Vercel (Settings
+    // → Environment Variables). Sans clé configurée, on retombe sur
+    // OpenStreetMap standard plutôt que de casser la carte ("API key
     // required" constaté quand la clé manquait).
     const cleCartoApi = import.meta.env.VITE_CARTO_API_KEY as string | undefined;
     if (cleCartoApi) {
