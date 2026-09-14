@@ -11,9 +11,11 @@ import {
   entreeSecteurCorrespond,
   departementAutorise,
   rechercherCommunes,
+  communesProches,
   DEPARTEMENTS_SECTEUR_LABEL,
   type GeoPoint,
   type SuggestionCommune,
+  type SuggestionCommuneProche,
 } from "@/immosphera/lib/geo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,6 +101,7 @@ export default function Secteurs() {
   // Autocomplete de communes par conseiller (recherche en cours + résultats)
   const [rechercheCommune, setRechercheCommune] = useState<Record<string, string>>({});
   const [suggestionsCommune, setSuggestionsCommune] = useState<Record<string, SuggestionCommune[]>>({});
+  const [communesVoisines, setCommunesVoisines] = useState<Record<string, SuggestionCommuneProche[]>>({});
 
   const [ficheOuverte, setFicheOuverte] = useState(false);
   const [contactEnEdition, setContactEnEdition] = useState<Contact | null>(null);
@@ -245,8 +248,14 @@ export default function Secteurs() {
         const pos = marker.getLatLng();
         setPointsDraft((prev) => prev.map((p, i) => (i === index ? { lat: pos.lat, lng: pos.lng } : p)));
       });
-      marker.on("click", (e) => {
-        L.DomEvent.stopPropagation(e);
+      // Rapporté : « je ne peux pas supprimer des points » — un appel à
+      // L.DomEvent.stopPropagation(e) ici attendait un événement DOM natif,
+      // pas l'événement Leaflet reçu par ce handler ; l'appel plantait
+      // silencieusement avant d'atteindre setPointsDraft juste en dessous.
+      // Un clic sur un marqueur ne remonte de toute façon pas jusqu'au clic
+      // "ajouter un point" de la carte (comportement Leaflet par défaut) :
+      // inutile de l'arrêter à la main.
+      marker.on("click", () => {
         setPointsDraft((prev) => prev.filter((_, i) => i !== index));
       });
       marker.addTo(map);
@@ -254,13 +263,17 @@ export default function Secteurs() {
     });
   }, [pointsDraft, dessinActif, secteurParConseiller]);
 
-  // Contours enregistrés (un polygone par secteur qui en a un)
+  // Contours enregistrés (un polygone par secteur qui en a un) — celui du
+  // conseiller en cours d'édition est masqué : rapporté « quand je modifie
+  // le contour, le reste reste sur l'écran », le tracé déjà enregistré
+  // restait affiché EN PLUS du brouillon modifiable, dédoublant l'affichage.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     polygoneLayersRef.current.forEach((l) => l.remove());
     polygoneLayersRef.current = [];
     secteurs.forEach((s) => {
+      if (s.conseiller_id === dessinActif) return;
       if (!Array.isArray(s.polygone) || s.polygone.length < 3) return;
       const conseiller = getAdvisorById(s.conseiller_id);
       const polygone = L.polygon(
@@ -271,7 +284,7 @@ export default function Secteurs() {
       polygone.addTo(map);
       polygoneLayersRef.current.push(polygone);
     });
-  }, [secteurs]);
+  }, [secteurs, dessinActif]);
 
   // Cercles de secteur (un par code postal, coloré selon le conseiller) —
   // contour discret + remplissage doux, plusieurs cercles superposés donnant
@@ -547,6 +560,17 @@ export default function Secteurs() {
     });
     setRechercheCommune((prev) => ({ ...prev, [conseillerId]: "" }));
     setSuggestionsCommune((prev) => ({ ...prev, [conseillerId]: [] }));
+    // Rapporté : « pour le code postal ça ne met que Lézignan, alors qu'il
+    // y a beaucoup de villages autour » — propose les communes voisines de
+    // celle qu'on vient d'ajouter, pour les ajouter en un clic plutôt que
+    // de devoir chercher chaque village un par un par son nom.
+    void suggererVoisines(conseillerId, suggestion);
+  };
+  const suggererVoisines = async (conseillerId: string, suggestion: SuggestionCommune) => {
+    const resultat = await geocodeEntreeSecteur(suggestion.codePostal);
+    if (!resultat) return;
+    const voisines = await communesProches(resultat.point, suggestion.nom);
+    setCommunesVoisines((prev) => ({ ...prev, [conseillerId]: voisines }));
   };
 
   // Valide chaque entrée AVANT d'enregistrer — demande explicite : « les
@@ -711,6 +735,30 @@ export default function Secteurs() {
                             </div>
                           )}
                         </div>
+
+                        {/* Villages autour de la dernière commune ajoutée —
+                            rapporté : « pour le code postal ça ne met que
+                            Lézignan, alors qu'il y a beaucoup de villages
+                            autour ». Un clic ajoute, plutôt que de devoir
+                            chercher chaque village un par un par son nom. */}
+                        {(communesVoisines[a.id]?.length ?? 0) > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {communesVoisines[a.id].map((v) => (
+                              <button
+                                key={`${v.nom}-${v.codePostal}`}
+                                type="button"
+                                onClick={() => {
+                                  ajouterCommuneSuggeree(a.id, v);
+                                  setCommunesVoisines((prev) => ({ ...prev, [a.id]: prev[a.id].filter((x) => x.codePostal !== v.codePostal) }));
+                                }}
+                                title={`${v.distanceKm.toFixed(1)} km`}
+                                className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted hover:bg-muted/70 text-muted-foreground"
+                              >
+                                + {v.nom}
+                              </button>
+                            ))}
+                          </div>
+                        )}
 
                         <Input
                           value={valeurCourante}
