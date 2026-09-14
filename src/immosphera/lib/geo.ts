@@ -146,7 +146,7 @@ export async function geocodePostalCode(codePostal: string, forceRefresh = false
  */
 export async function geocodeAdresseAvecCodePostal(
   adresse: string
-): Promise<(GeoPoint & { postcode: string | null }) | null> {
+): Promise<(GeoPoint & { postcode: string | null; city: string | null }) | null> {
   const query = adresse.trim();
   if (!query) return null;
   try {
@@ -158,10 +158,45 @@ export async function geocodeAdresseAvecCodePostal(
     if (!Array.isArray(coords) || coords.length !== 2) return null;
     const point = { lat: coords[1], lng: coords[0] };
     if (!isValidFrancePoint(point)) return null;
-    return { ...point, postcode: feature?.properties?.postcode ?? null };
+    return { ...point, postcode: feature?.properties?.postcode ?? null, city: feature?.properties?.city ?? null };
   } catch {
     return null;
   }
+}
+
+/**
+ * Une entrée de secteur (Secteurs.tsx) peut être un code postal OU un nom de
+ * ville — demande explicite : « mettre le code postal, également par ville,
+ * si parfois on n'a pas le code postal en connaissance ». Un code postal
+ * (5 chiffres) est géocodé par geocodePostalCode ; sinon l'entrée est
+ * traitée comme un nom de ville (geocodeCity, déjà utilisé pour les Biens).
+ */
+export async function geocodeEntreeSecteur(entree: string): Promise<GeoPoint | null> {
+  const valeur = entree.trim();
+  if (!valeur) return null;
+  return /^\d{5}$/.test(valeur) ? geocodePostalCode(valeur) : geocodeCity(valeur);
+}
+
+function normaliserVille(v: string): string {
+  return v
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Une entrée de secteur (code postal ou ville) correspond-elle à l'adresse
+ * géocodée d'un contact ? Compare le code postal exact, ou le nom de ville
+ * (insensible aux accents/casse) selon la forme de l'entrée.
+ */
+export function entreeSecteurCorrespond(
+  entree: string,
+  adresse: { postcode: string | null; city: string | null }
+): boolean {
+  const valeur = entree.trim();
+  if (/^\d{5}$/.test(valeur)) return valeur === adresse.postcode;
+  return !!adresse.city && normaliserVille(valeur) === normaliserVille(adresse.city);
 }
 
 export function pointDansPolygone(point: GeoPoint, polygone: GeoPoint[]): boolean {
