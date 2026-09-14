@@ -508,7 +508,13 @@ export default function Secteurs() {
       polygone?: GeoPoint[] | null;
     }) => {
       const agencyId = await resoudreAgencyId();
-      const payload: any = { agency_id: agencyId, conseiller_id: conseillerId, codes_postaux: codes, couleur };
+      const payload: any = {
+        agency_id: agencyId,
+        conseiller_id: conseillerId,
+        codes_postaux: codes,
+        couleur,
+        updated_at: new Date().toISOString(),
+      };
       if (polygone !== undefined) payload.polygone = polygone;
       const { error } = await supabase
         .from("immosphera_secteurs" as any)
@@ -645,6 +651,7 @@ export default function Secteurs() {
     try {
       const horsZone: string[] = [];
       const introuvables: string[] = [];
+      const valides: string[] = [];
       const nouveauxCentroides: Record<string, GeoPoint> = {};
       // Géocodées en parallèle plutôt qu'une par une (voir le même
       // correctif sur l'effet de géocodage plus haut) : un secteur avec
@@ -660,12 +667,19 @@ export default function Secteurs() {
             horsZone.push(entree);
             return;
           }
+          valides.push(entree);
           nouveauxCentroides[entree] = resultat.point;
         })
       );
+      // Rapporté : « quand je mets Lézignan, tous les villages ne se
+      // mettent pas quand je clique sur enregistrer » — l'ancienne version
+      // bloquait TOUT l'enregistrement si UNE SEULE entrée posait problème
+      // (introuvable, hors zone), même parmi 20+ communes valides. Enregistre
+      // maintenant celles qui sont valides, et prévient juste pour les
+      // autres au lieu de tout perdre.
       if (introuvables.length > 0 || horsZone.length > 0) {
         toast({
-          title: "Secteur non enregistré",
+          title: valides.length > 0 ? `${valides.length} commune${valides.length > 1 ? "s" : ""} enregistrée${valides.length > 1 ? "s" : ""}, le reste ignoré` : "Secteur non enregistré",
           description: [
             introuvables.length > 0 ? `Introuvable : ${introuvables.join(", ")}.` : "",
             horsZone.length > 0 ? `Hors ${DEPARTEMENTS_SECTEUR_LABEL} : ${horsZone.join(", ")}.` : "",
@@ -674,10 +688,10 @@ export default function Secteurs() {
             .join(" "),
           variant: "destructive",
         });
-        return;
+        if (valides.length === 0) return;
       }
       setCentroides((prev) => ({ ...prev, ...nouveauxCentroides }));
-      sauvegarderSecteurMutation.mutate({ conseillerId, codes: codesBruts, couleur });
+      sauvegarderSecteurMutation.mutate({ conseillerId, codes: valides, couleur });
     } finally {
       setValidationEnCours(null);
     }
