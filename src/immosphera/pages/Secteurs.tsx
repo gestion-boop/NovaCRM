@@ -10,8 +10,10 @@ import {
   geocodeEntreeSecteur,
   entreeSecteurCorrespond,
   departementAutorise,
+  rechercherCommunes,
   DEPARTEMENTS_SECTEUR_LABEL,
   type GeoPoint,
+  type SuggestionCommune,
 } from "@/immosphera/lib/geo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Compass } from "lucide-react";
+import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Compass, Pencil, X, Check } from "lucide-react";
 
 // Demande explicite (14 septembre, v2 — après un premier essai à base de
 // polygones dessinés à la main) : « dans les équipes, dans les fiches des
@@ -43,6 +45,11 @@ type Secteur = {
   conseiller_id: string;
   couleur: string;
   codes_postaux: string[];
+  // Demande explicite (14 septembre) : « pourquoi pas dessiner un secteur
+  // aussi sur la carte qui englobe pas mal de codes postaux » — contour
+  // libre optionnel, en complément des communes choisies via l'autocomplete
+  // ci-dessous plutôt qu'à la place.
+  polygone: GeoPoint[] | null;
 };
 
 type Contact = {
@@ -75,11 +82,22 @@ export default function Secteurs() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const secteurLayersRef = useRef<L.Circle[]>([]);
+  const polygoneLayersRef = useRef<L.Polygon[]>([]);
+  const draftLayerRef = useRef<L.Polygon | L.Polyline | null>(null);
   const contactMarkersRef = useRef<L.Marker[]>([]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [panneauOuvert, setPanneauOuvert] = useState(true);
   const [centroides, setCentroides] = useState<Record<string, GeoPoint>>({});
+
+  // Dessin de contour libre — conseiller pour lequel le dessin est en
+  // cours (null = aucun), et les points déjà posés.
+  const [dessinActif, setDessinActif] = useState<string | null>(null);
+  const [pointsDraft, setPointsDraft] = useState<GeoPoint[]>([]);
+
+  // Autocomplete de communes par conseiller (recherche en cours + résultats)
+  const [rechercheCommune, setRechercheCommune] = useState<Record<string, string>>({});
+  const [suggestionsCommune, setSuggestionsCommune] = useState<Record<string, SuggestionCommune[]>>({});
 
   const [ficheOuverte, setFicheOuverte] = useState(false);
   const [contactEnEdition, setContactEnEdition] = useState<Contact | null>(null);
@@ -165,6 +183,63 @@ export default function Secteurs() {
       mapRef.current = null;
     };
   }, []);
+
+  // Dessin d'un contour libre — chaque clic ajoute un point, tant que
+  // `dessinActif` porte un conseiller.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const onClick = (e: L.LeafletMouseEvent) => {
+      if (!dessinActif) return;
+      setPointsDraft((prev) => [...prev, { lat: e.latlng.lat, lng: e.latlng.lng }]);
+    };
+    map.on("click", onClick);
+    return () => {
+      map.off("click", onClick);
+    };
+  }, [dessinActif]);
+
+  // Trace en cours (pointillé tant qu'il n'est pas fermé)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (draftLayerRef.current) {
+      draftLayerRef.current.remove();
+      draftLayerRef.current = null;
+    }
+    const couleur = dessinActif ? secteurParConseiller.get(dessinActif)?.couleur || "#E0A21A" : "#E0A21A";
+    if (pointsDraft.length >= 3) {
+      draftLayerRef.current = L.polygon(
+        pointsDraft.map((p) => [p.lat, p.lng] as [number, number]),
+        { color: couleur, weight: 2, dashArray: "6 4", fillOpacity: 0.15 }
+      ).addTo(map);
+    } else if (pointsDraft.length > 0) {
+      draftLayerRef.current = L.polyline(
+        pointsDraft.map((p) => [p.lat, p.lng] as [number, number]),
+        { color: couleur, weight: 2, dashArray: "6 4" }
+      ).addTo(map);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pointsDraft, dessinActif]);
+
+  // Contours enregistrés (un polygone par secteur qui en a un)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    polygoneLayersRef.current.forEach((l) => l.remove());
+    polygoneLayersRef.current = [];
+    secteurs.forEach((s) => {
+      if (!Array.isArray(s.polygone) || s.polygone.length < 3) return;
+      const conseiller = getAdvisorById(s.conseiller_id);
+      const polygone = L.polygon(
+        s.polygone.map((p) => [p.lat, p.lng] as [number, number]),
+        { color: s.couleur, weight: 2, fillColor: s.couleur, fillOpacity: 0.12 }
+      );
+      polygone.bindTooltip(`<b>${conseiller?.name || "?"}</b>`, { sticky: true });
+      polygone.addTo(map);
+      polygoneLayersRef.current.push(polygone);
+    });
+  }, [secteurs]);
 
   // Cercles de secteur (un par code postal, coloré selon le conseiller) —
   // contour discret + remplissage doux, plusieurs cercles superposés donnant
@@ -359,13 +434,25 @@ export default function Secteurs() {
   // ── Édition des secteurs (super admin) ──────────────────────────────
   const [codesEnEdition, setCodesEnEdition] = useState<Record<string, string>>({});
   const sauvegarderSecteurMutation = useMutation({
-    mutationFn: async ({ conseillerId, codes, couleur }: { conseillerId: string; codes: string[]; couleur: string }) => {
+    mutationFn: async ({
+      conseillerId,
+      codes,
+      couleur,
+      polygone,
+    }: {
+      conseillerId: string;
+      codes: string[];
+      couleur: string;
+      // Omis = ne pas toucher au contour déjà enregistré (upsert Supabase :
+      // seules les colonnes présentes dans l'objet sont mises à jour).
+      polygone?: GeoPoint[] | null;
+    }) => {
       const agencyId = await resoudreAgencyId();
+      const payload: any = { agency_id: agencyId, conseiller_id: conseillerId, codes_postaux: codes, couleur };
+      if (polygone !== undefined) payload.polygone = polygone;
       const { error } = await supabase
         .from("immosphera_secteurs" as any)
-        .upsert({ agency_id: agencyId, conseiller_id: conseillerId, codes_postaux: codes, couleur } as any, {
-          onConflict: "agency_id,conseiller_id",
-        });
+        .upsert(payload, { onConflict: "agency_id,conseiller_id" });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -374,6 +461,58 @@ export default function Secteurs() {
     },
     onError: (e: any) => toast({ title: "Erreur", description: e.message, variant: "destructive" }),
   });
+
+  const demarrerDessin = (conseillerId: string) => {
+    setDessinActif(conseillerId);
+    setPointsDraft([]);
+  };
+  const annulerDessin = () => {
+    setDessinActif(null);
+    setPointsDraft([]);
+  };
+  const terminerDessin = () => {
+    if (!dessinActif || pointsDraft.length < 3) {
+      toast({ title: "Trace un contour d'au moins 3 points avant de terminer.", variant: "destructive" });
+      return;
+    }
+    const secteur = secteurParConseiller.get(dessinActif);
+    sauvegarderSecteurMutation.mutate({
+      conseillerId: dessinActif,
+      codes: secteur?.codes_postaux ?? [],
+      couleur: secteur?.couleur ?? COULEURS[advisors.findIndex((a) => a.id === dessinActif) % COULEURS.length],
+      polygone: pointsDraft,
+    });
+    setDessinActif(null);
+    setPointsDraft([]);
+  };
+  const effacerContour = (conseillerId: string) => {
+    const secteur = secteurParConseiller.get(conseillerId);
+    if (!secteur) return;
+    sauvegarderSecteurMutation.mutate({
+      conseillerId,
+      codes: secteur.codes_postaux,
+      couleur: secteur.couleur,
+      polygone: null,
+    });
+  };
+
+  // Autocomplete communes — demande explicite : « un fichier déroulant, on
+  // peut cliquer plusieurs villes » plutôt que de taper à la main.
+  const rechercherEtSuggerer = async (conseillerId: string, texte: string) => {
+    setRechercheCommune((prev) => ({ ...prev, [conseillerId]: texte }));
+    const resultats = await rechercherCommunes(texte);
+    setSuggestionsCommune((prev) => ({ ...prev, [conseillerId]: resultats }));
+  };
+  const ajouterCommuneSuggeree = (conseillerId: string, suggestion: SuggestionCommune) => {
+    setCodesEnEdition((prev) => {
+      const actuel = prev[conseillerId] ?? (secteurParConseiller.get(conseillerId)?.codes_postaux.join(", ") || "");
+      const liste = actuel.split(",").map((s) => s.trim()).filter(Boolean);
+      if (!liste.includes(suggestion.codePostal)) liste.push(suggestion.codePostal);
+      return { ...prev, [conseillerId]: liste.join(", ") };
+    });
+    setRechercheCommune((prev) => ({ ...prev, [conseillerId]: "" }));
+    setSuggestionsCommune((prev) => ({ ...prev, [conseillerId]: [] }));
+  };
 
   // Valide chaque entrée AVANT d'enregistrer — demande explicite : « les
   // codes postaux et les villes doivent être impérativement de l'Aude, de
@@ -503,11 +642,41 @@ export default function Secteurs() {
                   const secteur = secteurParConseiller.get(a.id);
                   const valeurCourante = codesEnEdition[a.id] ?? (secteur?.codes_postaux.join(", ") || "");
                   const couleur = secteur?.couleur || COULEURS[advisors.indexOf(a) % COULEURS.length];
+                  const enTrainDeDessiner = dessinActif === a.id;
+                  const suggestions = suggestionsCommune[a.id] ?? [];
                   return (
                     <div key={a.id} className="flex items-start gap-2 p-2 rounded-lg bg-muted/30">
                       <span className="w-3 h-3 rounded-full mt-1.5 shrink-0" style={{ background: couleur }} />
                       <div className="flex-1 min-w-0 space-y-1">
                         <p className="text-[11px] font-bold">{a.name}</p>
+
+                        {/* Autocomplete communes — demande explicite : « un
+                            fichier déroulant, on peut cliquer plusieurs
+                            villes » plutôt que de taper un nom à la main. */}
+                        <div className="relative">
+                          <Input
+                            value={rechercheCommune[a.id] ?? ""}
+                            onChange={(e) => rechercherEtSuggerer(a.id, e.target.value)}
+                            placeholder="Chercher une commune à ajouter..."
+                            className="h-7 text-[11px]"
+                          />
+                          {suggestions.length > 0 && (
+                            <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                              {suggestions.map((s) => (
+                                <button
+                                  key={`${s.nom}-${s.codePostal}`}
+                                  type="button"
+                                  onClick={() => ajouterCommuneSuggeree(a.id, s)}
+                                  className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-muted/60 flex items-center justify-between gap-2"
+                                >
+                                  <span>{s.nom}</span>
+                                  <span className="text-muted-foreground shrink-0">{s.codePostal}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
                         <Input
                           value={valeurCourante}
                           onChange={(e) => setCodesEnEdition((prev) => ({ ...prev, [a.id]: e.target.value }))}
@@ -546,6 +715,47 @@ export default function Secteurs() {
                           >
                             {validationEnCours === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Enregistrer"}
                           </Button>
+                        </div>
+
+                        {/* Contour libre — demande explicite : « pourquoi
+                            pas dessiner un secteur aussi sur la carte qui
+                            englobe pas mal de codes postaux » */}
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          {enTrainDeDessiner ? (
+                            <>
+                              <span className="text-[10px] text-muted-foreground">
+                                Clique sur la carte ({pointsDraft.length} pt{pointsDraft.length > 1 ? "s" : ""})
+                              </span>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 ml-auto" onClick={terminerDessin}>
+                                <Check className="h-3 w-3 mr-1" /> Terminer
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={annulerDessin}>
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 text-[10px] px-2"
+                                disabled={dessinActif !== null}
+                                onClick={() => demarrerDessin(a.id)}
+                              >
+                                <Pencil className="h-3 w-3 mr-1" /> Dessiner un contour
+                              </Button>
+                              {secteur?.polygone && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 text-[10px] px-2 text-muted-foreground"
+                                  onClick={() => effacerContour(a.id)}
+                                >
+                                  Effacer
+                                </Button>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
