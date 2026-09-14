@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Plus,
   Users,
+  MapPinned,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -283,6 +284,20 @@ export function SearchPanel({
         >
           <Users className="h-3.5 w-3.5" />
           Partenaires
+        </button>
+        {/* Demande explicite (14 septembre) : « avoir une carte par
+            secteur » — cette barre (SearchPanel) est le SEUL endroit d'où
+            on peut changer d'onglet depuis la page Biens (le bandeau de
+            navigation d'Immosphera.tsx est volontairement masqué ici,
+            voir isHome) : sans ce bouton, l'onglet Secteurs ajouté par
+            ailleurs restait invisible/inatteignable depuis l'accueil. */}
+        <button
+          type="button"
+          onClick={() => navigate("/immosphera/secteurs")}
+          className={`${PILL_BASE} ${PILL_IDLE}`}
+        >
+          <MapPinned className="h-3.5 w-3.5" />
+          Secteurs
         </button>
       </div>
 

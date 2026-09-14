@@ -98,6 +98,140 @@ export async function geocodeCity(value: string, forceRefresh = false, codePosta
 /** Alias plus explicite pour les formulaires de biens. */
 export const geocodeAddress = geocodeCity;
 
+/**
+ * Géocode un code postal en centroïde approximatif — utilisé pour tracer le
+ * secteur d'un conseiller (src/immosphera/pages/Secteurs.tsx) sous forme de
+ * cercles colorés, faute de vraies limites de code postal disponibles.
+ * `type=municipality` cible directement une commune plutôt qu'une adresse
+ * précise à l'intérieur (le code postal seul n'en désigne pas une).
+ */
+export async function geocodePostalCode(codePostal: string, forceRefresh = false): Promise<GeoPoint | null> {
+  const code = codePostal.trim();
+  if (!/^\d{5}$/.test(code)) return null;
+
+  const cache = getCache();
+  const key = `cp:${code}`;
+  if (!forceRefresh && cache[key]) return cache[key];
+
+  try {
+    const params = new URLSearchParams({ q: code, type: "municipality", limit: "1" });
+    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?${params.toString()}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const feature = json?.features?.[0];
+    const coords = feature?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length !== 2) return null;
+
+    const point: GeoPoint = { lat: coords[1], lng: coords[0] };
+    if (!isValidFrancePoint(point)) return null;
+
+    cache[key] = point;
+    setCache(cache);
+    return point;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Point-dans-polygone (ray casting) — utilisé pour déterminer dans quel
+ * secteur (src/immosphera/pages/Secteurs.tsx) tombe l'adresse d'un contact,
+ * une fois géocodée. Pas besoin de PostGIS pour ce volume : le calcul se
+ * fait entièrement côté client sur les polygones déjà chargés.
+ */
+/**
+ * Géocode une adresse ET renvoie son code postal (pas seulement les
+ * coordonnées comme geocodeAddress) — utilisé pour rattacher un contact
+ * (Secteurs.tsx) au secteur du conseiller dont le code postal correspond.
+ */
+export async function geocodeAdresseAvecCodePostal(
+  adresse: string
+): Promise<(GeoPoint & { postcode: string | null; city: string | null }) | null> {
+  const query = adresse.trim();
+  if (!query) return null;
+  try {
+    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?${new URLSearchParams({ q: query, limit: "1" })}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const feature = json?.features?.[0];
+    const coords = feature?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length !== 2) return null;
+    const point = { lat: coords[1], lng: coords[0] };
+    if (!isValidFrancePoint(point)) return null;
+    return { ...point, postcode: feature?.properties?.postcode ?? null, city: feature?.properties?.city ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Une entrée de secteur (Secteurs.tsx) peut être un code postal OU un nom de
+ * ville — demande explicite : « mettre le code postal, également par ville,
+ * si parfois on n'a pas le code postal en connaissance ». Un code postal
+ * (5 chiffres) est géocodé par geocodePostalCode ; sinon l'entrée est
+ * traitée comme un nom de ville (geocodeCity, déjà utilisé pour les Biens).
+ *
+ * Renvoie aussi le code postal résolu (même pour une entrée "ville") : sert
+ * à vérifier le département (voir departementAutorise ci-dessous).
+ */
+export async function geocodeEntreeSecteur(entree: string): Promise<{ point: GeoPoint; postcode: string | null } | null> {
+  const valeur = entree.trim();
+  if (!valeur) return null;
+  if (/^\d{5}$/.test(valeur)) {
+    const point = await geocodePostalCode(valeur);
+    return point ? { point, postcode: valeur } : null;
+  }
+  const resultat = await geocodeAdresseAvecCodePostal(valeur);
+  return resultat ? { point: { lat: resultat.lat, lng: resultat.lng }, postcode: resultat.postcode } : null;
+}
+
+// Demande explicite (14 septembre) : « fais-moi plutôt pour l'instant la
+// carte de l'Aude, l'Hérault et les Pyrénées-Orientales [...] si jamais tu
+// la codes autre part c'est une erreur de ta part » — les secteurs sont
+// volontairement limités à ces 3 départements pour l'instant.
+export const DEPARTEMENTS_SECTEUR_AUTORISES = ["11", "34", "66"] as const;
+export const DEPARTEMENTS_SECTEUR_LABEL = "Aude (11), Hérault (34) et Pyrénées-Orientales (66)";
+
+export function departementAutorise(codePostal: string | null): boolean {
+  if (!codePostal || !/^\d{5}$/.test(codePostal)) return false;
+  return (DEPARTEMENTS_SECTEUR_AUTORISES as readonly string[]).includes(codePostal.slice(0, 2));
+}
+
+function normaliserVille(v: string): string {
+  return v
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Une entrée de secteur (code postal ou ville) correspond-elle à l'adresse
+ * géocodée d'un contact ? Compare le code postal exact, ou le nom de ville
+ * (insensible aux accents/casse) selon la forme de l'entrée.
+ */
+export function entreeSecteurCorrespond(
+  entree: string,
+  adresse: { postcode: string | null; city: string | null }
+): boolean {
+  const valeur = entree.trim();
+  if (/^\d{5}$/.test(valeur)) return valeur === adresse.postcode;
+  return !!adresse.city && normaliserVille(valeur) === normaliserVille(adresse.city);
+}
+
+export function pointDansPolygone(point: GeoPoint, polygone: GeoPoint[]): boolean {
+  let dedans = false;
+  for (let i = 0, j = polygone.length - 1; i < polygone.length; j = i++) {
+    const pi = polygone[i];
+    const pj = polygone[j];
+    const intersecte =
+      pi.lat > point.lat !== pj.lat > point.lat &&
+      point.lng < ((pj.lng - pi.lng) * (point.lat - pi.lat)) / (pj.lat - pi.lat) + pi.lng;
+    if (intersecte) dedans = !dedans;
+  }
+  return dedans;
+}
+
 export function distanceKm(a: GeoPoint, b: GeoPoint): number {
   if (!a || !b) return Infinity;
   const toRad = (deg: number) => (deg * Math.PI) / 180;
