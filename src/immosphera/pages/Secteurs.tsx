@@ -23,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Compass, Pencil, X, Check } from "lucide-react";
+import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Compass, Pencil, X, Check, Search, Trash2, ListChecks } from "lucide-react";
 
 // Demande explicite (14 septembre, v2 — après un premier essai à base de
 // polygones dessinés à la main) : « dans les équipes, dans les fiches des
@@ -90,6 +90,11 @@ export default function Secteurs() {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [panneauOuvert, setPanneauOuvert] = useState(true);
+  // Demande explicite : « un bouton qui ouvre un popup plus grand pour
+  // supprimer des lieux avec une barre de recherche au cas où » — la liste
+  // en ligne dans le panneau devient vite illisible avec 20+ communes.
+  const [gererOuvertPour, setGererOuvertPour] = useState<string | null>(null);
+  const [filtreGererCommunes, setFiltreGererCommunes] = useState("");
   // Le code postal résolu est gardé avec chaque point (pas seulement les
   // coordonnées) — sert à afficher, à côté de chaque commune dans la liste
   // "villages enregistrés", ce à quoi elle a réellement été résolue (voir
@@ -850,48 +855,28 @@ export default function Secteurs() {
                             veux pouvoir voir les villages qui ont été
                             enregistrés pour en supprimer si je le veux. Car
                             là ça met Canet en Roussillon et je ne comprends
-                            pas pourquoi. » Chaque commune affichée avec le
-                            code postal auquel elle a été résolue (rend une
-                            résolution erronée visible d'un coup d'œil), et
-                            un × pour la retirer directement. */}
-                        {valeurCourante.split(",").map((s) => s.trim()).filter(Boolean).length > 0 && (
-                          <div className="flex flex-wrap gap-1 pt-0.5">
-                            {valeurCourante
-                              .split(",")
-                              .map((s) => s.trim())
-                              .filter(Boolean)
-                              .map((entree) => {
-                                const info = centroides[entree];
-                                return (
-                                  <span
-                                    key={entree}
-                                    className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-semibold text-white"
-                                    style={{ background: couleur }}
-                                  >
-                                    {entree}
-                                    {info?.postcode && <span className="opacity-80">· {info.postcode}</span>}
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setCodesEnEdition((prev) => ({
-                                          ...prev,
-                                          [a.id]: valeurCourante
-                                            .split(",")
-                                            .map((s2) => s2.trim())
-                                            .filter((s2) => s2 && s2 !== entree)
-                                            .join(", "),
-                                        }))
-                                      }
-                                      title={`Retirer ${entree}`}
-                                      className="w-3.5 h-3.5 rounded-full grid place-items-center hover:bg-black/20"
-                                    >
-                                      <X className="h-2.5 w-2.5" />
-                                    </button>
-                                  </span>
-                                );
-                              })}
-                          </div>
-                        )}
+                            pas pourquoi » puis « un bouton qui ouvre un
+                            popup plus grand pour supprimer des lieux avec
+                            une barre de recherche au cas où ». La liste
+                            complète (avec suppression) vit dans le Dialog
+                            ci-dessous plutôt qu'en ligne ici — illisible dès
+                            qu'il y a beaucoup de communes. */}
+                        {(() => {
+                          const listeActuelle = valeurCourante.split(",").map((s) => s.trim()).filter(Boolean);
+                          return listeActuelle.length > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setGererOuvertPour(a.id);
+                                setFiltreGererCommunes("");
+                              }}
+                              className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+                            >
+                              <ListChecks className="h-3 w-3" />
+                              {listeActuelle.length} commune{listeActuelle.length > 1 ? "s" : ""} — voir / supprimer
+                            </button>
+                          ) : null;
+                        })()}
 
                         <Input
                           value={valeurCourante}
@@ -1072,6 +1057,82 @@ export default function Secteurs() {
               {enregistrementContact ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enregistrer"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Gérer les communes d'un secteur — demande explicite : « un bouton
+          qui ouvre un popup plus grand pour supprimer des lieux avec une
+          barre de recherche au cas où ». */}
+      <Dialog open={gererOuvertPour !== null} onOpenChange={(v) => !v && setGererOuvertPour(null)}>
+        <DialogContent className="max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
+              Communes {gererOuvertPour && `— ${getAdvisorById(gererOuvertPour)?.name || ""}`}
+            </DialogTitle>
+          </DialogHeader>
+          {gererOuvertPour &&
+            (() => {
+              const conseillerId = gererOuvertPour;
+              const valeurCourante = codesEnEdition[conseillerId] ?? (secteurParConseiller.get(conseillerId)?.codes_postaux.join(", ") || "");
+              const liste = valeurCourante.split(",").map((s) => s.trim()).filter(Boolean);
+              const filtre = filtreGererCommunes.trim().toLowerCase();
+              const listeFiltree = filtre ? liste.filter((entree) => entree.toLowerCase().includes(filtre)) : liste;
+              const retirer = (entree: string) =>
+                setCodesEnEdition((prev) => ({
+                  ...prev,
+                  [conseillerId]: liste.filter((e) => e !== entree).join(", "),
+                }));
+              return (
+                <div className="flex-1 min-h-0 flex flex-col gap-3">
+                  <div className="relative shrink-0">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      value={filtreGererCommunes}
+                      onChange={(e) => setFiltreGererCommunes(e.target.value)}
+                      placeholder="Filtrer la liste..."
+                      className="h-9 pl-8 text-sm"
+                    />
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                    {listeFiltree.length === 0 && (
+                      <p className="text-xs text-muted-foreground p-4 text-center">
+                        {liste.length === 0 ? "Aucune commune pour l'instant." : "Aucune commune ne correspond à ce filtre."}
+                      </p>
+                    )}
+                    {listeFiltree.map((entree) => {
+                      const info = centroides[entree];
+                      return (
+                        <div key={entree} className="flex items-center justify-between gap-2 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate">{entree}</p>
+                            {info?.postcode && <p className="text-[11px] text-muted-foreground">{info.postcode}</p>}
+                          </div>
+                          <Button size="sm" variant="ghost" className="text-destructive shrink-0" onClick={() => retirer(entree)}>
+                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Retirer
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-1 shrink-0">
+                    <p className="text-[11px] text-muted-foreground">
+                      {liste.length} commune{liste.length > 1 ? "s" : ""} au total
+                    </p>
+                    <Button
+                      size="sm"
+                      disabled={validationEnCours === conseillerId}
+                      onClick={() => {
+                        const secteur = secteurParConseiller.get(conseillerId);
+                        const couleur = secteur?.couleur || COULEURS[advisors.findIndex((a) => a.id === conseillerId) % COULEURS.length];
+                        validerEtEnregistrerSecteur(conseillerId, liste, couleur);
+                      }}
+                    >
+                      {validationEnCours === conseillerId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Enregistrer"}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
         </DialogContent>
       </Dialog>
     </div>
