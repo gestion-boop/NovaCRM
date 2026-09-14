@@ -144,16 +144,24 @@ export default function Secteurs() {
     const toutesLesEntrees = Array.from(new Set(secteurs.flatMap((s) => s.codes_postaux)));
     const manquantes = toutesLesEntrees.filter((c) => !centroides[c]);
     if (manquantes.length === 0) return;
+    // Rapporté : « j'ai mis beaucoup de secteur et cela ne s'affiche pas »
+    // — un secteur avec de nombreuses communes géocodait chaque entrée
+    // l'une après l'autre (boucle for + await), donc en attendant très
+    // longtemps avant que les derniers cercles n'apparaissent. Toutes les
+    // entrées manquantes sont maintenant géocodées EN PARALLÈLE.
     (async () => {
-      const resultats: Record<string, GeoPoint> = {};
-      for (const entree of manquantes) {
-        const resultat = await geocodeEntreeSecteur(entree);
-        // Filtre défensif : une entrée hors Aude/Hérault/Pyrénées-Orientales
-        // ne devrait déjà plus pouvoir être enregistrée (voir la validation
-        // dans validerEtEnregistrerSecteur), mais une donnée existante mal
-        // saisie avant cette règle ne doit pas apparaître silencieusement.
-        if (resultat && departementAutorise(resultat.postcode)) resultats[entree] = resultat.point;
-      }
+      const paires = await Promise.all(
+        manquantes.map(async (entree) => {
+          const resultat = await geocodeEntreeSecteur(entree);
+          // Filtre défensif : une entrée hors Aude/Hérault/Pyrénées-
+          // Orientales ne devrait déjà plus pouvoir être enregistrée (voir
+          // la validation dans validerEtEnregistrerSecteur), mais une
+          // donnée existante mal saisie avant cette règle ne doit pas
+          // apparaître silencieusement.
+          return resultat && departementAutorise(resultat.postcode) ? ([entree, resultat.point] as const) : null;
+        })
+      );
+      const resultats = Object.fromEntries(paires.filter((p): p is readonly [string, GeoPoint] => p !== null));
       if (Object.keys(resultats).length > 0) setCentroides((prev) => ({ ...prev, ...resultats }));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -609,18 +617,23 @@ export default function Secteurs() {
       const horsZone: string[] = [];
       const introuvables: string[] = [];
       const nouveauxCentroides: Record<string, GeoPoint> = {};
-      for (const entree of codesBruts) {
-        const resultat = await geocodeEntreeSecteur(entree);
-        if (!resultat) {
-          introuvables.push(entree);
-          continue;
-        }
-        if (!departementAutorise(resultat.postcode)) {
-          horsZone.push(entree);
-          continue;
-        }
-        nouveauxCentroides[entree] = resultat.point;
-      }
+      // Géocodées en parallèle plutôt qu'une par une (voir le même
+      // correctif sur l'effet de géocodage plus haut) : un secteur avec
+      // beaucoup de communes mettait très longtemps à s'enregistrer.
+      await Promise.all(
+        codesBruts.map(async (entree) => {
+          const resultat = await geocodeEntreeSecteur(entree);
+          if (!resultat) {
+            introuvables.push(entree);
+            return;
+          }
+          if (!departementAutorise(resultat.postcode)) {
+            horsZone.push(entree);
+            return;
+          }
+          nouveauxCentroides[entree] = resultat.point;
+        })
+      );
       if (introuvables.length > 0 || horsZone.length > 0) {
         toast({
           title: "Secteur non enregistré",
