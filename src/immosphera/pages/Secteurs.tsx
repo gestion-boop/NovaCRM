@@ -864,17 +864,19 @@ export default function Secteurs() {
                         {(() => {
                           const listeActuelle = valeurCourante.split(",").map((s) => s.trim()).filter(Boolean);
                           return listeActuelle.length > 0 ? (
-                            <button
+                            <Button
                               type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] w-full justify-start"
                               onClick={() => {
                                 setGererOuvertPour(a.id);
                                 setFiltreGererCommunes("");
                               }}
-                              className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
                             >
-                              <ListChecks className="h-3 w-3" />
-                              {listeActuelle.length} commune{listeActuelle.length > 1 ? "s" : ""} — voir / supprimer
-                            </button>
+                              <ListChecks className="h-3.5 w-3.5 mr-1.5" />
+                              Voir les {listeActuelle.length} commune{listeActuelle.length > 1 ? "s" : ""}
+                            </Button>
                           ) : null;
                         })()}
 
@@ -1064,7 +1066,7 @@ export default function Secteurs() {
           qui ouvre un popup plus grand pour supprimer des lieux avec une
           barre de recherche au cas où ». */}
       <Dialog open={gererOuvertPour !== null} onOpenChange={(v) => !v && setGererOuvertPour(null)}>
-        <DialogContent className="max-h-[80vh] flex flex-col">
+        <DialogContent className="max-w-2xl w-[calc(100vw-2rem)] h-[85vh] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
               Communes {gererOuvertPour && `— ${getAdvisorById(gererOuvertPour)?.name || ""}`}
@@ -1093,16 +1095,17 @@ export default function Secteurs() {
                       className="h-9 pl-8 text-sm"
                     />
                   </div>
-                  <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                  <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border p-2">
                     {listeFiltree.length === 0 && (
                       <p className="text-xs text-muted-foreground p-4 text-center">
                         {liste.length === 0 ? "Aucune commune pour l'instant." : "Aucune commune ne correspond à ce filtre."}
                       </p>
                     )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                     {listeFiltree.map((entree) => {
                       const info = centroides[entree];
                       return (
-                        <div key={entree} className="flex items-center justify-between gap-2 px-3 py-2">
+                        <div key={entree} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-muted/40">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold truncate">{entree}</p>
                             {info?.postcode && <p className="text-[11px] text-muted-foreground">{info.postcode}</p>}
@@ -1113,6 +1116,7 @@ export default function Secteurs() {
                         </div>
                       );
                     })}
+                    </div>
                   </div>
                   <div className="flex items-center justify-between gap-2 pt-1 shrink-0">
                     <p className="text-[11px] text-muted-foreground">
