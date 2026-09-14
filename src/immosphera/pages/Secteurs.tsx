@@ -69,7 +69,24 @@ type Contact = {
   created_at: string;
 };
 
-const COULEURS = ["#E0A21A", "#2f9e44", "#1971c2", "#e8590c", "#9c36b5", "#c92a2a", "#0c8599"];
+const COULEURS = [
+  "#E0A21A",
+  "#2f9e44",
+  "#1971c2",
+  "#e8590c",
+  "#9c36b5",
+  "#c92a2a",
+  "#0c8599",
+  // Couleurs plus foncées — demande explicite : « rajoute des couleurs
+  // un peu plus foncées »
+  "#8a6d1a",
+  "#1e5f2c",
+  "#144a80",
+  "#8a3a0c",
+  "#5c2170",
+  "#7a1a1a",
+  "#075662",
+];
 const RAYON_CERCLE_M = 2200;
 
 const EMPTY_CONTACT = { nom: "", telephone: "", email: "", adresse: "", notes: "" };
@@ -95,6 +112,9 @@ export default function Secteurs() {
   // en ligne dans le panneau devient vite illisible avec 20+ communes.
   const [gererOuvertPour, setGererOuvertPour] = useState<string | null>(null);
   const [filtreGererCommunes, setFiltreGererCommunes] = useState("");
+  // Couleur choisie dans le popup « Gérer les communes » (le sélecteur de
+  // couleur a été déplacé ici depuis le panneau latéral).
+  const [couleurEnEdition, setCouleurEnEdition] = useState<Record<string, string>>({});
   // Le code postal résolu est gardé avec chaque point (pas seulement les
   // coordonnées) — sert à afficher, à côté de chaque commune dans la liste
   // "villages enregistrés", ce à quoi elle a réellement été résolue (voir
@@ -836,23 +856,11 @@ export default function Secteurs() {
                           placeholder="11100, Narbonne, 11160..."
                           className="h-7 text-[11px]"
                         />
+                        {/* Le choix de couleur vit désormais dans le popup
+                            « Gérer les communes » (avec la liste) — demande
+                            explicite : « ajoute les couleurs comme ça on
+                            les supprime dans l'autre interface ». */}
                         <div className="flex items-center gap-1 flex-wrap">
-                          {COULEURS.map((c) => (
-                            <button
-                              key={c}
-                              type="button"
-                              disabled={validationEnCours === a.id}
-                              onClick={() =>
-                                validerEtEnregistrerSecteur(
-                                  a.id,
-                                  valeurCourante.split(",").map((s) => s.trim()).filter(Boolean),
-                                  c
-                                )
-                              }
-                              className={`w-4 h-4 rounded-full border ${couleur === c ? "border-foreground" : "border-transparent"}`}
-                              style={{ background: c }}
-                            />
-                          ))}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -1039,6 +1047,11 @@ export default function Secteurs() {
                 }));
               const suggestionsAjout = suggestionsCommune[conseillerId] ?? [];
               const voisinesAjout = communesVoisines[conseillerId] ?? [];
+              const secteurActuel = secteurParConseiller.get(conseillerId);
+              const couleurActuelle =
+                couleurEnEdition[conseillerId] ??
+                secteurActuel?.couleur ??
+                COULEURS[advisors.findIndex((a) => a.id === conseillerId) % COULEURS.length];
               return (
                 <div className="flex-1 min-h-0 flex flex-col gap-3">
                   {/* Ajout — autocomplete (« un fichier déroulant, on peut
@@ -1121,6 +1134,22 @@ export default function Secteurs() {
                     })}
                     </div>
                   </div>
+                  {/* Choix de couleur — déplacé ici depuis le panneau
+                      latéral, demande explicite : « ajoute les couleurs
+                      comme ça on les supprime dans l'autre interface, ajoute
+                      des couleurs un peu plus foncées ». */}
+                  <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                    {COULEURS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        disabled={validationEnCours === conseillerId}
+                        onClick={() => setCouleurEnEdition((prev) => ({ ...prev, [conseillerId]: c }))}
+                        className={`w-5 h-5 rounded-full border-2 ${couleurActuelle === c ? "border-foreground" : "border-transparent"}`}
+                        style={{ background: c }}
+                      />
+                    ))}
+                  </div>
                   <div className="flex items-center justify-between gap-2 pt-1 shrink-0">
                     <p className="text-[11px] text-muted-foreground">
                       {liste.length} commune{liste.length > 1 ? "s" : ""} au total
@@ -1128,10 +1157,11 @@ export default function Secteurs() {
                     <Button
                       size="sm"
                       disabled={validationEnCours === conseillerId}
-                      onClick={() => {
-                        const secteur = secteurParConseiller.get(conseillerId);
-                        const couleur = secteur?.couleur || COULEURS[advisors.findIndex((a) => a.id === conseillerId) % COULEURS.length];
-                        validerEtEnregistrerSecteur(conseillerId, liste, couleur);
+                      onClick={async () => {
+                        await validerEtEnregistrerSecteur(conseillerId, liste, couleurActuelle);
+                        // Demande explicite : « quand on clic sur
+                        // enregistrer cela ferme le pop up »
+                        setGererOuvertPour(null);
                       }}
                     >
                       {validationEnCours === conseillerId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Enregistrer"}
