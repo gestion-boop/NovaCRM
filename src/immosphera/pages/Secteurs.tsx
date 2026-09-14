@@ -1066,7 +1066,10 @@ export default function Secteurs() {
           qui ouvre un popup plus grand pour supprimer des lieux avec une
           barre de recherche au cas où ». */}
       <Dialog open={gererOuvertPour !== null} onOpenChange={(v) => !v && setGererOuvertPour(null)}>
-        <DialogContent className="max-w-2xl w-[calc(100vw-2rem)] h-[85vh] max-h-[85vh] flex flex-col">
+        {/* z-[2000] : sans ça, la carte passait devant le popup — nos
+            propres repères sur la carte (titre, boussole, légende) sont en
+            z-[1000], bien au-dessus du z-50 par défaut du Dialog. */}
+        <DialogContent className="z-[2000] max-w-2xl w-[calc(100vw-2rem)] h-[85vh] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
               Communes {gererOuvertPour && `— ${getAdvisorById(gererOuvertPour)?.name || ""}`}
