@@ -99,11 +99,71 @@ export async function geocodeCity(value: string, forceRefresh = false, codePosta
 export const geocodeAddress = geocodeCity;
 
 /**
+ * Géocode un code postal en centroïde approximatif — utilisé pour tracer le
+ * secteur d'un conseiller (src/immosphera/pages/Secteurs.tsx) sous forme de
+ * cercles colorés, faute de vraies limites de code postal disponibles.
+ * `type=municipality` cible directement une commune plutôt qu'une adresse
+ * précise à l'intérieur (le code postal seul n'en désigne pas une).
+ */
+export async function geocodePostalCode(codePostal: string, forceRefresh = false): Promise<GeoPoint | null> {
+  const code = codePostal.trim();
+  if (!/^\d{5}$/.test(code)) return null;
+
+  const cache = getCache();
+  const key = `cp:${code}`;
+  if (!forceRefresh && cache[key]) return cache[key];
+
+  try {
+    const params = new URLSearchParams({ q: code, type: "municipality", limit: "1" });
+    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?${params.toString()}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const feature = json?.features?.[0];
+    const coords = feature?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length !== 2) return null;
+
+    const point: GeoPoint = { lat: coords[1], lng: coords[0] };
+    if (!isValidFrancePoint(point)) return null;
+
+    cache[key] = point;
+    setCache(cache);
+    return point;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Point-dans-polygone (ray casting) — utilisé pour déterminer dans quel
  * secteur (src/immosphera/pages/Secteurs.tsx) tombe l'adresse d'un contact,
  * une fois géocodée. Pas besoin de PostGIS pour ce volume : le calcul se
  * fait entièrement côté client sur les polygones déjà chargés.
  */
+/**
+ * Géocode une adresse ET renvoie son code postal (pas seulement les
+ * coordonnées comme geocodeAddress) — utilisé pour rattacher un contact
+ * (Secteurs.tsx) au secteur du conseiller dont le code postal correspond.
+ */
+export async function geocodeAdresseAvecCodePostal(
+  adresse: string
+): Promise<(GeoPoint & { postcode: string | null }) | null> {
+  const query = adresse.trim();
+  if (!query) return null;
+  try {
+    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?${new URLSearchParams({ q: query, limit: "1" })}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const feature = json?.features?.[0];
+    const coords = feature?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length !== 2) return null;
+    const point = { lat: coords[1], lng: coords[0] };
+    if (!isValidFrancePoint(point)) return null;
+    return { ...point, postcode: feature?.properties?.postcode ?? null };
+  } catch {
+    return null;
+  }
+}
+
 export function pointDansPolygone(point: GeoPoint, polygone: GeoPoint[]): boolean {
   let dedans = false;
   for (let i = 0, j = polygone.length - 1; i < polygone.length; j = i++) {
