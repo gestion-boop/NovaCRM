@@ -436,20 +436,40 @@ export default function AcademyView() {
   const dossiersEnfants = useMemo(() => {
     const nomsConnus = new Set(dossiers.map((d) => d.nom));
     const positions = new Map<string, number>();
-    const compte = new Map<string, number>();
+    const enfantsDirects = new Set<string>();
     dossiers.filter((d) => d.parent_nom === dossierActif).forEach((d) => {
-      compte.set(d.nom, 0);
+      enfantsDirects.add(d.nom);
       positions.set(d.nom, d.position);
     });
     if (dossierActif === null) {
       // Rubriques orphelines (sans ligne academy_folders) : toujours à la
       // racine, jamais sous un sous-dossier.
       ressources.forEach((r) => {
-        if (!nomsConnus.has(r.rubrique)) compte.set(r.rubrique, 0);
+        if (!nomsConnus.has(r.rubrique)) enfantsDirects.add(r.rubrique);
       });
     }
+    // Demande explicite (14 septembre) : « quand les dossiers sont dedans
+    // le compteur dans le dossier reste à zéro » — le compteur affiché sur
+    // un dossier doit inclure les procédures de TOUS ses descendants (pas
+    // seulement celles directement rangées dedans), sinon un dossier qui ne
+    // contient que des sous-dossiers affiche toujours 0.
+    // Fonction locale (plutôt que estSoiMemeOuDescendant, définie plus bas
+    // dans le composant) : useMemo exécute ce calcul dès le premier rendu,
+    // avant que ce const-là n'existe encore (TDZ).
+    const estDescendantDe = (nomCandidat: string, nomAncetre: string): boolean => {
+      if (nomCandidat === nomAncetre) return true;
+      return dossiers
+        .filter((d) => d.parent_nom === nomAncetre)
+        .some((d) => estDescendantDe(nomCandidat, d.nom));
+    };
+    const compte = new Map<string, number>();
+    enfantsDirects.forEach((nom) => compte.set(nom, 0));
     ressources.forEach((r) => {
-      if (compte.has(r.rubrique)) compte.set(r.rubrique, (compte.get(r.rubrique) || 0) + 1);
+      for (const nom of enfantsDirects) {
+        if (estDescendantDe(r.rubrique, nom)) {
+          compte.set(nom, (compte.get(nom) || 0) + 1);
+        }
+      }
     });
     // Demande explicite (16 septembre) : « les mettre dans l'ordre que je
     // veux » — tri par `position` (ordre manuel, voir deplacerDossierApres
