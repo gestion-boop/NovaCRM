@@ -290,6 +290,48 @@ export function departementAutorise(codePostal: string | null): boolean {
   return (DEPARTEMENTS_SECTEUR_AUTORISES as readonly string[]).includes(codePostal.slice(0, 2));
 }
 
+export interface SuggestionCommune {
+  nom: string;
+  codePostal: string;
+}
+
+/**
+ * Recherche de communes par nom (autocomplete) — demande explicite (14
+ * septembre) : « un fichier déroulant, on peut cliquer plusieurs villes »,
+ * en réaction aux erreurs répétées de géocodage sur du texte libre. En
+ * choisissant une commune dans une liste de résultats RÉELS (plutôt que de
+ * taper un nom à la main), il n'y a plus ni faute de frappe ni homonyme
+ * ambigu possible — seule l'exactitude du POINT affiché sur la carte reste
+ * gérée par Google Geocoding (voir geocodePostalCode), pas cette recherche.
+ * Restreinte aux 3 départements autorisés (voir DEPARTEMENTS_SECTEUR_AUTORISES).
+ */
+export async function rechercherCommunes(recherche: string): Promise<SuggestionCommune[]> {
+  const q = recherche.trim();
+  if (q.length < 2) return [];
+  try {
+    const params = new URLSearchParams({
+      nom: q,
+      boost: "population",
+      limit: "12",
+      fields: "nom,codesPostaux,codeDepartement",
+    });
+    const res = await fetch(`https://geo.api.gouv.fr/communes?${params.toString()}`);
+    if (!res.ok) return [];
+    const communes = await res.json();
+    if (!Array.isArray(communes)) return [];
+    const suggestions: SuggestionCommune[] = [];
+    for (const c of communes) {
+      if (!(DEPARTEMENTS_SECTEUR_AUTORISES as readonly string[]).includes(c?.codeDepartement)) continue;
+      for (const cp of c?.codesPostaux ?? []) {
+        suggestions.push({ nom: c.nom, codePostal: cp });
+      }
+    }
+    return suggestions.slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
 function normaliserVille(v: string): string {
   return v
     .normalize("NFD")
