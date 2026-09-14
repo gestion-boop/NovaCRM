@@ -295,6 +295,10 @@ export interface SuggestionCommune {
   codePostal: string;
 }
 
+export interface SuggestionCommuneProche extends SuggestionCommune {
+  distanceKm: number;
+}
+
 /**
  * Recherche de communes par nom (autocomplete) — demande explicite (14
  * septembre) : « un fichier déroulant, on peut cliquer plusieurs villes »,
@@ -327,6 +331,44 @@ export async function rechercherCommunes(recherche: string): Promise<SuggestionC
       }
     }
     return suggestions.slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Villages/communes autour d'un point donné — demande explicite (14
+ * septembre) : « pour le code postal ça ne met que Lézignan, alors qu'il y
+ * a beaucoup de villages autour ». rechercherCommunes ne répond qu'à une
+ * recherche par NOM (donc une seule commune à la fois) ; celle-ci
+ * interroge geo.api.gouv.fr par proximité géographique (lat/lon) pour
+ * lister les communes voisines, à ajouter en un clic plutôt que de devoir
+ * les chercher une par une par leur nom. Triées par distance, restreintes
+ * aux 3 départements autorisés, le point de départ lui-même exclu.
+ */
+export async function communesProches(centre: GeoPoint, nomExclu?: string): Promise<SuggestionCommuneProche[]> {
+  try {
+    const params = new URLSearchParams({
+      lat: String(centre.lat),
+      lon: String(centre.lng),
+      fields: "nom,codesPostaux,codeDepartement,centre",
+      limit: "20",
+    });
+    const res = await fetch(`https://geo.api.gouv.fr/communes?${params.toString()}`);
+    if (!res.ok) return [];
+    const communes = await res.json();
+    if (!Array.isArray(communes)) return [];
+    const suggestions: SuggestionCommuneProche[] = [];
+    for (const c of communes) {
+      if (!(DEPARTEMENTS_SECTEUR_AUTORISES as readonly string[]).includes(c?.codeDepartement)) continue;
+      if (nomExclu && c?.nom === nomExclu) continue;
+      const coords = c?.centre?.coordinates;
+      const distanceKmValeur = Array.isArray(coords) && coords.length === 2 ? distanceKm(centre, { lat: coords[1], lng: coords[0] }) : Infinity;
+      for (const cp of c?.codesPostaux ?? []) {
+        suggestions.push({ nom: c.nom, codePostal: cp, distanceKm: distanceKmValeur });
+      }
+    }
+    return suggestions.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 15);
   } catch {
     return [];
   }
