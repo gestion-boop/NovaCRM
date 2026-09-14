@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
-import { MapPin, Maximize, BedDouble, Home, TreePine } from "lucide-react";
+import { MapPin, Maximize, BedDouble, Home, TreePine, Headset } from "lucide-react";
 import { VirtualTourIcon, Giraffe360Icon, WebsiteIcon } from "@/immosphera/components/PropertyIcons";
 import { HeartIcon } from "@/immosphera/components/HeartIcon";
 import { AdvisorModal } from "@/immosphera/components/AdvisorModal";
@@ -167,6 +167,20 @@ export function PropertyCard({
               {property.title}
             </Link>
             <div className="flex gap-1.5 shrink-0">
+              {/* Demande explicite (14 septembre) : « possibilité de mettre
+                  un logo de casque quand la visite virtuelle est faite,
+                  cela confirmera que c'est bien disponible au casque VR »
+                  — coché manuellement dans la fiche (vr_headset_available),
+                  indépendant de virtual_tour_url ci-dessous. */}
+              {property.vr_headset_available && (
+                <Link
+                  to={`/immosphera/bien/${property.id}`}
+                  className="w-9 h-9 rounded-full bg-muted grid place-items-center hover:bg-primary/20"
+                  title="Disponible au casque VR"
+                >
+                  <Headset className="h-5 w-5 text-primary" />
+                </Link>
+              )}
               {property.virtual_tour_url && (
                 <Link
                   to={`/immosphera/bien/${property.id}`}
