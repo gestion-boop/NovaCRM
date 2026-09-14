@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Compass } from "lucide-react";
 
 // Demande explicite (14 septembre, v2 — après un premier essai à base de
 // polygones dessinés à la main) : « dans les équipes, dans les fiches des
@@ -143,10 +143,21 @@ export default function Secteurs() {
   // Orientales »), plutôt que le point générique utilisé jusqu'ici.
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
-    const map = L.map(mapContainerRef.current);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    const map = L.map(mapContainerRef.current, { zoomControl: false });
+    // Demande explicite (14 septembre, en réaction à une maquette envoyée
+    // par le client) : « est-ce que tu peux présenter les cartes comme ça ?
+    // ça serait plus sympa. » Le rendu peint-à-la-main de la maquette n'est
+    // pas reproductible sur une carte VIVANTE (elle doit rester interactive
+    // et se mettre à jour automatiquement), mais un fond de carte plus épuré
+    // (CARTO Voyager plutôt que l'OSM brut, très chargé en repères routiers)
+    // s'en rapproche nettement.
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: "abcd",
+      maxZoom: 19,
     }).addTo(map);
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+    L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
     map.setView([43.05, 2.75], 8);
     mapRef.current = map;
     return () => {
@@ -155,7 +166,9 @@ export default function Secteurs() {
     };
   }, []);
 
-  // Cercles de secteur (un par code postal, coloré selon le conseiller)
+  // Cercles de secteur (un par code postal, coloré selon le conseiller) —
+  // contour discret + remplissage doux, plusieurs cercles superposés donnant
+  // l'effet de "tracé" continu façon aplat peint plutôt qu'un pointillé.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -169,9 +182,10 @@ export default function Secteurs() {
         const cercle = L.circle([centre.lat, centre.lng], {
           radius: RAYON_CERCLE_M,
           color: s.couleur,
-          weight: 1.5,
+          weight: 1,
+          opacity: 0.5,
           fillColor: s.couleur,
-          fillOpacity: 0.28,
+          fillOpacity: 0.22,
         });
         cercle.bindTooltip(`<b>${conseiller?.name || "?"}</b><br/>${code}`, { sticky: true });
         cercle.addTo(map);
@@ -437,6 +451,34 @@ export default function Secteurs() {
           >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
+
+          {/* Bandeau titre + boussole — dans l'esprit de la maquette envoyée
+              (« CARTOGRAPHIE DU SECTEUR »), sans chercher à reproduire ses
+              formes peintes à la main sur une carte qui reste vivante. */}
+          <div className="absolute top-3 left-3 z-[1000] px-4 py-2.5 rounded-xl bg-[#1b2b2e]/92 backdrop-blur-sm shadow-lg">
+            <p className="text-[9px] tracking-[0.2em] text-[#E0A21A]/80 font-bold uppercase">Cartographie</p>
+            <p className="text-sm font-bold text-white -mt-0.5">Secteurs des conseillers</p>
+          </div>
+          <div className="absolute top-3 right-16 z-[1000] w-9 h-9 rounded-full bg-card/90 backdrop-blur-sm border border-border grid place-items-center shadow-md">
+            <Compass className="h-4 w-4 text-[#E0A21A]" />
+          </div>
+
+          {/* Légende — un point par conseiller ayant un secteur défini */}
+          {secteurs.length > 0 && (
+            <div className="absolute bottom-6 left-3 z-[1000] px-3 py-2 rounded-xl bg-card/92 backdrop-blur-sm border border-border shadow-lg space-y-1 max-w-[160px]">
+              {secteurs.map((s) => {
+                const conseiller = getAdvisorById(s.conseiller_id);
+                if (!conseiller) return null;
+                return (
+                  <div key={s.id} className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.couleur }} />
+                    <span className="text-[10px] font-semibold truncate">{conseiller.name}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div ref={mapContainerRef} className="absolute inset-0" />
         </div>
       </div>
