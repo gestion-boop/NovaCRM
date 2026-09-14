@@ -720,13 +720,32 @@ export default function AcademyView() {
       return;
     }
     try {
+      // Upsert plutôt qu'update : `nomSource` peut être un dossier « orphelin »
+      // (une rubrique qui n'a jamais eu sa propre ligne dans academy_folders,
+      // seulement portée par des ressources) — un update sur une ligne
+      // inexistante réussit silencieusement (0 ligne affectée, pas d'erreur),
+      // d'où le bug rapporté (« le message dit que c'est fait, mais le
+      // dossier ne se met pas dedans ») : le toast de succès mentait.
+      const existant = dossiers.find((d) => d.nom === nomSource);
+      const position = existant?.position ?? 1 + Math.max(0, ...dossiers.filter((d) => d.parent_nom === nomCibleParent).map((d) => d.position));
       const { error } = await supabase
         .from('academy_folders' as any)
-        .update({ parent_nom: nomCibleParent, updated_at: new Date().toISOString() } as any)
-        .eq('agency_id', activeAgency!.id)
-        .eq('nom', nomSource);
+        .upsert(
+          {
+            agency_id: activeAgency!.id,
+            nom: nomSource,
+            parent_nom: nomCibleParent,
+            position,
+            updated_at: new Date().toISOString(),
+          } as any,
+          { onConflict: 'agency_id,nom' }
+        );
       if (error) throw error;
-      setDossiers((prev) => prev.map((d) => (d.nom === nomSource ? { ...d, parent_nom: nomCibleParent } : d)));
+      setDossiers((prev) =>
+        existant
+          ? prev.map((d) => (d.nom === nomSource ? { ...d, parent_nom: nomCibleParent } : d))
+          : [...prev, { nom: nomSource, parent_nom: nomCibleParent, position }]
+      );
       toast.success(`« ${nomSource} » est maintenant un sous-dossier de « ${nomCibleParent} ».`);
     } catch (e: any) {
       console.error(e);
@@ -748,24 +767,41 @@ export default function AcademyView() {
     if (index === -1 || indexVoisin < 0 || indexVoisin >= fratrie.length) return;
     const courant = fratrie[index];
     const voisin = fratrie[indexVoisin];
-    setDossiers((prev) =>
-      prev.map((d) => {
-        if (d.nom === courant.nom) return { ...d, position: voisin.position };
-        if (d.nom === voisin.nom) return { ...d, position: courant.position };
-        return d;
-      })
-    );
+    setDossiers((prev) => {
+      // upsert local : courant/voisin peuvent être des dossiers orphelins
+      // pas encore présents dans `dossiers` (jamais eu de ligne dédiée).
+      const parNom = new Map(prev.map((d) => [d.nom, d]));
+      parNom.set(courant.nom, { ...(parNom.get(courant.nom) ?? { nom: courant.nom, parent_nom: dossierActif }), position: voisin.position });
+      parNom.set(voisin.nom, { ...(parNom.get(voisin.nom) ?? { nom: voisin.nom, parent_nom: dossierActif }), position: courant.position });
+      return Array.from(parNom.values());
+    });
     try {
+      // Upsert (même raison que deplacerDossierVersParent) : courant/voisin
+      // peuvent être des dossiers orphelins sans ligne academy_folders.
       const { error: err1 } = await supabase
         .from('academy_folders' as any)
-        .update({ position: voisin.position, updated_at: new Date().toISOString() } as any)
-        .eq('agency_id', activeAgency!.id)
-        .eq('nom', courant.nom);
+        .upsert(
+          {
+            agency_id: activeAgency!.id,
+            nom: courant.nom,
+            parent_nom: dossierActif,
+            position: voisin.position,
+            updated_at: new Date().toISOString(),
+          } as any,
+          { onConflict: 'agency_id,nom' }
+        );
       const { error: err2 } = await supabase
         .from('academy_folders' as any)
-        .update({ position: courant.position, updated_at: new Date().toISOString() } as any)
-        .eq('agency_id', activeAgency!.id)
-        .eq('nom', voisin.nom);
+        .upsert(
+          {
+            agency_id: activeAgency!.id,
+            nom: voisin.nom,
+            parent_nom: dossierActif,
+            position: courant.position,
+            updated_at: new Date().toISOString(),
+          } as any,
+          { onConflict: 'agency_id,nom' }
+        );
       if (err1 || err2) throw err1 || err2;
     } catch (e: any) {
       console.error(e);
@@ -837,11 +873,24 @@ export default function AcademyView() {
         .eq('agency_id', activeAgency!.id)
         .eq('rubrique', ancien);
       if (error) throw error;
-      await supabase
-        .from('academy_folders' as any)
-        .update({ nom: nouveau, updated_at: new Date().toISOString() } as any)
-        .eq('agency_id', activeAgency!.id)
-        .eq('nom', ancien);
+      // Upsert (même raison qu'ailleurs) : un dossier orphelin n'a pas de
+      // ligne à renommer via UPDATE (0 ligne affectée, pas d'erreur) — il
+      // faut créer sa ligne directement sous le nouveau nom.
+      const existant = dossiers.find((d) => d.nom === ancien);
+      if (existant) {
+        await supabase
+          .from('academy_folders' as any)
+          .update({ nom: nouveau, updated_at: new Date().toISOString() } as any)
+          .eq('agency_id', activeAgency!.id)
+          .eq('nom', ancien);
+      } else {
+        await supabase
+          .from('academy_folders' as any)
+          .upsert(
+            { agency_id: activeAgency!.id, nom: nouveau, parent_nom: null, position: 0, updated_at: new Date().toISOString() } as any,
+            { onConflict: 'agency_id,nom' }
+          );
+      }
       setRessources((prev) => prev.map((r) => (r.rubrique === ancien ? { ...r, rubrique: nouveau } : r)));
       setVisuelsDossiers((prev) => {
         const suivant = new Map(prev);
@@ -855,13 +904,15 @@ export default function AcademyView() {
       // attendre un rechargement complet avant de les revoir sous le
       // dossier renommé.
       setDossiers((prev) =>
-        prev.map((d) =>
-          d.nom === ancien
-            ? { ...d, nom: nouveau }
-            : d.parent_nom === ancien
-              ? { ...d, parent_nom: nouveau }
-              : d
-        )
+        existant
+          ? prev.map((d) =>
+              d.nom === ancien
+                ? { ...d, nom: nouveau }
+                : d.parent_nom === ancien
+                  ? { ...d, parent_nom: nouveau }
+                  : d
+            )
+          : [...prev, { nom: nouveau, parent_nom: null, position: 0 }]
       );
       setCheminDossiers((chemin) => chemin.map((n) => (n === ancien ? nouveau : n)));
       toast.success(`Dossier renommé « ${nouveau} ».`);
