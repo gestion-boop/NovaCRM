@@ -801,69 +801,17 @@ export default function Secteurs() {
                       <div className="flex-1 min-w-0 space-y-1">
                         <p className="text-[11px] font-bold">{a.name}</p>
 
-                        {/* Autocomplete communes — demande explicite : « un
-                            fichier déroulant, on peut cliquer plusieurs
-                            villes » plutôt que de taper un nom à la main. */}
-                        <div className="relative">
-                          <Input
-                            value={rechercheCommune[a.id] ?? ""}
-                            onChange={(e) => rechercherEtSuggerer(a.id, e.target.value)}
-                            placeholder="Chercher une commune à ajouter..."
-                            className="h-7 text-[11px]"
-                          />
-                          {suggestions.length > 0 && (
-                            <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                              {suggestions.map((s) => (
-                                <button
-                                  key={`${s.nom}-${s.codePostal}`}
-                                  type="button"
-                                  onClick={() => ajouterCommuneSuggeree(a.id, s)}
-                                  className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-muted/60 flex items-center justify-between gap-2"
-                                >
-                                  <span>{s.nom}</span>
-                                  <span className="text-muted-foreground shrink-0">{s.codePostal}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Communes du même code postal — rapporté, détail
-                            vérifié à l'appui : « 11200 dessert 23 communes
-                            et villages [...] c'est ça que je veux comme
-                            proposition ». Un clic ajoute (par son nom, pas
-                            le code postal — voir ajouterCommuneSuggeree). */}
-                        {(communesVoisines[a.id]?.length ?? 0) > 0 && (
-                          <div className="flex flex-wrap gap-1 pt-0.5">
-                            {communesVoisines[a.id].map((v) => (
-                              <button
-                                key={`${v.nom}-${v.codePostal}`}
-                                type="button"
-                                onClick={() => {
-                                  ajouterCommuneSuggeree(a.id, v);
-                                  setCommunesVoisines((prev) => ({ ...prev, [a.id]: prev[a.id].filter((x) => x.nom !== v.nom) }));
-                                }}
-                                className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted hover:bg-muted/70 text-muted-foreground"
-                              >
-                                + {v.nom}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Villages enregistrés — demande explicite : « je
-                            veux pouvoir voir les villages qui ont été
-                            enregistrés pour en supprimer si je le veux. Car
-                            là ça met Canet en Roussillon et je ne comprends
-                            pas pourquoi » puis « un bouton qui ouvre un
-                            popup plus grand pour supprimer des lieux avec
-                            une barre de recherche au cas où ». La liste
-                            complète (avec suppression) vit dans le Dialog
-                            ci-dessous plutôt qu'en ligne ici — illisible dès
-                            qu'il y a beaucoup de communes. */}
+                        {/* Ajout ET suppression des communes vivent
+                            maintenant ensemble dans le popup « Gérer les
+                            communes » — demande explicite : « il faudrait
+                            juste revoir l'incorporation des communes.
+                            Mettre les communes quand on a le panneau pop up
+                            comme ça on pourrait mieux voir ». Le bouton
+                            reste visible même à 0 commune, pour pouvoir en
+                            ajouter une première depuis le popup. */}
                         {(() => {
                           const listeActuelle = valeurCourante.split(",").map((s) => s.trim()).filter(Boolean);
-                          return listeActuelle.length > 0 ? (
+                          return (
                             <Button
                               type="button"
                               size="sm"
@@ -875,9 +823,11 @@ export default function Secteurs() {
                               }}
                             >
                               <ListChecks className="h-3.5 w-3.5 mr-1.5" />
-                              Voir les {listeActuelle.length} commune{listeActuelle.length > 1 ? "s" : ""}
+                              {listeActuelle.length > 0
+                                ? `Voir les ${listeActuelle.length} commune${listeActuelle.length > 1 ? "s" : ""}`
+                                : "Gérer les communes"}
                             </Button>
-                          ) : null;
+                          );
                         })()}
 
                         <Input
@@ -1087,8 +1037,58 @@ export default function Secteurs() {
                   ...prev,
                   [conseillerId]: liste.filter((e) => e !== entree).join(", "),
                 }));
+              const suggestionsAjout = suggestionsCommune[conseillerId] ?? [];
+              const voisinesAjout = communesVoisines[conseillerId] ?? [];
               return (
                 <div className="flex-1 min-h-0 flex flex-col gap-3">
+                  {/* Ajout — autocomplete (« un fichier déroulant, on peut
+                      cliquer plusieurs villes ») déplacé ici depuis la
+                      barre latérale, plus à l'aise dans ce grand popup. */}
+                  <div className="relative shrink-0">
+                    <Input
+                      value={rechercheCommune[conseillerId] ?? ""}
+                      onChange={(e) => rechercherEtSuggerer(conseillerId, e.target.value)}
+                      placeholder="Chercher une commune à ajouter..."
+                      className="h-9 text-sm"
+                    />
+                    {suggestionsAjout.length > 0 && (
+                      <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {suggestionsAjout.map((s) => (
+                          <button
+                            key={`${s.nom}-${s.codePostal}`}
+                            type="button"
+                            onClick={() => ajouterCommuneSuggeree(conseillerId, s)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted/60 flex items-center justify-between gap-2"
+                          >
+                            <span>{s.nom}</span>
+                            <span className="text-muted-foreground shrink-0">{s.codePostal}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Communes du même code postal — « 11200 dessert 23
+                      communes et villages [...] c'est ça que je veux comme
+                      proposition ». */}
+                  {voisinesAjout.length > 0 && (
+                    <div className="flex flex-wrap gap-1 shrink-0">
+                      {voisinesAjout.map((v) => (
+                        <button
+                          key={`${v.nom}-${v.codePostal}`}
+                          type="button"
+                          onClick={() => {
+                            ajouterCommuneSuggeree(conseillerId, v);
+                            setCommunesVoisines((prev) => ({ ...prev, [conseillerId]: (prev[conseillerId] ?? []).filter((x) => x.nom !== v.nom) }));
+                          }}
+                          className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-muted hover:bg-muted/70 text-muted-foreground"
+                        >
+                          + {v.nom}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="relative shrink-0">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
