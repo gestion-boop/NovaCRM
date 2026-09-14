@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useImmoAuth as useAuth } from "@/immosphera/lib/access";
 import { advisors, getAdvisorById, type Advisor } from "@/immosphera/lib/advisors";
-import { geocodeAdresseAvecCodePostal, geocodePostalCode, type GeoPoint } from "@/immosphera/lib/geo";
+import { geocodeAdresseAvecCodePostal, geocodeEntreeSecteur, entreeSecteurCorrespond, type GeoPoint } from "@/immosphera/lib/geo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -108,17 +108,19 @@ export default function Secteurs() {
   const secteurParConseiller = useMemo(() => new Map(secteurs.map((s) => [s.conseiller_id, s])), [secteurs]);
   const secteurParId = useMemo(() => new Map(secteurs.map((s) => [s.id, s])), [secteurs]);
 
-  // Géocode tous les codes postaux utilisés (une seule fois, mis en cache
-  // localStorage par geocodePostalCode lui-même).
+  // Géocode toutes les entrées de secteur utilisées (code postal OU ville —
+  // demande explicite : « mettre le code postal, également par ville, si
+  // parfois on n'a pas le code postal en connaissance »), mis en cache
+  // localStorage par geocodeEntreeSecteur lui-même.
   useEffect(() => {
-    const tousLesCodes = Array.from(new Set(secteurs.flatMap((s) => s.codes_postaux)));
-    const manquants = tousLesCodes.filter((c) => !centroides[c]);
-    if (manquants.length === 0) return;
+    const toutesLesEntrees = Array.from(new Set(secteurs.flatMap((s) => s.codes_postaux)));
+    const manquantes = toutesLesEntrees.filter((c) => !centroides[c]);
+    if (manquantes.length === 0) return;
     (async () => {
       const resultats: Record<string, GeoPoint> = {};
-      for (const code of manquants) {
-        const point = await geocodePostalCode(code);
-        if (point) resultats[code] = point;
+      for (const entree of manquantes) {
+        const point = await geocodeEntreeSecteur(entree);
+        if (point) resultats[entree] = point;
       }
       if (Object.keys(resultats).length > 0) setCentroides((prev) => ({ ...prev, ...resultats }));
     })();
@@ -247,8 +249,8 @@ export default function Secteurs() {
     setEnregistrementContact(true);
     try {
       const geo = await geocodeAdresseAvecCodePostal(contactForm.adresse);
-      const secteurTrouve = geo?.postcode
-        ? secteurs.find((s) => s.codes_postaux.includes(geo.postcode!))
+      const secteurTrouve = geo
+        ? secteurs.find((s) => s.codes_postaux.some((entree) => entreeSecteurCorrespond(entree, geo)))
         : null;
 
       const base = {
@@ -393,6 +395,9 @@ export default function Secteurs() {
             </button>
             {panneauOuvert && (
               <div className="p-3 pt-0 space-y-3">
+                <p className="text-[10px] text-muted-foreground -mt-1">
+                  Code postal ou nom de ville, séparés par des virgules — les deux se mélangent librement.
+                </p>
                 {advisors.map((a) => {
                   const secteur = secteurParConseiller.get(a.id);
                   const valeurCourante = codesEnEdition[a.id] ?? (secteur?.codes_postaux.join(", ") || "");
@@ -405,7 +410,7 @@ export default function Secteurs() {
                         <Input
                           value={valeurCourante}
                           onChange={(e) => setCodesEnEdition((prev) => ({ ...prev, [a.id]: e.target.value }))}
-                          placeholder="11100, 11160, 11230..."
+                          placeholder="11100, Narbonne, 11160..."
                           className="h-7 text-[11px]"
                         />
                         <div className="flex items-center gap-1 flex-wrap">
