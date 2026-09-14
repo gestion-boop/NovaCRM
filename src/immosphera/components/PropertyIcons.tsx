@@ -30,3 +30,29 @@ export function WebsiteIcon({ className = "h-5 w-5" }: { className?: string }) {
     />
   );
 }
+
+// Demande explicite (15 septembre) : « je veux que tu intègres celui-ci
+// pour le casque [...] car celui que tu as mis n'est pas joli » — l'icône
+// lucide "Headset" (filaire, générique) remplacée par un dessin sur mesure
+// fidèle à la forme du casque VR envoyé en référence (coque blanche
+// arrondie en pilule, bandeau, 3 capteurs en façade) — sans logo de
+// marque, jamais reçu en fichier exploitable côté serveur (image collée
+// dans la conversation, aucun accès aux pixels bruts).
+export function VrHeadsetIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 32" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Bandeau */}
+      <path
+        d="M15 4C15 2 16.5 1 18 1H30C31.5 1 33 2 33 4V8C33 8 30 6.5 24 6.5C18 6.5 15 8 15 8V4Z"
+        fill="currentColor"
+        opacity="0.55"
+      />
+      {/* Coque principale (pilule) */}
+      <rect x="2" y="9" width="44" height="20" rx="10" fill="currentColor" />
+      {/* Capteurs en façade */}
+      <rect x="17" y="16" width="3" height="6" rx="1.5" fill="black" opacity="0.35" />
+      <rect x="22.5" y="16" width="3" height="6" rx="1.5" fill="black" opacity="0.35" />
+      <rect x="28" y="16" width="3" height="6" rx="1.5" fill="black" opacity="0.35" />
+    </svg>
+  );
+}

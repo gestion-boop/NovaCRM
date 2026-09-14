@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
-import { MapPin, Maximize, BedDouble, Home, TreePine, Headset } from "lucide-react";
-import { VirtualTourIcon, Giraffe360Icon, WebsiteIcon } from "@/immosphera/components/PropertyIcons";
+import { MapPin, Maximize, BedDouble, Home, TreePine } from "lucide-react";
+import { VirtualTourIcon, Giraffe360Icon, WebsiteIcon, VrHeadsetIcon } from "@/immosphera/components/PropertyIcons";
 import { HeartIcon } from "@/immosphera/components/HeartIcon";
 import { AdvisorModal } from "@/immosphera/components/AdvisorModal";
 import { advisors, getAdvisorByName, type Advisor } from "@/immosphera/lib/advisors";
@@ -192,7 +192,7 @@ export function PropertyCard({
                   className="w-9 h-9 rounded-full bg-muted grid place-items-center hover:bg-primary/20"
                   title="Disponible au casque VR"
                 >
-                  <Headset className="h-5 w-5 text-primary" />
+                  <VrHeadsetIcon className="h-5 w-5 text-primary" />
                 </Link>
               )}
               {property.virtual_tour_url && (
