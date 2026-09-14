@@ -105,8 +105,10 @@ export const geocodeAddress = geocodeCity;
 
 /**
  * Appel générique à l'API Google Geocoding — clé fournie par le client,
- * VITE_GOOGLE_MAPS_API_KEY, jamais commitée (voir .env.example). `params`
- * porte soit `address` (nom de ville), soit `components=postal_code:...`
+ * VITE_GOOGLE_MAPS_API_KEY (correctement configurée côté Vercel le 14
+ * septembre, après une première tentative où le nom et la valeur avaient
+ * été inversés dans le formulaire), jamais commitée (voir .env.example).
+ * `params` porte soit `address` (nom de ville), soit `components=postal_code:...`
  * (code postal), voir les deux wrappers ci-dessous.
  */
 async function geocodeGoogle(params: URLSearchParams): Promise<(GeoPoint & { postcode: string | null }) | null> {
