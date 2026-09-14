@@ -16,6 +16,7 @@ import {
   type GeoPoint,
   type SuggestionCommune,
 } from "@/immosphera/lib/geo";
+import { createTeardropIcon, adresseTooltipHtml } from "@/immosphera/lib/mapPins";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -365,13 +366,13 @@ export default function Secteurs() {
       if (c.latitude == null || c.longitude == null) return;
       const secteur = c.secteur_id ? secteurParId.get(c.secteur_id) : null;
       const couleur = secteur?.couleur || "#495057";
-      const icon = L.divIcon({
-        className: "map-pin-contact",
-        html: `<span style="display:block;width:14px;height:14px;border-radius:50%;background:${couleur};border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35)"></span>`,
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
-      });
+      // Pin façon Google Maps + survol = adresse — demande explicite :
+      // « quand on rentre l'adresse du client, cela s'affiche dans la
+      // carte du secteur comme un point [...] et qu'on survole avec la
+      // souris [...] il y a automatiquement l'adresse du client ».
+      const icon = createTeardropIcon(couleur, { size: 26 });
       const marker = L.marker([c.latitude, c.longitude], { icon });
+      marker.bindTooltip(adresseTooltipHtml(c.adresse || "", c.nom), { direction: "top", offset: [0, -24] });
       marker.on("click", () => ouvrirFiche(c));
       marker.addTo(map);
       contactMarkersRef.current.push(marker);
