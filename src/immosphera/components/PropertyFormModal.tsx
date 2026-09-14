@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { advisors, type Advisor } from "@/immosphera/lib/advisors";
 import { supabase } from "@/integrations/supabase/client";
@@ -105,6 +106,10 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
     bedrooms: "",
     description: "",
     listedAt: "",
+    // Demande explicite (14 septembre) : case à cocher « Casque VR
+    // disponible », indépendante de virtual_tour_url (une visite 360°
+    // peut exister sans être confirmée compatible casque par l'agent).
+    vrHeadset: false,
   });
 
   const [details, setDetails] = useState<TechDetails>({ ...EMPTY_DETAILS });
@@ -128,6 +133,7 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
         bedrooms: editingProperty.bedrooms ? String(editingProperty.bedrooms) : "",
         description: editingProperty.description || "",
         listedAt: (editingProperty as any).listed_at || "",
+        vrHeadset: Boolean((editingProperty as any).vr_headset_available),
       });
       setDetails({
         ...EMPTY_DETAILS,
@@ -371,6 +377,7 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
         agent_photo: selectedAdvisor?.photo || null,
         tech_details: cleanDetails,
         listed_at: form.listedAt || null,
+        vr_headset_available: form.vrHeadset,
       };
 
       if (initialCoords) {
@@ -847,6 +854,21 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
                     value={form.giraffeUrl}
                     onChange={(e) => handleChange("giraffeUrl", e.target.value)}
                   />
+                </div>
+                {/* Demande explicite (14 septembre) : « possibilité de
+                    mettre un logo de casque quand la visite virtuelle est
+                    faite, cela confirmera que c'est bien disponible au
+                    casque VR » — case indépendante des liens ci-dessus
+                    (une URL de visite virtuelle ne garantit pas la
+                    compatibilité casque, c'est l'agent qui la confirme). */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <Checkbox
+                      checked={form.vrHeadset}
+                      onCheckedChange={(checked) => setForm((prev) => ({ ...prev, vrHeadset: checked === true }))}
+                    />
+                    <span className="text-sm">Casque VR disponible (visite virtuelle consultable au casque)</span>
+                  </label>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>Lien site internet (immosphera.fr)</Label>

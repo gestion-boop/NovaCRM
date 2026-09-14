@@ -1411,6 +1411,7 @@ export type Database = {
           title: string
           updated_at: string
           virtual_tour_url: string | null
+          vr_headset_available: boolean
         }
         Insert: {
           address: string
@@ -1441,6 +1442,7 @@ export type Database = {
           title: string
           updated_at?: string
           virtual_tour_url?: string | null
+          vr_headset_available?: boolean
         }
         Update: {
           address?: string
@@ -1471,6 +1473,7 @@ export type Database = {
           title?: string
           updated_at?: string
           virtual_tour_url?: string | null
+          vr_headset_available?: boolean
         }
         Relationships: []
       }
