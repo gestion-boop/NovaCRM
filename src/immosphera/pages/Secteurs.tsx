@@ -5,7 +5,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useImmoAuth as useAuth } from "@/immosphera/lib/access";
 import { advisors, getAdvisorById, type Advisor } from "@/immosphera/lib/advisors";
-import { geocodeAdresseAvecCodePostal, geocodeEntreeSecteur, entreeSecteurCorrespond, type GeoPoint } from "@/immosphera/lib/geo";
+import {
+  geocodeAdresseAvecCodePostal,
+  geocodeEntreeSecteur,
+  entreeSecteurCorrespond,
+  departementAutorise,
+  DEPARTEMENTS_SECTEUR_LABEL,
+  type GeoPoint,
+} from "@/immosphera/lib/geo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -119,22 +126,28 @@ export default function Secteurs() {
     (async () => {
       const resultats: Record<string, GeoPoint> = {};
       for (const entree of manquantes) {
-        const point = await geocodeEntreeSecteur(entree);
-        if (point) resultats[entree] = point;
+        const resultat = await geocodeEntreeSecteur(entree);
+        // Filtre défensif : une entrée hors Aude/Hérault/Pyrénées-Orientales
+        // ne devrait déjà plus pouvoir être enregistrée (voir la validation
+        // dans validerEtEnregistrerSecteur), mais une donnée existante mal
+        // saisie avant cette règle ne doit pas apparaître silencieusement.
+        if (resultat && departementAutorise(resultat.postcode)) resultats[entree] = resultat.point;
       }
       if (Object.keys(resultats).length > 0) setCentroides((prev) => ({ ...prev, ...resultats }));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secteurs]);
 
-  // Init carte
+  // Init carte — centrée sur l'Aude/Hérault/Pyrénées-Orientales (demande
+  // explicite : « la carte de l'Aude, l'Hérault et les Pyrénées-
+  // Orientales »), plutôt que le point générique utilisé jusqu'ici.
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     const map = L.map(mapContainerRef.current);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
     }).addTo(map);
-    map.setView([43.183, 3.004], 10);
+    map.setView([43.05, 2.75], 8);
     mapRef.current = map;
     return () => {
       map.remove();
@@ -348,6 +361,52 @@ export default function Secteurs() {
     onError: (e: any) => toast({ title: "Erreur", description: e.message, variant: "destructive" }),
   });
 
+  // Valide chaque entrée AVANT d'enregistrer — demande explicite : « les
+  // codes postaux et les villes doivent être impérativement de l'Aude, de
+  // l'Hérault et des Pyrénées-Orientales, si jamais tu la codes autre part
+  // c'est une erreur de ta part. » Une seule entrée hors zone (ou
+  // introuvable) bloque tout l'enregistrement plutôt que de la filtrer en
+  // silence — l'admin doit la corriger, pas la voir disparaître sans savoir
+  // pourquoi.
+  const [validationEnCours, setValidationEnCours] = useState<string | null>(null);
+  const validerEtEnregistrerSecteur = async (conseillerId: string, codesBruts: string[], couleur: string) => {
+    setValidationEnCours(conseillerId);
+    try {
+      const horsZone: string[] = [];
+      const introuvables: string[] = [];
+      const nouveauxCentroides: Record<string, GeoPoint> = {};
+      for (const entree of codesBruts) {
+        const resultat = await geocodeEntreeSecteur(entree);
+        if (!resultat) {
+          introuvables.push(entree);
+          continue;
+        }
+        if (!departementAutorise(resultat.postcode)) {
+          horsZone.push(entree);
+          continue;
+        }
+        nouveauxCentroides[entree] = resultat.point;
+      }
+      if (introuvables.length > 0 || horsZone.length > 0) {
+        toast({
+          title: "Secteur non enregistré",
+          description: [
+            introuvables.length > 0 ? `Introuvable : ${introuvables.join(", ")}.` : "",
+            horsZone.length > 0 ? `Hors ${DEPARTEMENTS_SECTEUR_LABEL} : ${horsZone.join(", ")}.` : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+          variant: "destructive",
+        });
+        return;
+      }
+      setCentroides((prev) => ({ ...prev, ...nouveauxCentroides }));
+      sauvegarderSecteurMutation.mutate({ conseillerId, codes: codesBruts, couleur });
+    } finally {
+      setValidationEnCours(null);
+    }
+  };
+
   const statutLabel: Record<Contact["statut"], string> = { nouveau: "Nouveau", transfere: "Transféré", traite: "Traité" };
 
   return (
@@ -396,7 +455,7 @@ export default function Secteurs() {
             {panneauOuvert && (
               <div className="p-3 pt-0 space-y-3">
                 <p className="text-[10px] text-muted-foreground -mt-1">
-                  Code postal ou nom de ville, séparés par des virgules — les deux se mélangent librement.
+                  Code postal ou nom de ville, séparés par des virgules. Limité pour l'instant à {DEPARTEMENTS_SECTEUR_LABEL} — une entrée hors zone bloque l'enregistrement.
                 </p>
                 {advisors.map((a) => {
                   const secteur = secteurParConseiller.get(a.id);
@@ -418,12 +477,13 @@ export default function Secteurs() {
                             <button
                               key={c}
                               type="button"
+                              disabled={validationEnCours === a.id}
                               onClick={() =>
-                                sauvegarderSecteurMutation.mutate({
-                                  conseillerId: a.id,
-                                  codes: valeurCourante.split(",").map((s) => s.trim()).filter(Boolean),
-                                  couleur: c,
-                                })
+                                validerEtEnregistrerSecteur(
+                                  a.id,
+                                  valeurCourante.split(",").map((s) => s.trim()).filter(Boolean),
+                                  c
+                                )
                               }
                               className={`w-4 h-4 rounded-full border ${couleur === c ? "border-foreground" : "border-transparent"}`}
                               style={{ background: c }}
@@ -433,15 +493,16 @@ export default function Secteurs() {
                             size="sm"
                             variant="ghost"
                             className="h-6 text-[10px] ml-auto px-2"
+                            disabled={validationEnCours === a.id}
                             onClick={() =>
-                              sauvegarderSecteurMutation.mutate({
-                                conseillerId: a.id,
-                                codes: valeurCourante.split(",").map((s) => s.trim()).filter(Boolean),
-                                couleur,
-                              })
+                              validerEtEnregistrerSecteur(
+                                a.id,
+                                valeurCourante.split(",").map((s) => s.trim()).filter(Boolean),
+                                couleur
+                              )
                             }
                           >
-                            Enregistrer
+                            {validationEnCours === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Enregistrer"}
                           </Button>
                         </div>
                       </div>
