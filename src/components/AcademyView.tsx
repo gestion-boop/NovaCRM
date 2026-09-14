@@ -149,6 +149,15 @@ export default function AcademyView() {
   // sous-dossier de celui-ci » — voir onDragOver/onDrop sur chaque
   // dossier plus bas).
   const [dossierSurvoleParDossier, setDossierSurvoleParDossier] = useState<string | null>(null);
+  // Demande explicite (14 septembre) : « je ne peux pas bouger l'ordre des
+  // dossiers » — le drag-and-drop ne faisait QUE nester (déposer sur un
+  // dossier = devenir son sous-dossier), il n'y avait aucun moyen de
+  // simplement réordonner par glisser-déposer, seulement les flèches
+  // Monter/Descendre planquées dans le menu "...". Ce state retient
+  // l'intention détectée pendant le survol — déposer sur le quart gauche/
+  // droit d'un dossier le RÉORDONNE avant/après lui, déposer au centre le
+  // NESTE dedans (comportement d'origine, conservé).
+  const [dossierSurvolIntention, setDossierSurvolIntention] = useState<'avant' | 'apres' | 'dans' | null>(null);
   const entrerDossier = (nom: string) => setCheminDossiers((chemin) => [...chemin, nom]);
   const allerAuNiveau = (index: number) => setCheminDossiers((chemin) => chemin.slice(0, index + 1));
   const [dossierEnDepot, setDossierEnDepot] = useState<string | null>(null);
@@ -774,6 +783,44 @@ export default function AcademyView() {
   };
 
   /**
+   * Réordonne par glisser-déposer — déposer `nomSource` sur le quart
+   * gauche/droit de `nomCible` le place juste avant/après lui, parmi les
+   * dossiers actuellement affichés (donc déjà tous du même parent). Toute
+   * la fratrie est renumérotée pour rester cohérente (0, 1, 2…) plutôt que
+   * de bricoler une position intercalaire.
+   */
+  const reordonnerDossier = async (nomSource: string, nomCible: string, position: 'avant' | 'apres') => {
+    if (nomSource === nomCible) return;
+    const fratrie = dossiersEnfants.map((d) => d.nom).filter((n) => n !== nomSource);
+    let indexCible = fratrie.indexOf(nomCible);
+    if (indexCible === -1) return;
+    if (position === 'apres') indexCible += 1;
+    fratrie.splice(indexCible, 0, nomSource);
+    setDossiers((prev) => {
+      const parNom = new Map(prev.map((d) => [d.nom, d]));
+      fratrie.forEach((nom, i) => {
+        parNom.set(nom, { ...(parNom.get(nom) ?? { nom, parent_nom: dossierActif }), parent_nom: dossierActif, position: i });
+      });
+      return Array.from(parNom.values());
+    });
+    try {
+      const lignes = fratrie.map((nom, i) => ({
+        agency_id: activeAgency!.id,
+        nom,
+        parent_nom: dossierActif,
+        position: i,
+        updated_at: new Date().toISOString(),
+      }));
+      const { error } = await supabase.from('academy_folders' as any).upsert(lignes as any, { onConflict: 'agency_id,nom' });
+      if (error) throw error;
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Impossible d'enregistrer ce nouvel ordre.");
+      await charger();
+    }
+  };
+
+  /**
    * Réordonne les dossiers de MÊME parent — demande explicite (16
    * septembre) : « dans les sous dossiers, je veux pouvoir aussi les
    * mettre dans l'ordre que je veux ». Échange simplement la `position`
@@ -1368,33 +1415,55 @@ export default function AcademyView() {
                       onClick={() => entrerDossier(nom)}
                       // Demande explicite (16 septembre) : « drag and drop
                       // dans les dossiers pour que les sous dossiers se
-                      // mettent » — déposer un dossier SUR un autre en fait
-                      // un sous-dossier de celui-ci. Réordonner entre eux
-                      // se fait, lui, par les flèches du menu "..." (voir
-                      // plus bas) : plus fiable qu'un repérage au pixel
-                      // près pour savoir si on dépose "sur" ou "entre".
+                      // mettent ». Puis (14 septembre) : « je ne peux pas
+                      // bouger l'ordre des dossiers » — déposer sur le quart
+                      // gauche/droit d'un dossier le réordonne avant/après
+                      // lui ; déposer au centre le neste dedans, comme avant.
                       draggable={estSuperAdmin}
                       onDragStart={(e) => { e.dataTransfer.setData('text/plain', `dossier:${nom}`); e.stopPropagation(); }}
                       onDragOver={(e) => {
                         if (!estSuperAdmin) return;
                         e.preventDefault();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const fraction = (e.clientX - rect.left) / rect.width;
                         setDossierSurvoleParDossier(nom);
+                        setDossierSurvolIntention(fraction < 0.25 ? 'avant' : fraction > 0.75 ? 'apres' : 'dans');
                       }}
-                      onDragLeave={() => setDossierSurvoleParDossier((v) => (v === nom ? null : v))}
+                      onDragLeave={() => {
+                        setDossierSurvoleParDossier((v) => (v === nom ? null : v));
+                        setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
+                      }}
                       onDrop={(e) => {
                         e.preventDefault();
                         setDossierSurvoleParDossier(null);
+                        const intention = dossierSurvolIntention;
+                        setDossierSurvolIntention(null);
                         const donnee = e.dataTransfer.getData('text/plain');
                         if (donnee.startsWith('dossier:')) {
-                          void deplacerDossierVersParent(donnee.slice('dossier:'.length), nom);
+                          const nomSource = donnee.slice('dossier:'.length);
+                          if (intention === 'avant' || intention === 'apres') {
+                            void reordonnerDossier(nomSource, nom, intention);
+                          } else {
+                            void deplacerDossierVersParent(nomSource, nom);
+                          }
                         } else {
                           const ressource = ressources.find((r) => r.id === donnee);
                           if (ressource) void deplacerVers(ressource, nom);
                         }
                       }}
-                      className={`group flex flex-col items-center focus:outline-none rounded-xl transition-colors ${dossierSurvoleParDossier === nom ? 'ring-2 ring-[#E0A21A] ring-offset-2 ring-offset-[#F7F1E5]' : ''}`}
+                      className={`group relative flex flex-col items-center focus:outline-none rounded-xl transition-colors ${
+                        dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans'
+                          ? 'ring-2 ring-[#E0A21A] ring-offset-2 ring-offset-[#F7F1E5]'
+                          : ''
+                      }`}
                       title={`${nom} — ${nombre} procédure${nombre > 1 ? 's' : ''}`}
                     >
+                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'avant' && (
+                        <span className="absolute -left-2 top-0 bottom-0 w-1 rounded-full bg-[#E0A21A]" />
+                      )}
+                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'apres' && (
+                        <span className="absolute -right-2 top-0 bottom-0 w-1 rounded-full bg-[#E0A21A]" />
+                      )}
                       {/* Dossier réduit : signalé « beaucoup trop gros ». Il
                           reste reconnaissable — onglet, corps, rabat — mais
                           plusieurs tiennent maintenant sur une ligne. */}
@@ -1535,21 +1604,46 @@ export default function AcademyView() {
                       onClick={() => entrerDossier(nom)}
                       draggable={estSuperAdmin}
                       onDragStart={(e) => { e.dataTransfer.setData('text/plain', `dossier:${nom}`); e.stopPropagation(); }}
-                      onDragOver={(e) => { if (!estSuperAdmin) return; e.preventDefault(); setDossierSurvoleParDossier(nom); }}
-                      onDragLeave={() => setDossierSurvoleParDossier((v) => (v === nom ? null : v))}
+                      onDragOver={(e) => {
+                        if (!estSuperAdmin) return;
+                        e.preventDefault();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const fraction = (e.clientY - rect.top) / rect.height;
+                        setDossierSurvoleParDossier(nom);
+                        setDossierSurvolIntention(fraction < 0.25 ? 'avant' : fraction > 0.75 ? 'apres' : 'dans');
+                      }}
+                      onDragLeave={() => {
+                        setDossierSurvoleParDossier((v) => (v === nom ? null : v));
+                        setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
+                      }}
                       onDrop={(e) => {
                         e.preventDefault();
                         setDossierSurvoleParDossier(null);
+                        const intention = dossierSurvolIntention;
+                        setDossierSurvolIntention(null);
                         const donnee = e.dataTransfer.getData('text/plain');
                         if (donnee.startsWith('dossier:')) {
-                          void deplacerDossierVersParent(donnee.slice('dossier:'.length), nom);
+                          const nomSource = donnee.slice('dossier:'.length);
+                          if (intention === 'avant' || intention === 'apres') {
+                            void reordonnerDossier(nomSource, nom, intention);
+                          } else {
+                            void deplacerDossierVersParent(nomSource, nom);
+                          }
                         } else {
                           const ressource = ressources.find((r) => r.id === donnee);
                           if (ressource) void deplacerVers(ressource, nom);
                         }
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[#E0A21A]/10 transition-colors text-left ${dossierSurvoleParDossier === nom ? 'bg-[#E0A21A]/20' : ''}`}
+                      className={`relative w-full flex items-center gap-3 px-4 py-3 hover:bg-[#E0A21A]/10 transition-colors text-left ${
+                        dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans' ? 'bg-[#E0A21A]/20' : ''
+                      }`}
                     >
+                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'avant' && (
+                        <span className="absolute inset-x-2 -top-px h-0.5 rounded-full bg-[#E0A21A]" />
+                      )}
+                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'apres' && (
+                        <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#E0A21A]" />
+                      )}
                       {/* Même dossier, en miniature : la liste garde le repère
                           visuel, elle ne le remplace pas par une puce. */}
                       <span className="relative w-9 h-7 shrink-0">
