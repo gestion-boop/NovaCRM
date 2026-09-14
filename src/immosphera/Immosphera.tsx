@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Plus, Users, FileText, Loader2, Building2, ArrowLeft } from "lucide-react";
+import { Plus, Users, FileText, Loader2, Building2, ArrowLeft, MapPinned } from "lucide-react";
 import "@/immosphera/immosphera.css";
 import { useImmoAuth } from "@/immosphera/lib/access";
 import { PropertyFormModal } from "@/immosphera/components/PropertyFormModal";
@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/immosphera/components/ErrorBoundary";
 import Index from "@/immosphera/pages/Index";
 import PropertyDetail from "@/immosphera/pages/PropertyDetail";
 import Partners from "@/immosphera/pages/Partners";
+import Secteurs from "@/immosphera/pages/Secteurs";
 import NovaSearchBar from "@/immosphera/components/NovaSearchBar";
 const PILL_BASE =
   "inline-flex items-center gap-2 px-4 h-10 rounded-full text-sm font-semibold transition-all border backdrop-blur-md";
@@ -65,6 +66,9 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
   const navItems = [
     { label: "Biens", icon: Building2, path: "/immosphera" },
     { label: "Partenaires", icon: Users, path: "/immosphera/partenaires" },
+    // Demande explicite (14 septembre) : « avoir une carte par secteur [...]
+    // s'envoyer des contacts si hors secteur si besoin. »
+    { label: "Secteurs", icon: MapPinned, path: "/immosphera/secteurs" },
   ];
 
   if (loading) {
@@ -165,6 +169,7 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
               proposition" sur une fiche bien continue d'enregistrer en base
               mais n'a plus d'écran pour la consulter. */}
           <Route path="partenaires" element={<Partners />} />
+          <Route path="secteurs" element={<Secteurs />} />
           <Route path="*" element={<Navigate to="/immosphera" replace />} />
         </Routes>
       </ErrorBoundary>

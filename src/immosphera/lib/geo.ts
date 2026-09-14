@@ -98,6 +98,25 @@ export async function geocodeCity(value: string, forceRefresh = false, codePosta
 /** Alias plus explicite pour les formulaires de biens. */
 export const geocodeAddress = geocodeCity;
 
+/**
+ * Point-dans-polygone (ray casting) — utilisé pour déterminer dans quel
+ * secteur (src/immosphera/pages/Secteurs.tsx) tombe l'adresse d'un contact,
+ * une fois géocodée. Pas besoin de PostGIS pour ce volume : le calcul se
+ * fait entièrement côté client sur les polygones déjà chargés.
+ */
+export function pointDansPolygone(point: GeoPoint, polygone: GeoPoint[]): boolean {
+  let dedans = false;
+  for (let i = 0, j = polygone.length - 1; i < polygone.length; j = i++) {
+    const pi = polygone[i];
+    const pj = polygone[j];
+    const intersecte =
+      pi.lat > point.lat !== pj.lat > point.lat &&
+      point.lng < ((pj.lng - pi.lng) * (point.lat - pi.lat)) / (pj.lat - pi.lat) + pi.lng;
+    if (intersecte) dedans = !dedans;
+  }
+  return dedans;
+}
+
 export function distanceKm(a: GeoPoint, b: GeoPoint): number {
   if (!a || !b) return Infinity;
   const toRad = (deg: number) => (deg * Math.PI) / 180;
