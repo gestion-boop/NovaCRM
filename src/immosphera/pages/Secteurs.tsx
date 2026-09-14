@@ -146,16 +146,28 @@ export default function Secteurs() {
     const map = L.map(mapContainerRef.current, { zoomControl: false });
     // Demande explicite (14 septembre, en réaction à une maquette envoyée
     // par le client) : « est-ce que tu peux présenter les cartes comme ça ?
-    // ça serait plus sympa. » Le rendu peint-à-la-main de la maquette n'est
-    // pas reproductible sur une carte VIVANTE (elle doit rester interactive
-    // et se mettre à jour automatiquement) — un fond de carte CARTO Voyager
-    // avait été essayé pour se rapprocher de ce rendu épuré, mais CARTO
-    // exige désormais une clé API sur ce domaine ("API key required" côté
-    // client) : retour à OpenStreetMap standard, gratuit et sans clé.
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-      maxZoom: 19,
-    }).addTo(map);
+    // ça serait plus sympa. » Fond CARTO Voyager (plus épuré que l'OSM
+    // brut) via une clé API fournie par le client — VITE_CARTO_API_KEY,
+    // jamais commitée (voir .env.example). Sans clé configurée, on retombe
+    // sur OpenStreetMap standard plutôt que de casser la carte ("API key
+    // required" constaté quand la clé manquait).
+    const cleCartoApi = import.meta.env.VITE_CARTO_API_KEY as string | undefined;
+    if (cleCartoApi) {
+      L.tileLayer(
+        `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?api_key=${cleCartoApi}`,
+        {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          subdomains: "abcd",
+          maxZoom: 19,
+        }
+      ).addTo(map);
+    } else {
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+        maxZoom: 19,
+      }).addTo(map);
+    }
     L.control.zoom({ position: "bottomright" }).addTo(map);
     L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
     map.setView([43.05, 2.75], 8);
