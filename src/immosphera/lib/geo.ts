@@ -1,8 +1,8 @@
-// v3 : invalide le cache existant suite au bug de géocodage des codes
-// postaux (« j'ai mis 11100, et au final Narbonne est à côté ») — sans ça,
-// les mauvaises coordonnées déjà mises en cache localement continueraient
-// d'être servies malgré la correction.
-const CACHE_KEY = "immosphera360-geocode-cache-v3";
+// v4 : re-invalide le cache — le premier correctif (v3, centroïde
+// géométrique de commune) restait imprécis pour les communes tentaculaires
+// comme Narbonne (« c'était mieux avant »), remplacé par le point officiel
+// du centre-ville.
+const CACHE_KEY = "immosphera360-geocode-cache-v4";
 
 export interface GeoPoint {
   lat: number;
@@ -103,19 +103,28 @@ export async function geocodeCity(value: string, forceRefresh = false, codePosta
 export const geocodeAddress = geocodeCity;
 
 /**
- * Géocode un code postal en centroïde approximatif — utilisé pour tracer le
- * secteur d'un conseiller (src/immosphera/pages/Secteurs.tsx) sous forme de
- * cercles colorés, faute de vraies limites de code postal disponibles.
+ * Géocode un code postal en un point de repère fiable — utilisé pour tracer
+ * le secteur d'un conseiller (src/immosphera/pages/Secteurs.tsx) sous forme
+ * de cercles colorés, faute de vraies limites de code postal disponibles.
  *
- * Bug constaté (14 septembre, capture à l'appui) : « j'ai mis 11100, et au
- * final Narbonne est à côté » — le cercle tombait dans un champ près de
- * l'aérodrome, à l'est de la vraie ville. Cause : interroger l'API Adresse
- * (recherche plein texte, faite pour des adresses) avec un code postal NU
- * comme requête ("q=11100") n'a rien de fiable à matcher — elle renvoie le
- * résultat texte le plus proche, pas la commune. Remplacée par l'API
- * officielle du découpage administratif (geo.api.gouv.fr), qui associe
- * directement un code postal à sa ou ses commune(s) et leur centre exact —
- * conçue pour ça, plutôt que détournée.
+ * Deux essais précédents ratés (14 septembre, captures à l'appui) :
+ * 1. Interroger l'API Adresse (recherche plein texte, faite pour des
+ *    adresses) avec le code postal NU comme requête ("q=11100") — sans rien
+ *    de concret à matcher, elle renvoyait le résultat texte le plus proche,
+ *    pas la commune (cercle tombé près de l'aérodrome de Narbonne).
+ * 2. Utiliser le "centre" officiel (geo.api.gouv.fr) de la ou des commune(s)
+ *    portant ce code postal — c'est le centroïde GÉOMÉTRIQUE de tout le
+ *    territoire communal, pas le centre-ville : pour une commune tentaculaire
+ *    comme Narbonne (dont le territoire s'étend jusqu'à la mer, Narbonne-
+ *    Plage), ce centroïde tombe en pleine campagne au sud, loin de la ville
+ *    elle-même (« c'était mieux avant »).
+ *
+ * Solution : demander à geo.api.gouv.fr le NOM de la commune la plus
+ * peuplée portant ce code postal (donnée fiable, faite pour ça), puis
+ * géocoder ce NOM via l'API Adresse en mode "municipality" — qui renvoie,
+ * elle, le point de repère officiel du centre-ville (chef-lieu), pas un
+ * centroïde de territoire. Le meilleur des deux APIs plutôt que l'une ou
+ * l'autre détournée de son usage.
  */
 export async function geocodePostalCode(codePostal: string, forceRefresh = false): Promise<GeoPoint | null> {
   const code = codePostal.trim();
@@ -126,23 +135,26 @@ export async function geocodePostalCode(codePostal: string, forceRefresh = false
   if (!forceRefresh && cache[key]) return cache[key];
 
   try {
-    const params = new URLSearchParams({ codePostal: code, fields: "centre", format: "json", geometry: "centre" });
+    const params = new URLSearchParams({ codePostal: code, fields: "nom,population", format: "json" });
     const res = await fetch(`https://geo.api.gouv.fr/communes?${params.toString()}`);
     if (!res.ok) return null;
     const communes = await res.json();
     if (!Array.isArray(communes) || communes.length === 0) return null;
 
     // Plusieurs communes (ou hameaux rattachés) peuvent partager un même
-    // code postal : on moyenne leurs centres plutôt que de n'en garder
-    // qu'une au hasard, pour rester représentatif de la zone entière.
-    const coordonnees = communes
-      .map((c: any) => c?.centre?.coordinates)
-      .filter((c: any) => Array.isArray(c) && c.length === 2);
-    if (coordonnees.length === 0) return null;
-    const lat = coordonnees.reduce((s: number, c: number[]) => s + c[1], 0) / coordonnees.length;
-    const lng = coordonnees.reduce((s: number, c: number[]) => s + c[0], 0) / coordonnees.length;
+    // code postal : on prend la plus peuplée, celle à laquelle le code
+    // postal fait référence en pratique.
+    const principale = [...communes].sort((a: any, b: any) => (b?.population ?? 0) - (a?.population ?? 0))[0];
+    if (!principale?.nom) return null;
 
-    const point: GeoPoint = { lat, lng };
+    const paramsAdresse = new URLSearchParams({ q: principale.nom, type: "municipality", postcode: code, limit: "1" });
+    const resAdresse = await fetch(`https://api-adresse.data.gouv.fr/search/?${paramsAdresse.toString()}`);
+    if (!resAdresse.ok) return null;
+    const jsonAdresse = await resAdresse.json();
+    const coords = jsonAdresse?.features?.[0]?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length !== 2) return null;
+
+    const point: GeoPoint = { lat: coords[1], lng: coords[0] };
     if (!isValidFrancePoint(point)) return null;
 
     cache[key] = point;
