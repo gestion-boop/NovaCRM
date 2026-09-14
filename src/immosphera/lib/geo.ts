@@ -151,8 +151,20 @@ async function geocodePostalCodeGoogle(codePostal: string): Promise<GeoPoint | n
  * seulement celui des codes postaux). Renvoie aussi le code postal résolu,
  * nécessaire à departementAutorise.
  */
-async function geocodeVilleGoogle(nomVille: string): Promise<(GeoPoint & { postcode: string | null }) | null> {
-  return geocodeGoogle(new URLSearchParams({ address: nomVille, components: "country:FR" }));
+async function geocodeVilleGoogle(
+  nomVille: string,
+  codePostalDesambiguation?: string
+): Promise<(GeoPoint & { postcode: string | null }) | null> {
+  // `codePostalDesambiguation` restreint Google à LA bonne commune — sans
+  // lui, plusieurs communes françaises portant des noms proches (ex.
+  // "Canet" en Aude vs "Canet-en-Roussillon" en Pyrénées-Orientales, bien
+  // plus connue) peuvent se faire confondre. Voir geocodeEntreeSecteur.
+  return geocodeGoogle(
+    new URLSearchParams({
+      address: nomVille,
+      components: codePostalDesambiguation ? `postal_code:${codePostalDesambiguation}|country:FR` : "country:FR",
+    })
+  );
 }
 
 /**
@@ -269,9 +281,30 @@ export async function geocodeEntreeSecteur(entree: string): Promise<{ point: Geo
     const point = await geocodePostalCode(valeur);
     return point ? { point, postcode: valeur } : null;
   }
-  // Google d'abord (voir geocodePostalCode plus haut pour l'historique du
-  // bug), l'ancienne API Adresse seulement si Google échoue ou n'est pas
-  // configuré.
+
+  // Désambiguïsation par département — rapporté (14 septembre) : « cela met
+  // dans Canet en Roussillon et je ne comprends pas pourquoi » : plusieurs
+  // communes françaises portent des noms proches (ici, la petite commune
+  // "Canet" de l'Aude — voisine de Lézignan-Corbières, code postal 11200 —
+  // confondue avec Canet-en-Roussillon, station balnéaire des Pyrénées-
+  // Orientales bien plus connue). Résout d'abord le code postal exact DE LA
+  // commune voulue (recherche par nom déjà restreinte aux 3 départements
+  // autorisés), puis géocode en s'y restreignant — plutôt qu'une recherche
+  // par nom seul, que Google peut faire glisser vers une homonyme ailleurs
+  // en France.
+  const correspondances = await rechercherCommunes(valeur);
+  const correspondanceExacte =
+    correspondances.find((c) => normaliserVille(c.nom) === normaliserVille(valeur)) ?? correspondances[0] ?? null;
+  if (correspondanceExacte) {
+    const viaGooglePrecis = await geocodeVilleGoogle(correspondanceExacte.nom, correspondanceExacte.codePostal);
+    if (viaGooglePrecis) {
+      return { point: { lat: viaGooglePrecis.lat, lng: viaGooglePrecis.lng }, postcode: correspondanceExacte.codePostal };
+    }
+  }
+
+  // Repli si rechercherCommunes n'a rien trouvé pour cette entrée (faute de
+  // frappe que Google résout quand même correctement, etc.) — même
+  // comportement qu'avant, sans garantie de désambiguïsation.
   const viaGoogle = await geocodeVilleGoogle(valeur);
   if (viaGoogle) return { point: { lat: viaGoogle.lat, lng: viaGoogle.lng }, postcode: viaGoogle.postcode };
   const resultat = await geocodeAdresseAvecCodePostal(valeur);
