@@ -11,11 +11,10 @@ import {
   entreeSecteurCorrespond,
   departementAutorise,
   rechercherCommunes,
-  communesProches,
+  communesMemeCodePostal,
   DEPARTEMENTS_SECTEUR_LABEL,
   type GeoPoint,
   type SuggestionCommune,
-  type SuggestionCommuneProche,
 } from "@/immosphera/lib/geo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,7 +100,7 @@ export default function Secteurs() {
   // Autocomplete de communes par conseiller (recherche en cours + résultats)
   const [rechercheCommune, setRechercheCommune] = useState<Record<string, string>>({});
   const [suggestionsCommune, setSuggestionsCommune] = useState<Record<string, SuggestionCommune[]>>({});
-  const [communesVoisines, setCommunesVoisines] = useState<Record<string, SuggestionCommuneProche[]>>({});
+  const [communesVoisines, setCommunesVoisines] = useState<Record<string, SuggestionCommune[]>>({});
 
   const [ficheOuverte, setFicheOuverte] = useState(false);
   const [contactEnEdition, setContactEnEdition] = useState<Contact | null>(null);
@@ -555,22 +554,29 @@ export default function Secteurs() {
     setCodesEnEdition((prev) => {
       const actuel = prev[conseillerId] ?? (secteurParConseiller.get(conseillerId)?.codes_postaux.join(", ") || "");
       const liste = actuel.split(",").map((s) => s.trim()).filter(Boolean);
-      if (!liste.includes(suggestion.codePostal)) liste.push(suggestion.codePostal);
+      // Ajoute le NOM de la commune (validé par cette recherche), pas le
+      // code postal : plusieurs villages voisins partagent souvent le même
+      // code (voir suggererVoisines juste en dessous) — les ajouter tous
+      // sous le même code ne changerait rien visuellement (un seul cercle,
+      // déjà présent), alors que chaque nom se géocode individuellement et
+      // dessine son propre cercle, reflétant la vraie dispersion du secteur.
+      if (!liste.includes(suggestion.nom)) liste.push(suggestion.nom);
       return { ...prev, [conseillerId]: liste.join(", ") };
     });
     setRechercheCommune((prev) => ({ ...prev, [conseillerId]: "" }));
     setSuggestionsCommune((prev) => ({ ...prev, [conseillerId]: [] }));
-    // Rapporté : « pour le code postal ça ne met que Lézignan, alors qu'il
-    // y a beaucoup de villages autour » — propose les communes voisines de
-    // celle qu'on vient d'ajouter, pour les ajouter en un clic plutôt que
-    // de devoir chercher chaque village un par un par son nom.
+    // Rapporté (avec le détail exact vérifié — « 11200 dessert 23 communes
+    // et villages [...] c'est ça que je veux comme proposition ») : propose
+    // TOUTES les communes qui partagent le même code postal que celle qu'on
+    // vient d'ajouter, pas seulement les plus proches à vol d'oiseau.
     void suggererVoisines(conseillerId, suggestion);
   };
   const suggererVoisines = async (conseillerId: string, suggestion: SuggestionCommune) => {
-    const resultat = await geocodeEntreeSecteur(suggestion.codePostal);
-    if (!resultat) return;
-    const voisines = await communesProches(resultat.point, suggestion.nom);
-    setCommunesVoisines((prev) => ({ ...prev, [conseillerId]: voisines }));
+    const voisines = await communesMemeCodePostal(suggestion.codePostal);
+    setCommunesVoisines((prev) => ({
+      ...prev,
+      [conseillerId]: voisines.filter((v) => v.nom !== suggestion.nom),
+    }));
   };
 
   // Valide chaque entrée AVANT d'enregistrer — demande explicite : « les
@@ -736,11 +742,11 @@ export default function Secteurs() {
                           )}
                         </div>
 
-                        {/* Villages autour de la dernière commune ajoutée —
-                            rapporté : « pour le code postal ça ne met que
-                            Lézignan, alors qu'il y a beaucoup de villages
-                            autour ». Un clic ajoute, plutôt que de devoir
-                            chercher chaque village un par un par son nom. */}
+                        {/* Communes du même code postal — rapporté, détail
+                            vérifié à l'appui : « 11200 dessert 23 communes
+                            et villages [...] c'est ça que je veux comme
+                            proposition ». Un clic ajoute (par son nom, pas
+                            le code postal — voir ajouterCommuneSuggeree). */}
                         {(communesVoisines[a.id]?.length ?? 0) > 0 && (
                           <div className="flex flex-wrap gap-1 pt-0.5">
                             {communesVoisines[a.id].map((v) => (
@@ -749,9 +755,8 @@ export default function Secteurs() {
                                 type="button"
                                 onClick={() => {
                                   ajouterCommuneSuggeree(a.id, v);
-                                  setCommunesVoisines((prev) => ({ ...prev, [a.id]: prev[a.id].filter((x) => x.codePostal !== v.codePostal) }));
+                                  setCommunesVoisines((prev) => ({ ...prev, [a.id]: prev[a.id].filter((x) => x.nom !== v.nom) }));
                                 }}
-                                title={`${v.distanceKm.toFixed(1)} km`}
                                 className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted hover:bg-muted/70 text-muted-foreground"
                               >
                                 + {v.nom}
