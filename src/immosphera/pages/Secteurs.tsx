@@ -477,6 +477,14 @@ export default function Secteurs() {
 
   // ── Édition des secteurs (super admin) ──────────────────────────────
   const [codesEnEdition, setCodesEnEdition] = useState<Record<string, string>>({});
+  // Lu depuis suggererVoisines (async) pour exclure ce qui est déjà ajouté
+  // au moment où la réponse arrive — un simple state ne suffit pas là, un
+  // useState capturé dans une closure async reste figé à sa valeur du
+  // moment de l'appel.
+  const codesEnEditionRef = useRef(codesEnEdition);
+  useEffect(() => {
+    codesEnEditionRef.current = codesEnEdition;
+  }, [codesEnEdition]);
   const sauvegarderSecteurMutation = useMutation({
     mutationFn: async ({
       conseillerId,
@@ -573,9 +581,17 @@ export default function Secteurs() {
   };
   const suggererVoisines = async (conseillerId: string, suggestion: SuggestionCommune) => {
     const voisines = await communesMemeCodePostal(suggestion.codePostal);
+    // Rapporté : « quand je sélectionne, il faudrait que cela s'enlève de
+    // la liste » — exclut tout ce qui est déjà dans le champ au moment où
+    // la réponse arrive (pas seulement la commune qui vient d'être
+    // cliquée), via la ref plutôt que le state directement capturé dans
+    // cette fonction async, qui resterait figé à sa valeur de départ.
+    const actuel =
+      codesEnEditionRef.current[conseillerId] ?? (secteurParConseiller.get(conseillerId)?.codes_postaux.join(", ") || "");
+    const dejaAjoutes = new Set(actuel.split(",").map((s) => s.trim()).filter(Boolean));
     setCommunesVoisines((prev) => ({
       ...prev,
-      [conseillerId]: voisines.filter((v) => v.nom !== suggestion.nom),
+      [conseillerId]: voisines.filter((v) => !dejaAjoutes.has(v.nom)),
     }));
   };
 
