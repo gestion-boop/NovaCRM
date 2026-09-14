@@ -2,13 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText, PlayCircle, Plus, Search, Trash2, X, Loader2, Upload, Link as LinkIcon, Pencil,
   CheckCircle2, Circle, Users, ImagePlus, GraduationCap, LayoutGrid, List as ListIcon,
-  MoreVertical, ImageOff, Maximize2, Minimize2,
+  MoreVertical, ImageOff, Maximize2, Minimize2, Unlock, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { getCachedAccessToken, requestWorkspaceAccessToken, reconnectGoogleWorkspace, isGoogleAuthError } from '@/lib/workspace';
-import { uploadDocumentToDrive } from '@/lib/documentDrive';
+import { getCachedAccessToken, requestWorkspaceAccessToken } from '@/lib/workspace';
 
 /**
  * Académy — catalogue de procédures (PDF et vidéos) d'une agence.
@@ -100,7 +99,13 @@ export default function AcademyView() {
   const [ressources, setRessources] = useState<Ressource[]>([]);
   const [chargement, setChargement] = useState(true);
   const [recherche, setRecherche] = useState('');
-  const [rubriqueActive, setRubriqueActive] = useState<string | null>(null);
+  // Demande explicite (15 septembre) : « je veux créer des dossiers avec
+  // des sous-dossiers pour ne pas se perdre » — un seul niveau
+  // (rubriqueActive: string | null) ne suffit plus. `cheminDossiers` est
+  // le fil d'Ariane depuis la racine (ex. ['Vente', 'Mandats']) ; le
+  // dossier réellement affiché est toujours son dernier élément.
+  const [cheminDossiers, setCheminDossiers] = useState<string[]>([]);
+  const dossierActif = cheminDossiers[cheminDossiers.length - 1] ?? null;
   const [ouverte, setOuverte] = useState<Ressource | null>(null);
 
   // Validation de lecture : chacun coche pour lui. Les super admins voient en
@@ -133,6 +138,28 @@ export default function AcademyView() {
   // nom de la rubrique). Un dossier sans ligne reste un dossier valide,
   // simplement sans visuel.
   const [visuelsDossiers, setVisuelsDossiers] = useState<Map<string, string>>(new Map());
+  // Hiérarchie complète des dossiers (nom + parent_nom), chargée depuis
+  // `academy_folders` — un dossier peut désormais exister SANS aucune
+  // ressource dedans (un sous-dossier vide reste affiché), contrairement
+  // aux anciens dossiers qui n'existaient qu'à travers leurs ressources.
+  const [dossiers, setDossiers] = useState<{ nom: string; parent_nom: string | null; position: number }[]>([]);
+  // Demande explicite (16 septembre) : ordre manuel des dossiers, et
+  // dossier survolé par un AUTRE dossier en train d'être glissé (pour
+  // distinguer visuellement « je le range ici » de « je le range comme
+  // sous-dossier de celui-ci » — voir onDragOver/onDrop sur chaque
+  // dossier plus bas).
+  const [dossierSurvoleParDossier, setDossierSurvoleParDossier] = useState<string | null>(null);
+  // Demande explicite (14 septembre) : « je ne peux pas bouger l'ordre des
+  // dossiers » — le drag-and-drop ne faisait QUE nester (déposer sur un
+  // dossier = devenir son sous-dossier), il n'y avait aucun moyen de
+  // simplement réordonner par glisser-déposer, seulement les flèches
+  // Monter/Descendre planquées dans le menu "...". Ce state retient
+  // l'intention détectée pendant le survol — déposer sur le quart gauche/
+  // droit d'un dossier le RÉORDONNE avant/après lui, déposer au centre le
+  // NESTE dedans (comportement d'origine, conservé).
+  const [dossierSurvolIntention, setDossierSurvolIntention] = useState<'avant' | 'apres' | 'dans' | null>(null);
+  const entrerDossier = (nom: string) => setCheminDossiers((chemin) => [...chemin, nom]);
+  const allerAuNiveau = (index: number) => setCheminDossiers((chemin) => chemin.slice(0, index + 1));
   const [dossierEnDepot, setDossierEnDepot] = useState<string | null>(null);
   const [dossierSurvole, setDossierSurvole] = useState<string | null>(null);
   const [deplacementEnCours, setDeplacementEnCours] = useState<string | null>(null);
@@ -150,6 +177,59 @@ export default function AcademyView() {
   const [fond, setFond] = useState<string | null>(null);
   const [fondEnCours, setFondEnCours] = useState(false);
   const champFond = useRef<HTMLInputElement>(null);
+
+  // Demande explicite (15 septembre) : « fais en sorte que les fichiers
+  // déjà mis soient accessibles à tout le monde en lecture seule ». Les
+  // procédures déposées AVANT ce correctif vivent dans le Drive de
+  // l'agence, avec le partage par défaut du compte qui les a envoyées —
+  // pas forcément "Anyone with the link". Action ponctuelle, réservée aux
+  // super admins : ouvre chaque fichier Drive existant en lecture pour
+  // n'importe qui possédant le lien (Drive API permissions.create,
+  // type=anyone/role=reader), une bonne fois pour toutes — les nouveaux
+  // dépôts, eux, ne passent plus du tout par Drive (voir deposerFichier).
+  const [reparationEnCours, setReparationEnCours] = useState(false);
+  const rendrePublicsLesFichiersExistants = async () => {
+    const idsDrive = [...new Set(ressources.map((r) => r.drive_file_id).filter(Boolean))] as string[];
+    if (idsDrive.length === 0) {
+      toast.success('Aucun fichier Drive à ouvrir : déjà tout dans le nouveau stockage public.');
+      return;
+    }
+    if (!window.confirm(`Rendre les ${idsDrive.length} fichier(s) Drive existant(s) accessibles à tout le monde (lecture seule, sans connexion Google) ?`)) return;
+    setReparationEnCours(true);
+    try {
+      let token = getCachedAccessToken();
+      if (!token) token = await requestWorkspaceAccessToken();
+      if (!token) throw new Error('Connexion Google nécessaire pour cette réparation ponctuelle.');
+      let ok = 0;
+      const echecs: string[] = [];
+      for (const fileId of idsDrive) {
+        try {
+          const res = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions?supportsAllDrives=true&sendNotificationEmail=false`,
+            {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'anyone', role: 'reader' }),
+            }
+          );
+          if (res.ok) ok += 1;
+          else echecs.push(fileId);
+        } catch {
+          echecs.push(fileId);
+        }
+      }
+      if (echecs.length === 0) {
+        toast.success(`${ok} fichier(s) rendus accessibles à tous, sans connexion Google.`);
+      } else {
+        toast.error(`${ok} réussi(s), ${echecs.length} échec(s) — probablement des fichiers dont vous n'êtes pas propriétaire sur Drive.`);
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Impossible de lancer cette réparation.');
+    } finally {
+      setReparationEnCours(false);
+    }
+  };
 
   // Formulaire d'ajout / modification (super admins)
   const [formOuvert, setFormOuvert] = useState(false);
@@ -218,15 +298,17 @@ export default function AcademyView() {
       setValidationsParRessource(new Map());
     }
 
-    const { data: dossiers } = await supabase
+    const { data: lignesDossiers } = await supabase
       .from('academy_folders' as any)
-      .select('nom, image_url')
+      .select('nom, image_url, parent_nom, position')
       .eq('agency_id', activeAgency.id);
     const visuels = new Map<string, string>();
-    ((dossiers as unknown as { nom: string; image_url: string | null }[]) || []).forEach((d) => {
+    const dossiersCharges = ((lignesDossiers as unknown as { nom: string; image_url: string | null; parent_nom: string | null; position: number | null }[]) || []);
+    dossiersCharges.forEach((d) => {
       if (d.image_url) visuels.set(d.nom, d.image_url);
     });
     setVisuelsDossiers(visuels);
+    setDossiers(dossiersCharges.map((d) => ({ nom: d.nom, parent_nom: d.parent_nom, position: d.position ?? 0 })));
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -276,7 +358,7 @@ export default function AcademyView() {
 
   // Changer d'écran ou de dossier referme le menu : il n'a plus de sens une
   // fois qu'on a quitté la grille des dossiers.
-  useEffect(() => { setMenuDossier(null); }, [rubriqueActive, vueDossiers, activeAgency?.id]);
+  useEffect(() => { setMenuDossier(null); }, [dossierActif, vueDossiers, activeAgency?.id]);
 
   // Plein écran demandé le 2 septembre : « on peut cliquer sur un logo en
   // haut à droite, plein écran — sans partir sur une ouverture avec un onglet
@@ -342,16 +424,75 @@ export default function AcademyView() {
     }
   };
 
+  // Comptage par dossier (feuille), tous niveaux confondus — sert au
+  // datalist de création de ressource, au repli par défaut, et aux cibles
+  // du glisser-déposer (n'importe quel dossier reste une cible valide,
+  // quel que soit son niveau d'imbrication). Inclut les dossiers VIDES
+  // (sans ressource, désormais possibles grâce à `academy_folders`).
   const rubriques = useMemo(() => {
     const compte = new Map<string, number>();
+    dossiers.forEach((d) => compte.set(d.nom, 0));
     ressources.forEach((r) => compte.set(r.rubrique, (compte.get(r.rubrique) || 0) + 1));
     return Array.from(compte.entries()).sort((a, b) => a[0].localeCompare(b[0], 'fr'));
-  }, [ressources]);
+  }, [ressources, dossiers]);
+
+  // Demande explicite (15 septembre) : sous-dossiers — ne montre que les
+  // dossiers ENFANTS du dossier actuellement ouvert (ou les dossiers
+  // racine si on est à la racine). Un dossier historique, jamais créé
+  // explicitement (juste une rubrique tapée sur une ressource, sans ligne
+  // dans `academy_folders`), est traité comme un dossier racine — c'est
+  // déjà ce qu'il était avant ce correctif.
+  const dossiersEnfants = useMemo(() => {
+    const nomsConnus = new Set(dossiers.map((d) => d.nom));
+    const positions = new Map<string, number>();
+    const enfantsDirects = new Set<string>();
+    dossiers.filter((d) => d.parent_nom === dossierActif).forEach((d) => {
+      enfantsDirects.add(d.nom);
+      positions.set(d.nom, d.position);
+    });
+    if (dossierActif === null) {
+      // Rubriques orphelines (sans ligne academy_folders) : toujours à la
+      // racine, jamais sous un sous-dossier.
+      ressources.forEach((r) => {
+        if (!nomsConnus.has(r.rubrique)) enfantsDirects.add(r.rubrique);
+      });
+    }
+    // Demande explicite (14 septembre) : « quand les dossiers sont dedans
+    // le compteur dans le dossier reste à zéro » — le compteur affiché sur
+    // un dossier doit inclure les procédures de TOUS ses descendants (pas
+    // seulement celles directement rangées dedans), sinon un dossier qui ne
+    // contient que des sous-dossiers affiche toujours 0.
+    // Fonction locale (plutôt que estSoiMemeOuDescendant, définie plus bas
+    // dans le composant) : useMemo exécute ce calcul dès le premier rendu,
+    // avant que ce const-là n'existe encore (TDZ).
+    const estDescendantDe = (nomCandidat: string, nomAncetre: string): boolean => {
+      if (nomCandidat === nomAncetre) return true;
+      return dossiers
+        .filter((d) => d.parent_nom === nomAncetre)
+        .some((d) => estDescendantDe(nomCandidat, d.nom));
+    };
+    const compte = new Map<string, number>();
+    enfantsDirects.forEach((nom) => compte.set(nom, 0));
+    ressources.forEach((r) => {
+      for (const nom of enfantsDirects) {
+        if (estDescendantDe(r.rubrique, nom)) {
+          compte.set(nom, (compte.get(nom) || 0) + 1);
+        }
+      }
+    });
+    // Demande explicite (16 septembre) : « les mettre dans l'ordre que je
+    // veux » — tri par `position` (ordre manuel, voir deplacerDossierApres
+    // plus bas), l'alphabétique ne servant plus qu'à départager une égalité
+    // (ex. tous à 0 avant le premier rangement manuel).
+    return Array.from(compte.entries())
+      .map(([nom, nombre]) => ({ nom, nombre, position: positions.get(nom) ?? 0 }))
+      .sort((a, b) => a.position - b.position || a.nom.localeCompare(b.nom, 'fr'));
+  }, [ressources, dossiers, dossierActif]);
 
   const visibles = useMemo(() => {
     const q = recherche.trim().toLowerCase();
     return ressources.filter((r) => {
-      if (rubriqueActive && r.rubrique !== rubriqueActive) return false;
+      if (dossierActif && r.rubrique !== dossierActif) return false;
       if (!q) return true;
       return (
         r.titre.toLowerCase().includes(q) ||
@@ -360,12 +501,15 @@ export default function AcademyView() {
         r.rubrique.toLowerCase().includes(q)
       );
     });
-  }, [ressources, recherche, rubriqueActive]);
+  }, [ressources, recherche, dossierActif]);
 
   const reinitialiserFormulaire = () => {
     setEnModification(null);
     setTitre('');
-    setRubrique(rubriques[0]?.[0] || RUBRIQUES_SUGGEREES[0]);
+    // Pré-rempli sur le dossier actuellement ouvert, s'il y en a un — on
+    // ajoute presque toujours une procédure DEPUIS le dossier où on veut la
+    // ranger, pas en pigeant une rubrique au hasard dans la liste.
+    setRubrique(dossierActif || rubriques[0]?.[0] || RUBRIQUES_SUGGEREES[0]);
     setDescription('');
     setType('pdf');
     setDuree('');
@@ -412,6 +556,47 @@ export default function AcademyView() {
         error.message.toLowerCase().includes('bucket')
           ? "Le stockage des visuels n'existe pas encore : la migration 20260902180000 doit être appliquée."
           : error.message
+      );
+    }
+    return supabase.storage.from('academy').getPublicUrl(chemin).data.publicUrl;
+  };
+
+  /**
+   * Dépose un PDF (ou une vidéo) dans le MÊME compartiment public que les
+   * visuels de l'Académy — plus besoin du Drive de l'agence.
+   *
+   * Demande explicite (15 septembre) : « je voudrais simplement mettre des
+   * fichiers PDF à l'intérieur sans qu'il y ait une connexion particulière à
+   * Google, pour éviter la friction avec les personnes qui veulent se
+   * connecter dessus ». Jusqu'ici, `enregistrer` exigeait un token
+   * `requestWorkspaceAccessToken()` avant même de pouvoir déposer un fichier
+   * — la MOINDRE friction Google (token expiré, jamais connecté) bloquait
+   * l'ajout d'une simple procédure PDF, sans rapport avec Google Workspace.
+   * Le compartiment `academy` est déjà public en lecture (voir deposerImage
+   * ci-dessus) : un PDF y est donc directement consultable par tous, sans
+   * la moindre connexion.
+   */
+  const deposerFichier = async (fichier: File, prefixe: string): Promise<string> => {
+    // Signalé (15 septembre, erreur 400 au dépôt d'un PDF) : le vrai motif
+    // Supabase (taille dépassée, type refusé...) était masqué derrière un
+    // message générique. Vérification de taille faite ICI, avant l'envoi,
+    // avec un message exploitable — 200 Mo est la limite posée sur ce
+    // compartiment (voir la policy de stockage), donc inutile de tenter
+    // l'envoi d'un fichier plus gros pour se le faire dire par le serveur.
+    const LIMITE_OCTETS = 200 * 1024 * 1024;
+    if (fichier.size > LIMITE_OCTETS) {
+      throw new Error(`Ce fichier fait ${Math.round(fichier.size / 1024 / 1024)} Mo : la limite est de 200 Mo.`);
+    }
+    const extension = (fichier.name.split('.').pop() || 'pdf').toLowerCase();
+    const chemin = `${activeAgency?.id}/fichiers/${prefixe}.${extension}`;
+    const { error } = await supabase.storage
+      .from('academy')
+      .upload(chemin, fichier, { contentType: fichier.type || 'application/octet-stream', upsert: true });
+    if (error) {
+      throw new Error(
+        error.message.toLowerCase().includes('bucket')
+          ? "Le stockage des visuels n'existe pas encore : la migration 20260902180000 doit être appliquée."
+          : `Le dépôt du fichier a échoué : ${error.message}`
       );
     }
     return supabase.storage.from('academy').getPublicUrl(chemin).data.publicUrl;
@@ -542,6 +727,175 @@ export default function AcademyView() {
     toast.success(`Image retirée de « ${nomDossier} ».`);
   };
 
+  /** Un dossier est-il lui-même ou un descendant de `nomAncetre` ? Sert à
+   *  refuser un glisser-déposer qui créerait un cycle (déposer un dossier
+   *  DANS l'un de ses propres sous-dossiers). */
+  const estSoiMemeOuDescendant = (nomCandidat: string, nomAncetre: string): boolean => {
+    if (nomCandidat === nomAncetre) return true;
+    const enfants = dossiers.filter((d) => d.parent_nom === nomAncetre).map((d) => d.nom);
+    return enfants.some((enfant) => estSoiMemeOuDescendant(nomCandidat, enfant));
+  };
+
+  /**
+   * Glisser-déposer un dossier SUR un autre pour qu'il en devienne le
+   * sous-dossier — demande explicite (16 septembre) : « en tant que admin
+   * je puisse faire un drag and drop dans les dossiers pour que les sous
+   * dossiers se mettent ».
+   */
+  const deplacerDossierVersParent = async (nomSource: string, nomCibleParent: string) => {
+    if (nomSource === nomCibleParent) return;
+    if (estSoiMemeOuDescendant(nomCibleParent, nomSource)) {
+      toast.error('Impossible de déposer un dossier dans lui-même ou dans un de ses propres sous-dossiers.');
+      return;
+    }
+    try {
+      // Upsert plutôt qu'update : `nomSource` peut être un dossier « orphelin »
+      // (une rubrique qui n'a jamais eu sa propre ligne dans academy_folders,
+      // seulement portée par des ressources) — un update sur une ligne
+      // inexistante réussit silencieusement (0 ligne affectée, pas d'erreur),
+      // d'où le bug rapporté (« le message dit que c'est fait, mais le
+      // dossier ne se met pas dedans ») : le toast de succès mentait.
+      const existant = dossiers.find((d) => d.nom === nomSource);
+      const position = existant?.position ?? 1 + Math.max(0, ...dossiers.filter((d) => d.parent_nom === nomCibleParent).map((d) => d.position));
+      const { error } = await supabase
+        .from('academy_folders' as any)
+        .upsert(
+          {
+            agency_id: activeAgency!.id,
+            nom: nomSource,
+            parent_nom: nomCibleParent,
+            position,
+            updated_at: new Date().toISOString(),
+          } as any,
+          { onConflict: 'agency_id,nom' }
+        );
+      if (error) throw error;
+      setDossiers((prev) =>
+        existant
+          ? prev.map((d) => (d.nom === nomSource ? { ...d, parent_nom: nomCibleParent } : d))
+          : [...prev, { nom: nomSource, parent_nom: nomCibleParent, position }]
+      );
+      toast.success(`« ${nomSource} » est maintenant un sous-dossier de « ${nomCibleParent} ».`);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Impossible de déplacer ce dossier.');
+    }
+  };
+
+  /**
+   * Renumérote toute une fratrie de dossiers (même parent) selon l'ordre
+   * `nouvelOrdre` — position 0, 1, 2… dans cet ordre. Bug corrigé (14
+   * septembre, rapporté « je ne peux pas bouger l'ordre des dossiers » /
+   * « rien ne se passe ») : Monter/Descendre ÉCHANGEAIT deux positions,
+   * ce qui ne change rien de VISIBLE quand elles sont déjà égales — le
+   * cas par défaut, puisque tout dossier naît à position 0. Renumérote
+   * systématiquement toute la liste à la place. Écrit ligne par ligne
+   * (upsert séquentiel plutôt qu'un upsert groupé en un seul appel) pour
+   * ne dépendre d'aucune hypothèse sur le comportement d'un upsert
+   * multi-lignes vis-à-vis des lignes RLS/on_conflict.
+   */
+  const renumeroterFratrie = async (nouvelOrdre: string[]) => {
+    setDossiers((prev) => {
+      const parNom = new Map(prev.map((d) => [d.nom, d]));
+      nouvelOrdre.forEach((nom, i) => {
+        parNom.set(nom, { ...(parNom.get(nom) ?? { nom, parent_nom: dossierActif }), parent_nom: dossierActif, position: i });
+      });
+      return Array.from(parNom.values());
+    });
+    try {
+      for (let i = 0; i < nouvelOrdre.length; i++) {
+        const { error } = await supabase
+          .from('academy_folders' as any)
+          .upsert(
+            {
+              agency_id: activeAgency!.id,
+              nom: nouvelOrdre[i],
+              parent_nom: dossierActif,
+              position: i,
+              updated_at: new Date().toISOString(),
+            } as any,
+            { onConflict: 'agency_id,nom' }
+          );
+        if (error) throw error;
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Impossible d'enregistrer ce nouvel ordre.");
+      await charger();
+    }
+  };
+
+  /**
+   * Réordonne par glisser-déposer — déposer `nomSource` sur le quart
+   * gauche/droit de `nomCible` le place juste avant/après lui, parmi les
+   * dossiers actuellement affichés (donc déjà tous du même parent).
+   */
+  const reordonnerDossier = async (nomSource: string, nomCible: string, position: 'avant' | 'apres') => {
+    if (nomSource === nomCible) return;
+    const fratrie = dossiersEnfants.map((d) => d.nom).filter((n) => n !== nomSource);
+    let indexCible = fratrie.indexOf(nomCible);
+    if (indexCible === -1) return;
+    if (position === 'apres') indexCible += 1;
+    fratrie.splice(indexCible, 0, nomSource);
+    await renumeroterFratrie(fratrie);
+  };
+
+  /**
+   * Réordonne les dossiers de MÊME parent — demande explicite (16
+   * septembre) : « dans les sous dossiers, je veux pouvoir aussi les
+   * mettre dans l'ordre que je veux ». Fait glisser le dossier d'un cran
+   * dans la liste affichée, puis renumérote toute la fratrie.
+   */
+  const deplacerDossier = async (nom: string, direction: 'monter' | 'descendre') => {
+    const fratrie = dossiersEnfants.map((d) => d.nom);
+    const index = fratrie.indexOf(nom);
+    const indexVoisin = direction === 'monter' ? index - 1 : index + 1;
+    if (index === -1 || indexVoisin < 0 || indexVoisin >= fratrie.length) return;
+    [fratrie[index], fratrie[indexVoisin]] = [fratrie[indexVoisin], fratrie[index]];
+    await renumeroterFratrie(fratrie);
+  };
+
+  /**
+   * Crée un sous-dossier VIDE sous `parentNom` — demande explicite (15
+   * septembre) : « des dossiers avec des sous-dossiers pour ne pas se
+   * perdre ». Contrairement aux dossiers historiques (qui n'existaient
+   * qu'à travers une ressource déjà déposée dedans), un sous-dossier créé
+   * ici vit tout seul dans `academy_folders`, avec ou sans procédure —
+   * indispensable pour organiser à l'avance avant d'y ranger quoi que ce
+   * soit.
+   */
+  const creerSousDossier = async (parentNom: string | null) => {
+    const nom = window.prompt(
+      parentNom ? `Nom du sous-dossier, dans « ${parentNom} » :` : 'Nom du nouveau dossier :'
+    )?.trim();
+    if (!nom) return;
+    if (rubriques.some(([n]) => n === nom)) {
+      toast.error(`Un dossier « ${nom} » existe déjà (les noms de dossiers sont uniques, quel que soit leur niveau).`);
+      return;
+    }
+    // Nouveau dossier toujours en dernière position parmi ses futurs
+    // frères et sœurs, plutôt qu'à 0 (qui le mettrait en tête, au hasard
+    // de l'ordre alphabétique parmi ceux jamais réordonnés manuellement).
+    const positionInitiale =
+      1 + Math.max(0, ...dossiers.filter((d) => d.parent_nom === parentNom).map((d) => d.position));
+    try {
+      const { error } = await supabase
+        .from('academy_folders' as any)
+        .insert({ agency_id: activeAgency!.id, nom, parent_nom: parentNom, position: positionInitiale } as any);
+      if (error) throw error;
+      setDossiers((prev) => [...prev, { nom, parent_nom: parentNom, position: positionInitiale }]);
+      if (parentNom) entrerDossier(nom);
+      toast.success(parentNom ? `Sous-dossier « ${nom} » créé dans « ${parentNom} ».` : `Dossier « ${nom} » créé.`);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(
+        String(e?.message || '').includes('parent_nom')
+          ? "Les sous-dossiers ne sont pas encore en place : la migration 20260915120000 doit être appliquée."
+          : e?.message || 'Impossible de créer ce sous-dossier.'
+      );
+    }
+  };
+
   /**
    * Renomme un dossier.
    *
@@ -564,11 +918,24 @@ export default function AcademyView() {
         .eq('agency_id', activeAgency!.id)
         .eq('rubrique', ancien);
       if (error) throw error;
-      await supabase
-        .from('academy_folders' as any)
-        .update({ nom: nouveau, updated_at: new Date().toISOString() } as any)
-        .eq('agency_id', activeAgency!.id)
-        .eq('nom', ancien);
+      // Upsert (même raison qu'ailleurs) : un dossier orphelin n'a pas de
+      // ligne à renommer via UPDATE (0 ligne affectée, pas d'erreur) — il
+      // faut créer sa ligne directement sous le nouveau nom.
+      const existant = dossiers.find((d) => d.nom === ancien);
+      if (existant) {
+        await supabase
+          .from('academy_folders' as any)
+          .update({ nom: nouveau, updated_at: new Date().toISOString() } as any)
+          .eq('agency_id', activeAgency!.id)
+          .eq('nom', ancien);
+      } else {
+        await supabase
+          .from('academy_folders' as any)
+          .upsert(
+            { agency_id: activeAgency!.id, nom: nouveau, parent_nom: null, position: 0, updated_at: new Date().toISOString() } as any,
+            { onConflict: 'agency_id,nom' }
+          );
+      }
       setRessources((prev) => prev.map((r) => (r.rubrique === ancien ? { ...r, rubrique: nouveau } : r)));
       setVisuelsDossiers((prev) => {
         const suivant = new Map(prev);
@@ -577,7 +944,22 @@ export default function AcademyView() {
         if (image) suivant.set(nouveau, image);
         return suivant;
       });
-      if (rubriqueActive === ancien) setRubriqueActive(nouveau);
+      // La base met déjà à jour le `parent_nom` des sous-dossiers (ON
+      // UPDATE CASCADE) — on répercute la même chose ici pour ne pas
+      // attendre un rechargement complet avant de les revoir sous le
+      // dossier renommé.
+      setDossiers((prev) =>
+        existant
+          ? prev.map((d) =>
+              d.nom === ancien
+                ? { ...d, nom: nouveau }
+                : d.parent_nom === ancien
+                  ? { ...d, parent_nom: nouveau }
+                  : d
+            )
+          : [...prev, { nom: nouveau, parent_nom: null, position: 0 }]
+      );
+      setCheminDossiers((chemin) => chemin.map((n) => (n === ancien ? nouveau : n)));
       toast.success(`Dossier renommé « ${nouveau} ».`);
     } catch (e: any) {
       console.error(e);
@@ -591,10 +973,19 @@ export default function AcademyView() {
    * écrire serait une bien mauvaise surprise ; elles restent donc, ailleurs.
    */
   const supprimerDossier = async (nomDossier: string, nombre: number) => {
-    const message =
+    const sousDossiers = dossiers.filter((d) => d.parent_nom === nomDossier).length;
+    const phraseProcedures =
       nombre > 0
-        ? `Supprimer le dossier « ${nomDossier} » ?\n\nSes ${nombre} procédure${nombre > 1 ? 's' : ''} ne ${nombre > 1 ? 'seront' : 'sera'} pas supprimée${nombre > 1 ? 's' : ''} : elle${nombre > 1 ? 's' : ''} rejoin${nombre > 1 ? 'dront' : 'dra'} le dossier « Général ».`
-        : `Supprimer le dossier vide « ${nomDossier} » ?`;
+        ? `Ses ${nombre} procédure${nombre > 1 ? 's' : ''} ne ${nombre > 1 ? 'seront' : 'sera'} pas supprimée${nombre > 1 ? 's' : ''} : elle${nombre > 1 ? 's' : ''} rejoin${nombre > 1 ? 'dront' : 'dra'} le dossier « Général ».`
+        : '';
+    const phraseSousDossiers =
+      sousDossiers > 0
+        ? ` ${sousDossiers > 1 ? 'Ses' : 'Son'} ${sousDossiers} sous-dossier${sousDossiers > 1 ? 's' : ''} ne ${sousDossiers > 1 ? 'seront' : 'sera'} pas supprimé${sousDossiers > 1 ? 's' : ''} non plus : ${sousDossiers > 1 ? 'ils remonteront' : 'il remontera'} à la racine.`
+        : '';
+    const message =
+      nombre === 0 && sousDossiers === 0
+        ? `Supprimer le dossier vide « ${nomDossier} » ?`
+        : `Supprimer le dossier « ${nomDossier} » ?\n\n${phraseProcedures}${phraseSousDossiers}`;
     if (!window.confirm(message)) return;
     try {
       if (nombre > 0) {
@@ -612,7 +1003,20 @@ export default function AcademyView() {
         .eq('nom', nomDossier);
       setRessources((prev) => prev.map((r) => (r.rubrique === nomDossier ? { ...r, rubrique: 'Général' } : r)));
       setVisuelsDossiers((prev) => { const suivant = new Map(prev); suivant.delete(nomDossier); return suivant; });
-      if (rubriqueActive === nomDossier) setRubriqueActive(null);
+      // Non destructif comme pour les ressources : les SOUS-dossiers du
+      // dossier supprimé remontent à la racine (la base le fait déjà via
+      // ON DELETE SET NULL), au lieu de disparaître avec lui.
+      setDossiers((prev) =>
+        prev
+          .filter((d) => d.nom !== nomDossier)
+          .map((d) => (d.parent_nom === nomDossier ? { ...d, parent_nom: null } : d))
+      );
+      // Si le dossier supprimé était dans le chemin courant, on remonte
+      // juste avant lui plutôt que de tout réinitialiser à la racine.
+      setCheminDossiers((chemin) => {
+        const position = chemin.indexOf(nomDossier);
+        return position === -1 ? chemin : chemin.slice(0, position);
+      });
       toast.success(
         nombre > 0
           ? `Dossier supprimé. ${nombre} procédure${nombre > 1 ? 's' : ''} déplacée${nombre > 1 ? 's' : ''} vers « Général ».`
@@ -640,19 +1044,14 @@ export default function AcademyView() {
 
     setEnregistrement(true);
     try {
-      let driveId: string | null = enModification?.drive_file_id ?? null;
-      let driveLien: string | null = enModification?.drive_web_view_link ?? null;
-
-      if (fichier) {
-        // Même circuit que le Coffre Documents : le fichier part dans le Drive
-        // de l'agence, le CRM ne garde que le lien.
-        let token = getCachedAccessToken();
-        if (!token) token = await requestWorkspaceAccessToken();
-        if (!token) throw new Error('Connexion Google Drive nécessaire pour déposer un fichier.');
-        const envoi = await uploadDocumentToDrive(token, fichier, `${activeAgency.name} — Académy`);
-        driveId = envoi.fileId;
-        driveLien = envoi.fileUrl;
-      }
+      // Demande explicite (15 septembre) : plus de dépôt dans le Drive de
+      // l'agence (qui exigeait une connexion Google pour CHAQUE ajout) — le
+      // fichier part directement dans le compartiment public `academy`
+      // (voir deposerFichier ci-dessus), accessible à tous en lecture seule
+      // sans la moindre connexion. drive_file_id/drive_web_view_link ne sont
+      // plus renseignés pour un nouvel envoi (conservés tels quels si on
+      // modifie une ressource sans déposer de nouveau fichier).
+      const lienUploade = fichier ? await deposerFichier(fichier, `fichier-${Date.now()}`) : null;
 
       const imageUrl = couverture ? await deposerImage(couverture, 'couverture') : couvertureActuelle;
       const portraitUrl = portrait ? await deposerImage(portrait, 'portrait') : portraitActuel;
@@ -663,9 +1062,9 @@ export default function AcademyView() {
         titre: titre.trim(),
         description: description.trim() || null,
         type,
-        drive_file_id: driveId,
-        drive_web_view_link: driveLien,
-        external_url: lienExterne.trim() || null,
+        drive_file_id: fichier ? null : (enModification?.drive_file_id ?? null),
+        drive_web_view_link: fichier ? null : (enModification?.drive_web_view_link ?? null),
+        external_url: lienUploade || lienExterne.trim() || null,
         duree: duree.trim() || null,
         image_url: imageUrl,
         auteur: auteur.trim() || null,
@@ -693,24 +1092,14 @@ export default function AcademyView() {
       await charger();
     } catch (e: any) {
       console.error(e);
-      if (e?.code === 'google-reconnect' || isGoogleAuthError(e)) {
-        // Le fichier n'est pas parti : l'accès Google a expiré et n'a pas pu
-        // être renouvelé en silence. Un clic pour se reconnecter, la page
-        // revient ensuite ici même.
-        toast.error(e?.message || "Votre accès Google Drive a expiré.", {
-          duration: 12000,
-          action: { label: 'Reconnecter Google', onClick: () => { void reconnectGoogleWorkspace(); } },
-        });
-      } else {
-        toast.error(e?.message || "Impossible d'enregistrer cette ressource.");
-      }
+      toast.error(e?.message || "Impossible d'enregistrer cette ressource.");
     } finally {
       setEnregistrement(false);
     }
   };
 
   const supprimer = async (r: Ressource) => {
-    if (!window.confirm(`Supprimer « ${r.titre} » de l'Académy ? Le fichier reste dans le Drive.`)) return;
+    if (!window.confirm(`Supprimer « ${r.titre} » de l'Académy ? Le fichier reste disponible via son lien direct.`)) return;
     const { data, error } = await supabase
       .from('academy_resources' as any)
       .delete()
@@ -743,11 +1132,16 @@ export default function AcademyView() {
     );
   }
 
-  // Deux niveaux, comme demandé : d'abord des DOSSIERS, puis les formations
-  // qu'ils contiennent. La recherche, elle, court-circuite les dossiers : qui
-  // sait ce qu'il cherche ne veut pas ouvrir trois classeurs.
+  // Dossiers avec sous-dossiers, comme demandé (15 septembre) : « pour ne
+  // pas se perdre ». La recherche, elle, court-circuite toujours les
+  // dossiers : qui sait ce qu'il cherche ne veut pas ouvrir trois classeurs.
   const enRecherche = recherche.trim().length > 0;
-  const auNiveauDossiers = rubriqueActive === null && !enRecherche;
+  // À la racine : QUE la grille des dossiers (comme avant ce correctif).
+  const auNiveauDossiers = dossierActif === null && !enRecherche;
+  // Dans un dossier (peu importe sa profondeur) : ses éventuels
+  // sous-dossiers d'abord, puis ses propres procédures juste en dessous —
+  // les deux dans le même écran, sans écran intermédiaire supplémentaire.
+  const dansUnDossier = dossierActif !== null && !enRecherche;
 
   return (
     <div
@@ -835,6 +1229,19 @@ export default function AcademyView() {
                   <Plus className="w-4 h-4" />
                   Ajouter une procédure
                 </button>
+                {/* Dossier racine, VIDE si besoin — demande explicite (15
+                    septembre) : « des dossiers avec des sous-dossiers pour
+                    ne pas se perdre ». Le sous-dossier, lui, se crée depuis
+                    l'intérieur d'un dossier (voir le fil d'Ariane). */}
+                {auNiveauDossiers && (
+                  <button
+                    onClick={() => void creerSousDossier(null)}
+                    className="px-3.5 py-2.5 rounded-full bg-white/90 hover:bg-white border border-black/10 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-md"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Nouveau dossier
+                  </button>
+                )}
                 <input
                   ref={champCouvertureRapide}
                   type="file"
@@ -881,6 +1288,17 @@ export default function AcademyView() {
                   {fondEnCours ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
                   Image de fond
                 </button>
+                {ressources.some((r) => r.drive_file_id) && (
+                  <button
+                    onClick={() => void rendrePublicsLesFichiersExistants()}
+                    disabled={reparationEnCours}
+                    title="Ouvrir en lecture les anciens fichiers Drive, sans connexion Google pour les lire"
+                    className="px-3.5 py-2.5 rounded-full bg-white/90 hover:bg-white border border-black/10 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-md disabled:opacity-60"
+                  >
+                    {reparationEnCours ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />}
+                    Rendre les fichiers existants publics
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -905,23 +1323,125 @@ export default function AcademyView() {
             </div>
           )}
 
+          {/* ── Le contenu d'un dossier, à N'IMPORTE QUEL niveau ──────────
+              Demande explicite (15 septembre) : « des dossiers avec des
+              sous-dossiers pour ne pas se perdre » — fil d'Ariane cliquable
+              à chaque niveau (au lieu d'un seul retour "Tous les dossiers"),
+              pour toujours savoir où l'on est ET pouvoir remonter d'un
+              coup à n'importe quel palier, pas seulement à la racine.
+              Affiché AVANT la grille des sous-dossiers ci-dessous : on sait
+              où l'on est avant de voir ce qu'il y a dedans. */}
+          {!auNiveauDossiers && (
+            <div className="mt-8 flex flex-wrap items-center gap-x-1.5 gap-y-2">
+              <button
+                onClick={() => { setCheminDossiers([]); setRecherche(''); }}
+                className="px-3.5 py-2 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 text-xs font-bold shadow-sm"
+              >
+                ← Tous les dossiers
+              </button>
+              {!enRecherche && cheminDossiers.map((nom, index) => (
+                <React.Fragment key={nom}>
+                  <span className="text-slate-400 text-xs">/</span>
+                  <button
+                    onClick={() => allerAuNiveau(index)}
+                    disabled={index === cheminDossiers.length - 1}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold ${
+                      index === cheminDossiers.length - 1
+                        ? 'text-slate-900'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    {nom}
+                  </button>
+                </React.Fragment>
+              ))}
+              {enRecherche && (
+                <h2 className="text-lg font-black text-slate-900 truncate">
+                  Résultats pour « {recherche.trim()} »
+                </h2>
+              )}
+              <span className="text-xs text-slate-500 ml-1">
+                {visibles.length} procédure{visibles.length > 1 ? 's' : ''}
+              </span>
+              {/* Sous-dossier : créable à n'importe quel niveau, y compris
+                  vide — la grille des dossiers ci-dessus n'existait
+                  jusqu'ici QU'à travers une ressource déjà déposée dedans. */}
+              {estSuperAdmin && !enRecherche && dossierActif && (
+                <button
+                  onClick={() => void creerSousDossier(dossierActif)}
+                  className="ml-auto px-3.5 py-2 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 text-xs font-bold shadow-sm flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Sous-dossier
+                </button>
+              )}
+            </div>
+          )}
+
           {/* ── NIVEAU 1 : les dossiers ─────────────────────────────────
               Demandé : « un vrai dossier jaune comme on a l'habitude de voir,
               et quand on clique dedans on accède aux différentes formations ».
               Le dossier est dessiné en CSS — onglet, corps, rabat avant — pour
               rester net à toutes les tailles et suivre le thème sans image. */}
-          {auNiveauDossiers && !chargement && rubriques.length > 0 && (
+          {(auNiveauDossiers || dansUnDossier) && !chargement && dossiersEnfants.length > 0 && (
             vueDossiers === 'grille' ? (
-              <div className="mt-8 grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-x-4 gap-y-6">
-                {rubriques.map(([nom, nombre]) => {
+              <div className={`grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-x-4 gap-y-6 ${auNiveauDossiers ? 'mt-8' : 'mt-4'}`}>
+                {dossiersEnfants.map(({ nom, nombre }, index) => {
                   const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
                   return (
                     <button
                       key={nom}
-                      onClick={() => setRubriqueActive(nom)}
-                      className="group flex flex-col items-center focus:outline-none"
+                      onClick={() => entrerDossier(nom)}
+                      // Demande explicite (16 septembre) : « drag and drop
+                      // dans les dossiers pour que les sous dossiers se
+                      // mettent ». Puis (14 septembre) : « je ne peux pas
+                      // bouger l'ordre des dossiers » — déposer sur le quart
+                      // gauche/droit d'un dossier le réordonne avant/après
+                      // lui ; déposer au centre le neste dedans, comme avant.
+                      draggable={estSuperAdmin}
+                      onDragStart={(e) => { e.dataTransfer.setData('text/plain', `dossier:${nom}`); e.stopPropagation(); }}
+                      onDragOver={(e) => {
+                        if (!estSuperAdmin) return;
+                        e.preventDefault();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const fraction = (e.clientX - rect.left) / rect.width;
+                        setDossierSurvoleParDossier(nom);
+                        setDossierSurvolIntention(fraction < 0.25 ? 'avant' : fraction > 0.75 ? 'apres' : 'dans');
+                      }}
+                      onDragLeave={() => {
+                        setDossierSurvoleParDossier((v) => (v === nom ? null : v));
+                        setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDossierSurvoleParDossier(null);
+                        const intention = dossierSurvolIntention;
+                        setDossierSurvolIntention(null);
+                        const donnee = e.dataTransfer.getData('text/plain');
+                        if (donnee.startsWith('dossier:')) {
+                          const nomSource = donnee.slice('dossier:'.length);
+                          if (intention === 'avant' || intention === 'apres') {
+                            void reordonnerDossier(nomSource, nom, intention);
+                          } else {
+                            void deplacerDossierVersParent(nomSource, nom);
+                          }
+                        } else {
+                          const ressource = ressources.find((r) => r.id === donnee);
+                          if (ressource) void deplacerVers(ressource, nom);
+                        }
+                      }}
+                      className={`group relative flex flex-col items-center focus:outline-none rounded-xl transition-colors ${
+                        dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans'
+                          ? 'ring-2 ring-[#E0A21A] ring-offset-2 ring-offset-[#F7F1E5]'
+                          : ''
+                      }`}
                       title={`${nom} — ${nombre} procédure${nombre > 1 ? 's' : ''}`}
                     >
+                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'avant' && (
+                        <span className="absolute -left-2 top-0 bottom-0 w-1 rounded-full bg-[#E0A21A]" />
+                      )}
+                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'apres' && (
+                        <span className="absolute -right-2 top-0 bottom-0 w-1 rounded-full bg-[#E0A21A]" />
+                      )}
                       {/* Dossier réduit : signalé « beaucoup trop gros ». Il
                           reste reconnaissable — onglet, corps, rabat — mais
                           plusieurs tiennent maintenant sur une ligne. */}
@@ -1007,6 +1527,29 @@ export default function AcademyView() {
                               Retirer l'image
                             </span>
                           )}
+                          {/* Demande explicite (16 septembre) : « dans les
+                              sous dossiers, je veux pouvoir aussi les
+                              mettre dans l'ordre que je veux » — échange
+                              de position avec le voisin immédiat, désactivé
+                              en bout de rangée. */}
+                          <span
+                            role="button"
+                            aria-disabled={index === 0}
+                            onClick={() => { if (index > 0) { setMenuDossier(null); void deplacerDossier(nom, 'monter'); } }}
+                            className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === 0 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-100'}`}
+                          >
+                            <ArrowUp className="w-3.5 h-3.5 text-slate-500" />
+                            Monter
+                          </span>
+                          <span
+                            role="button"
+                            aria-disabled={index === dossiersEnfants.length - 1}
+                            onClick={() => { if (index < dossiersEnfants.length - 1) { setMenuDossier(null); void deplacerDossier(nom, 'descendre'); } }}
+                            className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === dossiersEnfants.length - 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-100'}`}
+                          >
+                            <ArrowDown className="w-3.5 h-3.5 text-slate-500" />
+                            Descendre
+                          </span>
                           <span
                             role="button"
                             onClick={() => { setMenuDossier(null); void renommerDossier(nom); }}
@@ -1030,15 +1573,55 @@ export default function AcademyView() {
                 })}
               </div>
             ) : (
-              <div className="mt-8 max-w-3xl rounded-2xl bg-white/85 border border-black/10 shadow-lg divide-y divide-black/5 overflow-hidden">
-                {rubriques.map(([nom, nombre]) => {
+              <div className={`max-w-3xl rounded-2xl bg-white/85 border border-black/10 shadow-lg divide-y divide-black/5 overflow-hidden ${auNiveauDossiers ? 'mt-8' : 'mt-4'}`}>
+                {dossiersEnfants.map(({ nom, nombre }, index) => {
                   const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
                   return (
                     <button
                       key={nom}
-                      onClick={() => setRubriqueActive(nom)}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#E0A21A]/10 transition-colors text-left"
+                      onClick={() => entrerDossier(nom)}
+                      draggable={estSuperAdmin}
+                      onDragStart={(e) => { e.dataTransfer.setData('text/plain', `dossier:${nom}`); e.stopPropagation(); }}
+                      onDragOver={(e) => {
+                        if (!estSuperAdmin) return;
+                        e.preventDefault();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const fraction = (e.clientY - rect.top) / rect.height;
+                        setDossierSurvoleParDossier(nom);
+                        setDossierSurvolIntention(fraction < 0.25 ? 'avant' : fraction > 0.75 ? 'apres' : 'dans');
+                      }}
+                      onDragLeave={() => {
+                        setDossierSurvoleParDossier((v) => (v === nom ? null : v));
+                        setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDossierSurvoleParDossier(null);
+                        const intention = dossierSurvolIntention;
+                        setDossierSurvolIntention(null);
+                        const donnee = e.dataTransfer.getData('text/plain');
+                        if (donnee.startsWith('dossier:')) {
+                          const nomSource = donnee.slice('dossier:'.length);
+                          if (intention === 'avant' || intention === 'apres') {
+                            void reordonnerDossier(nomSource, nom, intention);
+                          } else {
+                            void deplacerDossierVersParent(nomSource, nom);
+                          }
+                        } else {
+                          const ressource = ressources.find((r) => r.id === donnee);
+                          if (ressource) void deplacerVers(ressource, nom);
+                        }
+                      }}
+                      className={`relative w-full flex items-center gap-3 px-4 py-3 hover:bg-[#E0A21A]/10 transition-colors text-left ${
+                        dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans' ? 'bg-[#E0A21A]/20' : ''
+                      }`}
                     >
+                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'avant' && (
+                        <span className="absolute inset-x-2 -top-px h-0.5 rounded-full bg-[#E0A21A]" />
+                      )}
+                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'apres' && (
+                        <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#E0A21A]" />
+                      )}
                       {/* Même dossier, en miniature : la liste garde le repère
                           visuel, elle ne le remplace pas par une puce. */}
                       <span className="relative w-9 h-7 shrink-0">
@@ -1058,6 +1641,22 @@ export default function AcademyView() {
                       </span>
                       {estSuperAdmin && (
                         <>
+                          <span
+                            role="button"
+                            title="Monter"
+                            onClick={(e) => { e.stopPropagation(); if (index > 0) void deplacerDossier(nom, 'monter'); }}
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center ${index === 0 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-800 hover:bg-black/5'}`}
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </span>
+                          <span
+                            role="button"
+                            title="Descendre"
+                            onClick={(e) => { e.stopPropagation(); if (index < dossiersEnfants.length - 1) void deplacerDossier(nom, 'descendre'); }}
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center ${index === dossiersEnfants.length - 1 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-800 hover:bg-black/5'}`}
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </span>
                           <span
                             role="button"
                             title="Renommer le dossier"
@@ -1083,24 +1682,6 @@ export default function AcademyView() {
             )
           )}
 
-          {/* ── NIVEAU 2 : le contenu d'un dossier ─────────────────────── */}
-          {!auNiveauDossiers && (
-            <div className="mt-8 flex items-center gap-3">
-              <button
-                onClick={() => { setRubriqueActive(null); setRecherche(''); }}
-                className="px-3.5 py-2 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 text-xs font-bold shadow-sm"
-              >
-                ← Tous les dossiers
-              </button>
-              <h2 className="text-lg font-black text-slate-900 truncate">
-                {enRecherche ? `Résultats pour « ${recherche.trim()} »` : rubriqueActive}
-              </h2>
-              <span className="text-xs text-slate-500">
-                {visibles.length} procédure{visibles.length > 1 ? 's' : ''}
-              </span>
-            </div>
-          )}
-
           {/* Glisser-déposer entre dossiers — « de façon à ce que si on s'est
               trompé, on puisse avoir une solution de repli ». Le déplacement
               ne fait que changer le dossier d'une procédure : rien n'est copié
@@ -1111,7 +1692,7 @@ export default function AcademyView() {
                 Glisser une procédure vers
               </span>
               {rubriques
-                .filter(([nom]) => nom !== rubriqueActive)
+                .filter(([nom]) => nom !== dossierActif)
                 .map(([nom, nombre]) => (
                   <span
                     key={nom}
@@ -1585,7 +2166,7 @@ export default function AcademyView() {
                 >
                   <Upload className="w-4 h-4 text-[#F7BC5F] shrink-0" />
                   <span className="truncate">
-                    {fichier ? fichier.name : "Déposer un fichier dans le Drive de l'agence"}
+                    {fichier ? fichier.name : 'Déposer un PDF ou une vidéo'}
                   </span>
                 </button>
               </div>
