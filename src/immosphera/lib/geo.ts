@@ -1,8 +1,7 @@
-// v4 : re-invalide le cache — le premier correctif (v3, centroïde
-// géométrique de commune) restait imprécis pour les communes tentaculaires
-// comme Narbonne (« c'était mieux avant »), remplacé par le point officiel
-// du centre-ville.
-const CACHE_KEY = "immosphera360-geocode-cache-v4";
+// v5 : re-invalide le cache — bascule sur Google Geocoding (clé fournie par
+// le client) pour les codes postaux, les APIs françaises gratuites restant
+// imprécises pour certaines communes (« toujours aussi mauvais »).
+const CACHE_KEY = "immosphera360-geocode-cache-v5";
 
 export interface GeoPoint {
   lat: number;
@@ -103,28 +102,48 @@ export async function geocodeCity(value: string, forceRefresh = false, codePosta
 export const geocodeAddress = geocodeCity;
 
 /**
+ * Géocode un code postal via l'API Google Geocoding (components=postal_code)
+ * — nettement plus fiable en pratique que les APIs françaises gratuites pour
+ * ce cas précis (voir geocodePostalCode ci-dessous). Clé fournie par le
+ * client, VITE_GOOGLE_MAPS_API_KEY, jamais commitée (voir .env.example).
+ */
+async function geocodePostalCodeGoogle(codePostal: string): Promise<GeoPoint | null> {
+  const cleGoogle = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+  if (!cleGoogle) return null;
+  try {
+    const params = new URLSearchParams({ components: `postal_code:${codePostal}|country:FR`, key: cleGoogle });
+    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json?.status !== "OK") return null;
+    const location = json?.results?.[0]?.geometry?.location;
+    if (typeof location?.lat !== "number" || typeof location?.lng !== "number") return null;
+    const point: GeoPoint = { lat: location.lat, lng: location.lng };
+    return isValidFrancePoint(point) ? point : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Géocode un code postal en un point de repère fiable — utilisé pour tracer
  * le secteur d'un conseiller (src/immosphera/pages/Secteurs.tsx) sous forme
  * de cercles colorés, faute de vraies limites de code postal disponibles.
  *
- * Deux essais précédents ratés (14 septembre, captures à l'appui) :
+ * Deux essais précédents ratés avec des APIs françaises gratuites (14
+ * septembre, captures à l'appui) :
  * 1. Interroger l'API Adresse (recherche plein texte, faite pour des
  *    adresses) avec le code postal NU comme requête ("q=11100") — sans rien
  *    de concret à matcher, elle renvoyait le résultat texte le plus proche,
  *    pas la commune (cercle tombé près de l'aérodrome de Narbonne).
  * 2. Utiliser le "centre" officiel (geo.api.gouv.fr) de la ou des commune(s)
- *    portant ce code postal — c'est le centroïde GÉOMÉTRIQUE de tout le
- *    territoire communal, pas le centre-ville : pour une commune tentaculaire
- *    comme Narbonne (dont le territoire s'étend jusqu'à la mer, Narbonne-
- *    Plage), ce centroïde tombe en pleine campagne au sud, loin de la ville
- *    elle-même (« c'était mieux avant »).
+ *    portant ce code postal, PUIS regéocoder son nom en mode "municipality"
+ *    — toujours tombé au même endroit erroné (« toujours aussi mauvais »).
  *
- * Solution : demander à geo.api.gouv.fr le NOM de la commune la plus
- * peuplée portant ce code postal (donnée fiable, faite pour ça), puis
- * géocoder ce NOM via l'API Adresse en mode "municipality" — qui renvoie,
- * elle, le point de repère officiel du centre-ville (chef-lieu), pas un
- * centroïde de territoire. Le meilleur des deux APIs plutôt que l'une ou
- * l'autre détournée de son usage.
+ * Google Geocoding (voir geocodePostalCodeGoogle) est essayé EN PREMIER
+ * quand une clé est configurée — nettement plus fiable en pratique pour ce
+ * cas précis. Sans clé (ou si Google échoue), on retombe sur la chaîne
+ * geo.api.gouv.fr + API Adresse plutôt que de ne rien afficher du tout.
  */
 export async function geocodePostalCode(codePostal: string, forceRefresh = false): Promise<GeoPoint | null> {
   const code = codePostal.trim();
@@ -133,6 +152,13 @@ export async function geocodePostalCode(codePostal: string, forceRefresh = false
   const cache = getCache();
   const key = `cp:${code}`;
   if (!forceRefresh && cache[key]) return cache[key];
+
+  const viaGoogle = await geocodePostalCodeGoogle(code);
+  if (viaGoogle) {
+    cache[key] = viaGoogle;
+    setCache(cache);
+    return viaGoogle;
+  }
 
   try {
     const params = new URLSearchParams({ codePostal: code, fields: "nom,population", format: "json" });
