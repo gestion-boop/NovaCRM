@@ -1,7 +1,9 @@
-// v5 : re-invalide le cache — bascule sur Google Geocoding (clé fournie par
-// le client) pour les codes postaux, les APIs françaises gratuites restant
-// imprécises pour certaines communes (« toujours aussi mauvais »).
-const CACHE_KEY = "immosphera360-geocode-cache-v5";
+// v6 : re-invalide le cache — les codes postaux testés pendant que la clé
+// Google était encore mal configurée (restriction referer incompatible
+// avec l'API Geocoding, puis API non activée) avaient mis en cache le
+// mauvais résultat de repli, jamais réessayé depuis puisque la clé de
+// cache existait déjà (« même pour le code c'est mis à côté »).
+const CACHE_KEY = "immosphera360-geocode-cache-v6";
 
 export interface GeoPoint {
   lat: number;
@@ -102,27 +104,53 @@ export async function geocodeCity(value: string, forceRefresh = false, codePosta
 export const geocodeAddress = geocodeCity;
 
 /**
- * Géocode un code postal via l'API Google Geocoding (components=postal_code)
- * — nettement plus fiable en pratique que les APIs françaises gratuites pour
- * ce cas précis (voir geocodePostalCode ci-dessous). Clé fournie par le
- * client, VITE_GOOGLE_MAPS_API_KEY, jamais commitée (voir .env.example).
+ * Appel générique à l'API Google Geocoding — clé fournie par le client,
+ * VITE_GOOGLE_MAPS_API_KEY, jamais commitée (voir .env.example). `params`
+ * porte soit `address` (nom de ville), soit `components=postal_code:...`
+ * (code postal), voir les deux wrappers ci-dessous.
  */
-async function geocodePostalCodeGoogle(codePostal: string): Promise<GeoPoint | null> {
+async function geocodeGoogle(params: URLSearchParams): Promise<(GeoPoint & { postcode: string | null }) | null> {
   const cleGoogle = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
   if (!cleGoogle) return null;
   try {
-    const params = new URLSearchParams({ components: `postal_code:${codePostal}|country:FR`, key: cleGoogle });
+    params.set("key", cleGoogle);
     const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`);
     if (!res.ok) return null;
     const json = await res.json();
     if (json?.status !== "OK") return null;
-    const location = json?.results?.[0]?.geometry?.location;
+    const resultat = json?.results?.[0];
+    const location = resultat?.geometry?.location;
     if (typeof location?.lat !== "number" || typeof location?.lng !== "number") return null;
     const point: GeoPoint = { lat: location.lat, lng: location.lng };
-    return isValidFrancePoint(point) ? point : null;
+    if (!isValidFrancePoint(point)) return null;
+    const postcode: string | null =
+      resultat?.address_components?.find((c: any) => c.types?.includes("postal_code"))?.long_name ?? null;
+    return { ...point, postcode };
   } catch {
     return null;
   }
+}
+
+/**
+ * Géocode un code postal via l'API Google Geocoding (components=postal_code)
+ * — nettement plus fiable en pratique que les APIs françaises gratuites pour
+ * ce cas précis (voir geocodePostalCode ci-dessous).
+ */
+async function geocodePostalCodeGoogle(codePostal: string): Promise<GeoPoint | null> {
+  const resultat = await geocodeGoogle(new URLSearchParams({ components: `postal_code:${codePostal}|country:FR` }));
+  return resultat ? { lat: resultat.lat, lng: resultat.lng } : null;
+}
+
+/**
+ * Géocode un nom de ville via l'API Google Geocoding — même raison que
+ * geocodePostalCodeGoogle : bug constaté (14 septembre) où « Narbonne »
+ * tapé en toutes lettres tombait au même endroit erroné qu'un code postal
+ * (le géocodage des noms de ville n'était pas encore branché sur Google,
+ * seulement celui des codes postaux). Renvoie aussi le code postal résolu,
+ * nécessaire à departementAutorise.
+ */
+async function geocodeVilleGoogle(nomVille: string): Promise<(GeoPoint & { postcode: string | null }) | null> {
+  return geocodeGoogle(new URLSearchParams({ address: nomVille, components: "country:FR" }));
 }
 
 /**
@@ -239,6 +267,11 @@ export async function geocodeEntreeSecteur(entree: string): Promise<{ point: Geo
     const point = await geocodePostalCode(valeur);
     return point ? { point, postcode: valeur } : null;
   }
+  // Google d'abord (voir geocodePostalCode plus haut pour l'historique du
+  // bug), l'ancienne API Adresse seulement si Google échoue ou n'est pas
+  // configuré.
+  const viaGoogle = await geocodeVilleGoogle(valeur);
+  if (viaGoogle) return { point: { lat: viaGoogle.lat, lng: viaGoogle.lng }, postcode: viaGoogle.postcode };
   const resultat = await geocodeAdresseAvecCodePostal(valeur);
   return resultat ? { point: { lat: resultat.lat, lng: resultat.lng }, postcode: resultat.postcode } : null;
 }
