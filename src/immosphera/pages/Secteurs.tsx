@@ -90,7 +90,12 @@ export default function Secteurs() {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [panneauOuvert, setPanneauOuvert] = useState(true);
-  const [centroides, setCentroides] = useState<Record<string, GeoPoint>>({});
+  // Le code postal résolu est gardé avec chaque point (pas seulement les
+  // coordonnées) — sert à afficher, à côté de chaque commune dans la liste
+  // "villages enregistrés", ce à quoi elle a réellement été résolue (voir
+  // plus bas) : rapporté « ça met Canet-en-Roussillon, je ne comprends pas
+  // pourquoi » — sans repère visible, une résolution erronée passe inaperçue.
+  const [centroides, setCentroides] = useState<Record<string, { point: GeoPoint; postcode: string | null }>>({});
 
   // Dessin de contour libre — conseiller pour lequel le dessin est en
   // cours (null = aucun), et les points déjà posés.
@@ -158,10 +163,14 @@ export default function Secteurs() {
           // la validation dans validerEtEnregistrerSecteur), mais une
           // donnée existante mal saisie avant cette règle ne doit pas
           // apparaître silencieusement.
-          return resultat && departementAutorise(resultat.postcode) ? ([entree, resultat.point] as const) : null;
+          return resultat && departementAutorise(resultat.postcode)
+            ? ([entree, { point: resultat.point, postcode: resultat.postcode }] as const)
+            : null;
         })
       );
-      const resultats = Object.fromEntries(paires.filter((p): p is readonly [string, GeoPoint] => p !== null));
+      const resultats = Object.fromEntries(
+        paires.filter((p): p is readonly [string, { point: GeoPoint; postcode: string | null }] => p !== null)
+      );
       if (Object.keys(resultats).length > 0) setCentroides((prev) => ({ ...prev, ...resultats }));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -304,7 +313,7 @@ export default function Secteurs() {
     secteurs.forEach((s) => {
       const conseiller = getAdvisorById(s.conseiller_id);
       s.codes_postaux.forEach((code) => {
-        const centre = centroides[code];
+        const centre = centroides[code]?.point;
         if (!centre) return;
         const cercle = L.circle([centre.lat, centre.lng], {
           radius: RAYON_CERCLE_M,
@@ -350,7 +359,7 @@ export default function Secteurs() {
     const map = mapRef.current;
     if (!map) return;
     const points: [number, number][] = [];
-    secteurs.forEach((s) => s.codes_postaux.forEach((c) => centroides[c] && points.push([centroides[c].lat, centroides[c].lng])));
+    secteurs.forEach((s) => s.codes_postaux.forEach((c) => centroides[c] && points.push([centroides[c].point.lat, centroides[c].point.lng])));
     contacts.forEach((c) => c.latitude != null && c.longitude != null && points.push([c.latitude, c.longitude]));
     if (points.length > 0) map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 12 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -652,7 +661,7 @@ export default function Secteurs() {
       const horsZone: string[] = [];
       const introuvables: string[] = [];
       const valides: string[] = [];
-      const nouveauxCentroides: Record<string, GeoPoint> = {};
+      const nouveauxCentroides: Record<string, { point: GeoPoint; postcode: string | null }> = {};
       // Géocodées en parallèle plutôt qu'une par une (voir le même
       // correctif sur l'effet de géocodage plus haut) : un secteur avec
       // beaucoup de communes mettait très longtemps à s'enregistrer.
@@ -668,7 +677,7 @@ export default function Secteurs() {
             return;
           }
           valides.push(entree);
-          nouveauxCentroides[entree] = resultat.point;
+          nouveauxCentroides[entree] = { point: resultat.point, postcode: resultat.postcode };
         })
       );
       // Rapporté : « quand je mets Lézignan, tous les villages ne se
@@ -834,6 +843,53 @@ export default function Secteurs() {
                                 + {v.nom}
                               </button>
                             ))}
+                          </div>
+                        )}
+
+                        {/* Villages enregistrés — demande explicite : « je
+                            veux pouvoir voir les villages qui ont été
+                            enregistrés pour en supprimer si je le veux. Car
+                            là ça met Canet en Roussillon et je ne comprends
+                            pas pourquoi. » Chaque commune affichée avec le
+                            code postal auquel elle a été résolue (rend une
+                            résolution erronée visible d'un coup d'œil), et
+                            un × pour la retirer directement. */}
+                        {valeurCourante.split(",").map((s) => s.trim()).filter(Boolean).length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {valeurCourante
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter(Boolean)
+                              .map((entree) => {
+                                const info = centroides[entree];
+                                return (
+                                  <span
+                                    key={entree}
+                                    className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-semibold text-white"
+                                    style={{ background: couleur }}
+                                  >
+                                    {entree}
+                                    {info?.postcode && <span className="opacity-80">· {info.postcode}</span>}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setCodesEnEdition((prev) => ({
+                                          ...prev,
+                                          [a.id]: valeurCourante
+                                            .split(",")
+                                            .map((s2) => s2.trim())
+                                            .filter((s2) => s2 && s2 !== entree)
+                                            .join(", "),
+                                        }))
+                                      }
+                                      title={`Retirer ${entree}`}
+                                      className="w-3.5 h-3.5 rounded-full grid place-items-center hover:bg-black/20"
+                                    >
+                                      <X className="h-2.5 w-2.5" />
+                                    </button>
+                                  </span>
+                                );
+                              })}
                           </div>
                         )}
 
