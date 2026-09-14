@@ -374,6 +374,34 @@ export async function communesProches(centre: GeoPoint, nomExclu?: string): Prom
   }
 }
 
+/**
+ * Toutes les communes qui PARTAGENT le même code postal — demande explicite
+ * (14 septembre, avec le détail exact vérifié) : « le code postal 11200 est
+ * rattaché à... il dessert au total 23 communes et villages [...] alors que
+ * tu me mets qu'un village, c'est ça que je veux comme proposition. » Une
+ * première version proposait les villages les plus PROCHES géographiquement
+ * (communesProches, par distance) — ce n'est pas la même chose : un code
+ * postal regroupe officiellement plusieurs communes desservies par le même
+ * bureau de poste, pas forcément les plus proches à vol d'oiseau. Requête
+ * directe par code postal (déjà utilisée pour geocodePostalCode), bien plus
+ * fidèle à ce regroupement réel.
+ */
+export async function communesMemeCodePostal(codePostal: string): Promise<SuggestionCommune[]> {
+  try {
+    const params = new URLSearchParams({ codePostal, fields: "nom" });
+    const res = await fetch(`https://geo.api.gouv.fr/communes?${params.toString()}`);
+    if (!res.ok) return [];
+    const communes = await res.json();
+    if (!Array.isArray(communes)) return [];
+    return communes
+      .filter((c: any) => typeof c?.nom === "string")
+      .map((c: any) => ({ nom: c.nom, codePostal }))
+      .sort((a: SuggestionCommune, b: SuggestionCommune) => a.nom.localeCompare(b.nom, "fr"));
+  } catch {
+    return [];
+  }
+}
+
 function normaliserVille(v: string): string {
   return v
     .normalize("NFD")
