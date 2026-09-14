@@ -99,7 +99,13 @@ export default function AcademyView() {
   const [ressources, setRessources] = useState<Ressource[]>([]);
   const [chargement, setChargement] = useState(true);
   const [recherche, setRecherche] = useState('');
-  const [rubriqueActive, setRubriqueActive] = useState<string | null>(null);
+  // Demande explicite (15 septembre) : « je veux créer des dossiers avec
+  // des sous-dossiers pour ne pas se perdre » — un seul niveau
+  // (rubriqueActive: string | null) ne suffit plus. `cheminDossiers` est
+  // le fil d'Ariane depuis la racine (ex. ['Vente', 'Mandats']) ; le
+  // dossier réellement affiché est toujours son dernier élément.
+  const [cheminDossiers, setCheminDossiers] = useState<string[]>([]);
+  const dossierActif = cheminDossiers[cheminDossiers.length - 1] ?? null;
   const [ouverte, setOuverte] = useState<Ressource | null>(null);
 
   // Validation de lecture : chacun coche pour lui. Les super admins voient en
@@ -132,6 +138,13 @@ export default function AcademyView() {
   // nom de la rubrique). Un dossier sans ligne reste un dossier valide,
   // simplement sans visuel.
   const [visuelsDossiers, setVisuelsDossiers] = useState<Map<string, string>>(new Map());
+  // Hiérarchie complète des dossiers (nom + parent_nom), chargée depuis
+  // `academy_folders` — un dossier peut désormais exister SANS aucune
+  // ressource dedans (un sous-dossier vide reste affiché), contrairement
+  // aux anciens dossiers qui n'existaient qu'à travers leurs ressources.
+  const [dossiers, setDossiers] = useState<{ nom: string; parent_nom: string | null }[]>([]);
+  const entrerDossier = (nom: string) => setCheminDossiers((chemin) => [...chemin, nom]);
+  const allerAuNiveau = (index: number) => setCheminDossiers((chemin) => chemin.slice(0, index + 1));
   const [dossierEnDepot, setDossierEnDepot] = useState<string | null>(null);
   const [dossierSurvole, setDossierSurvole] = useState<string | null>(null);
   const [deplacementEnCours, setDeplacementEnCours] = useState<string | null>(null);
@@ -270,15 +283,17 @@ export default function AcademyView() {
       setValidationsParRessource(new Map());
     }
 
-    const { data: dossiers } = await supabase
+    const { data: lignesDossiers } = await supabase
       .from('academy_folders' as any)
-      .select('nom, image_url')
+      .select('nom, image_url, parent_nom')
       .eq('agency_id', activeAgency.id);
     const visuels = new Map<string, string>();
-    ((dossiers as unknown as { nom: string; image_url: string | null }[]) || []).forEach((d) => {
+    const dossiersCharges = ((lignesDossiers as unknown as { nom: string; image_url: string | null; parent_nom: string | null }[]) || []);
+    dossiersCharges.forEach((d) => {
       if (d.image_url) visuels.set(d.nom, d.image_url);
     });
     setVisuelsDossiers(visuels);
+    setDossiers(dossiersCharges.map((d) => ({ nom: d.nom, parent_nom: d.parent_nom })));
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -328,7 +343,7 @@ export default function AcademyView() {
 
   // Changer d'écran ou de dossier referme le menu : il n'a plus de sens une
   // fois qu'on a quitté la grille des dossiers.
-  useEffect(() => { setMenuDossier(null); }, [rubriqueActive, vueDossiers, activeAgency?.id]);
+  useEffect(() => { setMenuDossier(null); }, [dossierActif, vueDossiers, activeAgency?.id]);
 
   // Plein écran demandé le 2 septembre : « on peut cliquer sur un logo en
   // haut à droite, plein écran — sans partir sur une ouverture avec un onglet
@@ -394,16 +409,45 @@ export default function AcademyView() {
     }
   };
 
+  // Comptage par dossier (feuille), tous niveaux confondus — sert au
+  // datalist de création de ressource, au repli par défaut, et aux cibles
+  // du glisser-déposer (n'importe quel dossier reste une cible valide,
+  // quel que soit son niveau d'imbrication). Inclut les dossiers VIDES
+  // (sans ressource, désormais possibles grâce à `academy_folders`).
   const rubriques = useMemo(() => {
     const compte = new Map<string, number>();
+    dossiers.forEach((d) => compte.set(d.nom, 0));
     ressources.forEach((r) => compte.set(r.rubrique, (compte.get(r.rubrique) || 0) + 1));
     return Array.from(compte.entries()).sort((a, b) => a[0].localeCompare(b[0], 'fr'));
-  }, [ressources]);
+  }, [ressources, dossiers]);
+
+  // Demande explicite (15 septembre) : sous-dossiers — ne montre que les
+  // dossiers ENFANTS du dossier actuellement ouvert (ou les dossiers
+  // racine si on est à la racine). Un dossier historique, jamais créé
+  // explicitement (juste une rubrique tapée sur une ressource, sans ligne
+  // dans `academy_folders`), est traité comme un dossier racine — c'est
+  // déjà ce qu'il était avant ce correctif.
+  const dossiersEnfants = useMemo(() => {
+    const nomsConnus = new Set(dossiers.map((d) => d.nom));
+    const compte = new Map<string, number>();
+    dossiers.filter((d) => d.parent_nom === dossierActif).forEach((d) => compte.set(d.nom, 0));
+    if (dossierActif === null) {
+      // Rubriques orphelines (sans ligne academy_folders) : toujours à la
+      // racine, jamais sous un sous-dossier.
+      ressources.forEach((r) => {
+        if (!nomsConnus.has(r.rubrique)) compte.set(r.rubrique, 0);
+      });
+    }
+    ressources.forEach((r) => {
+      if (compte.has(r.rubrique)) compte.set(r.rubrique, (compte.get(r.rubrique) || 0) + 1);
+    });
+    return Array.from(compte.entries()).sort((a, b) => a[0].localeCompare(b[0], 'fr'));
+  }, [ressources, dossiers, dossierActif]);
 
   const visibles = useMemo(() => {
     const q = recherche.trim().toLowerCase();
     return ressources.filter((r) => {
-      if (rubriqueActive && r.rubrique !== rubriqueActive) return false;
+      if (dossierActif && r.rubrique !== dossierActif) return false;
       if (!q) return true;
       return (
         r.titre.toLowerCase().includes(q) ||
@@ -412,12 +456,15 @@ export default function AcademyView() {
         r.rubrique.toLowerCase().includes(q)
       );
     });
-  }, [ressources, recherche, rubriqueActive]);
+  }, [ressources, recherche, dossierActif]);
 
   const reinitialiserFormulaire = () => {
     setEnModification(null);
     setTitre('');
-    setRubrique(rubriques[0]?.[0] || RUBRIQUES_SUGGEREES[0]);
+    // Pré-rempli sur le dossier actuellement ouvert, s'il y en a un — on
+    // ajoute presque toujours une procédure DEPUIS le dossier où on veut la
+    // ranger, pas en pigeant une rubrique au hasard dans la liste.
+    setRubrique(dossierActif || rubriques[0]?.[0] || RUBRIQUES_SUGGEREES[0]);
     setDescription('');
     setType('pdf');
     setDuree('');
@@ -636,6 +683,42 @@ export default function AcademyView() {
   };
 
   /**
+   * Crée un sous-dossier VIDE sous `parentNom` — demande explicite (15
+   * septembre) : « des dossiers avec des sous-dossiers pour ne pas se
+   * perdre ». Contrairement aux dossiers historiques (qui n'existaient
+   * qu'à travers une ressource déjà déposée dedans), un sous-dossier créé
+   * ici vit tout seul dans `academy_folders`, avec ou sans procédure —
+   * indispensable pour organiser à l'avance avant d'y ranger quoi que ce
+   * soit.
+   */
+  const creerSousDossier = async (parentNom: string | null) => {
+    const nom = window.prompt(
+      parentNom ? `Nom du sous-dossier, dans « ${parentNom} » :` : 'Nom du nouveau dossier :'
+    )?.trim();
+    if (!nom) return;
+    if (rubriques.some(([n]) => n === nom)) {
+      toast.error(`Un dossier « ${nom} » existe déjà (les noms de dossiers sont uniques, quel que soit leur niveau).`);
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('academy_folders' as any)
+        .insert({ agency_id: activeAgency!.id, nom, parent_nom: parentNom } as any);
+      if (error) throw error;
+      setDossiers((prev) => [...prev, { nom, parent_nom: parentNom }]);
+      if (parentNom) entrerDossier(nom);
+      toast.success(parentNom ? `Sous-dossier « ${nom} » créé dans « ${parentNom} ».` : `Dossier « ${nom} » créé.`);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(
+        String(e?.message || '').includes('parent_nom')
+          ? "Les sous-dossiers ne sont pas encore en place : la migration 20260915120000 doit être appliquée."
+          : e?.message || 'Impossible de créer ce sous-dossier.'
+      );
+    }
+  };
+
+  /**
    * Renomme un dossier.
    *
    * Le dossier n'est qu'un NOM porté par ses procédures : le renommer, c'est
@@ -670,7 +753,20 @@ export default function AcademyView() {
         if (image) suivant.set(nouveau, image);
         return suivant;
       });
-      if (rubriqueActive === ancien) setRubriqueActive(nouveau);
+      // La base met déjà à jour le `parent_nom` des sous-dossiers (ON
+      // UPDATE CASCADE) — on répercute la même chose ici pour ne pas
+      // attendre un rechargement complet avant de les revoir sous le
+      // dossier renommé.
+      setDossiers((prev) =>
+        prev.map((d) =>
+          d.nom === ancien
+            ? { ...d, nom: nouveau }
+            : d.parent_nom === ancien
+              ? { ...d, parent_nom: nouveau }
+              : d
+        )
+      );
+      setCheminDossiers((chemin) => chemin.map((n) => (n === ancien ? nouveau : n)));
       toast.success(`Dossier renommé « ${nouveau} ».`);
     } catch (e: any) {
       console.error(e);
@@ -684,10 +780,19 @@ export default function AcademyView() {
    * écrire serait une bien mauvaise surprise ; elles restent donc, ailleurs.
    */
   const supprimerDossier = async (nomDossier: string, nombre: number) => {
-    const message =
+    const sousDossiers = dossiers.filter((d) => d.parent_nom === nomDossier).length;
+    const phraseProcedures =
       nombre > 0
-        ? `Supprimer le dossier « ${nomDossier} » ?\n\nSes ${nombre} procédure${nombre > 1 ? 's' : ''} ne ${nombre > 1 ? 'seront' : 'sera'} pas supprimée${nombre > 1 ? 's' : ''} : elle${nombre > 1 ? 's' : ''} rejoin${nombre > 1 ? 'dront' : 'dra'} le dossier « Général ».`
-        : `Supprimer le dossier vide « ${nomDossier} » ?`;
+        ? `Ses ${nombre} procédure${nombre > 1 ? 's' : ''} ne ${nombre > 1 ? 'seront' : 'sera'} pas supprimée${nombre > 1 ? 's' : ''} : elle${nombre > 1 ? 's' : ''} rejoin${nombre > 1 ? 'dront' : 'dra'} le dossier « Général ».`
+        : '';
+    const phraseSousDossiers =
+      sousDossiers > 0
+        ? ` ${sousDossiers > 1 ? 'Ses' : 'Son'} ${sousDossiers} sous-dossier${sousDossiers > 1 ? 's' : ''} ne ${sousDossiers > 1 ? 'seront' : 'sera'} pas supprimé${sousDossiers > 1 ? 's' : ''} non plus : ${sousDossiers > 1 ? 'ils remonteront' : 'il remontera'} à la racine.`
+        : '';
+    const message =
+      nombre === 0 && sousDossiers === 0
+        ? `Supprimer le dossier vide « ${nomDossier} » ?`
+        : `Supprimer le dossier « ${nomDossier} » ?\n\n${phraseProcedures}${phraseSousDossiers}`;
     if (!window.confirm(message)) return;
     try {
       if (nombre > 0) {
@@ -705,7 +810,20 @@ export default function AcademyView() {
         .eq('nom', nomDossier);
       setRessources((prev) => prev.map((r) => (r.rubrique === nomDossier ? { ...r, rubrique: 'Général' } : r)));
       setVisuelsDossiers((prev) => { const suivant = new Map(prev); suivant.delete(nomDossier); return suivant; });
-      if (rubriqueActive === nomDossier) setRubriqueActive(null);
+      // Non destructif comme pour les ressources : les SOUS-dossiers du
+      // dossier supprimé remontent à la racine (la base le fait déjà via
+      // ON DELETE SET NULL), au lieu de disparaître avec lui.
+      setDossiers((prev) =>
+        prev
+          .filter((d) => d.nom !== nomDossier)
+          .map((d) => (d.parent_nom === nomDossier ? { ...d, parent_nom: null } : d))
+      );
+      // Si le dossier supprimé était dans le chemin courant, on remonte
+      // juste avant lui plutôt que de tout réinitialiser à la racine.
+      setCheminDossiers((chemin) => {
+        const position = chemin.indexOf(nomDossier);
+        return position === -1 ? chemin : chemin.slice(0, position);
+      });
       toast.success(
         nombre > 0
           ? `Dossier supprimé. ${nombre} procédure${nombre > 1 ? 's' : ''} déplacée${nombre > 1 ? 's' : ''} vers « Général ».`
@@ -821,11 +939,16 @@ export default function AcademyView() {
     );
   }
 
-  // Deux niveaux, comme demandé : d'abord des DOSSIERS, puis les formations
-  // qu'ils contiennent. La recherche, elle, court-circuite les dossiers : qui
-  // sait ce qu'il cherche ne veut pas ouvrir trois classeurs.
+  // Dossiers avec sous-dossiers, comme demandé (15 septembre) : « pour ne
+  // pas se perdre ». La recherche, elle, court-circuite toujours les
+  // dossiers : qui sait ce qu'il cherche ne veut pas ouvrir trois classeurs.
   const enRecherche = recherche.trim().length > 0;
-  const auNiveauDossiers = rubriqueActive === null && !enRecherche;
+  // À la racine : QUE la grille des dossiers (comme avant ce correctif).
+  const auNiveauDossiers = dossierActif === null && !enRecherche;
+  // Dans un dossier (peu importe sa profondeur) : ses éventuels
+  // sous-dossiers d'abord, puis ses propres procédures juste en dessous —
+  // les deux dans le même écran, sans écran intermédiaire supplémentaire.
+  const dansUnDossier = dossierActif !== null && !enRecherche;
 
   return (
     <div
@@ -913,6 +1036,19 @@ export default function AcademyView() {
                   <Plus className="w-4 h-4" />
                   Ajouter une procédure
                 </button>
+                {/* Dossier racine, VIDE si besoin — demande explicite (15
+                    septembre) : « des dossiers avec des sous-dossiers pour
+                    ne pas se perdre ». Le sous-dossier, lui, se crée depuis
+                    l'intérieur d'un dossier (voir le fil d'Ariane). */}
+                {auNiveauDossiers && (
+                  <button
+                    onClick={() => void creerSousDossier(null)}
+                    className="px-3.5 py-2.5 rounded-full bg-white/90 hover:bg-white border border-black/10 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-md"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Nouveau dossier
+                  </button>
+                )}
                 <input
                   ref={champCouvertureRapide}
                   type="file"
@@ -994,20 +1130,74 @@ export default function AcademyView() {
             </div>
           )}
 
+          {/* ── Le contenu d'un dossier, à N'IMPORTE QUEL niveau ──────────
+              Demande explicite (15 septembre) : « des dossiers avec des
+              sous-dossiers pour ne pas se perdre » — fil d'Ariane cliquable
+              à chaque niveau (au lieu d'un seul retour "Tous les dossiers"),
+              pour toujours savoir où l'on est ET pouvoir remonter d'un
+              coup à n'importe quel palier, pas seulement à la racine.
+              Affiché AVANT la grille des sous-dossiers ci-dessous : on sait
+              où l'on est avant de voir ce qu'il y a dedans. */}
+          {!auNiveauDossiers && (
+            <div className="mt-8 flex flex-wrap items-center gap-x-1.5 gap-y-2">
+              <button
+                onClick={() => { setCheminDossiers([]); setRecherche(''); }}
+                className="px-3.5 py-2 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 text-xs font-bold shadow-sm"
+              >
+                ← Tous les dossiers
+              </button>
+              {!enRecherche && cheminDossiers.map((nom, index) => (
+                <React.Fragment key={nom}>
+                  <span className="text-slate-400 text-xs">/</span>
+                  <button
+                    onClick={() => allerAuNiveau(index)}
+                    disabled={index === cheminDossiers.length - 1}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold ${
+                      index === cheminDossiers.length - 1
+                        ? 'text-slate-900'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    {nom}
+                  </button>
+                </React.Fragment>
+              ))}
+              {enRecherche && (
+                <h2 className="text-lg font-black text-slate-900 truncate">
+                  Résultats pour « {recherche.trim()} »
+                </h2>
+              )}
+              <span className="text-xs text-slate-500 ml-1">
+                {visibles.length} procédure{visibles.length > 1 ? 's' : ''}
+              </span>
+              {/* Sous-dossier : créable à n'importe quel niveau, y compris
+                  vide — la grille des dossiers ci-dessus n'existait
+                  jusqu'ici QU'à travers une ressource déjà déposée dedans. */}
+              {estSuperAdmin && !enRecherche && dossierActif && (
+                <button
+                  onClick={() => void creerSousDossier(dossierActif)}
+                  className="ml-auto px-3.5 py-2 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 text-xs font-bold shadow-sm flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Sous-dossier
+                </button>
+              )}
+            </div>
+          )}
+
           {/* ── NIVEAU 1 : les dossiers ─────────────────────────────────
               Demandé : « un vrai dossier jaune comme on a l'habitude de voir,
               et quand on clique dedans on accède aux différentes formations ».
               Le dossier est dessiné en CSS — onglet, corps, rabat avant — pour
               rester net à toutes les tailles et suivre le thème sans image. */}
-          {auNiveauDossiers && !chargement && rubriques.length > 0 && (
+          {(auNiveauDossiers || dansUnDossier) && !chargement && dossiersEnfants.length > 0 && (
             vueDossiers === 'grille' ? (
-              <div className="mt-8 grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-x-4 gap-y-6">
-                {rubriques.map(([nom, nombre]) => {
+              <div className={`grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-x-4 gap-y-6 ${auNiveauDossiers ? 'mt-8' : 'mt-4'}`}>
+                {dossiersEnfants.map(([nom, nombre]) => {
                   const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
                   return (
                     <button
                       key={nom}
-                      onClick={() => setRubriqueActive(nom)}
+                      onClick={() => entrerDossier(nom)}
                       className="group flex flex-col items-center focus:outline-none"
                       title={`${nom} — ${nombre} procédure${nombre > 1 ? 's' : ''}`}
                     >
@@ -1119,13 +1309,13 @@ export default function AcademyView() {
                 })}
               </div>
             ) : (
-              <div className="mt-8 max-w-3xl rounded-2xl bg-white/85 border border-black/10 shadow-lg divide-y divide-black/5 overflow-hidden">
-                {rubriques.map(([nom, nombre]) => {
+              <div className={`max-w-3xl rounded-2xl bg-white/85 border border-black/10 shadow-lg divide-y divide-black/5 overflow-hidden ${auNiveauDossiers ? 'mt-8' : 'mt-4'}`}>
+                {dossiersEnfants.map(([nom, nombre]) => {
                   const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
                   return (
                     <button
                       key={nom}
-                      onClick={() => setRubriqueActive(nom)}
+                      onClick={() => entrerDossier(nom)}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#E0A21A]/10 transition-colors text-left"
                     >
                       {/* Même dossier, en miniature : la liste garde le repère
@@ -1172,24 +1362,6 @@ export default function AcademyView() {
             )
           )}
 
-          {/* ── NIVEAU 2 : le contenu d'un dossier ─────────────────────── */}
-          {!auNiveauDossiers && (
-            <div className="mt-8 flex items-center gap-3">
-              <button
-                onClick={() => { setRubriqueActive(null); setRecherche(''); }}
-                className="px-3.5 py-2 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 text-xs font-bold shadow-sm"
-              >
-                ← Tous les dossiers
-              </button>
-              <h2 className="text-lg font-black text-slate-900 truncate">
-                {enRecherche ? `Résultats pour « ${recherche.trim()} »` : rubriqueActive}
-              </h2>
-              <span className="text-xs text-slate-500">
-                {visibles.length} procédure{visibles.length > 1 ? 's' : ''}
-              </span>
-            </div>
-          )}
-
           {/* Glisser-déposer entre dossiers — « de façon à ce que si on s'est
               trompé, on puisse avoir une solution de repli ». Le déplacement
               ne fait que changer le dossier d'une procédure : rien n'est copié
@@ -1200,7 +1372,7 @@ export default function AcademyView() {
                 Glisser une procédure vers
               </span>
               {rubriques
-                .filter(([nom]) => nom !== rubriqueActive)
+                .filter(([nom]) => nom !== dossierActif)
                 .map(([nom, nombre]) => (
                   <span
                     key={nom}
