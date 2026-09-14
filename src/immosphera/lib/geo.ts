@@ -170,11 +170,31 @@ export async function geocodeAdresseAvecCodePostal(
  * si parfois on n'a pas le code postal en connaissance ». Un code postal
  * (5 chiffres) est géocodé par geocodePostalCode ; sinon l'entrée est
  * traitée comme un nom de ville (geocodeCity, déjà utilisé pour les Biens).
+ *
+ * Renvoie aussi le code postal résolu (même pour une entrée "ville") : sert
+ * à vérifier le département (voir departementAutorise ci-dessous).
  */
-export async function geocodeEntreeSecteur(entree: string): Promise<GeoPoint | null> {
+export async function geocodeEntreeSecteur(entree: string): Promise<{ point: GeoPoint; postcode: string | null } | null> {
   const valeur = entree.trim();
   if (!valeur) return null;
-  return /^\d{5}$/.test(valeur) ? geocodePostalCode(valeur) : geocodeCity(valeur);
+  if (/^\d{5}$/.test(valeur)) {
+    const point = await geocodePostalCode(valeur);
+    return point ? { point, postcode: valeur } : null;
+  }
+  const resultat = await geocodeAdresseAvecCodePostal(valeur);
+  return resultat ? { point: { lat: resultat.lat, lng: resultat.lng }, postcode: resultat.postcode } : null;
+}
+
+// Demande explicite (14 septembre) : « fais-moi plutôt pour l'instant la
+// carte de l'Aude, l'Hérault et les Pyrénées-Orientales [...] si jamais tu
+// la codes autre part c'est une erreur de ta part » — les secteurs sont
+// volontairement limités à ces 3 départements pour l'instant.
+export const DEPARTEMENTS_SECTEUR_AUTORISES = ["11", "34", "66"] as const;
+export const DEPARTEMENTS_SECTEUR_LABEL = "Aude (11), Hérault (34) et Pyrénées-Orientales (66)";
+
+export function departementAutorise(codePostal: string | null): boolean {
+  if (!codePostal || !/^\d{5}$/.test(codePostal)) return false;
+  return (DEPARTEMENTS_SECTEUR_AUTORISES as readonly string[]).includes(codePostal.slice(0, 2));
 }
 
 function normaliserVille(v: string): string {
