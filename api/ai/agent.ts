@@ -338,7 +338,7 @@ const TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: "Mots-clés libres (ville, quartier, secteur...) à chercher dans le titre/la description/l'adresse. Ne pas y mettre le type de bien, le prix, la surface etc. — utilise les champs dédiés ci-dessous pour ça, sinon ils ne filtrent pas correctement." },
+        query: { type: 'string', description: "Mots-clés libres (ville, quartier, secteur, OU numéro de mandat) à chercher dans le titre/l'adresse/la localisation/le numéro de mandat. Ne pas y mettre le type de bien, le prix, la surface etc. — utilise les champs dédiés ci-dessous pour ça, sinon ils ne filtrent pas correctement." },
         listingType: { type: 'string', enum: ['vente', 'location'], description: 'Type d\'annonce, si précisé.' },
         propertyType: {
           type: 'string',
@@ -578,7 +578,10 @@ async function runPropertySearch(args: any) {
     // de recherche classique) ne matche elle que titre/adresse/localisation
     // — aligné ici sur exactement les mêmes champs pour un matching des
     // villes qui corresponde vraiment aux biens, cohérent entre les deux.
-    if (term) q = q.or(`title.ilike.%${term}%,address.ilike.%${term}%,location.ilike.%${term}%`);
+    // Ajouté (15 septembre, demande explicite) : mandate_number, pour
+    // qu'un numéro de mandat tapé dans la barre retrouve le bien — même
+    // alignement avec la recherche manuelle, voir usePropertyFilters.ts.
+    if (term) q = q.or(`title.ilike.%${term}%,address.ilike.%${term}%,location.ilike.%${term}%,mandate_number.ilike.%${term}%`);
   }
 
   const { data, error } = await q;

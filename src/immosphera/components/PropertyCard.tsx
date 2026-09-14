@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
-import { MapPin, Maximize, BedDouble, Home, TreePine, Headset } from "lucide-react";
-import { VirtualTourIcon, Giraffe360Icon, WebsiteIcon } from "@/immosphera/components/PropertyIcons";
+import { MapPin, Maximize, BedDouble, Home, TreePine } from "lucide-react";
+import { VirtualTourIcon, Giraffe360Icon, WebsiteIcon, VrHeadsetIcon } from "@/immosphera/components/PropertyIcons";
 import { HeartIcon } from "@/immosphera/components/HeartIcon";
 import { AdvisorModal } from "@/immosphera/components/AdvisorModal";
 import { advisors, getAdvisorByName, type Advisor } from "@/immosphera/lib/advisors";
@@ -120,6 +120,20 @@ export function PropertyCard({
               Match {matchScore}%
             </span>
           )}
+          {/* Demande explicite (15 septembre) : numéro de mandat en bas à
+              droite de la carte, pour identifier le bien lors de la visite
+              au casque VR (les biens y sont répertoriés par numéro de
+              mandat). Décalé au-dessus du badge "Match" quand les deux
+              sont présents, pour ne jamais se superposer. */}
+          {property.mandate_number && (
+            <span
+              className={`absolute right-3 px-2.5 py-1 rounded-full text-[11px] font-bold bg-card/90 text-card-foreground shadow ${
+                typeof matchScore === "number" ? "bottom-10" : "bottom-3"
+              }`}
+            >
+              Mandat {property.mandate_number}
+            </span>
+          )}
           {/* Heart */}
           {onTogglePropal && (
             <button
@@ -178,7 +192,7 @@ export function PropertyCard({
                   className="w-9 h-9 rounded-full bg-muted grid place-items-center hover:bg-primary/20"
                   title="Disponible au casque VR"
                 >
-                  <Headset className="h-5 w-5 text-primary" />
+                  <VrHeadsetIcon className="h-5 w-5 text-primary" />
                 </Link>
               )}
               {property.virtual_tour_url && (

@@ -106,6 +106,10 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
     bedrooms: "",
     description: "",
     listedAt: "",
+    // Demande explicite (15 septembre) : numéro de mandat, affiché sur la
+    // carte pour identifier le bien lors de la visite au casque VR (les
+    // biens y sont répertoriés par numéro de mandat).
+    mandateNumber: "",
     // Demande explicite (14 septembre) : case à cocher « Casque VR
     // disponible », indépendante de virtual_tour_url (une visite 360°
     // peut exister sans être confirmée compatible casque par l'agent).
@@ -133,6 +137,7 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
         bedrooms: editingProperty.bedrooms ? String(editingProperty.bedrooms) : "",
         description: editingProperty.description || "",
         listedAt: (editingProperty as any).listed_at || "",
+        mandateNumber: (editingProperty as any).mandate_number || "",
         vrHeadset: Boolean((editingProperty as any).vr_headset_available),
       });
       setDetails({
@@ -377,6 +382,7 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
         agent_photo: selectedAdvisor?.photo || null,
         tech_details: cleanDetails,
         listed_at: form.listedAt || null,
+        mandate_number: form.mandateNumber.trim() || null,
         vr_headset_available: form.vrHeadset,
       };
 
@@ -836,6 +842,19 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                {/* Demande explicite (15 septembre) : numéro de mandat,
+                    affiché sur la carte principale (en bas à droite) pour
+                    identifier le bien lors de la visite au casque VR — les
+                    biens y sont répertoriés par numéro de mandat. */}
+                <div className="space-y-1.5">
+                  <Label>Numéro de mandat</Label>
+                  <Input
+                    type="text"
+                    placeholder="Ex. 2024-018"
+                    value={form.mandateNumber}
+                    onChange={(e) => handleChange("mandateNumber", e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Visite virtuelle (URL)</Label>
