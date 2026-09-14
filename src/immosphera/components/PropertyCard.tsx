@@ -120,20 +120,6 @@ export function PropertyCard({
               Match {matchScore}%
             </span>
           )}
-          {/* Demande explicite (15 septembre) : numéro de mandat en bas à
-              droite de la carte, pour identifier le bien lors de la visite
-              au casque VR (les biens y sont répertoriés par numéro de
-              mandat). Décalé au-dessus du badge "Match" quand les deux
-              sont présents, pour ne jamais se superposer. */}
-          {property.mandate_number && (
-            <span
-              className={`absolute right-3 px-2.5 py-1 rounded-full text-[11px] font-bold bg-card/90 text-card-foreground shadow ${
-                typeof matchScore === "number" ? "bottom-10" : "bottom-3"
-              }`}
-            >
-              Mandat {property.mandate_number}
-            </span>
-          )}
           {/* Heart */}
           {onTogglePropal && (
             <button
@@ -278,6 +264,15 @@ export function PropertyCard({
                 {tag.label}
               </span>
             ))}
+            {/* Demande explicite (15 septembre, capture à l'appui) : numéro
+                de mandat retiré du badge sur la photo, affiché ici en bas
+                de la carte à la place — même style (fond et écriture) que
+                Terrasse/Piscine ci-dessus, plutôt qu'un badge à part. */}
+            {property.mandate_number && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/15 text-primary border border-primary/30">
+                Mandat {property.mandate_number}
+              </span>
+            )}
           </div>
 
           <div className="mt-auto" />
