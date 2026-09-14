@@ -54,7 +54,18 @@ export function usePropertyFilters(properties: Property[]) {
         items = items.filter((p) => {
           const title = normalizeLocationText(p.title || "");
           const address = normalizeLocationText(p.address || "");
-          return title.includes(q) || address.includes(q) || propertyMatchesLocation(p, filters.searchText);
+          // Demande explicite (15 septembre) : « la recherche de mandat
+          // puisse se faire dans la barre de recherche si on tape un
+          // numéro » — recherche exacte OU partielle sur mandate_number
+          // (normalisée comme le reste : accents/casse ignorés, utile si
+          // le numéro contient des lettres).
+          const mandate = normalizeLocationText((p as any).mandate_number || "");
+          return (
+            title.includes(q) ||
+            address.includes(q) ||
+            (mandate.length > 0 && mandate.includes(q)) ||
+            propertyMatchesLocation(p, filters.searchText)
+          );
         });
       }
 
