@@ -783,36 +783,41 @@ export default function AcademyView() {
   };
 
   /**
-   * Réordonne par glisser-déposer — déposer `nomSource` sur le quart
-   * gauche/droit de `nomCible` le place juste avant/après lui, parmi les
-   * dossiers actuellement affichés (donc déjà tous du même parent). Toute
-   * la fratrie est renumérotée pour rester cohérente (0, 1, 2…) plutôt que
-   * de bricoler une position intercalaire.
+   * Renumérote toute une fratrie de dossiers (même parent) selon l'ordre
+   * `nouvelOrdre` — position 0, 1, 2… dans cet ordre. Bug corrigé (14
+   * septembre, rapporté « je ne peux pas bouger l'ordre des dossiers » /
+   * « rien ne se passe ») : Monter/Descendre ÉCHANGEAIT deux positions,
+   * ce qui ne change rien de VISIBLE quand elles sont déjà égales — le
+   * cas par défaut, puisque tout dossier naît à position 0. Renumérote
+   * systématiquement toute la liste à la place. Écrit ligne par ligne
+   * (upsert séquentiel plutôt qu'un upsert groupé en un seul appel) pour
+   * ne dépendre d'aucune hypothèse sur le comportement d'un upsert
+   * multi-lignes vis-à-vis des lignes RLS/on_conflict.
    */
-  const reordonnerDossier = async (nomSource: string, nomCible: string, position: 'avant' | 'apres') => {
-    if (nomSource === nomCible) return;
-    const fratrie = dossiersEnfants.map((d) => d.nom).filter((n) => n !== nomSource);
-    let indexCible = fratrie.indexOf(nomCible);
-    if (indexCible === -1) return;
-    if (position === 'apres') indexCible += 1;
-    fratrie.splice(indexCible, 0, nomSource);
+  const renumeroterFratrie = async (nouvelOrdre: string[]) => {
     setDossiers((prev) => {
       const parNom = new Map(prev.map((d) => [d.nom, d]));
-      fratrie.forEach((nom, i) => {
+      nouvelOrdre.forEach((nom, i) => {
         parNom.set(nom, { ...(parNom.get(nom) ?? { nom, parent_nom: dossierActif }), parent_nom: dossierActif, position: i });
       });
       return Array.from(parNom.values());
     });
     try {
-      const lignes = fratrie.map((nom, i) => ({
-        agency_id: activeAgency!.id,
-        nom,
-        parent_nom: dossierActif,
-        position: i,
-        updated_at: new Date().toISOString(),
-      }));
-      const { error } = await supabase.from('academy_folders' as any).upsert(lignes as any, { onConflict: 'agency_id,nom' });
-      if (error) throw error;
+      for (let i = 0; i < nouvelOrdre.length; i++) {
+        const { error } = await supabase
+          .from('academy_folders' as any)
+          .upsert(
+            {
+              agency_id: activeAgency!.id,
+              nom: nouvelOrdre[i],
+              parent_nom: dossierActif,
+              position: i,
+              updated_at: new Date().toISOString(),
+            } as any,
+            { onConflict: 'agency_id,nom' }
+          );
+        if (error) throw error;
+      }
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message || "Impossible d'enregistrer ce nouvel ordre.");
@@ -821,60 +826,33 @@ export default function AcademyView() {
   };
 
   /**
+   * Réordonne par glisser-déposer — déposer `nomSource` sur le quart
+   * gauche/droit de `nomCible` le place juste avant/après lui, parmi les
+   * dossiers actuellement affichés (donc déjà tous du même parent).
+   */
+  const reordonnerDossier = async (nomSource: string, nomCible: string, position: 'avant' | 'apres') => {
+    if (nomSource === nomCible) return;
+    const fratrie = dossiersEnfants.map((d) => d.nom).filter((n) => n !== nomSource);
+    let indexCible = fratrie.indexOf(nomCible);
+    if (indexCible === -1) return;
+    if (position === 'apres') indexCible += 1;
+    fratrie.splice(indexCible, 0, nomSource);
+    await renumeroterFratrie(fratrie);
+  };
+
+  /**
    * Réordonne les dossiers de MÊME parent — demande explicite (16
    * septembre) : « dans les sous dossiers, je veux pouvoir aussi les
-   * mettre dans l'ordre que je veux ». Échange simplement la `position`
-   * du dossier avec celle de son voisin immédiat (précédent ou suivant
-   * dans l'ordre affiché) — pas besoin de renuméroter toute la fratrie.
+   * mettre dans l'ordre que je veux ». Fait glisser le dossier d'un cran
+   * dans la liste affichée, puis renumérote toute la fratrie.
    */
   const deplacerDossier = async (nom: string, direction: 'monter' | 'descendre') => {
-    const fratrie = dossiersEnfants;
-    const index = fratrie.findIndex((d) => d.nom === nom);
+    const fratrie = dossiersEnfants.map((d) => d.nom);
+    const index = fratrie.indexOf(nom);
     const indexVoisin = direction === 'monter' ? index - 1 : index + 1;
     if (index === -1 || indexVoisin < 0 || indexVoisin >= fratrie.length) return;
-    const courant = fratrie[index];
-    const voisin = fratrie[indexVoisin];
-    setDossiers((prev) => {
-      // upsert local : courant/voisin peuvent être des dossiers orphelins
-      // pas encore présents dans `dossiers` (jamais eu de ligne dédiée).
-      const parNom = new Map(prev.map((d) => [d.nom, d]));
-      parNom.set(courant.nom, { ...(parNom.get(courant.nom) ?? { nom: courant.nom, parent_nom: dossierActif }), position: voisin.position });
-      parNom.set(voisin.nom, { ...(parNom.get(voisin.nom) ?? { nom: voisin.nom, parent_nom: dossierActif }), position: courant.position });
-      return Array.from(parNom.values());
-    });
-    try {
-      // Upsert (même raison que deplacerDossierVersParent) : courant/voisin
-      // peuvent être des dossiers orphelins sans ligne academy_folders.
-      const { error: err1 } = await supabase
-        .from('academy_folders' as any)
-        .upsert(
-          {
-            agency_id: activeAgency!.id,
-            nom: courant.nom,
-            parent_nom: dossierActif,
-            position: voisin.position,
-            updated_at: new Date().toISOString(),
-          } as any,
-          { onConflict: 'agency_id,nom' }
-        );
-      const { error: err2 } = await supabase
-        .from('academy_folders' as any)
-        .upsert(
-          {
-            agency_id: activeAgency!.id,
-            nom: voisin.nom,
-            parent_nom: dossierActif,
-            position: courant.position,
-            updated_at: new Date().toISOString(),
-          } as any,
-          { onConflict: 'agency_id,nom' }
-        );
-      if (err1 || err2) throw err1 || err2;
-    } catch (e: any) {
-      console.error(e);
-      toast.error(e?.message || "Impossible d'enregistrer ce nouvel ordre.");
-      await charger();
-    }
+    [fratrie[index], fratrie[indexVoisin]] = [fratrie[indexVoisin], fratrie[index]];
+    await renumeroterFratrie(fratrie);
   };
 
   /**
