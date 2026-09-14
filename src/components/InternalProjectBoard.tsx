@@ -18,7 +18,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
-import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { ChevronLeft, Plus, Trash2, Calendar, X, Loader2, User, CheckSquare, Image as ImageIcon, Mic, Square, Send, Paperclip, MessageCircle, Eye, Users as UsersIcon, Check, Pencil } from 'lucide-react';
 import { InternalTask, InternalTaskStatus, InternalTaskPriority } from '@/types';
 import { NovaSphereUserProfile, useAuth } from '@/context/AuthContext';
@@ -898,11 +897,10 @@ const TaskDetailModal: React.FC<{
 }> = ({ task, users, onClose, onSave, onDelete }) => {
   // Audit responsive tablette (9 septembre) : le bouton "supprimer cette
   // ligne de checklist" n'était visible qu'au survol — invisible ET
-  // inatteignable sur une tablette tactile (pas de souris). Même correctif
-  // que ChatViewSupabase.tsx/KanbanBoardsView.tsx.
-  const isMobile = useIsMobile();
-  const isCoarsePointer = useIsCoarsePointer();
-  const pointeurTactile = isMobile || isCoarsePointer;
+  // inatteignable sur une tablette tactile (pas de souris). Corrigé une
+  // première fois pour le tactile, puis rendu TOUJOURS visible (14
+  // septembre, capture à l'appui) — même sur ordinateur, le survol seul
+  // ne suffisait pas à le rendre découvrable.
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
   const [status, setStatus] = useState(task.status);
@@ -1234,10 +1232,18 @@ const TaskDetailModal: React.FC<{
                         {item.isDone && <CheckSquare className="w-3 h-3 text-black" />}
                       </button>
                       <span className={`text-xs flex-1 min-w-0 truncate ${item.isDone ? 'text-gray-500 line-through' : 'text-gray-200'}`}>{item.text}</span>
+                      {/* Demande explicite (14 septembre, capture à l'appui)
+                          : "je veux avoir la possibilité de la supprimer
+                          quand elle est créée" — le bouton existait déjà
+                          mais restait invisible tant que la souris ne
+                          survolait pas la ligne (opacity-0 group-hover),
+                          sans aucun indice qu'il existe. Toujours visible
+                          désormais, plus seulement sur tactile. */}
                       <button
                         type="button"
                         onClick={() => deleteChecklistItem.mutate(item.id)}
-                        className={`text-gray-600 hover:text-rose-300 shrink-0 transition-opacity ${pointeurTactile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                        title="Supprimer cet élément"
+                        className="text-gray-500 hover:text-rose-300 shrink-0"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
