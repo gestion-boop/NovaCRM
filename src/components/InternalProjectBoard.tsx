@@ -20,7 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
 import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { ChevronLeft, Plus, Trash2, Calendar, X, Loader2, User, CheckSquare, Image as ImageIcon, Mic, Square, Send, Paperclip, MessageCircle, Eye, Users as UsersIcon, Check, Pencil } from 'lucide-react';
-import { InternalTask, InternalTaskStatus } from '@/types';
+import { InternalTask, InternalTaskStatus, InternalTaskPriority } from '@/types';
 import { NovaSphereUserProfile, useAuth } from '@/context/AuthContext';
 import { useInternalProjectTasks, InternalTasksScope } from '@/hooks/useInternalProjectTasks';
 import { useTaskChecklist, useChecklistCounts } from '@/hooks/useTaskChecklist';
@@ -460,8 +460,22 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
     return rectIntersection(args);
   };
 
+  // Demande explicite (14 septembre, Novavisio) : « je veux que cela soit
+  // classé par priorité des urgences. Urgences, puis haute puis normal ».
+  // Tri primaire par priorité (urgente → haute → normale → basse, non
+  // demandée mais logiquement en dernier) ; `position` (l'ordre manuel du
+  // glisser-déposer) ne sert plus qu'à départager les cartes de MÊME
+  // priorité, pour ne pas perdre le rangement manuel à l'intérieur d'un
+  // niveau de priorité.
+  const ORDRE_PRIORITE: Record<InternalTaskPriority, number> = { urgente: 0, haute: 1, normale: 2, basse: 3 };
   const tasksByStatus = (status: InternalTaskStatus) =>
-    tasks.filter((t) => t.status === status).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    tasks
+      .filter((t) => t.status === status)
+      .sort((a, b) => {
+        const parPriorite = ORDRE_PRIORITE[a.priority] - ORDRE_PRIORITE[b.priority];
+        if (parPriorite !== 0) return parPriorite;
+        return (a.position ?? 0) - (b.position ?? 0);
+      });
 
   const handleDragStart = (event: DragStartEvent) => {
     const task = tasks.find((t) => t.id === String(event.active.id));
