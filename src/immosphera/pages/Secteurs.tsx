@@ -121,6 +121,10 @@ export default function Secteurs() {
   const [commoditesPanelOuvert, setCommoditesPanelOuvert] = useState(false);
   const [rechercheCommoditeTexte, setRechercheCommoditeTexte] = useState("");
   const [commoditesCentre, setCommoditesCentre] = useState<GeoPoint | null>(null);
+  // Texte exact recherché, figé au moment de la recherche — sert de
+  // libellé sous le pin (voir « on en voit pas l'adresse »), indépendant de
+  // ce que l'utilisateur retape ensuite dans le champ de recherche.
+  const [commoditesAdresseRecherchee, setCommoditesAdresseRecherchee] = useState("");
   const [commoditesListe, setCommoditesListe] = useState<Commodite[]>([]);
   const [commoditesLoading, setCommoditesLoading] = useState(false);
   const [commoditesErreur, setCommoditesErreur] = useState<string | null>(null);
@@ -418,13 +422,16 @@ export default function Secteurs() {
     commoditeCentreMarkerRef.current?.remove();
     commoditeCentreMarkerRef.current = null;
     if (!commoditesCentre) return;
-    const centreIcon = L.divIcon({
-      className: "map-pin-commodite-centre",
-      html: `<span style="display:block;width:14px;height:14px;border-radius:50%;background:#1b2b2e;border:3px solid #E0A21A;box-shadow:0 0 0 4px rgba(224,162,26,0.25)"></span>`,
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
-    });
+    // Pin vert plus gros, avec l'adresse recherchée affichée en permanence
+    // en dessous — signalé : « on en voit pas l'adresse ».
+    const centreIcon = createTeardropIcon("#2f9e44", { size: 40 });
     const centreMarker = L.marker([commoditesCentre.lat, commoditesCentre.lng], { icon: centreIcon });
+    centreMarker.bindTooltip(commoditesAdresseRecherchee || "Adresse recherchée", {
+      permanent: true,
+      direction: "bottom",
+      offset: [0, 4],
+      className: "tooltip-adresse-recherchee",
+    });
     centreMarker.addTo(map);
     commoditeCentreMarkerRef.current = centreMarker;
     // Changer de filtre ne masque que les marqueurs — le cadrage de la
@@ -443,7 +450,7 @@ export default function Secteurs() {
         marker.addTo(map);
         commoditeMarkersRef.current.push(marker);
       });
-  }, [commoditesCentre, commoditesListe, commoditesFiltreType]);
+  }, [commoditesCentre, commoditesListe, commoditesFiltreType, commoditesAdresseRecherchee]);
 
   // Cadrage de la carte sur la recherche — uniquement quand la recherche
   // change (pas à chaque coche/décoche de catégorie, voir ci-dessus).
@@ -697,6 +704,7 @@ export default function Secteurs() {
         return;
       }
       setCommoditesCentre({ lat: resultat.lat, lng: resultat.lng });
+      setCommoditesAdresseRecherchee(texte);
       const commodites = await rechercherCommodites({ lat: resultat.lat, lng: resultat.lng });
       setCommoditesListe(commodites);
       setCommoditesFiltreType("tous");
@@ -1019,6 +1027,7 @@ export default function Secteurs() {
                       setCommoditesListe([]);
                       setCommoditesErreur(null);
                       setCommoditesFiltreType("tous");
+                      setCommoditesAdresseRecherchee("");
                     }}
                     className="text-[11px] text-muted-foreground hover:text-foreground underline"
                   >
