@@ -13,9 +13,11 @@ import {
   rechercherCommunes,
   communesMemeCodePostal,
   DEPARTEMENTS_SECTEUR_LABEL,
+  geocodeRechercheLibre,
   type GeoPoint,
   type SuggestionCommune,
 } from "@/immosphera/lib/geo";
+import { rechercherCommodites, type Commodite, type TypeCommodite } from "@/immosphera/lib/commodites";
 import { createTeardropIcon, adresseTooltipHtml } from "@/immosphera/lib/mapPins";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Compass, Pencil, X, Check, Search, Trash2, ListChecks } from "lucide-react";
+import { MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Pencil, X, Check, Search, Trash2, ListChecks, Eye, EyeOff, Store } from "lucide-react";
 
 // Demande explicite (14 septembre, v2 — après un premier essai à base de
 // polygones dessinés à la main) : « dans les équipes, dans les fiches des
@@ -105,8 +107,32 @@ export default function Secteurs() {
   const draftLayerRef = useRef<L.Polygon | L.Polyline | null>(null);
   const pointsMarkersRef = useRef<L.Marker[]>([]);
   const contactMarkersRef = useRef<L.Marker[]>([]);
+  const commoditeMarkersRef = useRef<L.Marker[]>([]);
+  const commoditeCentreMarkerRef = useRef<L.Marker | null>(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Demande explicite : « un bouton sur la droite pour tous, pour
+  // désactiver la vue des secteurs [...] cela enlèvera les secteurs ».
+  const [secteursVisibles, setSecteursVisibles] = useState(true);
+  // Commodités (pharmacies, écoles, commerces) autour d'une ville/adresse
+  // recherchée — demande explicite : « un bouton pour les commodités. En
+  // cherchant une ville [...] on aurait toutes les pharmacies écoles,
+  // commerces ». Voir src/immosphera/lib/commodites.ts (Overpass/OSM).
+  const [commoditesPanelOuvert, setCommoditesPanelOuvert] = useState(false);
+  const [rechercheCommoditeTexte, setRechercheCommoditeTexte] = useState("");
+  const [commoditesCentre, setCommoditesCentre] = useState<GeoPoint | null>(null);
+  // Texte exact recherché, figé au moment de la recherche — sert de
+  // libellé sous le pin (voir « on en voit pas l'adresse »), indépendant de
+  // ce que l'utilisateur retape ensuite dans le champ de recherche.
+  const [commoditesAdresseRecherchee, setCommoditesAdresseRecherchee] = useState("");
+  const [commoditesListe, setCommoditesListe] = useState<Commodite[]>([]);
+  const [commoditesLoading, setCommoditesLoading] = useState(false);
+  const [commoditesErreur, setCommoditesErreur] = useState<string | null>(null);
+  // Filtre exclusif par catégorie — demande explicite : « on peut ensuite
+  // sélectionner par exemple la pharmacie, et elle seule sera affichée
+  // comme le commerce etc. » : un choix à la fois plutôt que des cases à
+  // cocher indépendantes. "tous" = tout affiché (par défaut).
+  const [commoditesFiltreType, setCommoditesFiltreType] = useState<TypeCommodite | "tous">("tous");
   const [panneauOuvert, setPanneauOuvert] = useState(true);
   // Demande explicite : « un bouton qui ouvre un popup plus grand pour
   // supprimer des lieux avec une barre de recherche au cas où » — la liste
@@ -314,6 +340,9 @@ export default function Secteurs() {
     if (!map) return;
     polygoneLayersRef.current.forEach((l) => l.remove());
     polygoneLayersRef.current = [];
+    // Bouton « désactiver la vue des secteurs » — demande explicite : « cela
+    // enlèvera les secteurs ». On vide les couches puis on s'arrête là.
+    if (!secteursVisibles) return;
     secteurs.forEach((s) => {
       if (s.conseiller_id === dessinActif) return;
       if (!Array.isArray(s.polygone) || s.polygone.length < 3) return;
@@ -326,7 +355,7 @@ export default function Secteurs() {
       polygone.addTo(map);
       polygoneLayersRef.current.push(polygone);
     });
-  }, [secteurs, dessinActif]);
+  }, [secteurs, dessinActif, secteursVisibles]);
 
   // Cercles de secteur (un par code postal, coloré selon le conseiller) —
   // contour discret + remplissage doux, plusieurs cercles superposés donnant
@@ -336,6 +365,7 @@ export default function Secteurs() {
     if (!map) return;
     secteurLayersRef.current.forEach((l) => l.remove());
     secteurLayersRef.current = [];
+    if (!secteursVisibles) return;
     secteurs.forEach((s) => {
       const conseiller = getAdvisorById(s.conseiller_id);
       s.codes_postaux.forEach((code) => {
@@ -354,7 +384,7 @@ export default function Secteurs() {
         secteurLayersRef.current.push(cercle);
       });
     });
-  }, [secteurs, centroides]);
+  }, [secteurs, centroides, secteursVisibles]);
 
   // Points contacts
   useEffect(() => {
@@ -379,6 +409,64 @@ export default function Secteurs() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contacts, secteurParId]);
+
+  // Commodités (pharmacies, écoles, commerces) autour du point recherché.
+  const COULEURS_COMMODITE: Record<TypeCommodite, string> = { pharmacie: "#e03131", ecole: "#1971c2", commerce: "#f08c00" };
+  const EMOJI_COMMODITE: Record<TypeCommodite, string> = { pharmacie: "💊", ecole: "🏫", commerce: "🛒" };
+  const LABELS_COMMODITE: Record<TypeCommodite, string> = { pharmacie: "Pharmacie", ecole: "École", commerce: "Commerce" };
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    commoditeMarkersRef.current.forEach((m) => m.remove());
+    commoditeMarkersRef.current = [];
+    commoditeCentreMarkerRef.current?.remove();
+    commoditeCentreMarkerRef.current = null;
+    if (!commoditesCentre) return;
+    // Pin vert plus gros, avec l'adresse recherchée affichée en permanence
+    // en dessous — signalé : « on en voit pas l'adresse ».
+    const centreIcon = createTeardropIcon("#2f9e44", { size: 40 });
+    const centreMarker = L.marker([commoditesCentre.lat, commoditesCentre.lng], { icon: centreIcon });
+    centreMarker.bindTooltip(commoditesAdresseRecherchee || "Adresse recherchée", {
+      permanent: true,
+      direction: "bottom",
+      offset: [0, 4],
+      className: "tooltip-adresse-recherchee",
+    });
+    centreMarker.addTo(map);
+    commoditeCentreMarkerRef.current = centreMarker;
+    // Changer de filtre ne masque que les marqueurs — le cadrage de la
+    // carte (effet séparé ci-dessous) ne bouge pas à chaque changement.
+    commoditesListe
+      .filter((c) => commoditesFiltreType === "tous" || c.type === commoditesFiltreType)
+      .forEach((c) => {
+        const icon = L.divIcon({
+          className: "map-pin-commodite",
+          html: `<span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${COULEURS_COMMODITE[c.type]};border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);font-size:11px">${EMOJI_COMMODITE[c.type]}</span>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+        });
+        const marker = L.marker([c.point.lat, c.point.lng], { icon });
+        marker.bindTooltip(adresseTooltipHtml(LABELS_COMMODITE[c.type], c.nom), { direction: "top", offset: [0, -14] });
+        marker.addTo(map);
+        commoditeMarkersRef.current.push(marker);
+      });
+  }, [commoditesCentre, commoditesListe, commoditesFiltreType, commoditesAdresseRecherchee]);
+
+  // Cadrage de la carte sur la recherche — uniquement quand la recherche
+  // change (pas à chaque coche/décoche de catégorie, voir ci-dessus).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !commoditesCentre) return;
+    if (commoditesListe.length > 0) {
+      map.fitBounds(
+        L.latLngBounds([[commoditesCentre.lat, commoditesCentre.lng], ...commoditesListe.map((c) => [c.point.lat, c.point.lng] as [number, number])]),
+        { padding: [50, 50], maxZoom: 16 }
+      );
+    } else {
+      map.setView([commoditesCentre.lat, commoditesCentre.lng], 15);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commoditesCentre, commoditesListe]);
 
   // Fit bounds au premier chargement (secteurs, sinon contacts)
   useEffect(() => {
@@ -600,6 +688,34 @@ export default function Secteurs() {
     });
   };
 
+  // Commodités — demande explicite : « en cherchant une ville [...] et en
+  // cliquant dessus commodité, on aurait toutes les pharmacies écoles,
+  // commerces ». Deux étapes : géocoder la recherche (ville ou adresse
+  // complète), puis charger les commodités autour de ce point.
+  const rechercherCommodite = async () => {
+    const texte = rechercheCommoditeTexte.trim();
+    if (!texte) return;
+    setCommoditesErreur(null);
+    setCommoditesLoading(true);
+    try {
+      const resultat = await geocodeRechercheLibre(texte);
+      if (!resultat) {
+        setCommoditesErreur(`« ${texte} » introuvable.`);
+        return;
+      }
+      setCommoditesCentre({ lat: resultat.lat, lng: resultat.lng });
+      setCommoditesAdresseRecherchee(texte);
+      const commodites = await rechercherCommodites({ lat: resultat.lat, lng: resultat.lng });
+      setCommoditesListe(commodites);
+      setCommoditesFiltreType("tous");
+      if (commodites.length === 0) {
+        setCommoditesErreur("Aucune pharmacie, école ou commerce trouvé à proximité.");
+      }
+    } finally {
+      setCommoditesLoading(false);
+    }
+  };
+
   // Autocomplete communes — demande explicite : « un fichier déroulant, on
   // peut cliquer plusieurs villes » plutôt que de taper à la main.
   //
@@ -744,9 +860,6 @@ export default function Secteurs() {
       <div className="md:flex-1 flex flex-col mb-3 md:mb-0">
         <div className="flex items-center gap-2 pb-2">
           <h2 className="font-bold text-sm mr-auto">🗺️ Secteurs</h2>
-          <Button size="sm" variant="outline" className="text-xs" onClick={() => ouvrirFiche(null)}>
-            <Plus className="h-3.5 w-3.5 mr-1" /> Nouvelle fiche
-          </Button>
         </div>
         <div
           ref={mapWrapperRef}
@@ -763,6 +876,40 @@ export default function Secteurs() {
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
 
+          {/* Bouton « désactiver la vue des secteurs » — demande explicite :
+              « un bouton sur la droite pour tous, pour désactiver la vue des
+              secteurs des agents immobiliers donc cela enlèvera les
+              secteurs ». */}
+          <button
+            type="button"
+            onClick={() => setSecteursVisibles((v) => !v)}
+            title={secteursVisibles ? "Masquer les secteurs" : "Afficher les secteurs"}
+            className={`absolute top-3 right-16 z-[1000] w-9 h-9 rounded-full backdrop-blur-sm border grid place-items-center transition-colors shadow-md ${
+              secteursVisibles ? "bg-card/90 border-border hover:bg-card" : "bg-[#E0A21A] border-[#E0A21A] text-[#1b2b2e]"
+            }`}
+          >
+            {secteursVisibles ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          </button>
+
+          {/* Commodités — demande explicite : « un bouton pour les
+              commodités [...] on aurait toutes les pharmacies écoles,
+              commerces ». La recherche + les cases à cocher par catégorie
+              vivent dans le panneau latéral (à droite), plus lisible qu'un
+              petit encart flottant sur la carte — demande explicite :
+              « avoir le panneau latéral de droite plus élaboré [...] et
+              décocher ce que je souhaite ». Ce bouton ouvre/ferme cette
+              section du panneau. */}
+          <button
+            type="button"
+            onClick={() => setCommoditesPanelOuvert((v) => !v)}
+            title="Commodités à proximité"
+            className={`absolute top-3 right-[7.25rem] z-[1000] w-9 h-9 rounded-full backdrop-blur-sm border grid place-items-center transition-colors shadow-md ${
+              commoditesPanelOuvert ? "bg-[#E0A21A] border-[#E0A21A] text-[#1b2b2e]" : "bg-card/90 border-border hover:bg-card"
+            }`}
+          >
+            <Store className="h-4 w-4" />
+          </button>
+
           {/* Bandeau titre + boussole — dans l'esprit de la maquette envoyée
               (« CARTOGRAPHIE DU SECTEUR »), sans chercher à reproduire ses
               formes peintes à la main sur une carte qui reste vivante. */}
@@ -770,12 +917,9 @@ export default function Secteurs() {
             <p className="text-[9px] tracking-[0.2em] text-[#E0A21A]/80 font-bold uppercase">Cartographie</p>
             <p className="text-sm font-bold text-white -mt-0.5">Secteurs des conseillers</p>
           </div>
-          <div className="absolute top-3 right-16 z-[1000] w-9 h-9 rounded-full bg-card/90 backdrop-blur-sm border border-border grid place-items-center shadow-md">
-            <Compass className="h-4 w-4 text-[#E0A21A]" />
-          </div>
 
           {/* Légende — un point par conseiller ayant un secteur défini */}
-          {secteurs.length > 0 && (
+          {secteursVisibles && secteurs.length > 0 && (
             <div className="absolute bottom-6 left-3 z-[1000] px-3 py-2 rounded-xl bg-card/92 backdrop-blur-sm border border-border shadow-lg space-y-1 max-w-[160px]">
               {secteurs.map((s) => {
                 const conseiller = getAdvisorById(s.conseiller_id);
@@ -796,6 +940,105 @@ export default function Secteurs() {
 
       {/* Panneau latéral : secteurs (admin) + contacts */}
       <aside className="w-full md:w-96 shrink-0 border border-border rounded-2xl flex flex-col h-[80vh] overflow-y-auto">
+        {/* Commodités — demande explicite : « avoir le panneau latéral de
+            droite plus élaboré pour avoir une meilleure vue et décocher ce
+            que je souhaite ». Recherche + une case à cocher par catégorie
+            (pharmacie/école/commerce), chacune dépliable sur la liste des
+            lieux trouvés. */}
+        <div className="border-b border-border">
+          <button
+            className="w-full flex items-center gap-2 p-3 text-xs font-bold"
+            onClick={() => setCommoditesPanelOuvert((v) => !v)}
+          >
+            <Store className="h-3.5 w-3.5 text-[#E0A21A]" />
+            Commodités à proximité
+            {commoditesPanelOuvert ? <ChevronUp className="h-3.5 w-3.5 ml-auto" /> : <ChevronDown className="h-3.5 w-3.5 ml-auto" />}
+          </button>
+          {commoditesPanelOuvert && (
+            <div className="p-3 pt-0 space-y-2.5">
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={rechercheCommoditeTexte}
+                  onChange={(e) => setRechercheCommoditeTexte(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && rechercherCommodite()}
+                  placeholder="Ville ou adresse..."
+                  className="h-8 text-[11px]"
+                />
+                <Button size="sm" className="h-8 px-2.5 shrink-0" disabled={commoditesLoading} onClick={rechercherCommodite}>
+                  {commoditesLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+              {commoditesErreur && <p className="text-[11px] text-destructive">{commoditesErreur}</p>}
+              {commoditesListe.length > 0 && (
+                <div className="space-y-2">
+                  {/* Filtre exclusif — demande explicite : « on peut ensuite
+                      sélectionner par exemple la pharmacie, et elle seule
+                      sera affichée comme le commerce etc. » : un clic isole
+                      une catégorie, un second clic sur "Tout" les remet
+                      toutes. */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCommoditesFiltreType("tous")}
+                      className={`flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors ${
+                        commoditesFiltreType === "tous"
+                          ? "bg-[#E0A21A] border-[#E0A21A] text-[#1b2b2e]"
+                          : "border-border text-muted-foreground hover:bg-muted/40"
+                      }`}
+                    >
+                      Tout ({commoditesListe.length})
+                    </button>
+                    {(["pharmacie", "ecole", "commerce"] as TypeCommodite[]).map((type) => {
+                      const n = commoditesListe.filter((c) => c.type === type).length;
+                      if (n === 0) return null;
+                      const actif = commoditesFiltreType === type;
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setCommoditesFiltreType(type)}
+                          className={`flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors ${
+                            actif ? "text-white border-transparent" : "border-border text-muted-foreground hover:bg-muted/40"
+                          }`}
+                          style={actif ? { background: COULEURS_COMMODITE[type] } : undefined}
+                        >
+                          {EMOJI_COMMODITE[type]} {LABELS_COMMODITE[type]} ({n})
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Liste des lieux de la catégorie isolée — "Tout" reste
+                      volontairement sans liste, pour ne pas surcharger. */}
+                  {commoditesFiltreType !== "tous" && (
+                    <div className="rounded-lg border border-border max-h-32 overflow-y-auto">
+                      {commoditesListe
+                        .filter((c) => c.type === commoditesFiltreType)
+                        .map((c) => (
+                          <p key={c.id} className="px-2.5 py-1 text-[10px] text-muted-foreground truncate">
+                            {c.nom}
+                          </p>
+                        ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCommoditesCentre(null);
+                      setCommoditesListe([]);
+                      setCommoditesErreur(null);
+                      setCommoditesFiltreType("tous");
+                      setCommoditesAdresseRecherchee("");
+                    }}
+                    className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                  >
+                    Effacer la recherche
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {peutGererSecteurs && (
           <div className="border-b border-border">
             <button
