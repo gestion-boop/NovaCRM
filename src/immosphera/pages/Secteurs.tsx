@@ -124,6 +124,12 @@ export default function Secteurs() {
   const [commoditesListe, setCommoditesListe] = useState<Commodite[]>([]);
   const [commoditesLoading, setCommoditesLoading] = useState(false);
   const [commoditesErreur, setCommoditesErreur] = useState<string | null>(null);
+  // Décocher une catégorie — demande explicite : « avoir le panneau latéral
+  // de droite plus élaboré [...] et décocher ce que je souhaite ». Les 3
+  // catégories sont cochées (visibles) par défaut.
+  const [commoditesTypesActifs, setCommoditesTypesActifs] = useState<Set<TypeCommodite>>(
+    new Set<TypeCommodite>(["pharmacie", "ecole", "commerce"])
+  );
   const [panneauOuvert, setPanneauOuvert] = useState(true);
   // Demande explicite : « un bouton qui ouvre un popup plus grand pour
   // supprimer des lieux avec une barre de recherche au cas où » — la liste
@@ -422,18 +428,29 @@ export default function Secteurs() {
     const centreMarker = L.marker([commoditesCentre.lat, commoditesCentre.lng], { icon: centreIcon });
     centreMarker.addTo(map);
     commoditeCentreMarkerRef.current = centreMarker;
-    commoditesListe.forEach((c) => {
-      const icon = L.divIcon({
-        className: "map-pin-commodite",
-        html: `<span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${COULEURS_COMMODITE[c.type]};border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);font-size:11px">${EMOJI_COMMODITE[c.type]}</span>`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11],
+    // Décocher une catégorie ne masque que ses marqueurs — le cadrage de la
+    // carte (effet séparé ci-dessous) ne bouge pas à chaque coche/décoche.
+    commoditesListe
+      .filter((c) => commoditesTypesActifs.has(c.type))
+      .forEach((c) => {
+        const icon = L.divIcon({
+          className: "map-pin-commodite",
+          html: `<span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${COULEURS_COMMODITE[c.type]};border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);font-size:11px">${EMOJI_COMMODITE[c.type]}</span>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+        });
+        const marker = L.marker([c.point.lat, c.point.lng], { icon });
+        marker.bindTooltip(adresseTooltipHtml(LABELS_COMMODITE[c.type], c.nom), { direction: "top", offset: [0, -14] });
+        marker.addTo(map);
+        commoditeMarkersRef.current.push(marker);
       });
-      const marker = L.marker([c.point.lat, c.point.lng], { icon });
-      marker.bindTooltip(adresseTooltipHtml(LABELS_COMMODITE[c.type], c.nom), { direction: "top", offset: [0, -14] });
-      marker.addTo(map);
-      commoditeMarkersRef.current.push(marker);
-    });
+  }, [commoditesCentre, commoditesListe, commoditesTypesActifs]);
+
+  // Cadrage de la carte sur la recherche — uniquement quand la recherche
+  // change (pas à chaque coche/décoche de catégorie, voir ci-dessus).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !commoditesCentre) return;
     if (commoditesListe.length > 0) {
       map.fitBounds(
         L.latLngBounds([[commoditesCentre.lat, commoditesCentre.lng], ...commoditesListe.map((c) => [c.point.lat, c.point.lng] as [number, number])]),
@@ -442,6 +459,7 @@ export default function Secteurs() {
     } else {
       map.setView([commoditesCentre.lat, commoditesCentre.lng], 15);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commoditesCentre, commoditesListe]);
 
   // Fit bounds au premier chargement (secteurs, sinon contacts)
@@ -682,6 +700,7 @@ export default function Secteurs() {
       setCommoditesCentre({ lat: resultat.lat, lng: resultat.lng });
       const commodites = await rechercherCommodites({ lat: resultat.lat, lng: resultat.lng });
       setCommoditesListe(commodites);
+      setCommoditesTypesActifs(new Set<TypeCommodite>(["pharmacie", "ecole", "commerce"]));
       if (commodites.length === 0) {
         setCommoditesErreur("Aucune pharmacie, école ou commerce trouvé à proximité.");
       }
@@ -869,8 +888,13 @@ export default function Secteurs() {
           </button>
 
           {/* Commodités — demande explicite : « un bouton pour les
-              commodités. En cherchant une ville [...] on aurait toutes les
-              pharmacies écoles, commerces ». */}
+              commodités [...] on aurait toutes les pharmacies écoles,
+              commerces ». La recherche + les cases à cocher par catégorie
+              vivent dans le panneau latéral (à droite), plus lisible qu'un
+              petit encart flottant sur la carte — demande explicite :
+              « avoir le panneau latéral de droite plus élaboré [...] et
+              décocher ce que je souhaite ». Ce bouton ouvre/ferme cette
+              section du panneau. */}
           <button
             type="button"
             onClick={() => setCommoditesPanelOuvert((v) => !v)}
@@ -881,50 +905,6 @@ export default function Secteurs() {
           >
             <Store className="h-4 w-4" />
           </button>
-
-          {commoditesPanelOuvert && (
-            <div className="absolute top-14 right-3 z-[1000] w-64 p-3 rounded-xl bg-[#1b2b2e]/95 backdrop-blur-sm shadow-lg space-y-2">
-              <p className="text-[10px] font-bold text-white/80 uppercase tracking-wide">Commodités à proximité</p>
-              <div className="flex items-center gap-1.5">
-                <Input
-                  value={rechercheCommoditeTexte}
-                  onChange={(e) => setRechercheCommoditeTexte(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && rechercherCommodite()}
-                  placeholder="Ville ou adresse..."
-                  className="h-8 text-[11px] bg-white/10 border-white/20 text-white placeholder:text-white/40"
-                />
-                <Button size="sm" className="h-8 px-2 shrink-0" disabled={commoditesLoading} onClick={rechercherCommodite}>
-                  {commoditesLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-                </Button>
-              </div>
-              {commoditesErreur && <p className="text-[10px] text-rose-300">{commoditesErreur}</p>}
-              {commoditesListe.length > 0 && (
-                <div className="space-y-1 pt-1 border-t border-white/10">
-                  {(["pharmacie", "ecole", "commerce"] as TypeCommodite[]).map((type) => {
-                    const n = commoditesListe.filter((c) => c.type === type).length;
-                    if (n === 0) return null;
-                    return (
-                      <div key={type} className="flex items-center gap-1.5 text-[10px] text-white/80">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: COULEURS_COMMODITE[type] }} />
-                        {EMOJI_COMMODITE[type]} {LABELS_COMMODITE[type]} ({n})
-                      </div>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCommoditesCentre(null);
-                      setCommoditesListe([]);
-                      setCommoditesErreur(null);
-                    }}
-                    className="text-[10px] text-white/50 hover:text-white underline pt-0.5"
-                  >
-                    Effacer
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Bandeau titre + boussole — dans l'esprit de la maquette envoyée
               (« CARTOGRAPHIE DU SECTEUR »), sans chercher à reproduire ses
@@ -956,6 +936,91 @@ export default function Secteurs() {
 
       {/* Panneau latéral : secteurs (admin) + contacts */}
       <aside className="w-full md:w-96 shrink-0 border border-border rounded-2xl flex flex-col h-[80vh] overflow-y-auto">
+        {/* Commodités — demande explicite : « avoir le panneau latéral de
+            droite plus élaboré pour avoir une meilleure vue et décocher ce
+            que je souhaite ». Recherche + une case à cocher par catégorie
+            (pharmacie/école/commerce), chacune dépliable sur la liste des
+            lieux trouvés. */}
+        <div className="border-b border-border">
+          <button
+            className="w-full flex items-center gap-2 p-3 text-xs font-bold"
+            onClick={() => setCommoditesPanelOuvert((v) => !v)}
+          >
+            <Store className="h-3.5 w-3.5 text-[#E0A21A]" />
+            Commodités à proximité
+            {commoditesPanelOuvert ? <ChevronUp className="h-3.5 w-3.5 ml-auto" /> : <ChevronDown className="h-3.5 w-3.5 ml-auto" />}
+          </button>
+          {commoditesPanelOuvert && (
+            <div className="p-3 pt-0 space-y-2.5">
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={rechercheCommoditeTexte}
+                  onChange={(e) => setRechercheCommoditeTexte(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && rechercherCommodite()}
+                  placeholder="Ville ou adresse..."
+                  className="h-8 text-[11px]"
+                />
+                <Button size="sm" className="h-8 px-2.5 shrink-0" disabled={commoditesLoading} onClick={rechercherCommodite}>
+                  {commoditesLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+              {commoditesErreur && <p className="text-[11px] text-destructive">{commoditesErreur}</p>}
+              {commoditesListe.length > 0 && (
+                <div className="space-y-1.5">
+                  {(["pharmacie", "ecole", "commerce"] as TypeCommodite[]).map((type) => {
+                    const items = commoditesListe.filter((c) => c.type === type);
+                    if (items.length === 0) return null;
+                    const actif = commoditesTypesActifs.has(type);
+                    return (
+                      <div key={type} className="rounded-lg border border-border overflow-hidden">
+                        <label className="flex items-center gap-2 px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer hover:bg-muted/40">
+                          <input
+                            type="checkbox"
+                            checked={actif}
+                            onChange={() =>
+                              setCommoditesTypesActifs((prev) => {
+                                const n = new Set(prev);
+                                if (n.has(type)) n.delete(type);
+                                else n.add(type);
+                                return n;
+                              })
+                            }
+                            className="accent-[#E0A21A]"
+                          />
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: COULEURS_COMMODITE[type] }} />
+                          <span className="truncate flex-1">
+                            {EMOJI_COMMODITE[type]} {LABELS_COMMODITE[type]} ({items.length})
+                          </span>
+                        </label>
+                        {actif && (
+                          <div className="max-h-28 overflow-y-auto border-t border-border">
+                            {items.map((c) => (
+                              <p key={c.id} className="px-2.5 py-1 text-[10px] text-muted-foreground truncate">
+                                {c.nom}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCommoditesCentre(null);
+                      setCommoditesListe([]);
+                      setCommoditesErreur(null);
+                    }}
+                    className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                  >
+                    Effacer la recherche
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {peutGererSecteurs && (
           <div className="border-b border-border">
             <button
