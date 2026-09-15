@@ -4,7 +4,7 @@ import {
   Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown, ChevronRight,
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Mic2, Square, Eye, ArrowLeft, Check, CheckCheck,
-  Clock, Camera,
+  Clock, Camera, Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -48,6 +48,22 @@ interface ChatChannel {
   // migration 20260904130000). `null`/`undefined` pour un canal racine —
   // rendu et comportement strictement inchangés dans ce cas.
   parent_channel_id?: string | null;
+  created_by?: string | null;
+  // Participation par canal — demande explicite : « je veux choisir qui
+  // participe à chaque canal ». `restricted` = false (par défaut, canaux
+  // existants inclus) : tout le dossier voit le canal, comme avant. À
+  // true : seuls les invités (chat_channel_members) + le créateur du canal
+  // + les super admins le voient (voir migration
+  // 20260916100000_chat_channel_members_restriction).
+  restricted?: boolean;
+}
+
+interface ChatChannelMember {
+  id: string;
+  channel_id: string;
+  user_id: string;
+  added_by: string | null;
+  created_at: string;
 }
 
 interface ChatMessageRow {
@@ -193,6 +209,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // ── Gestion des membres par projet (table chat_project_members) ─────────
   const [membersModalProjectId, setMembersModalProjectId] = useState<string | null>(null);
   const [projectMembers, setProjectMembers] = useState<ChatProjectMember[]>([]);
+
+  // ── Gestion des membres par CANAL (table chat_channel_members) ──────────
+  // Demande explicite : « je veux choisir qui participe à chaque canal »
+  // (ex. un canal "Laetitia" au sein du dossier "Réseaux sociaux", visible
+  // seulement d'elle + les personnes qu'on y invite).
+  const [membersModalChannelId, setMembersModalChannelId] = useState<string | null>(null);
+  const [channelMembers, setChannelMembers] = useState<ChatChannelMember[]>([]);
+  const [channelMembersLoading, setChannelMembersLoading] = useState(false);
+  const [channelMemberPickerQuery, setChannelMemberPickerQuery] = useState('');
   // Création d'un dossier de projet (31/08/2026) — « chaque agence doit avoir
   // sa propre vue des dossiers, et le + serait idéal pour créer des dossiers
   // en rattachant les utilisateurs des agences concernées ».
@@ -2493,6 +2518,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           >
             {aDesEnfants ? <Folder className="w-3.5 h-3.5 shrink-0" /> : <Hash className="w-3.5 h-3.5 shrink-0" />}
             <span className="truncate flex-1">{c.name}</span>
+            {c.restricted && <Lock className="w-3 h-3 shrink-0 text-[#F7BC5F]" title="Canal restreint à ses participants" />}
             {canalUnread > 0 && (
               <span className="shrink-0 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-[#F7BC5F] text-slate-950">
                 {canalUnread > 9 ? '9+' : canalUnread}
@@ -2506,6 +2532,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               </button>
               <button onClick={() => moveChannel(c, 1)} disabled={i === fratrie.length - 1} className="p-1 text-slate-500 hover:text-white disabled:opacity-20">
                 <ChevronDown className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => openChannelMembersModal(c.id)}
+                className="p-1 text-slate-500 hover:text-[#F7BC5F]"
+                title="Choisir les participants du canal"
+              >
+                <Users className="w-3 h-3" />
               </button>
               <button onClick={() => setNewSubChannelFor(c.id)} className="p-1 text-slate-500 hover:text-[#F7BC5F]" title="Ajouter un sous-dossier">
                 <FolderPlus className="w-3 h-3" />
@@ -2698,6 +2731,76 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setProjectMembers((prev) => prev.filter((m) => m.id !== member.id));
   };
 
+  // ── Membres d'un CANAL (restriction optionnelle) ─────────────────────
+  const openChannelMembersModal = async (channelId: string) => {
+    setMembersModalChannelId(channelId);
+    setChannelMemberPickerQuery('');
+    setChannelMembersLoading(true);
+    try {
+      const [{ data: membres }] = await Promise.all([
+        supabase.from('chat_channel_members').select('*').eq('channel_id', channelId),
+        ensureProfilesLoaded(),
+      ]);
+      setChannelMembers((membres as ChatChannelMember[]) || []);
+    } finally {
+      setChannelMembersLoading(false);
+    }
+  };
+
+  // Bascule un canal en « restreint » — tant qu'aucun participant n'y est
+  // invité, il reste visible par le créateur et les super admins
+  // uniquement (voir can_view_chat_channel). On prévient si on l'active à
+  // vide, pour éviter la surprise « où est passé mon canal ? ».
+  const toggleChannelRestricted = async (channel: ChatChannel) => {
+    if (!isSuperAdmin) return;
+    const nouvelleValeur = !channel.restricted;
+    const { error } = await supabase.from('chat_channels').update({ restricted: nouvelleValeur } as any).eq('id', channel.id);
+    if (error) {
+      toast.error(`Restriction non modifiée : ${error.message}`);
+      return;
+    }
+    setChannelsByProject((prev) => ({
+      ...prev,
+      [channel.project_id]: (prev[channel.project_id] || []).map((c) => (c.id === channel.id ? { ...c, restricted: nouvelleValeur } : c)),
+    }));
+    if (nouvelleValeur) {
+      toast.info('Canal restreint : invitez ses participants, sinon vous seul(e) le verrez.');
+    }
+  };
+
+  const addChannelMember = async (channelId: string, userId: string) => {
+    if (!isSuperAdmin || !currentUser) return;
+    const channel = Object.values(channelsByProject).flat().find((c) => c.id === channelId);
+    if (!channel) return;
+    // Être invité à un canal d'un dossier suppose d'être membre du dossier
+    // (les policies RLS des messages exigent les deux) — on l'ajoute donc
+    // au passage, silencieusement, si ce n'était pas déjà le cas.
+    const dejaMembreDuDossier = projectMembers.some((m) => m.user_id === userId && m.project_id === channel.project_id);
+    if (!dejaMembreDuDossier) {
+      await supabase.from('chat_project_members').insert({ project_id: channel.project_id, user_id: userId, added_by: currentUser.uid } as any);
+    }
+    const { data, error } = await supabase
+      .from('chat_channel_members')
+      .insert({ channel_id: channelId, user_id: userId, added_by: currentUser.uid } as any)
+      .select()
+      .single();
+    if (error) {
+      toast.error(`Participant non ajouté : ${error.message}`);
+      return;
+    }
+    if (data) {
+      setChannelMembers((prev) => [...prev, data as ChatChannelMember]);
+      const dossier = projects.find((p) => p.id === channel.project_id);
+      await notifierAjoutAuDossier(channel.project_id, `${dossier?.name || 'un dossier'} — ${channel.name}`, [userId]);
+    }
+  };
+
+  const removeChannelMember = async (member: ChatChannelMember) => {
+    if (!isSuperAdmin) return;
+    await supabase.from('chat_channel_members').delete().eq('id', member.id);
+    setChannelMembers((prev) => prev.filter((m) => m.id !== member.id));
+  };
+
   const membersModalProject = projects.find((p) => p.id === membersModalProjectId) || null;
   // Signalé (7 septembre, « Philippe Serra ») : deux comptes du même nom
   // existent (un par agence — voir agency_members), et le sélecteur les
@@ -2711,6 +2814,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       (!membersModalProject?.agency_id || (agencyIdsByUid[p.uid] || []).includes(membersModalProject.agency_id)) &&
       (p.displayName.toLowerCase().includes(memberPickerQuery.toLowerCase()) ||
         p.email.toLowerCase().includes(memberPickerQuery.toLowerCase()))
+  );
+
+  const membersModalChannel = Object.values(channelsByProject).flat().find((c) => c.id === membersModalChannelId) || null;
+  const membersModalChannelProject = membersModalChannel ? projects.find((p) => p.id === membersModalChannel.project_id) || null : null;
+  // Même filtre par agence que memberablePeople — un canal restreint reste
+  // à l'intérieur du dossier et de son agence, super admin excepté (RLS).
+  const channelMemberablePeople = allProfiles.filter(
+    (p) =>
+      !channelMembers.some((m) => m.user_id === p.uid) &&
+      (!membersModalChannelProject?.agency_id || (agencyIdsByUid[p.uid] || []).includes(membersModalChannelProject.agency_id)) &&
+      (p.displayName.toLowerCase().includes(channelMemberPickerQuery.toLowerCase()) ||
+        p.email.toLowerCase().includes(channelMemberPickerQuery.toLowerCase()))
   );
 
   const formatTime = (d: string) =>
@@ -4429,6 +4544,117 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </button>
                   ))}
                   {memberPickerQuery && memberablePeople.length === 0 && (
+                    <p className="text-[11px] text-slate-500 px-1 py-1">Aucun résultat.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Gestion des participants d'un CANAL — demande explicite :
+          « je veux choisir qui participe à chaque canal ». Un canal
+          restreint sans aucun participant reste invisible à tout le monde
+          sauf son créateur/super admin (voir toggleChannelRestricted) : le
+          bouton pour l'activer vit ici, à côté de la liste. */}
+      {membersModalChannelId && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setMembersModalChannelId(null)}
+        >
+          <div
+            className="bg-[#0E1A20] border border-white/10 rounded-2xl max-w-md w-full p-6 text-white space-y-4 max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#F7BC5F]" />
+                <h3 className="text-base font-bold">Participants — {membersModalChannel?.name}</h3>
+              </div>
+              <button onClick={() => setMembersModalChannelId(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {!isSuperAdmin && (
+              <p className="text-[11px] text-slate-400 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                Seuls les super admins peuvent restreindre un canal ou en gérer les participants.
+              </p>
+            )}
+
+            {isSuperAdmin && membersModalChannel && (
+              <button
+                onClick={() => toggleChannelRestricted(membersModalChannel)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold text-left ${
+                  membersModalChannel.restricted
+                    ? 'bg-[#F7BC5F]/10 border-[#F7BC5F]/50 text-[#F7BC5F]'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:border-white/20'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5 shrink-0" />
+                {membersModalChannel.restricted
+                  ? 'Canal restreint — seuls les participants ci-dessous le voient'
+                  : 'Canal ouvert à tout le dossier — cliquer pour le restreindre'}
+              </button>
+            )}
+
+            {/* Liste des participants actuels (n'a de sens que si le canal
+                est restreint, mais reste visible sinon pour préparer une
+                restriction à venir). */}
+            <div className="space-y-1.5 overflow-y-auto custom-scrollbar max-h-56">
+              {channelMembersLoading ? (
+                <p className="text-xs text-slate-500 py-4 text-center">Chargement…</p>
+              ) : channelMembers.length === 0 ? (
+                <p className="text-xs text-slate-500 py-4 text-center">Aucun participant invité pour l'instant.</p>
+              ) : (
+                channelMembers.map((member) => {
+                  const profile = allProfiles.find((p) => p.uid === member.user_id);
+                  return (
+                    <div key={member.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/5 border border-white/10">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold truncate">{profile?.displayName || member.user_id}</p>
+                        {profile?.email && <p className="text-[10px] text-slate-400 truncate">{profile.email}</p>}
+                      </div>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => removeChannelMember(member)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 shrink-0"
+                          title="Retirer ce participant"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Invitation d'un participant (super admins uniquement) */}
+            {isSuperAdmin && (
+              <div className="pt-3 border-t border-white/10 space-y-2">
+                <label className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
+                  <UserPlus className="w-3.5 h-3.5 text-[#F7BC5F]" /> Inviter au canal
+                </label>
+                <input
+                  value={channelMemberPickerQuery}
+                  onChange={(e) => setChannelMemberPickerQuery(e.target.value)}
+                  placeholder="Rechercher par nom ou email…"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                />
+                <div className="max-h-36 overflow-y-auto custom-scrollbar space-y-1">
+                  {channelMemberablePeople.slice(0, 20).map((p) => (
+                    <button
+                      key={p.uid}
+                      onClick={() => membersModalChannelId && addChannelMember(membersModalChannelId, p.uid)}
+                      className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs text-left text-slate-300 hover:bg-white/5 hover:text-white"
+                    >
+                      <span className="truncate">{p.displayName}</span>
+                      <Plus className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
+                    </button>
+                  ))}
+                  {channelMemberPickerQuery && channelMemberablePeople.length === 0 && (
                     <p className="text-[11px] text-slate-500 px-1 py-1">Aucun résultat.</p>
                   )}
                 </div>
