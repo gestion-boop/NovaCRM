@@ -3970,6 +3970,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 )}
                 <Hash className="w-4 h-4 text-[#F7BC5F]" />
                 <span className="font-bold">{activeChannel.name}</span>
+                {activeChannel.restricted && <Lock className="w-3.5 h-3.5 text-[#F7BC5F]" title="Canal restreint à ses participants" />}
+                {/* Voir qui est dans ce canal — demande explicite : « ici je
+                    veux voir les collaborateurs qui sont dans le CRM » (en
+                    étant sur un canal). Le bouton équivalent dans la liste
+                    à gauche n'apparaît qu'au survol (réservé aux super
+                    admins) : celui-ci reste visible pour tout le monde,
+                    en lecture au minimum. */}
+                <button
+                  onClick={() => openChannelMembersModal(activeChannel.id)}
+                  className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/5 shrink-0"
+                  title="Voir les participants de ce canal"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  {!isMobile && 'Participants'}
+                </button>
               </div>
 
               <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-3">
