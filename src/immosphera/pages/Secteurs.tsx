@@ -13,9 +13,11 @@ import {
   rechercherCommunes,
   communesMemeCodePostal,
   DEPARTEMENTS_SECTEUR_LABEL,
+  geocodeRechercheLibre,
   type GeoPoint,
   type SuggestionCommune,
 } from "@/immosphera/lib/geo";
+import { rechercherCommodites, type Commodite, type TypeCommodite } from "@/immosphera/lib/commodites";
 import { createTeardropIcon, adresseTooltipHtml } from "@/immosphera/lib/mapPins";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Compass, Pencil, X, Check, Search, Trash2, ListChecks } from "lucide-react";
+import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Pencil, X, Check, Search, Trash2, ListChecks, Eye, EyeOff, Store } from "lucide-react";
 
 // Demande explicite (14 septembre, v2 — après un premier essai à base de
 // polygones dessinés à la main) : « dans les équipes, dans les fiches des
@@ -105,8 +107,23 @@ export default function Secteurs() {
   const draftLayerRef = useRef<L.Polygon | L.Polyline | null>(null);
   const pointsMarkersRef = useRef<L.Marker[]>([]);
   const contactMarkersRef = useRef<L.Marker[]>([]);
+  const commoditeMarkersRef = useRef<L.Marker[]>([]);
+  const commoditeCentreMarkerRef = useRef<L.Marker | null>(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Demande explicite : « un bouton sur la droite pour tous, pour
+  // désactiver la vue des secteurs [...] cela enlèvera les secteurs ».
+  const [secteursVisibles, setSecteursVisibles] = useState(true);
+  // Commodités (pharmacies, écoles, commerces) autour d'une ville/adresse
+  // recherchée — demande explicite : « un bouton pour les commodités. En
+  // cherchant une ville [...] on aurait toutes les pharmacies écoles,
+  // commerces ». Voir src/immosphera/lib/commodites.ts (Overpass/OSM).
+  const [commoditesPanelOuvert, setCommoditesPanelOuvert] = useState(false);
+  const [rechercheCommoditeTexte, setRechercheCommoditeTexte] = useState("");
+  const [commoditesCentre, setCommoditesCentre] = useState<GeoPoint | null>(null);
+  const [commoditesListe, setCommoditesListe] = useState<Commodite[]>([]);
+  const [commoditesLoading, setCommoditesLoading] = useState(false);
+  const [commoditesErreur, setCommoditesErreur] = useState<string | null>(null);
   const [panneauOuvert, setPanneauOuvert] = useState(true);
   // Demande explicite : « un bouton qui ouvre un popup plus grand pour
   // supprimer des lieux avec une barre de recherche au cas où » — la liste
@@ -314,6 +331,9 @@ export default function Secteurs() {
     if (!map) return;
     polygoneLayersRef.current.forEach((l) => l.remove());
     polygoneLayersRef.current = [];
+    // Bouton « désactiver la vue des secteurs » — demande explicite : « cela
+    // enlèvera les secteurs ». On vide les couches puis on s'arrête là.
+    if (!secteursVisibles) return;
     secteurs.forEach((s) => {
       if (s.conseiller_id === dessinActif) return;
       if (!Array.isArray(s.polygone) || s.polygone.length < 3) return;
@@ -326,7 +346,7 @@ export default function Secteurs() {
       polygone.addTo(map);
       polygoneLayersRef.current.push(polygone);
     });
-  }, [secteurs, dessinActif]);
+  }, [secteurs, dessinActif, secteursVisibles]);
 
   // Cercles de secteur (un par code postal, coloré selon le conseiller) —
   // contour discret + remplissage doux, plusieurs cercles superposés donnant
@@ -336,6 +356,7 @@ export default function Secteurs() {
     if (!map) return;
     secteurLayersRef.current.forEach((l) => l.remove());
     secteurLayersRef.current = [];
+    if (!secteursVisibles) return;
     secteurs.forEach((s) => {
       const conseiller = getAdvisorById(s.conseiller_id);
       s.codes_postaux.forEach((code) => {
@@ -354,7 +375,7 @@ export default function Secteurs() {
         secteurLayersRef.current.push(cercle);
       });
     });
-  }, [secteurs, centroides]);
+  }, [secteurs, centroides, secteursVisibles]);
 
   // Points contacts
   useEffect(() => {
@@ -379,6 +400,49 @@ export default function Secteurs() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contacts, secteurParId]);
+
+  // Commodités (pharmacies, écoles, commerces) autour du point recherché.
+  const COULEURS_COMMODITE: Record<TypeCommodite, string> = { pharmacie: "#e03131", ecole: "#1971c2", commerce: "#f08c00" };
+  const EMOJI_COMMODITE: Record<TypeCommodite, string> = { pharmacie: "💊", ecole: "🏫", commerce: "🛒" };
+  const LABELS_COMMODITE: Record<TypeCommodite, string> = { pharmacie: "Pharmacie", ecole: "École", commerce: "Commerce" };
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    commoditeMarkersRef.current.forEach((m) => m.remove());
+    commoditeMarkersRef.current = [];
+    commoditeCentreMarkerRef.current?.remove();
+    commoditeCentreMarkerRef.current = null;
+    if (!commoditesCentre) return;
+    const centreIcon = L.divIcon({
+      className: "map-pin-commodite-centre",
+      html: `<span style="display:block;width:14px;height:14px;border-radius:50%;background:#1b2b2e;border:3px solid #E0A21A;box-shadow:0 0 0 4px rgba(224,162,26,0.25)"></span>`,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+    const centreMarker = L.marker([commoditesCentre.lat, commoditesCentre.lng], { icon: centreIcon });
+    centreMarker.addTo(map);
+    commoditeCentreMarkerRef.current = centreMarker;
+    commoditesListe.forEach((c) => {
+      const icon = L.divIcon({
+        className: "map-pin-commodite",
+        html: `<span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${COULEURS_COMMODITE[c.type]};border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);font-size:11px">${EMOJI_COMMODITE[c.type]}</span>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      });
+      const marker = L.marker([c.point.lat, c.point.lng], { icon });
+      marker.bindTooltip(adresseTooltipHtml(LABELS_COMMODITE[c.type], c.nom), { direction: "top", offset: [0, -14] });
+      marker.addTo(map);
+      commoditeMarkersRef.current.push(marker);
+    });
+    if (commoditesListe.length > 0) {
+      map.fitBounds(
+        L.latLngBounds([[commoditesCentre.lat, commoditesCentre.lng], ...commoditesListe.map((c) => [c.point.lat, c.point.lng] as [number, number])]),
+        { padding: [50, 50], maxZoom: 16 }
+      );
+    } else {
+      map.setView([commoditesCentre.lat, commoditesCentre.lng], 15);
+    }
+  }, [commoditesCentre, commoditesListe]);
 
   // Fit bounds au premier chargement (secteurs, sinon contacts)
   useEffect(() => {
@@ -600,6 +664,32 @@ export default function Secteurs() {
     });
   };
 
+  // Commodités — demande explicite : « en cherchant une ville [...] et en
+  // cliquant dessus commodité, on aurait toutes les pharmacies écoles,
+  // commerces ». Deux étapes : géocoder la recherche (ville ou adresse
+  // complète), puis charger les commodités autour de ce point.
+  const rechercherCommodite = async () => {
+    const texte = rechercheCommoditeTexte.trim();
+    if (!texte) return;
+    setCommoditesErreur(null);
+    setCommoditesLoading(true);
+    try {
+      const resultat = await geocodeRechercheLibre(texte);
+      if (!resultat) {
+        setCommoditesErreur(`« ${texte} » introuvable.`);
+        return;
+      }
+      setCommoditesCentre({ lat: resultat.lat, lng: resultat.lng });
+      const commodites = await rechercherCommodites({ lat: resultat.lat, lng: resultat.lng });
+      setCommoditesListe(commodites);
+      if (commodites.length === 0) {
+        setCommoditesErreur("Aucune pharmacie, école ou commerce trouvé à proximité.");
+      }
+    } finally {
+      setCommoditesLoading(false);
+    }
+  };
+
   // Autocomplete communes — demande explicite : « un fichier déroulant, on
   // peut cliquer plusieurs villes » plutôt que de taper à la main.
   //
@@ -763,6 +853,79 @@ export default function Secteurs() {
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
 
+          {/* Bouton « désactiver la vue des secteurs » — demande explicite :
+              « un bouton sur la droite pour tous, pour désactiver la vue des
+              secteurs des agents immobiliers donc cela enlèvera les
+              secteurs ». */}
+          <button
+            type="button"
+            onClick={() => setSecteursVisibles((v) => !v)}
+            title={secteursVisibles ? "Masquer les secteurs" : "Afficher les secteurs"}
+            className={`absolute top-3 right-16 z-[1000] w-9 h-9 rounded-full backdrop-blur-sm border grid place-items-center transition-colors shadow-md ${
+              secteursVisibles ? "bg-card/90 border-border hover:bg-card" : "bg-[#E0A21A] border-[#E0A21A] text-[#1b2b2e]"
+            }`}
+          >
+            {secteursVisibles ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          </button>
+
+          {/* Commodités — demande explicite : « un bouton pour les
+              commodités. En cherchant une ville [...] on aurait toutes les
+              pharmacies écoles, commerces ». */}
+          <button
+            type="button"
+            onClick={() => setCommoditesPanelOuvert((v) => !v)}
+            title="Commodités à proximité"
+            className={`absolute top-3 right-[7.25rem] z-[1000] w-9 h-9 rounded-full backdrop-blur-sm border grid place-items-center transition-colors shadow-md ${
+              commoditesPanelOuvert ? "bg-[#E0A21A] border-[#E0A21A] text-[#1b2b2e]" : "bg-card/90 border-border hover:bg-card"
+            }`}
+          >
+            <Store className="h-4 w-4" />
+          </button>
+
+          {commoditesPanelOuvert && (
+            <div className="absolute top-14 right-3 z-[1000] w-64 p-3 rounded-xl bg-[#1b2b2e]/95 backdrop-blur-sm shadow-lg space-y-2">
+              <p className="text-[10px] font-bold text-white/80 uppercase tracking-wide">Commodités à proximité</p>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={rechercheCommoditeTexte}
+                  onChange={(e) => setRechercheCommoditeTexte(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && rechercherCommodite()}
+                  placeholder="Ville ou adresse..."
+                  className="h-8 text-[11px] bg-white/10 border-white/20 text-white placeholder:text-white/40"
+                />
+                <Button size="sm" className="h-8 px-2 shrink-0" disabled={commoditesLoading} onClick={rechercherCommodite}>
+                  {commoditesLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+              {commoditesErreur && <p className="text-[10px] text-rose-300">{commoditesErreur}</p>}
+              {commoditesListe.length > 0 && (
+                <div className="space-y-1 pt-1 border-t border-white/10">
+                  {(["pharmacie", "ecole", "commerce"] as TypeCommodite[]).map((type) => {
+                    const n = commoditesListe.filter((c) => c.type === type).length;
+                    if (n === 0) return null;
+                    return (
+                      <div key={type} className="flex items-center gap-1.5 text-[10px] text-white/80">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: COULEURS_COMMODITE[type] }} />
+                        {EMOJI_COMMODITE[type]} {LABELS_COMMODITE[type]} ({n})
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCommoditesCentre(null);
+                      setCommoditesListe([]);
+                      setCommoditesErreur(null);
+                    }}
+                    className="text-[10px] text-white/50 hover:text-white underline pt-0.5"
+                  >
+                    Effacer
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Bandeau titre + boussole — dans l'esprit de la maquette envoyée
               (« CARTOGRAPHIE DU SECTEUR »), sans chercher à reproduire ses
               formes peintes à la main sur une carte qui reste vivante. */}
@@ -770,12 +933,9 @@ export default function Secteurs() {
             <p className="text-[9px] tracking-[0.2em] text-[#E0A21A]/80 font-bold uppercase">Cartographie</p>
             <p className="text-sm font-bold text-white -mt-0.5">Secteurs des conseillers</p>
           </div>
-          <div className="absolute top-3 right-16 z-[1000] w-9 h-9 rounded-full bg-card/90 backdrop-blur-sm border border-border grid place-items-center shadow-md">
-            <Compass className="h-4 w-4 text-[#E0A21A]" />
-          </div>
 
           {/* Légende — un point par conseiller ayant un secteur défini */}
-          {secteurs.length > 0 && (
+          {secteursVisibles && secteurs.length > 0 && (
             <div className="absolute bottom-6 left-3 z-[1000] px-3 py-2 rounded-xl bg-card/92 backdrop-blur-sm border border-border shadow-lg space-y-1 max-w-[160px]">
               {secteurs.map((s) => {
                 const conseiller = getAdvisorById(s.conseiller_id);

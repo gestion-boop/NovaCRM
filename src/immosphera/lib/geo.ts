@@ -168,6 +168,19 @@ async function geocodeVilleGoogle(
 }
 
 /**
+ * Géocode une recherche libre (ville ou adresse complète) — pour la
+ * recherche « Commodités » de la carte Secteurs : pas de restriction de
+ * département ici (contrairement à geocodeEntreeSecteur), juste centrer la
+ * carte sur ce que l'utilisateur a tapé.
+ */
+export async function geocodeRechercheLibre(texte: string): Promise<(GeoPoint & { label: string }) | null> {
+  const valeur = texte.trim();
+  if (!valeur) return null;
+  const resultat = await geocodeGoogle(new URLSearchParams({ address: valeur, components: "country:FR" }));
+  return resultat ? { lat: resultat.lat, lng: resultat.lng, label: valeur } : null;
+}
+
+/**
  * Géocode un code postal en un point de repère fiable — utilisé pour tracer
  * le secteur d'un conseiller (src/immosphera/pages/Secteurs.tsx) sous forme
  * de cercles colorés, faute de vraies limites de code postal disponibles.
