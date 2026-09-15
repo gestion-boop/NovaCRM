@@ -124,12 +124,11 @@ export default function Secteurs() {
   const [commoditesListe, setCommoditesListe] = useState<Commodite[]>([]);
   const [commoditesLoading, setCommoditesLoading] = useState(false);
   const [commoditesErreur, setCommoditesErreur] = useState<string | null>(null);
-  // Décocher une catégorie — demande explicite : « avoir le panneau latéral
-  // de droite plus élaboré [...] et décocher ce que je souhaite ». Les 3
-  // catégories sont cochées (visibles) par défaut.
-  const [commoditesTypesActifs, setCommoditesTypesActifs] = useState<Set<TypeCommodite>>(
-    new Set<TypeCommodite>(["pharmacie", "ecole", "commerce"])
-  );
+  // Filtre exclusif par catégorie — demande explicite : « on peut ensuite
+  // sélectionner par exemple la pharmacie, et elle seule sera affichée
+  // comme le commerce etc. » : un choix à la fois plutôt que des cases à
+  // cocher indépendantes. "tous" = tout affiché (par défaut).
+  const [commoditesFiltreType, setCommoditesFiltreType] = useState<TypeCommodite | "tous">("tous");
   const [panneauOuvert, setPanneauOuvert] = useState(true);
   // Demande explicite : « un bouton qui ouvre un popup plus grand pour
   // supprimer des lieux avec une barre de recherche au cas où » — la liste
@@ -428,10 +427,10 @@ export default function Secteurs() {
     const centreMarker = L.marker([commoditesCentre.lat, commoditesCentre.lng], { icon: centreIcon });
     centreMarker.addTo(map);
     commoditeCentreMarkerRef.current = centreMarker;
-    // Décocher une catégorie ne masque que ses marqueurs — le cadrage de la
-    // carte (effet séparé ci-dessous) ne bouge pas à chaque coche/décoche.
+    // Changer de filtre ne masque que les marqueurs — le cadrage de la
+    // carte (effet séparé ci-dessous) ne bouge pas à chaque changement.
     commoditesListe
-      .filter((c) => commoditesTypesActifs.has(c.type))
+      .filter((c) => commoditesFiltreType === "tous" || c.type === commoditesFiltreType)
       .forEach((c) => {
         const icon = L.divIcon({
           className: "map-pin-commodite",
@@ -444,7 +443,7 @@ export default function Secteurs() {
         marker.addTo(map);
         commoditeMarkersRef.current.push(marker);
       });
-  }, [commoditesCentre, commoditesListe, commoditesTypesActifs]);
+  }, [commoditesCentre, commoditesListe, commoditesFiltreType]);
 
   // Cadrage de la carte sur la recherche — uniquement quand la recherche
   // change (pas à chaque coche/décoche de catégorie, voir ci-dessus).
@@ -700,7 +699,7 @@ export default function Secteurs() {
       setCommoditesCentre({ lat: resultat.lat, lng: resultat.lng });
       const commodites = await rechercherCommodites({ lat: resultat.lat, lng: resultat.lng });
       setCommoditesListe(commodites);
-      setCommoditesTypesActifs(new Set<TypeCommodite>(["pharmacie", "ecole", "commerce"]));
+      setCommoditesFiltreType("tous");
       if (commodites.length === 0) {
         setCommoditesErreur("Aucune pharmacie, école ou commerce trouvé à proximité.");
       }
@@ -963,50 +962,63 @@ export default function Secteurs() {
               </div>
               {commoditesErreur && <p className="text-[11px] text-destructive">{commoditesErreur}</p>}
               {commoditesListe.length > 0 && (
-                <div className="space-y-1.5">
-                  {(["pharmacie", "ecole", "commerce"] as TypeCommodite[]).map((type) => {
-                    const items = commoditesListe.filter((c) => c.type === type);
-                    if (items.length === 0) return null;
-                    const actif = commoditesTypesActifs.has(type);
-                    return (
-                      <div key={type} className="rounded-lg border border-border overflow-hidden">
-                        <label className="flex items-center gap-2 px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer hover:bg-muted/40">
-                          <input
-                            type="checkbox"
-                            checked={actif}
-                            onChange={() =>
-                              setCommoditesTypesActifs((prev) => {
-                                const n = new Set(prev);
-                                if (n.has(type)) n.delete(type);
-                                else n.add(type);
-                                return n;
-                              })
-                            }
-                            className="accent-[#E0A21A]"
-                          />
-                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: COULEURS_COMMODITE[type] }} />
-                          <span className="truncate flex-1">
-                            {EMOJI_COMMODITE[type]} {LABELS_COMMODITE[type]} ({items.length})
-                          </span>
-                        </label>
-                        {actif && (
-                          <div className="max-h-28 overflow-y-auto border-t border-border">
-                            {items.map((c) => (
-                              <p key={c.id} className="px-2.5 py-1 text-[10px] text-muted-foreground truncate">
-                                {c.nom}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="space-y-2">
+                  {/* Filtre exclusif — demande explicite : « on peut ensuite
+                      sélectionner par exemple la pharmacie, et elle seule
+                      sera affichée comme le commerce etc. » : un clic isole
+                      une catégorie, un second clic sur "Tout" les remet
+                      toutes. */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCommoditesFiltreType("tous")}
+                      className={`flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors ${
+                        commoditesFiltreType === "tous"
+                          ? "bg-[#E0A21A] border-[#E0A21A] text-[#1b2b2e]"
+                          : "border-border text-muted-foreground hover:bg-muted/40"
+                      }`}
+                    >
+                      Tout ({commoditesListe.length})
+                    </button>
+                    {(["pharmacie", "ecole", "commerce"] as TypeCommodite[]).map((type) => {
+                      const n = commoditesListe.filter((c) => c.type === type).length;
+                      if (n === 0) return null;
+                      const actif = commoditesFiltreType === type;
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setCommoditesFiltreType(type)}
+                          className={`flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors ${
+                            actif ? "text-white border-transparent" : "border-border text-muted-foreground hover:bg-muted/40"
+                          }`}
+                          style={actif ? { background: COULEURS_COMMODITE[type] } : undefined}
+                        >
+                          {EMOJI_COMMODITE[type]} {LABELS_COMMODITE[type]} ({n})
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Liste des lieux de la catégorie isolée — "Tout" reste
+                      volontairement sans liste, pour ne pas surcharger. */}
+                  {commoditesFiltreType !== "tous" && (
+                    <div className="rounded-lg border border-border max-h-32 overflow-y-auto">
+                      {commoditesListe
+                        .filter((c) => c.type === commoditesFiltreType)
+                        .map((c) => (
+                          <p key={c.id} className="px-2.5 py-1 text-[10px] text-muted-foreground truncate">
+                            {c.nom}
+                          </p>
+                        ))}
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
                       setCommoditesCentre(null);
                       setCommoditesListe([]);
                       setCommoditesErreur(null);
+                      setCommoditesFiltreType("tous");
                     }}
                     className="text-[11px] text-muted-foreground hover:text-foreground underline"
                   >
