@@ -26,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Pencil, X, Check, Search, Trash2, ListChecks, Eye, EyeOff, Store } from "lucide-react";
+import { MapPin, Send, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Pencil, X, Check, Search, Trash2, ListChecks, Eye, EyeOff, Store } from "lucide-react";
 
 // Demande explicite (14 septembre, v2 — après un premier essai à base de
 // polygones dessinés à la main) : « dans les équipes, dans les fiches des
@@ -853,9 +853,6 @@ export default function Secteurs() {
       <div className="md:flex-1 flex flex-col mb-3 md:mb-0">
         <div className="flex items-center gap-2 pb-2">
           <h2 className="font-bold text-sm mr-auto">🗺️ Secteurs</h2>
-          <Button size="sm" variant="outline" className="text-xs" onClick={() => ouvrirFiche(null)}>
-            <Plus className="h-3.5 w-3.5 mr-1" /> Nouvelle fiche
-          </Button>
         </div>
         <div
           ref={mapWrapperRef}
