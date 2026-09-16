@@ -2491,6 +2491,81 @@ export default function ClientProfileView({
               </div>
             </div>
 
+            {/* Consentement au démarchage téléphonique — Immosphera
+                uniquement. Demande explicite (16 septembre) : positionné
+                juste sous l'en-tête (avatar/nom/température/type), au lieu
+                d'après "Coordonnées" plus bas. */}
+            {isImmosphera && (
+              <div className="pt-4 border-t border-[#143c3f]/50 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Consentement</span>
+                  <button
+                    onClick={() => { setConsentSendEmail(client.email || ''); setConsentSendError(null); setShowSendConsentModal(true); }}
+                    className="text-[10px] font-bold text-[#F7BC5F] hover:text-[#e5ab4c] flex items-center gap-1"
+                  >
+                    <Send className="w-3 h-3" /> Envoyer
+                  </button>
+                </div>
+                {!hasConsent && (
+                  <p className="text-sm text-slate-400">Aucun consentement envoyé pour ce client.</p>
+                )}
+                {hasConsent && <ConsentStatusBadge record={displayedConsent} size="md" />}
+                {latestSignedConsent ? (
+                  <div className="space-y-1 text-sm text-slate-300">
+                    <p>
+                      <span className="text-slate-500">Signé le : </span>
+                      <span className="font-semibold text-white">{formatFr(consentSignedDate)}</span>
+                    </p>
+                    <p>
+                      <span className="text-slate-500">Valable jusqu'au : </span>
+                      <span className={cn('font-semibold', consentExpired ? 'text-rose-400' : 'text-white')}>
+                        {formatFr(consentExpiryDate)}
+                      </span>
+                    </p>
+                    <p>
+                      <span className="text-slate-500">Réalisé par : </span>
+                      <span className="font-semibold text-white">
+                        {(latestSignedConsent.created_by && consentSenders[latestSignedConsent.created_by]?.name) ??
+                          latestSignedConsent.snapshot?.broker_name ??
+                          '—'}
+                      </span>
+                    </p>
+                    {consentExpired && (
+                      <p className="text-xs text-rose-400">
+                        Consentement expiré : un nouveau consentement doit être réalisé.
+                      </p>
+                    )}
+                    {submittedConsentCount > 1 && (
+                      <p className="text-xs text-slate-500">
+                        {submittedConsentCount} consentements dans l'historique.
+                      </p>
+                    )}
+                  </div>
+                ) : hasConsent ? (
+                  <p className="text-sm text-slate-400">Consentement envoyé, en attente de signature du client.</p>
+                ) : null}
+                {hasConsent && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setConsentViewOpen(true)}
+                      disabled={submittedConsentCount === 0}
+                      className="flex-1 px-3 py-2 rounded-xl border border-[#144447]/60 bg-black/20 text-xs font-bold text-slate-200 flex items-center justify-center gap-2 hover:bg-black/30 disabled:opacity-40"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" /> Voir le questionnaire
+                    </button>
+                    <button
+                      onClick={handleDownloadConsentPdf}
+                      disabled={submittedConsentCount === 0 || consentPdfDownloading}
+                      title="Télécharger le PDF"
+                      className="px-3 py-2 rounded-xl border border-[#144447]/60 bg-black/20 text-xs font-bold text-slate-200 flex items-center justify-center gap-2 hover:bg-black/30 disabled:opacity-40"
+                    >
+                      {consentPdfDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="pt-4 border-t border-[#143c3f]/50">
               <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Montant Estimé</span>
               <div className="text-3xl font-black text-[#F7BC5F] mt-1">
@@ -2577,78 +2652,6 @@ export default function ClientProfileView({
                 )}
               </div>
             </div>
-
-            {/* Consentement au démarchage téléphonique — Immosphera uniquement */}
-            {isImmosphera && (
-              <div className="pt-4 border-t border-[#143c3f]/50 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Consentement</span>
-                  <button
-                    onClick={() => { setConsentSendEmail(client.email || ''); setConsentSendError(null); setShowSendConsentModal(true); }}
-                    className="text-[10px] font-bold text-[#F7BC5F] hover:text-[#e5ab4c] flex items-center gap-1"
-                  >
-                    <Send className="w-3 h-3" /> Envoyer
-                  </button>
-                </div>
-                {!hasConsent && (
-                  <p className="text-sm text-slate-400">Aucun consentement envoyé pour ce client.</p>
-                )}
-                {hasConsent && <ConsentStatusBadge record={displayedConsent} size="md" />}
-                {latestSignedConsent ? (
-                  <div className="space-y-1 text-sm text-slate-300">
-                    <p>
-                      <span className="text-slate-500">Signé le : </span>
-                      <span className="font-semibold text-white">{formatFr(consentSignedDate)}</span>
-                    </p>
-                    <p>
-                      <span className="text-slate-500">Valable jusqu'au : </span>
-                      <span className={cn('font-semibold', consentExpired ? 'text-rose-400' : 'text-white')}>
-                        {formatFr(consentExpiryDate)}
-                      </span>
-                    </p>
-                    <p>
-                      <span className="text-slate-500">Réalisé par : </span>
-                      <span className="font-semibold text-white">
-                        {(latestSignedConsent.created_by && consentSenders[latestSignedConsent.created_by]?.name) ??
-                          latestSignedConsent.snapshot?.broker_name ??
-                          '—'}
-                      </span>
-                    </p>
-                    {consentExpired && (
-                      <p className="text-xs text-rose-400">
-                        Consentement expiré : un nouveau consentement doit être réalisé.
-                      </p>
-                    )}
-                    {submittedConsentCount > 1 && (
-                      <p className="text-xs text-slate-500">
-                        {submittedConsentCount} consentements dans l'historique.
-                      </p>
-                    )}
-                  </div>
-                ) : hasConsent ? (
-                  <p className="text-sm text-slate-400">Consentement envoyé, en attente de signature du client.</p>
-                ) : null}
-                {hasConsent && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setConsentViewOpen(true)}
-                      disabled={submittedConsentCount === 0}
-                      className="flex-1 px-3 py-2 rounded-xl border border-[#144447]/60 bg-black/20 text-xs font-bold text-slate-200 flex items-center justify-center gap-2 hover:bg-black/30 disabled:opacity-40"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" /> Voir le questionnaire
-                    </button>
-                    <button
-                      onClick={handleDownloadConsentPdf}
-                      disabled={submittedConsentCount === 0 || consentPdfDownloading}
-                      title="Télécharger le PDF"
-                      className="px-3 py-2 rounded-xl border border-[#144447]/60 bg-black/20 text-xs font-bold text-slate-200 flex items-center justify-center gap-2 hover:bg-black/30 disabled:opacity-40"
-                    >
-                      {consentPdfDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
 
             <div className="pt-4 border-t border-[#143c3f]/50 space-y-3">
               <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Structure & Agent Lié</span>
