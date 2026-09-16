@@ -164,10 +164,9 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         leadIds.length > 0
           ? supabase
               .from("confidential_questionnaires" as any)
-              .select("lead_id, submitted_at, signed_at, valid_until, consent_status, data")
+              .select("lead_id, created_at, submitted_at, signed_at, valid_until, consent_status, data")
               .in("lead_id", leadIds)
               .eq("kind", "consent")
-              .not("submitted_at", "is", null)
           : Promise.resolve({ data: [] }),
       ]);
 
@@ -187,13 +186,25 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         (sharedWithByLead[share.lead_id] ||= new Set<string>()).add(share.shared_with);
       });
 
-      const latestConsentByLead: Record<string, any> = {};
+      // Même règle que la fiche client (ClientProfileView : latestSignedConsent
+      // ?? latestConsent(consentRecords)) : un consentement juste envoyé mais
+      // pas encore signé doit afficher "Envoyé", pas "En attente" — sinon la
+      // liste et la fiche affichaient deux statuts différents pour le même
+      // client (signalé le 16 septembre).
+      const consentsByLead: Record<string, any[]> = {};
       ((consentsRes as any).data ?? []).forEach((c: any) => {
-        if (!c?.lead_id || !c?.submitted_at) return;
-        const existing = latestConsentByLead[c.lead_id];
-        if (!existing || new Date(c.submitted_at).getTime() > new Date(existing.submitted_at).getTime()) {
-          latestConsentByLead[c.lead_id] = c;
-        }
+        if (!c?.lead_id) return;
+        (consentsByLead[c.lead_id] ||= []).push(c);
+      });
+      const latestConsentByLead: Record<string, any> = {};
+      Object.entries(consentsByLead).forEach(([leadId, records]) => {
+        const signed = records.filter((r) => r.submitted_at);
+        const pool = signed.length > 0 ? signed : records;
+        latestConsentByLead[leadId] = [...pool].sort(
+          (a, b) =>
+            new Date(b.submitted_at ?? b.created_at ?? 0).getTime() -
+            new Date(a.submitted_at ?? a.created_at ?? 0).getTime(),
+        )[0];
       });
 
       return rows.map((l: any) => ({
