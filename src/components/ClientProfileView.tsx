@@ -1017,9 +1017,8 @@ export default function ClientProfileView({
   // le Consentement (ci-dessus) est déjà bien réservé à Immosphera ; c'est
   // le Questionnaire confidentiel qui n'avait AUCUNE restriction d'agence
   // (visible pour tout le monde, Immosphera compris) alors qu'il ne
-  // concerne que Conseils Finances.
-  const CONSEILS_FINANCES_ID = '30f96ea9-41da-41c2-a95e-f5e7898f8d8e';
-  const estConseilsFinances = matchesAgency(client?.agencyId, CONSEILS_FINANCES_ID);
+  // concerne que Conseils Finances. Réutilise `estConseilsFinances`,
+  // déjà calculé plus haut (ligne ~569) pour les honoraires TTC.
   const [consentViewOpen, setConsentViewOpen] = useState(false);
   const hasConsent = consentRecords.length > 0;
   const signedConsents = consentRecords.filter((r) => r.submitted_at);
