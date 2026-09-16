@@ -2551,7 +2551,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           >
             {aDesEnfants ? <Folder className="w-3.5 h-3.5 shrink-0" /> : <Hash className="w-3.5 h-3.5 shrink-0" />}
             <span className="truncate flex-1">{c.name}</span>
-            {(channelMemberCounts[c.id] || 0) > 0 && <Lock className="w-3 h-3 shrink-0 text-[#F7BC5F]" title="Canal restreint à ses participants" />}
+            {(channelMemberCounts[c.id] || 0) > 0 && (
+              <span title="Canal restreint à ses participants"><Lock className="w-3 h-3 shrink-0 text-[#F7BC5F]" /></span>
+            )}
             {canalUnread > 0 && (
               <span className="shrink-0 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-[#F7BC5F] text-slate-950">
                 {canalUnread > 9 ? '9+' : canalUnread}
@@ -3987,7 +3989,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 )}
                 <Hash className="w-4 h-4 text-[#F7BC5F]" />
                 <span className="font-bold">{activeChannel.name}</span>
-                {(channelMemberCounts[activeChannel.id] || 0) > 0 && <Lock className="w-3.5 h-3.5 text-[#F7BC5F]" title="Canal restreint à ses participants" />}
+                {(channelMemberCounts[activeChannel.id] || 0) > 0 && (
+                  <span title="Canal restreint à ses participants"><Lock className="w-3.5 h-3.5 text-[#F7BC5F]" /></span>
+                )}
                 {/* Voir qui est dans ce canal — demande explicite : « ici je
                     veux voir les collaborateurs qui sont dans le CRM » (en
                     étant sur un canal). Le bouton équivalent dans la liste
