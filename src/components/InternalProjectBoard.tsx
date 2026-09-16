@@ -320,9 +320,18 @@ interface InternalProjectBoardProps {
   // notification de message posté sur une carte).
   initialOpenTaskId?: string | null;
   onOpenTaskConsumed?: () => void;
+  // Signalé (16 septembre, Novavisio/Diane) : « en cliquant sur la
+  // notification cela ne nous emmène pas à son message » — une fois la
+  // carte ouverte (ci-dessus), fait défiler jusqu'au message précis et le
+  // fait clignoter, même principe que ChatViewSupabase.tsx.
+  initialHighlightMessageId?: string | null;
+  onHighlightMessageConsumed?: () => void;
 }
 
-export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scope, boardTitle, agencyId, users, onBack, onRenamed, canCreateTasks = true, initialOpenTaskId, onOpenTaskConsumed }) => {
+export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({
+  scope, boardTitle, agencyId, users, onBack, onRenamed, canCreateTasks = true,
+  initialOpenTaskId, onOpenTaskConsumed, initialHighlightMessageId, onHighlightMessageConsumed,
+}) => {
   const [title, setTitle] = useState(boardTitle);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(boardTitle);
@@ -387,11 +396,19 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
   const [activeDragTask, setActiveDragTask] = useState<InternalTask | null>(null);
   const [showAddFor, setShowAddFor] = useState<InternalTaskStatus | null>(null);
   const [openTask, setOpenTask] = useState<InternalTask | null>(null);
+  // Message à surligner dans la carte qui s'ouvre — capturé au même moment
+  // que la carte elle-même, pour ne pas s'appliquer à une carte ouverte
+  // normalement (clic direct) après coup.
+  const [pendingHighlightMessageId, setPendingHighlightMessageId] = useState<string | null>(null);
   useEffect(() => {
     if (!initialOpenTaskId || isLoading) return;
     const tache = tasks.find((t) => t.id === initialOpenTaskId);
-    if (tache) setOpenTask(tache);
+    if (tache) {
+      setOpenTask(tache);
+      setPendingHighlightMessageId(initialHighlightMessageId || null);
+    }
     onOpenTaskConsumed?.();
+    onHighlightMessageConsumed?.();
   }, [initialOpenTaskId, isLoading, tasks]);
 
   // Demande explicite : "pouvoir assigner un utilisateur... plutôt que de
@@ -770,7 +787,7 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
         <TaskDetailModal
           task={openTask}
           users={users}
-          onClose={() => setOpenTask(null)}
+          onClose={() => { setOpenTask(null); setPendingHighlightMessageId(null); }}
           onSave={async (updates) => {
             await updateTask.mutateAsync({ id: openTask.id, updates });
             setOpenTask(null);
@@ -779,6 +796,7 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({ scop
             await deleteTask.mutateAsync(openTask.id);
             setOpenTask(null);
           }}
+          initialHighlightMessageId={pendingHighlightMessageId}
         />
       )}
     </div>
@@ -894,7 +912,11 @@ const TaskDetailModal: React.FC<{
   onClose: () => void;
   onSave: (updates: Partial<InternalTask>) => Promise<void>;
   onDelete: () => Promise<void>;
-}> = ({ task, users, onClose, onSave, onDelete }) => {
+  // Signalé (16 septembre, Novavisio/Diane) : « en cliquant sur la
+  // notification cela ne nous emmène pas à son message » — voir
+  // InternalProjectBoard.tsx, pendingHighlightMessageId.
+  initialHighlightMessageId?: string | null;
+}> = ({ task, users, onClose, onSave, onDelete, initialHighlightMessageId }) => {
   // Audit responsive tablette (9 septembre) : le bouton "supprimer cette
   // ligne de checklist" n'était visible qu'au survol — invisible ET
   // inatteignable sur une tablette tactile (pas de souris). Corrigé une
@@ -942,6 +964,25 @@ const TaskDetailModal: React.FC<{
   useEffect(() => {
     if (tab === 'chat') chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [chatMessages.length, tab]);
+
+  // ── Rebond de 5s sur le message visé par une notification ("chat"
+  // uniquement) — même principe que ChatViewSupabase.tsx.
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!initialHighlightMessageId) return;
+    setTab('chat');
+    setHighlightedMessageId(initialHighlightMessageId);
+    const t = setTimeout(() => setHighlightedMessageId((cur) => (cur === initialHighlightMessageId ? null : cur)), 5000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialHighlightMessageId]);
+
+  useEffect(() => {
+    if (!highlightedMessageId) return;
+    const el = document.getElementById(`task-msg-${highlightedMessageId}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightedMessageId, chatMessages.length]);
 
   const sendChatText = async () => {
     if (!chatDraft.trim() || !currentUser || sendingChat) return;
@@ -1266,7 +1307,7 @@ const TaskDetailModal: React.FC<{
                     const sender = users.find((u) => u.uid === m.userId);
                     const isMe = m.userId === currentUser?.uid;
                     return (
-                      <div key={m.id} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
+                      <div key={m.id} id={`task-msg-${m.id}`} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
                         <div className="w-6 h-6 rounded-full bg-white/10 text-gray-300 text-[9px] font-black flex items-center justify-center overflow-hidden shrink-0">
                           {sender ? (sender.photoURL ? <img src={sender.photoURL} alt={sender.displayName} className="w-full h-full object-cover" /> : initials(sender.displayName)) : '?'}
                         </div>
@@ -1275,7 +1316,7 @@ const TaskDetailModal: React.FC<{
                             <span className="text-[10px] font-semibold text-gray-400">{isMe ? 'Vous' : sender?.displayName || 'Quelqu\'un'}</span>
                             <span className="text-[9px] text-gray-600">{new Date(m.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
-                          <div className={`rounded-2xl px-3 py-2 text-xs ${isMe ? 'bg-[#F7BC5F]/15 text-[#F9C977] border border-[#F7BC5F]/30' : 'bg-white/5 text-gray-200 border border-white/10'}`}>
+                          <div className={`rounded-2xl px-3 py-2 text-xs ${isMe ? 'bg-[#F7BC5F]/15 text-[#F9C977] border border-[#F7BC5F]/30' : 'bg-white/5 text-gray-200 border border-white/10'} ${highlightedMessageId === m.id ? 'message-highlight-flash' : ''}`}>
                             {m.kind === 'text' && <span className="whitespace-pre-wrap break-words">{m.body}</span>}
                             {m.kind === 'image' && m.attachmentUrl && (
                               <button

@@ -64,7 +64,7 @@ interface NotificationsViewProps {
   // projet ne m'amène pas directement au projet ». Même principe
   // qu'onOpenMessage, mais pour une carte de projet interne : ouvre
   // directement son projet + sa fiche détail au lieu de la liste générique.
-  onOpenInternalTask?: (taskId: string) => void;
+  onOpenInternalTask?: (taskId: string, messageId?: string) => void;
 }
 
 interface ChatMessageRow {
@@ -136,6 +136,10 @@ type NotificationItem = {
   contactTab?: 'espace-client';
   messageId?: string;
   taskId?: string;
+  // Id du message précis à l'intérieur de la carte de projet interne — voir
+  // useTaskMessages.ts (message_id dans les métadonnées). Distinct de
+  // `messageId` ci-dessus, réservé à la messagerie (/messagerie?highlight=).
+  taskMessageId?: string;
   rawType: string;
 
   priority:
@@ -518,6 +522,12 @@ export const NotificationsView: React.FC<
         taskId: (n.entity_type === 'internal_task' || n.entity_type === 'internal_task_message')
           ? ((n.metadata as { task_id?: string } | null)?.task_id || (n.entity_type === 'internal_task' ? n.entity_id || undefined : undefined))
           : undefined,
+        // Signalé (16 septembre, Novavisio/Diane) : « en cliquant sur la
+        // notification cela ne nous emmène pas à son message » — le message
+        // précis à l'intérieur de la carte, posé par useTaskMessages.ts.
+        taskMessageId: (n.entity_type === 'internal_task' || n.entity_type === 'internal_task_message')
+          ? (n.metadata as { message_id?: string } | null)?.message_id || undefined
+          : undefined,
         rawType: n.type,
         priority: n.type === 'lead_assigned' || n.type === 'task_assigned' ? 'important' : 'normal',
       } as NotificationItem));
@@ -774,7 +784,7 @@ export const NotificationsView: React.FC<
             } else if (notification.navTarget === 'chat' && notification.messageId && onOpenMessage) {
               onOpenMessage(notification.messageId);
             } else if (notification.navTarget === 'projets-internes' && notification.taskId && onOpenInternalTask) {
-              onOpenInternalTask(notification.taskId);
+              onOpenInternalTask(notification.taskId, notification.taskMessageId);
             } else {
               onNavigate(notification.navTarget);
             }

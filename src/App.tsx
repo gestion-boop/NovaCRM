@@ -168,6 +168,10 @@ function App() {
   // NotificationsView.tsx, onOpenInternalTask) : ouvre directement le
   // projet + la carte visée au lieu de la liste générique.
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
+  // Signalé (16 septembre, Novavisio/Diane) : « en cliquant sur la
+  // notification cela ne nous emmène pas à son message » — le message
+  // précis à surligner/faire défiler dans la carte une fois ouverte.
+  const [highlightTaskMessageId, setHighlightTaskMessageId] = useState<string | null>(null);
   const [novaAIPrompt, setNovaAIPrompt] = useState<string | null>(null);
   // Nova IA s'affiche désormais en superposition de l'interface principale
   // (quelle qu'elle soit, généralement l'accueil) au lieu de la remplacer
@@ -1090,6 +1094,8 @@ function App() {
               agencyId={activeAgency.id}
               initialOpenTaskId={highlightTaskId}
               onOpenTaskConsumed={() => setHighlightTaskId(null)}
+              initialHighlightMessageId={highlightTaskMessageId}
+              onHighlightMessageConsumed={() => setHighlightTaskMessageId(null)}
             />
           )}
 
@@ -1539,10 +1545,11 @@ function App() {
                   setHighlightMessageId(messageId);
                   setCurrentNav('chat');
                 }}
-                onOpenInternalTask={(taskId) => {
+                onOpenInternalTask={(taskId, messageId) => {
                   setNotificationsPanelOpen(false);
                   openClientProfile(null);
                   setHighlightTaskId(taskId);
+                  setHighlightTaskMessageId(messageId || null);
                   setCurrentNav('projets-internes');
                 }}
               />

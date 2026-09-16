@@ -165,7 +165,13 @@ export const useTaskMessages = (taskId: string | null) => {
                 _entity_type: messageId ? 'internal_task_message' : 'internal_task',
                 _entity_id: messageId || taskId,
                 _agency_id: t.agency_id,
-                _metadata: { url: '/projets-internes', task_id: taskId },
+                // Signalé (16 septembre, Novavisio/Diane) : « en cliquant
+                // sur la notification cela ne nous emmène pas à son
+                // message » — jusqu'ici seul task_id était transmis, rien
+                // ne permettait de savoir QUEL message ouvrir dans la
+                // carte. message_id ajouté, même principe que le
+                // `?highlight=` de la messagerie (voir ChatViewSupabase.tsx).
+                _metadata: { url: '/projets-internes', task_id: taskId, message_id: messageId },
               })
             )
           );
