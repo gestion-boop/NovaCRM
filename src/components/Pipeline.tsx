@@ -40,6 +40,7 @@ import { useIsLightMode } from './AccueilGrid';
 import TransactionChecklistModal, {
   STAGE_CHECKLISTS,
   IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID,
+  IMMOSPHERA_AGENCY_ID,
   usePreviousStageMissingCount,
   useCurrentStageChecklistCount,
 } from './TransactionChecklistModal';
@@ -616,6 +617,15 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
   const canManageStructure = !!currentUser && userProfile?.role === 'super_admin';
 
+  // Cloisonnement par utilisateur (Immosphera, demande explicite du 16
+  // septembre) : un admin (pas seulement super admin, contrairement à
+  // canManageStructure ci-dessus, réservé à la structure des colonnes) voit
+  // tous les dossiers de l'agence dans chaque pipeline ; les autres ne
+  // voient que les leurs. Voir la policy RLS "leads: lecture par les
+  // membres de l'agence" (migration 20260916150000) : ceci reflète côté
+  // UI ce que Supabase filtre déjà réellement côté serveur.
+  const estAdminVueDossiers = canManageStructure || userProfile?.role === 'admin';
+
   // « Je veux que les utilisateurs puissent supprimer les pipelines, sauf
   // les pipelines officiels, ou même renommer » (2 septembre). Renommer et
   // supprimer s'ouvrent donc à tout le monde, SAUF sur le pipeline officiel
@@ -754,17 +764,19 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           !deal.archivedAt
       );
 
-      // Signalé (7 septembre) : « il faut que les utilisateurs de
-      // ImmoSphera ne voient que leur propre dossier » dans Transactions
-      // V2 — trop de cartes, trop peu lisible dès qu'un agent regarde le
-      // pipeline complet de l'agence. Restreint aux dossiers dont il/elle
-      // est l'agent (assigned_to, repli sur created_by — voir advisorId
-      // dans useDeals.ts), sauf pour le super admin qui garde la vue
-      // complète (déjà celui qui voit les totaux agence ci-dessous).
-      if (activePipeline?.id === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID && !canManageStructure) {
-        return base.filter((deal) => deal.advisorId === currentUser?.uid);
-      }
-
+      // Cloisonnement par utilisateur (16 septembre, Immosphera) : chaque
+      // pipeline est désormais cloisonné par utilisateur (les admins
+      // voient tout), SAUF Pipeline Transactions V2, laissé pour
+      // l'instant visible de tous. Ce n'est plus un filtre client — c'est
+      // la policy RLS "leads: lecture par les membres de l'agence" qui ne
+      // renvoie déjà que les bonnes lignes (voir migration
+      // 20260916150000_leads_immosphera_pipeline_siloing) : `base` ne
+      // contient donc déjà que ce que l'utilisateur a le droit de voir,
+      // aucun filtre supplémentaire n'est nécessaire ici.
+      //
+      // Précédemment (7 septembre) c'était l'inverse — Transactions V2
+      // seule restreinte, filtrée côté client — remplacé par ce qui
+      // précède.
       return base;
     }, [
       allDeals,
@@ -2093,14 +2105,17 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                   (estAgenceNovavisio(currentAgencyId) && couleurEtapeNovavisio(stage)) ||
                   STAGE_ACCENT_COLORS[stageIndex % STAGE_ACCENT_COLORS.length];
 
-                // Transactions V2 (ImmoSphera) : `agencyDeals` est déjà
-                // restreint aux dossiers du conseiller pour un non-admin
-                // (voir plus haut) — `stageTotal` ne porte donc plus que
-                // SES dossiers à lui, et peut s'afficher sans rien
-                // dévoiler du reste de l'agence. Demandé le 7 septembre :
-                // « il faut que le montant des dossiers s'additionne tous
-                // en haut de la colonne ».
-                const estVueDossiersPropres = activePipeline.id === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID && !canManageStructure;
+                // Cloisonnement par utilisateur (16 septembre, Immosphera) :
+                // `agencyDeals` ne contient déjà (via la policy RLS) que
+                // les dossiers du conseiller pour un non-admin, sur tout
+                // pipeline Immosphera SAUF Transactions V2 (laissé visible
+                // de tous pour l'instant) — `stageTotal` ne porte donc que
+                // SES dossiers à lui sur ces pipelines-là, et peut
+                // s'afficher sans rien dévoiler du reste de l'agence.
+                const estVueDossiersPropres =
+                  currentAgencyId === IMMOSPHERA_AGENCY_ID &&
+                  activePipeline.id !== IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID &&
+                  !estAdminVueDossiers;
 
                 return (
                   <PipelineColumn
