@@ -205,37 +205,6 @@ export default function ClientProfileView({
   const currentUserName = currentUser?.displayName || currentUserEmail.split('@')[0];
   const isSuperAdmin = userProfile?.role === 'super_admin';
 
-  // Ticket "Clients invités" (3/13) : "Inviter dans l'espace client".
-  const [showGuestInviteModal, setShowGuestInviteModal] = useState(false);
-  const [guestInviteBusy, setGuestInviteBusy] = useState(false);
-  const [guestInviteResult, setGuestInviteResult] = useState<{ reason?: string; message?: string; duplicates?: any[] } | null>(null);
-
-  async function inviteClientGuest() {
-    if (!client?.id || !currentUser) return;
-    setGuestInviteBusy(true);
-    setGuestInviteResult(null);
-    try {
-      const token = await currentUser.getIdToken();
-      const res = await fetch('/api/clients/guest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'invite', leadId: client.id }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || 'Erreur.');
-      if (body.ok === false) {
-        setGuestInviteResult(body);
-        return;
-      }
-      toast.success(body.emailSent ? 'Invitation envoyée par e-mail.' : "Compte créé, mais l'e-mail n'a pas pu être envoyé.");
-      setShowGuestInviteModal(false);
-    } catch (err: any) {
-      toast.error(err?.message || "Impossible d'inviter ce client.");
-    } finally {
-      setGuestInviteBusy(false);
-    }
-  }
-
   // Demande explicite : "un onglet rdv pour prendre un rdv si besoin avec
   // vue sur agenda" — 'rdv' (déjà existant) ne contenait en réalité que des
   // TÂCHES internes CRM, jamais synchronisées à un agenda ; 'agenda' est un
@@ -1010,6 +979,24 @@ export default function ClientProfileView({
   const IMMOSPHERA_ID = '15157da9-71ea-4760-ae1c-3bc99d9caa20';
   const isImmosphera = matchesAgency(client?.agencyId, IMMOSPHERA_ID);
   const { data: consentRecords = [] } = useLeadConsents(clientId, isImmosphera);
+  // Demande explicite (16 septembre) : « quand le consentement a été
+  // signé, mets à jour sur la fiche du contact » — la signature se fait
+  // depuis la page publique (un autre appareil/onglet, sans session CRM) ;
+  // sans ceci, la fiche déjà ouverte restait sur l'ancien statut tant
+  // qu'elle n'était pas rechargée à la main. Même principe que le chat
+  // partagé juste au-dessus (client-share-chat).
+  useEffect(() => {
+    if (!isImmosphera || !clientId) return;
+    const channel = supabase
+      .channel(`consentement-${clientId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'confidential_questionnaires', filter: `lead_id=eq.${clientId}` },
+        () => qc.invalidateQueries({ queryKey: ['consent-forms-full', clientId] })
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [isImmosphera, clientId, qc]);
 
   // Signalé (16 septembre) : « tu n'as pas mis en place le consentement
   // pour les agents immobiliers, mais le questionnaire confidentiel. Qui
@@ -2292,7 +2279,6 @@ export default function ClientProfileView({
                     { icon: Calendar, label: 'Nouveau RDV/tâche', action: () => { setEditingTask(null); setShowTaskModal(true); } },
                     { icon: MessageSquare, label: 'Nouvelle note', action: () => { setActiveTab('notes'); setShowNewNoteModal(true); } },
                     { icon: Mail, label: 'Nouveau Mail', action: () => (onComposeMail ? onComposeMail(client.email || '') : toast.info('Ouvrez Mail depuis le menu latéral')) },
-                    ...(isSuperAdmin ? [{ icon: UserPlus, label: 'Inviter dans l\'espace client', action: () => { setGuestInviteResult(null); setShowGuestInviteModal(true); } }] : []),
                     { icon: Pencil, label: 'Modifier', action: () => setShowEditModal(true) },
                     client.archivedAt
                       ? { icon: ArchiveRestore, label: 'Désarchiver', action: () => void handleUnarchive() }
@@ -4576,58 +4562,8 @@ export default function ClientProfileView({
         />
       )}
 
-      {showGuestInviteModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => !guestInviteBusy && setShowGuestInviteModal(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-[#07191b] border border-[#1b4e52] rounded-2xl max-w-sm w-full p-6 text-white shadow-2xl relative animate-scale-up">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-[#143c3f] border border-[#1a5155] flex items-center justify-center text-[#F9C977]">
-                <UserPlus className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-white">Inviter dans l'espace client</h3>
-            </div>
-
-            {!guestInviteResult && (
-              <>
-                <p className="text-sm text-slate-300 mb-1">
-                  {client.email
-                    ? <>Un e-mail d'invitation sécurisé sera envoyé à <span className="text-[#F9C977] font-semibold">{client.email}</span>, pour l'agence <span className="font-semibold">{client.agencyId ? AGENCIES.find(a => a.id === client.agencyId)?.name || client.agencyId : ''}</span>.</>
-                    : "Cette fiche n'a pas d'adresse e-mail. Ajoutez-en une (bouton \"Modifier\") avant d'inviter ce client."}
-                </p>
-                <div className="flex justify-end gap-2 mt-5">
-                  <button onClick={() => setShowGuestInviteModal(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-gray-300 hover:text-white hover:bg-white/5">Annuler</button>
-                  <button
-                    onClick={() => void inviteClientGuest()}
-                    disabled={!client.email || guestInviteBusy}
-                    className="px-4 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-xs flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {guestInviteBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Envoyer l'invitation
-                  </button>
-                </div>
-              </>
-            )}
-
-            {guestInviteResult?.reason === 'already_invited' && (
-              <p className="text-sm text-slate-300">Ce client est déjà invité (statut : {guestInviteResult.message}).</p>
-            )}
-            {guestInviteResult?.reason === 'duplicate_email' && (
-              <div className="text-sm text-slate-300 space-y-2">
-                <p>Cette adresse e-mail est déjà utilisée par {guestInviteResult.duplicates?.length === 1 ? 'une autre fiche' : `${guestInviteResult.duplicates?.length} autres fiches`} :</p>
-                <ul className="list-disc list-inside text-slate-400 text-xs">
-                  {(guestInviteResult.duplicates || []).map((d: any) => (
-                    <li key={d.id}>{d.full_name || `${d.first_name || ''} ${d.last_name || ''}`.trim() || d.id}</li>
-                  ))}
-                </ul>
-                <p className="text-xs text-slate-500">Corrigez l'adresse sur l'une des fiches avant de continuer — aucun accès n'a été créé.</p>
-              </div>
-            )}
-            {(guestInviteResult?.reason === 'already_invited' || guestInviteResult?.reason === 'duplicate_email') && (
-              <div className="flex justify-end mt-5">
-                <button onClick={() => setShowGuestInviteModal(false)} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs">Fermer</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* "Inviter dans l'espace client" retiré (demande explicite, 16
+          septembre) — plus d'entrée dans le menu Actions ni de popup. */}
 
       {montantEtapePrompt && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => setMontantEtapePrompt(null)}>
