@@ -515,18 +515,22 @@ export const NotificationsView: React.FC<
         // (`?highlight=<id>` ou `&highlight_message=<id>`) — c'est ce qui
         // permet d'ouvrir directement la bonne conversation au clic.
         messageId: n.link?.match(/[?&]highlight(?:_message)?=([0-9a-f-]{36})/)?.[1],
-        // Id de la CARTE de projet interne (voir useTaskMessages.ts, qui
-        // pose `_metadata: { url: '/projets-internes', task_id: taskId }`)
-        // — c'est ce qui permet d'ouvrir directement le bon projet/la bonne
-        // carte au lieu de la liste générique des projets.
+        // Id de la CARTE de projet interne — encodé dans `link` (voir
+        // useTaskMessages.ts, `?task=<id>`) et non dans les métadonnées : la
+        // table `notifications` n'a PAS de colonne `metadata`, un premier
+        // essai s'appuyant dessus (16 septembre) était donc inopérant, la
+        // fonction SQL create_notification ne persistant que `link`. Repli
+        // sur `entity_id` pour d'éventuelles anciennes notifications sans ce
+        // paramètre (posées avant ce correctif, ou de type 'internal_task').
         taskId: (n.entity_type === 'internal_task' || n.entity_type === 'internal_task_message')
-          ? ((n.metadata as { task_id?: string } | null)?.task_id || (n.entity_type === 'internal_task' ? n.entity_id || undefined : undefined))
+          ? (n.link?.match(/[?&]task=([0-9a-f-]{36})/)?.[1] || (n.entity_type === 'internal_task' ? n.entity_id || undefined : undefined))
           : undefined,
         // Signalé (16 septembre, Novavisio/Diane) : « en cliquant sur la
         // notification cela ne nous emmène pas à son message » — le message
-        // précis à l'intérieur de la carte, posé par useTaskMessages.ts.
+        // précis à l'intérieur de la carte, réutilise le même `?highlight=`
+        // que `messageId` ci-dessus (posé par useTaskMessages.ts).
         taskMessageId: (n.entity_type === 'internal_task' || n.entity_type === 'internal_task_message')
-          ? (n.metadata as { message_id?: string } | null)?.message_id || undefined
+          ? n.link?.match(/[?&]highlight(?:_message)?=([0-9a-f-]{36})/)?.[1]
           : undefined,
         rawType: n.type,
         priority: n.type === 'lead_assigned' || n.type === 'task_assigned' ? 'important' : 'normal',
