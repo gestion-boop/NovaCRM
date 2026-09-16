@@ -171,6 +171,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('projets');
   const [projects, setProjects] = useState<ChatProject[]>([]);
   const [channelsByProject, setChannelsByProject] = useState<Record<string, ChatChannel[]>>({});
+  // Nombre de participants invités par canal — la restriction est
+  // désormais automatique (voir plus bas) : dès qu'un canal a au moins un
+  // participant, il est restreint. Sert à afficher le cadenas sans avoir à
+  // ouvrir le popup de gestion.
+  const [channelMemberCounts, setChannelMemberCounts] = useState<Record<string, number>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [activeChannel, setActiveChannel] = useState<ChatChannel | null>(null);
   const [messages, setMessages] = useState<ChatMessageRow[]>([]);
@@ -2177,6 +2182,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         (grouped[c.project_id] ||= []).push(c);
       });
       setChannelsByProject(grouped);
+
+      // Comptage des participants par canal — un canal restreint où
+      // l'utilisateur courant n'est pas invité n'apparaît de toute façon
+      // pas dans channelRows (RLS), donc ce comptage ne peut porter que sur
+      // des canaux déjà visibles.
+      const ids = (channelRows as ChatChannel[] || []).map((c) => c.id);
+      if (ids.length > 0) {
+        const { data: membresRows } = await supabase.from('chat_channel_members').select('channel_id').in('channel_id', ids);
+        const counts: Record<string, number> = {};
+        ((membresRows as { channel_id: string }[]) || []).forEach((m) => {
+          counts[m.channel_id] = (counts[m.channel_id] || 0) + 1;
+        });
+        setChannelMemberCounts(counts);
+      }
     }
   };
 
@@ -2314,26 +2333,29 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const notifierMembresDuDossier = async (canal: ChatChannel, apercu: string, messageId?: string) => {
     if (!currentUser) return;
     try {
-      // Signalé (16 septembre) : « quand je mets un message tous les
-      // utilisateurs du CRM de Immosphera reçoivent le message ce n'est pas
-      // bon [...] Chaque canal devra donner des accès à des utilisateurs
-      // pour pouvoir recevoir les messages » — un canal RESTREINT (voir
-      // chat_channel_members / can_view_chat_channel, migration
-      // 20260916100000) n'était notifié qu'au niveau du DOSSIER entier :
-      // même invisible pour eux (RLS bloque bien la lecture), les autres
-      // membres du dossier recevaient quand même la notification, qui
-      // dévoile déjà le nom du canal et un aperçu du message. Pour un canal
-      // restreint, seuls ses participants explicites (+ son créateur,
-      // toujours autorisé à le voir) sont notifiés désormais.
-      const { data: membres } = canal.restricted
-        ? await supabase.from('chat_channel_members').select('user_id').eq('channel_id', canal.id)
+      // Signalé (16 septembre, capture à l'appui) : « Isabelle voit les
+      // canaux de Laetitia, Carine etc. et [...] reçoit également le
+      // message alors qu'elle ne fait pas partie du canal. Il faut
+      // cloisonner et conditionner ABSOLUMENT ». La restriction est
+      // désormais automatique (voir can_view_chat_channel, migration
+      // 20260916180000) : dès qu'un canal a des participants invités
+      // (chat_channel_members), il est restreint à eux — plus de case à
+      // cocher séparée à oublier. On interroge donc toujours
+      // chat_channel_members d'abord ; s'il n'y a AUCUN participant invité,
+      // le canal est ouvert et on retombe sur tout le dossier.
+      const { data: membresCanal } = await supabase.from('chat_channel_members').select('user_id').eq('channel_id', canal.id);
+      const participantsInvites = (membresCanal as { user_id: string }[]) || [];
+      const canalRestreint = participantsInvites.length > 0;
+
+      const { data: membres } = canalRestreint
+        ? { data: participantsInvites }
         : await supabase.from('chat_project_members').select('user_id').eq('project_id', canal.project_id);
 
       const destinataires = Array.from(
         new Set(
           [
             ...((membres as { user_id: string }[]) || []).map((m) => m.user_id),
-            ...(canal.restricted && canal.created_by ? [canal.created_by] : []),
+            ...(canalRestreint && canal.created_by ? [canal.created_by] : []),
           ].filter((uid) => uid && uid !== currentUser.uid)
         )
       );
@@ -2529,7 +2551,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           >
             {aDesEnfants ? <Folder className="w-3.5 h-3.5 shrink-0" /> : <Hash className="w-3.5 h-3.5 shrink-0" />}
             <span className="truncate flex-1">{c.name}</span>
-            {c.restricted && <Lock className="w-3 h-3 shrink-0 text-[#F7BC5F]" title="Canal restreint à ses participants" />}
+            {(channelMemberCounts[c.id] || 0) > 0 && <Lock className="w-3 h-3 shrink-0 text-[#F7BC5F]" title="Canal restreint à ses participants" />}
             {canalUnread > 0 && (
               <span className="shrink-0 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-[#F7BC5F] text-slate-950">
                 {canalUnread > 9 ? '9+' : canalUnread}
@@ -2758,27 +2780,6 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     }
   };
 
-  // Bascule un canal en « restreint » — tant qu'aucun participant n'y est
-  // invité, il reste visible par le créateur et les super admins
-  // uniquement (voir can_view_chat_channel). On prévient si on l'active à
-  // vide, pour éviter la surprise « où est passé mon canal ? ».
-  const toggleChannelRestricted = async (channel: ChatChannel) => {
-    if (!isSuperAdmin) return;
-    const nouvelleValeur = !channel.restricted;
-    const { error } = await supabase.from('chat_channels').update({ restricted: nouvelleValeur } as any).eq('id', channel.id);
-    if (error) {
-      toast.error(`Restriction non modifiée : ${error.message}`);
-      return;
-    }
-    setChannelsByProject((prev) => ({
-      ...prev,
-      [channel.project_id]: (prev[channel.project_id] || []).map((c) => (c.id === channel.id ? { ...c, restricted: nouvelleValeur } : c)),
-    }));
-    if (nouvelleValeur) {
-      toast.info('Canal restreint : invitez ses participants, sinon vous seul(e) le verrez.');
-    }
-  };
-
   const addChannelMember = async (channelId: string, userId: string) => {
     if (!isSuperAdmin || !currentUser) return;
     const channel = Object.values(channelsByProject).flat().find((c) => c.id === channelId);
@@ -2801,6 +2802,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     }
     if (data) {
       setChannelMembers((prev) => [...prev, data as ChatChannelMember]);
+      // Restriction automatique (voir can_view_chat_channel) : le compteur
+      // local suffit à faire apparaître le cadenas tout de suite, sans
+      // recharger toute la liste des canaux.
+      setChannelMemberCounts((prev) => ({ ...prev, [channelId]: (prev[channelId] || 0) + 1 }));
       const dossier = projects.find((p) => p.id === channel.project_id);
       await notifierAjoutAuDossier(channel.project_id, `${dossier?.name || 'un dossier'} — ${channel.name}`, [userId]);
     }
@@ -2810,6 +2815,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (!isSuperAdmin) return;
     await supabase.from('chat_channel_members').delete().eq('id', member.id);
     setChannelMembers((prev) => prev.filter((m) => m.id !== member.id));
+    setChannelMemberCounts((prev) => ({ ...prev, [member.channel_id]: Math.max(0, (prev[member.channel_id] || 1) - 1) }));
   };
 
   const membersModalProject = projects.find((p) => p.id === membersModalProjectId) || null;
@@ -3981,7 +3987,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 )}
                 <Hash className="w-4 h-4 text-[#F7BC5F]" />
                 <span className="font-bold">{activeChannel.name}</span>
-                {activeChannel.restricted && <Lock className="w-3.5 h-3.5 text-[#F7BC5F]" title="Canal restreint à ses participants" />}
+                {(channelMemberCounts[activeChannel.id] || 0) > 0 && <Lock className="w-3.5 h-3.5 text-[#F7BC5F]" title="Canal restreint à ses participants" />}
                 {/* Voir qui est dans ce canal — demande explicite : « ici je
                     veux voir les collaborateurs qui sont dans le CRM » (en
                     étant sur un canal). Le bouton équivalent dans la liste
@@ -4580,10 +4586,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       )}
 
       {/* Modal Gestion des participants d'un CANAL — demande explicite :
-          « je veux choisir qui participe à chaque canal ». Un canal
-          restreint sans aucun participant reste invisible à tout le monde
-          sauf son créateur/super admin (voir toggleChannelRestricted) : le
-          bouton pour l'activer vit ici, à côté de la liste. */}
+          « je veux choisir qui participe à chaque canal ». La restriction
+          est automatique et absolue (16 septembre, suite à un signalement :
+          une case à cocher séparée avait été oubliée sur 5 canaux, qui
+          restaient donc ouverts à tout le dossier malgré des participants
+          déjà invités) : dès qu'un participant est invité ci-dessous, le
+          canal est restreint à lui/eux, sans bouton à activer. Retirer
+          tout le monde rouvre automatiquement le canal à tout le dossier. */}
       {membersModalChannelId && (
         <div
           className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -4605,24 +4614,23 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
             {!isSuperAdmin && (
               <p className="text-[11px] text-slate-400 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
-                Seuls les super admins peuvent restreindre un canal ou en gérer les participants.
+                Seuls les super admins peuvent inviter ou retirer des participants.
               </p>
             )}
 
-            {isSuperAdmin && membersModalChannel && (
-              <button
-                onClick={() => toggleChannelRestricted(membersModalChannel)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold text-left ${
-                  membersModalChannel.restricted
+            {membersModalChannel && (
+              <div
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold ${
+                  channelMembers.length > 0
                     ? 'bg-[#F7BC5F]/10 border-[#F7BC5F]/50 text-[#F7BC5F]'
-                    : 'bg-white/5 border-white/10 text-slate-300 hover:border-white/20'
+                    : 'bg-white/5 border-white/10 text-slate-300'
                 }`}
               >
                 <Lock className="w-3.5 h-3.5 shrink-0" />
-                {membersModalChannel.restricted
-                  ? 'Canal restreint — seuls les participants ci-dessous le voient'
-                  : 'Canal ouvert à tout le dossier — cliquer pour le restreindre'}
-              </button>
+                {channelMembers.length > 0
+                  ? 'Canal restreint — seuls les participants ci-dessous le voient et reçoivent ses messages'
+                  : 'Canal ouvert à tout le dossier — invitez un participant pour le restreindre automatiquement'}
+              </div>
             )}
 
             {/* Liste des participants actuels (n'a de sens que si le canal
