@@ -45,6 +45,12 @@ interface ProjetsInternesProps {
   // projet et on l'ouvre directement dessus.
   initialOpenTaskId?: string | null;
   onOpenTaskConsumed?: () => void;
+  // Signalé (16 septembre, Novavisio/Diane) : « en cliquant sur la
+  // notification cela ne nous emmène pas à son message » — même principe
+  // que ci-dessus, mais pour le message précis à l'intérieur de la carte
+  // (voir InternalProjectBoard.tsx).
+  initialHighlightMessageId?: string | null;
+  onHighlightMessageConsumed?: () => void;
 }
 
 interface StoredInternalProject
@@ -94,6 +100,8 @@ export const ProjetsInternes: React.FC<
   agencyId,
   initialOpenTaskId,
   onOpenTaskConsumed,
+  initialHighlightMessageId,
+  onHighlightMessageConsumed,
 }) => {
   const {
     currentUser,
@@ -850,6 +858,8 @@ export const ProjetsInternes: React.FC<
           users={users}
           initialOpenTaskId={taskToOpen}
           onOpenTaskConsumed={() => setTaskToOpen(null)}
+          initialHighlightMessageId={initialHighlightMessageId}
+          onHighlightMessageConsumed={onHighlightMessageConsumed}
           onBack={() => setOpenBoard(null)}
           onRenamed={(title) => {
             // Le titre renommé depuis l'intérieur du projet doit se refléter
