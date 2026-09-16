@@ -101,6 +101,13 @@ export default function PublicConsentement({ token }: Props) {
       if (!data) throw new Error("Ce lien n'est plus valide.");
       setSubmitted(true);
       if (meta) {
+        // Demande explicite (16 septembre) : « quand le consentement a été
+        // signé, mets à jour sur la fiche du contact » — la notification ne
+        // menait nulle part (`_metadata: {}` → lien par défaut "/") ;
+        // cliquer dessus amène maintenant directement sur la fiche, qui se
+        // recharge à l'ouverture et affiche donc l'état à jour. Voir aussi
+        // ClientProfileView.tsx (abonnement temps réel) pour le cas où la
+        // fiche est déjà ouverte au moment de la signature.
         supabase
           .rpc('create_notification', {
             _user_id: meta.sentBy,
@@ -110,7 +117,7 @@ export default function PublicConsentement({ token }: Props) {
             _entity_type: 'lead',
             _entity_id: meta.leadId,
             _agency_id: meta.agencyId,
-            _metadata: {},
+            _metadata: { url: `/clients/${meta.leadId}` },
           })
           .then(() => {}, () => {});
       }
