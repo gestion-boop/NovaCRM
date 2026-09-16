@@ -2314,16 +2314,27 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const notifierMembresDuDossier = async (canal: ChatChannel, apercu: string, messageId?: string) => {
     if (!currentUser) return;
     try {
-      const { data: membres } = await supabase
-        .from('chat_project_members')
-        .select('user_id')
-        .eq('project_id', canal.project_id);
+      // Signalé (16 septembre) : « quand je mets un message tous les
+      // utilisateurs du CRM de Immosphera reçoivent le message ce n'est pas
+      // bon [...] Chaque canal devra donner des accès à des utilisateurs
+      // pour pouvoir recevoir les messages » — un canal RESTREINT (voir
+      // chat_channel_members / can_view_chat_channel, migration
+      // 20260916100000) n'était notifié qu'au niveau du DOSSIER entier :
+      // même invisible pour eux (RLS bloque bien la lecture), les autres
+      // membres du dossier recevaient quand même la notification, qui
+      // dévoile déjà le nom du canal et un aperçu du message. Pour un canal
+      // restreint, seuls ses participants explicites (+ son créateur,
+      // toujours autorisé à le voir) sont notifiés désormais.
+      const { data: membres } = canal.restricted
+        ? await supabase.from('chat_channel_members').select('user_id').eq('channel_id', canal.id)
+        : await supabase.from('chat_project_members').select('user_id').eq('project_id', canal.project_id);
 
       const destinataires = Array.from(
         new Set(
-          ((membres as { user_id: string }[]) || [])
-            .map((m) => m.user_id)
-            .filter((uid) => uid && uid !== currentUser.uid)
+          [
+            ...((membres as { user_id: string }[]) || []).map((m) => m.user_id),
+            ...(canal.restricted && canal.created_by ? [canal.created_by] : []),
+          ].filter((uid) => uid && uid !== currentUser.uid)
         )
       );
       if (destinataires.length === 0) return;
