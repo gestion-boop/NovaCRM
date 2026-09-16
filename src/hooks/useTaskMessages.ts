@@ -165,7 +165,20 @@ export const useTaskMessages = (taskId: string | null) => {
                 _entity_type: messageId ? 'internal_task_message' : 'internal_task',
                 _entity_id: messageId || taskId,
                 _agency_id: t.agency_id,
-                _metadata: { url: '/projets-internes', task_id: taskId },
+                // Signalé (16 septembre, Novavisio/Diane) : « en cliquant sur
+                // la notification cela ne nous emmène pas à son message ».
+                // Premier essai (task_id/message_id dans _metadata) inopérant :
+                // la table `notifications` n'a PAS de colonne `metadata`, la
+                // fonction SQL create_notification(..., _metadata jsonb) ne
+                // s'en sert que pour extraire `url` — le reste est perdu. Le
+                // SEUL champ réellement persisté et renvoyé au client est
+                // `link`. On y encode donc directement la carte ET le
+                // message, mêmes noms de paramètres que la messagerie
+                // (`?highlight=`, voir ChatViewSupabase.tsx) pour réutiliser
+                // telle quelle son extraction par regex dans NotificationsView.
+                _metadata: {
+                  url: `/projets-internes?task=${taskId}${messageId ? `&highlight=${messageId}` : ''}`,
+                },
               })
             )
           );

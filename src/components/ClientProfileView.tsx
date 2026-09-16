@@ -1010,6 +1010,15 @@ export default function ClientProfileView({
   const IMMOSPHERA_ID = '15157da9-71ea-4760-ae1c-3bc99d9caa20';
   const isImmosphera = matchesAgency(client?.agencyId, IMMOSPHERA_ID);
   const { data: consentRecords = [] } = useLeadConsents(clientId, isImmosphera);
+
+  // Signalé (16 septembre) : « tu n'as pas mis en place le consentement
+  // pour les agents immobiliers, mais le questionnaire confidentiel. Qui
+  // n'est pas pour immosphera mais pour conseils finances uniquement » —
+  // le Consentement (ci-dessus) est déjà bien réservé à Immosphera ; c'est
+  // le Questionnaire confidentiel qui n'avait AUCUNE restriction d'agence
+  // (visible pour tout le monde, Immosphera compris) alors qu'il ne
+  // concerne que Conseils Finances. Réutilise `estConseilsFinances`,
+  // déjà calculé plus haut (ligne ~569) pour les honoraires TTC.
   const [consentViewOpen, setConsentViewOpen] = useState(false);
   const hasConsent = consentRecords.length > 0;
   const signedConsents = consentRecords.filter((r) => r.submitted_at);
@@ -1118,9 +1127,12 @@ export default function ClientProfileView({
   };
 
   useEffect(() => {
-    loadQuestionnaires();
+    // Questionnaire confidentiel : Conseils Finances uniquement (voir plus
+    // haut, estConseilsFinances) — inutile de charger quoi que ce soit
+    // ailleurs.
+    if (estConseilsFinances) loadQuestionnaires();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
+  }, [clientId, estConseilsFinances]);
 
   const loadClientEmails = async () => {
     if (!client?.email) return;
@@ -2275,7 +2287,7 @@ export default function ClientProfileView({
                 <div className="fixed inset-0 z-30" onClick={() => setShowActionsMenu(false)} />
                 <div className="absolute right-0 top-full mt-2 w-64 bg-[#0a1e20] border border-[#144447]/60 rounded-2xl shadow-2xl z-40 py-2 overflow-hidden">
                   {[
-                    { icon: ClipboardCheck, label: 'Questionnaire confidentiel', action: () => setShowQuestionnaireModal(true) },
+                    ...(estConseilsFinances ? [{ icon: ClipboardCheck, label: 'Questionnaire confidentiel', action: () => setShowQuestionnaireModal(true) }] : []),
                     { icon: Landmark, label: 'Parcours Crédit', action: () => setShowParcoursCredit(true) },
                     { icon: Calendar, label: 'Nouveau RDV/tâche', action: () => { setEditingTask(null); setShowTaskModal(true); } },
                     { icon: MessageSquare, label: 'Nouvelle note', action: () => { setActiveTab('notes'); setShowNewNoteModal(true); } },
