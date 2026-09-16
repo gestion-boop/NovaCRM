@@ -1,6 +1,6 @@
 import { matchesAgency } from "@/hooks/useContacts";
 import { clicMailCrm } from '@/lib/composerMail';
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -207,6 +207,23 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
       }));
     },
   });
+
+  // La liste des clients garde son propre badge de consentement (statut
+  // calculé côté requête ci-dessus), sans passer par ClientProfileView —
+  // sans cet abonnement, elle restait figée sur "en attente" tant que la
+  // page n'était pas rechargée manuellement, même après une signature
+  // (signalé le 16 septembre : "ben si c'est signé mais ce ne marque rien").
+  useEffect(() => {
+    const channel = supabase
+      .channel('consentement-liste-clients')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'confidential_questionnaires' },
+        () => qc.invalidateQueries({ queryKey: ['leads'] })
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [qc]);
 
   const filtered = leads.filter((l: any) => {
     if (filter !== "all" && l.temperature !== filter) return false;
