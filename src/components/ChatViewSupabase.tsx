@@ -2786,12 +2786,28 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (!isSuperAdmin || !currentUser) return;
     const channel = Object.values(channelsByProject).flat().find((c) => c.id === channelId);
     if (!channel) return;
-    // Être invité à un canal d'un dossier suppose d'être membre du dossier
-    // (les policies RLS des messages exigent les deux) — on l'ajoute donc
-    // au passage, silencieusement, si ce n'était pas déjà le cas.
-    const dejaMembreDuDossier = projectMembers.some((m) => m.user_id === userId && m.project_id === channel.project_id);
-    if (!dejaMembreDuDossier) {
-      await supabase.from('chat_project_members').insert({ project_id: channel.project_id, user_id: userId, added_by: currentUser.uid } as any);
+    // Signalé (16 septembre, Réseaux sociaux/Immosphera) : « Laetitia et
+    // Christophe ne reçoivent aucune notification » — en base, ils
+    // n'étaient dans AUCUN chat_project_members pour ce dossier, alors
+    // qu'ils étaient bien invités à leur canal. Les policies RLS des
+    // messages exigent les DEUX (dossier ET canal) : sans le premier, rien
+    // ne passe (ni lecture, ni notification), silencieusement.
+    //
+    // Cause : ce garde-fou s'appuyait sur `projectMembers`, un state local
+    // rempli UNIQUEMENT en ouvrant le popup "Gérer les membres" du DOSSIER
+    // — jamais chargé quand on invite quelqu'un directement depuis un
+    // CANAL. Et l'insertion elle-même n'avait aucune gestion d'erreur : un
+    // échec restait invisible. Remplacé par un upsert inconditionnel et
+    // idempotent (peu importe l'état local), avec son erreur affichée.
+    const { error: erreurDossier } = await supabase
+      .from('chat_project_members')
+      .upsert(
+        { project_id: channel.project_id, user_id: userId, added_by: currentUser.uid } as any,
+        { onConflict: 'project_id,user_id', ignoreDuplicates: true }
+      );
+    if (erreurDossier) {
+      toast.error(`Participant non ajouté au dossier : ${erreurDossier.message}`);
+      return;
     }
     const { data, error } = await supabase
       .from('chat_channel_members')
