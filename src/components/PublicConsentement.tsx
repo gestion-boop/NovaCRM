@@ -17,10 +17,12 @@ const maskEmail = (email: string) => {
 
 /**
  * Page publique de signature du consentement au démarchage téléphonique
- * (agence Immosphera). Réutilise les mêmes RPC génériques que le
- * questionnaire confidentiel (get_questionnaire_by_token / submit_questionnaire)
- * — elles ne sont pas spécifiques au crédit, `kind` (confidential vs consent)
- * n'intervient que côté affichage/interprétation dans src/lib/consent.ts.
+ * (agence Immosphera). Écrit/lit dans `confidential_questionnaires`
+ * (kind='consent') via ses propres RPC (get_consent_by_token /
+ * submit_consent) — PAS get_questionnaire_by_token / submit_questionnaire,
+ * qui malgré leur nom générique sont câblées sur `credit_questionnaires`
+ * (table différente) : les réutiliser ici rendait tout lien "invalide"
+ * systématiquement (signalé le 16 septembre).
  */
 export default function PublicConsentement({ token }: Props) {
   const [loading, setLoading] = useState(true);
@@ -38,7 +40,7 @@ export default function PublicConsentement({ token }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const { data, error: rpcError } = await supabase.rpc('get_questionnaire_by_token', { p_token: token });
+        const { data, error: rpcError } = await supabase.rpc('get_consent_by_token', { p_token: token });
         if (rpcError) throw rpcError;
         const row = Array.isArray(data) ? data[0] : data;
         if (!row) {
@@ -91,7 +93,7 @@ export default function PublicConsentement({ token }: Props) {
         });
       }
 
-      const { data, error: rpcError } = await supabase.rpc('submit_questionnaire', {
+      const { data, error: rpcError } = await supabase.rpc('submit_consent', {
         p_token: token,
         p_answers: { consentement },
       });
