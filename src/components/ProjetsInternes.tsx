@@ -5,6 +5,8 @@ import React, {
   useState,
 } from 'react';
 
+import { toast } from 'sonner';
+
 import { supabase } from '@/lib/supabase';
 
 import {
@@ -385,23 +387,47 @@ export const ProjetsInternes: React.FC<
   // base : elle est mémorisée par navigateur, pour ce compte. Elle ne change
   // rien à l'ordre des autres projets — les épinglés passent devant, le reste
   // garde exactement l'ordre alphabétique actuel.
+  // Signalé (17/09/2026) : "ça ne se sauvegarde pas tout le temps" — quand
+  // on épingle avant que l'utilisateur connecté soit résolu (`currentUser`
+  // démarre à `null`), l'écriture partait sous la clé `..._anon`. Une fois
+  // l'uid réel disponible, cet effet relit la BONNE clé (vide) et l'épingle
+  // faite entre-temps semblait avoir disparu. On migre maintenant les
+  // épingles de la clé `anon` vers la clé réelle dès que l'uid est connu.
   const CLE_EPINGLES = `nova_projets_epingles_${currentUser?.uid || 'anon'}`;
   const [epingles, setEpingles] = useState<string[]>([]);
   useEffect(() => {
     try {
+      if (currentUser?.uid) {
+        const cleAnon = 'nova_projets_epingles_anon';
+        const brutAnon = localStorage.getItem(cleAnon);
+        if (brutAnon) {
+          const epinglesAnon = JSON.parse(brutAnon) as string[];
+          const brutReel = localStorage.getItem(CLE_EPINGLES);
+          const epinglesReel = brutReel ? (JSON.parse(brutReel) as string[]) : [];
+          const fusion = [...new Set([...epinglesAnon, ...epinglesReel])];
+          localStorage.setItem(CLE_EPINGLES, JSON.stringify(fusion));
+          localStorage.removeItem(cleAnon);
+          setEpingles(fusion);
+          return;
+        }
+      }
       const brut = localStorage.getItem(CLE_EPINGLES);
       setEpingles(brut ? (JSON.parse(brut) as string[]) : []);
     } catch {
       setEpingles([]);
     }
-  }, [CLE_EPINGLES]);
+  }, [CLE_EPINGLES, currentUser?.uid]);
 
   const basculerEpingle = (projectId: string) => {
     setEpingles((prev) => {
       const suivant = prev.includes(projectId)
         ? prev.filter((id) => id !== projectId)
         : [projectId, ...prev];
-      try { localStorage.setItem(CLE_EPINGLES, JSON.stringify(suivant)); } catch { /* stockage indisponible */ }
+      try {
+        localStorage.setItem(CLE_EPINGLES, JSON.stringify(suivant));
+      } catch {
+        toast.error("L'épingle n'a pas pu être enregistrée sur cet appareil (stockage du navigateur indisponible ou plein).");
+      }
       return suivant;
     });
   };

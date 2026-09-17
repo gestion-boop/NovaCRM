@@ -17,10 +17,12 @@ const maskEmail = (email: string) => {
 
 /**
  * Page publique de signature du consentement au démarchage téléphonique
- * (agence Immosphera). Réutilise les mêmes RPC génériques que le
- * questionnaire confidentiel (get_questionnaire_by_token / submit_questionnaire)
- * — elles ne sont pas spécifiques au crédit, `kind` (confidential vs consent)
- * n'intervient que côté affichage/interprétation dans src/lib/consent.ts.
+ * (agence Immosphera). Écrit/lit dans `confidential_questionnaires`
+ * (kind='consent') via ses propres RPC (get_consent_by_token /
+ * submit_consent) — PAS get_questionnaire_by_token / submit_questionnaire,
+ * qui malgré leur nom générique sont câblées sur `credit_questionnaires`
+ * (table différente) : les réutiliser ici rendait tout lien "invalide"
+ * systématiquement (signalé le 16 septembre).
  */
 export default function PublicConsentement({ token }: Props) {
   const [loading, setLoading] = useState(true);
@@ -38,7 +40,7 @@ export default function PublicConsentement({ token }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const { data, error: rpcError } = await supabase.rpc('get_questionnaire_by_token', { p_token: token });
+        const { data, error: rpcError } = await supabase.rpc('get_consent_by_token', { p_token: token });
         if (rpcError) throw rpcError;
         const row = Array.isArray(data) ? data[0] : data;
         if (!row) {
@@ -91,7 +93,7 @@ export default function PublicConsentement({ token }: Props) {
         });
       }
 
-      const { data, error: rpcError } = await supabase.rpc('submit_questionnaire', {
+      const { data, error: rpcError } = await supabase.rpc('submit_consent', {
         p_token: token,
         p_answers: { consentement },
       });
@@ -99,6 +101,13 @@ export default function PublicConsentement({ token }: Props) {
       if (!data) throw new Error("Ce lien n'est plus valide.");
       setSubmitted(true);
       if (meta) {
+        // Demande explicite (16 septembre) : « quand le consentement a été
+        // signé, mets à jour sur la fiche du contact » — la notification ne
+        // menait nulle part (`_metadata: {}` → lien par défaut "/") ;
+        // cliquer dessus amène maintenant directement sur la fiche, qui se
+        // recharge à l'ouverture et affiche donc l'état à jour. Voir aussi
+        // ClientProfileView.tsx (abonnement temps réel) pour le cas où la
+        // fiche est déjà ouverte au moment de la signature.
         supabase
           .rpc('create_notification', {
             _user_id: meta.sentBy,
@@ -108,7 +117,7 @@ export default function PublicConsentement({ token }: Props) {
             _entity_type: 'lead',
             _entity_id: meta.leadId,
             _agency_id: meta.agencyId,
-            _metadata: {},
+            _metadata: { url: `/clients/${meta.leadId}` },
           })
           .then(() => {}, () => {});
       }

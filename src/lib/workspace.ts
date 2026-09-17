@@ -1030,6 +1030,24 @@ function encodeUtf8Base64Url(value: string): string {
     .replace(/=+$/g, '');
 }
 
+// Signalé (16 septembre) : « le client reçoit ça sur son mail :
+// Consentement au dÃƒÂ©marchage... » — un en-tête email (Subject) doit
+// rester en ASCII (RFC 5322) ; les accents envoyés bruts, tels quels dans
+// l'en-tête, sont réinterprétés avec un autre charset par certains relais
+// ou clients de messagerie, d'où ce charabia (double encodage visible :
+// "Ã©" à la place de "é"). Encodage standard RFC 2047 (=?UTF-8?B?...?=)
+// pour tout sujet contenant un caractère non-ASCII — le corps du message
+// n'est pas concerné (il n'est pas un en-tête, son charset UTF-8 est
+// déjà déclaré correctement dans Content-Type ci-dessous).
+function encodeMimeHeader(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  if (/^[\x00-\x7F]*$/.test(value)) return value;
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return `=?UTF-8?B?${btoa(binary)}?=`;
+}
+
 function getHeader(
   headers: GmailApiHeader[] | undefined,
   name: string
@@ -1419,7 +1437,7 @@ export const sendGmailMessage = async (
 
   const headers = [
     `To: ${message.to}`,
-    `Subject: ${message.subject}`,
+    `Subject: ${encodeMimeHeader(message.subject)}`,
     'MIME-Version: 1.0',
     useHtml ? 'Content-Type: text/html; charset=UTF-8' : 'Content-Type: text/plain; charset=UTF-8',
     'Content-Transfer-Encoding: 8bit',

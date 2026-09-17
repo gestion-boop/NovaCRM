@@ -1,6 +1,6 @@
 import { matchesAgency } from "@/hooks/useContacts";
 import { clicMailCrm } from '@/lib/composerMail';
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -29,6 +29,7 @@ import { LeadDialog } from "@/components/leads/LeadDialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import ConsentStatusBadge from "@/components/consent/ConsentStatusBadge";
+import { latestConsent } from "@/lib/consent";
 
 const IMMOSPHERA_ID = "15157da9-71ea-4760-ae1c-3bc99d9caa20";
 
@@ -164,10 +165,17 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         leadIds.length > 0
           ? supabase
               .from("confidential_questionnaires" as any)
-              .select("lead_id, submitted_at, signed_at, valid_until, consent_status, data")
+              // Signalé (17/09/2026) : "signé sur la fiche mais en attente
+              // dans la liste" — cette requête demandait signed_at/valid_until/
+              // consent_status, trois colonnes qui n'ont JAMAIS existé sur
+              // cette table (seules submitted_at/data le sont — voir
+              // useLeadConsents dans ConsentViewDialog.tsx, qui ne les demande
+              // pas). PostgREST rejetait donc la requête entière, et
+              // `consentsRes.data` restait vide pour TOUS les clients : chacun
+              // retombait sur "en attente" quel que soit son vrai statut.
+              .select("lead_id, created_at, submitted_at, data")
               .in("lead_id", leadIds)
               .eq("kind", "consent")
-              .not("submitted_at", "is", null)
           : Promise.resolve({ data: [] }),
       ]);
 
@@ -187,13 +195,21 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         (sharedWithByLead[share.lead_id] ||= new Set<string>()).add(share.shared_with);
       });
 
-      const latestConsentByLead: Record<string, any> = {};
+      // Même règle que la fiche client (ClientProfileView : latestSignedConsent
+      // ?? latestConsent(consentRecords)) : un consentement juste envoyé mais
+      // pas encore signé doit afficher "Envoyé", pas "En attente" — sinon la
+      // liste et la fiche affichaient deux statuts différents pour le même
+      // client (signalé le 16 septembre). Fonction partagée (lib/consent.ts)
+      // plutôt qu'une réimplémentation locale, pour que liste et fiche ne
+      // puissent plus diverger si cette règle change un jour.
+      const consentsByLead: Record<string, any[]> = {};
       ((consentsRes as any).data ?? []).forEach((c: any) => {
-        if (!c?.lead_id || !c?.submitted_at) return;
-        const existing = latestConsentByLead[c.lead_id];
-        if (!existing || new Date(c.submitted_at).getTime() > new Date(existing.submitted_at).getTime()) {
-          latestConsentByLead[c.lead_id] = c;
-        }
+        if (!c?.lead_id) return;
+        (consentsByLead[c.lead_id] ||= []).push(c);
+      });
+      const latestConsentByLead: Record<string, any> = {};
+      Object.entries(consentsByLead).forEach(([leadId, records]) => {
+        latestConsentByLead[leadId] = latestConsent(records);
       });
 
       return rows.map((l: any) => ({
@@ -207,6 +223,23 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
       }));
     },
   });
+
+  // La liste des clients garde son propre badge de consentement (statut
+  // calculé côté requête ci-dessus), sans passer par ClientProfileView —
+  // sans cet abonnement, elle restait figée sur "en attente" tant que la
+  // page n'était pas rechargée manuellement, même après une signature
+  // (signalé le 16 septembre : "ben si c'est signé mais ce ne marque rien").
+  useEffect(() => {
+    const channel = supabase
+      .channel('consentement-liste-clients')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'confidential_questionnaires' },
+        () => qc.invalidateQueries({ queryKey: ['leads'] })
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [qc]);
 
   const filtered = leads.filter((l: any) => {
     if (filter !== "all" && l.temperature !== filter) return false;
