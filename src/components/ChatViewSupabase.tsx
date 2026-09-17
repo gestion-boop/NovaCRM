@@ -654,8 +654,23 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // uniquement de cette vue (rien n'est supprimé en base).
   const isRawLeadPlaceholder = (c: ConversationRow) => !!c.title && c.title.startsWith('lead:');
 
+  // Signalé (17/09/2026) : "beaucoup marqué Utilisateur" — des identifiants
+  // fantômes restants dans conversation_members (comptes jamais recréés
+  // après une resynchronisation passée, cf. teamMembers.ts) ne se résolvent
+  // vers aucun profil ni aucun membre de TEAM_MEMBERS. Tant qu'on ne peut
+  // pas les identifier avec certitude, mieux vaut les masquer (comme les
+  // placeholders "lead:") que d'afficher un nom générique trompeur. Une
+  // conversation reste visible dès qu'AU MOINS un des autres membres se
+  // résout à un nom réel — rien n'est supprimé en base.
+  const hasOnlyUnresolvedMembers = (c: ConversationRow) => {
+    if (c.title) return false;
+    const others = (conversationMembers[c.id] || []).filter((u) => u !== currentUser?.uid);
+    return others.length > 0 && others.every((u) => !profileByUid[u]);
+  };
+
   const filteredConversations = conversations
     .filter((c) => !isRawLeadPlaceholder(c))
+    .filter((c) => !hasOnlyUnresolvedMembers(c))
     .filter((c) => conversationLabel(c).toLowerCase().includes(convSearch.toLowerCase()));
 
   // Réactions + accusés de lecture pour un LOT de messages donné — factorisé
