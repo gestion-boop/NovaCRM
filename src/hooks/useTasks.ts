@@ -47,6 +47,11 @@ function supabaseTaskToTask(item: Record<string, unknown>): Task {
     contactId: (item.lead_id as string) || undefined,
     createdBy: (item.user_id as string) || undefined,
     assignedTo: (item.assigned_to as string) || undefined,
+    // Signalé (17/09/2026) : colonne déjà en base et déjà remontée par le
+    // `select('*')` ci-dessous, mais perdue ici faute d'être reprise dans
+    // l'objet Task — la liste des tâches n'affichait donc jamais ce qui y
+    // était noté.
+    description: (item.description as string) || undefined,
   };
 }
 

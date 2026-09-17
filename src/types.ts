@@ -184,6 +184,10 @@ export interface Task {
   type?: 'Appel' | 'Rendez-vous' | 'Relance' | 'Document' | 'Tâche';
   contactId?: string;
   contactOrigin?: string;
+  // Colonne `reminders.description`, déjà en base mais jamais reprise
+  // jusqu'ici (17/09/2026, signalé : "on sait qu'on a une tâche à faire mais
+  // pas ce que c'est").
+  description?: string;
 
   createdBy?: string;
   assignedTo?: string;

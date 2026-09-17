@@ -353,6 +353,17 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
                               {(task.type === 'Appel' || task.type === 'Rendez-vous') && (
                                 <p className="text-sm text-slate-400">{task.title}</p>
                               )}
+                              {/* Demandé (17/09/2026) : « on sait qu'on a une
+                                  tâche à faire mais on ne sait pas ce que
+                                  c'est » — la description existait déjà en
+                                  base (reminders.description) mais n'était
+                                  affichée nulle part. `line-clamp-2` : une
+                                  carte de liste, pas la place pour un pavé de
+                                  texte complet ; le détail complet reste
+                                  accessible en ouvrant la tâche. */}
+                              {task.description && (
+                                <p className="text-sm text-slate-400 line-clamp-2">{task.description}</p>
+                              )}
                             </div>
                           </div>
 
