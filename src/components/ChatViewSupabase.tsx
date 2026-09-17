@@ -283,6 +283,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // changement sur `message_reactions` concerne CETTE conversation avant de
   // déclencher un rechargement ciblé.
   const convMessageIdsRef = useRef<Set<string>>(new Set());
+  // Signalé (17/09/2026) : "on attend jusqu'à 5 secondes pour que l'historique
+  // s'affiche" — rouvrir une conversation déjà consultée pendant cette
+  // session affichait `[]` (voir openConversation) et attendait le
+  // round-trip réseau avant de montrer quoi que ce soit, alors que son
+  // dernier lot de messages était déjà connu. Ce cache mémoire (par
+  // conversation, jamais persisté) permet de la réafficher instantanément
+  // pendant que loadConvMessages rafraîchit en tâche de fond — même
+  // principe que `silent=true` dans loadConversations, appliqué ici par
+  // conversation plutôt qu'à la liste entière.
+  const convMessagesCacheRef = useRef<Record<string, DirectMessageRow[]>>({});
   // Verrous d'envoi — un message à la fois par composeur. Un `useRef` et non
   // un `useState` : la valeur doit être lue et écrite dans le même tic, avant
   // tout nouveau rendu, sinon la garde arrive trop tard.
@@ -805,7 +815,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           if (couvert) byId.delete(id);
         });
 
-      return Array.from(byId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
+      const fusion = Array.from(byId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
+      // Mis à jour ici, scopé par `conversationId` (le paramètre de cette
+      // fonction) et non `activeConversationId` : reste correct même si la
+      // réponse arrive après que l'utilisateur a changé de conversation.
+      convMessagesCacheRef.current[conversationId] = fusion;
+      return fusion;
     });
     if (rows.length > 0) {
       await loadReactionsAndReceiptsFor(rows);
@@ -845,9 +860,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const openConversation = (id: string) => {
     setActiveConversationId(id);
-    setConvMessages([]);
+    // Signalé (17/09/2026) : "on attend jusqu'à 5 secondes" — deux correctifs
+    // conjoints :
+    //  1) Affiche tout de suite le dernier lot connu de CETTE conversation
+    //     (voir convMessagesCacheRef) au lieu de vider l'écran en attendant
+    //     le round-trip réseau ; `loadConvMessages` rafraîchit ensuite en
+    //     tâche de fond et met le cache à jour. Une conversation jamais
+    //     ouverte cette session reste vide le temps du premier chargement,
+    //     comme avant.
+    //  2) `loadConvMessages(id)` n'est plus appelé ICI : l'effet plus bas
+    //     (dépendances [activeConversationId, isActive]) le fait déjà dès
+    //     que `activeConversationId` change — l'appeler aussi ici doublait
+    //     systématiquement chaque ouverture (2x messages + 2x
+    //     réactions/accusés de lecture, jusqu'à 6 requêtes au lieu de 3).
+    setConvMessages(convMessagesCacheRef.current[id] || []);
     setConvHasMoreOlder(true);
-    loadConvMessages(id);
   };
 
   // Signalé (urgent, 30/08/2026) : "elle ne sait pas d'où ça vient" —

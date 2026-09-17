@@ -156,6 +156,24 @@
   border-color: var(--calendar-accent-color, #F7BC5F) !important;
 }
 
+/* Signalé (17/09/2026, mobile) : « espace noir tout en bas de la fenêtre,
+   ce n'est pas figé ». Distinct du bug de hauteur figée déjà corrigé pour
+   le clavier iOS (voir ChatViewSupabase.tsx, hauteurVisible/clavierOuvert) :
+   ici le clavier n'est même pas ouvert. Cause réelle : aucune règle ne
+   donnait de fond à <html> en thème sombre (seul `.light-mode`, plus bas,
+   en a un) — `body` a bien un fond en dur, mais ne couvre pas de façon
+   fiable le canevas natif <html>, transitoirement exposé (rebond de
+   défilement iOS, réajustements du conteneur pendant l'ouverture/fermeture
+   du clavier) : d'où un noir qui apparaît et disparaît, "pas figé", plutôt
+   qu'une bande statique. Couleur alignée sur la coque racine de l'app
+   (App.tsx, `bg-[#071015]`) pour que la zone exposée se fonde dedans.
+   `.light-mode` (plus bas, spécificité supérieure) continue à s'appliquer
+   normalement en thème clair. `overscroll-behavior-y` supprime en plus le
+   rebond natif lui-même, cause du mouvement en plus de sa couleur. */
+html {
+  background-color: #071015;
+}
+
 body {
   background-color: #0a2528;
   color: #e2e8f0;
@@ -165,6 +183,7 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }
 
