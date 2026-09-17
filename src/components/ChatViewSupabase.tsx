@@ -4011,6 +4011,29 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       </button>
                     </div>
                   </div>
+
+                  {/* Demandé (17/09/2026) : « rajoute ce micro pour la dictée
+                      vocale, positionné au centre tout en bas, pour y accéder
+                      plus vite » — la dictée existait déjà (menu "+" ci-dessus)
+                      mais nécessitait deux appuis. Bouton flottant dédié,
+                      mobile uniquement (`sm:hidden`, comme le reste de la
+                      messagerie), uniquement sur l'écran d'une conversation
+                      (ce bloc entier ne rend que dans ce cas). `absolute` +
+                      `bottom-full` sur ce conteneur `relative` (juste
+                      au-dessus, quelle que soit sa hauteur réelle) plutôt
+                      qu'un décalage fixe en pixels depuis le bas de l'écran,
+                      fragile à deviner et à maintenir. Réutilise exactement
+                      la même dictée (état, moteur de reconnaissance, texte)
+                      que celle du menu "+", pas une nouvelle instance. */}
+                  <button
+                    type="button"
+                    onClick={() => toggleDictee(isListeningConv, setIsListeningConv, recognitionConvRef, convDraft, setConvDraft)}
+                    className={`sm:hidden absolute left-1/2 -translate-x-1/2 bottom-full mb-3 z-20 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 text-white ${isListeningConv ? 'bg-rose-500 animate-pulse shadow-rose-500/50' : 'bg-rose-500/90 shadow-rose-500/30 hover:bg-rose-500'}`}
+                    title={isListeningConv ? 'Dictée en cours... (toucher pour arrêter)' : 'Dictée vocale'}
+                    aria-label={isListeningConv ? 'Dictée en cours, toucher pour arrêter' : 'Démarrer la dictée vocale'}
+                  >
+                    <Mic className="w-6 h-6" />
+                  </button>
                 </div>
               </>
             ) : (
