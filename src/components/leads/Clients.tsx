@@ -29,6 +29,7 @@ import { LeadDialog } from "@/components/leads/LeadDialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import ConsentStatusBadge from "@/components/consent/ConsentStatusBadge";
+import { latestConsent } from "@/lib/consent";
 
 const IMMOSPHERA_ID = "15157da9-71ea-4760-ae1c-3bc99d9caa20";
 
@@ -164,7 +165,15 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         leadIds.length > 0
           ? supabase
               .from("confidential_questionnaires" as any)
-              .select("lead_id, created_at, submitted_at, signed_at, valid_until, consent_status, data")
+              // Signalé (17/09/2026) : "signé sur la fiche mais en attente
+              // dans la liste" — cette requête demandait signed_at/valid_until/
+              // consent_status, trois colonnes qui n'ont JAMAIS existé sur
+              // cette table (seules submitted_at/data le sont — voir
+              // useLeadConsents dans ConsentViewDialog.tsx, qui ne les demande
+              // pas). PostgREST rejetait donc la requête entière, et
+              // `consentsRes.data` restait vide pour TOUS les clients : chacun
+              // retombait sur "en attente" quel que soit son vrai statut.
+              .select("lead_id, created_at, submitted_at, data")
               .in("lead_id", leadIds)
               .eq("kind", "consent")
           : Promise.resolve({ data: [] }),
@@ -190,7 +199,9 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
       // ?? latestConsent(consentRecords)) : un consentement juste envoyé mais
       // pas encore signé doit afficher "Envoyé", pas "En attente" — sinon la
       // liste et la fiche affichaient deux statuts différents pour le même
-      // client (signalé le 16 septembre).
+      // client (signalé le 16 septembre). Fonction partagée (lib/consent.ts)
+      // plutôt qu'une réimplémentation locale, pour que liste et fiche ne
+      // puissent plus diverger si cette règle change un jour.
       const consentsByLead: Record<string, any[]> = {};
       ((consentsRes as any).data ?? []).forEach((c: any) => {
         if (!c?.lead_id) return;
@@ -198,13 +209,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
       });
       const latestConsentByLead: Record<string, any> = {};
       Object.entries(consentsByLead).forEach(([leadId, records]) => {
-        const signed = records.filter((r) => r.submitted_at);
-        const pool = signed.length > 0 ? signed : records;
-        latestConsentByLead[leadId] = [...pool].sort(
-          (a, b) =>
-            new Date(b.submitted_at ?? b.created_at ?? 0).getTime() -
-            new Date(a.submitted_at ?? a.created_at ?? 0).getTime(),
-        )[0];
+        latestConsentByLead[leadId] = latestConsent(records);
       });
 
       return rows.map((l: any) => ({
