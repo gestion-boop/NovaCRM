@@ -3732,7 +3732,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     className="w-full resize-none bg-[#0b1c1e] border border-white/20 rounded-3xl px-5 max-sm:px-3 py-2.5 text-sm text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F] disabled:opacity-40"
                   />
 
-                  <div className="grid grid-cols-3 items-center">
+                  {/* Signalé (17/09/2026) : le bouton flottant de dictée
+                      ajouté au-dessus de la barre débordait sur le dernier
+                      message (position `absolute`/`bottom-full` mal vue à
+                      l'usage réel). Remis à sa place naturelle, DANS la
+                      rangée de boutons, colonne centrale. `grid-cols-3`
+                      (colonnes égales) devient `grid-cols-[auto_1fr_auto]` :
+                      les colonnes gauche/droite prennent exactement la
+                      largeur de leur contenu et collent aux bords, la
+                      colonne centrale (1fr) absorbe tout l'espace restant —
+                      le bouton Envoyer colle donc au bord droit réel de
+                      l'écran, plus au bord d'un simple tiers de grille. */}
+                  <div className="grid grid-cols-[auto_1fr_auto] items-center">
                     <div className="flex items-center gap-2 justify-self-start">
                       {/* Téléphone : un seul « + » à la place des trois
                           boutons, qui ouvre la liste des options. Les trois
@@ -3914,6 +3925,25 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       <Mic className="w-6 h-6 sm:w-5 sm:h-5" />
                     </button>
 
+                    {/* Demandé (17/09/2026) : « rajoute ce micro pour la
+                        dictée vocale, [...] centré en bas [...] aligné avec
+                        le "+" et le bouton Envoyer » — équivalent mobile du
+                        bouton ci-dessus (même case centrale, même style),
+                        mais pour la DICTÉE (texte), pas l'enregistrement d'un
+                        message vocal (déjà accessible via le menu "+" sur
+                        mobile, voir plus haut). `sm:hidden` : uniquement
+                        mobile, l'ordinateur garde le bouton d'enregistrement
+                        ci-dessus dans cette même case. */}
+                    <button
+                      type="button"
+                      onClick={() => toggleDictee(isListeningConv, setIsListeningConv, recognitionConvRef, convDraft, setConvDraft)}
+                      className={`justify-self-center flex sm:hidden w-14 h-14 rounded-full items-center justify-center shadow-lg transition-transform hover:scale-105 text-white ${isListeningConv ? 'bg-rose-500 animate-pulse shadow-rose-500/50' : 'bg-rose-500/90 shadow-rose-500/30 hover:bg-rose-500'}`}
+                      title={isListeningConv ? 'Dictée en cours... (toucher pour arrêter)' : 'Dictée vocale'}
+                      aria-label={isListeningConv ? 'Dictée en cours, toucher pour arrêter' : 'Démarrer la dictée vocale'}
+                    >
+                      <Mic className="w-6 h-6" />
+                    </button>
+
                     <div className="flex items-center gap-2 justify-self-end">
                       {/* Envoi différé — placé à côté du bouton d'envoi plutôt
                           que dans le groupe emoji/nova/image ci-dessus :
@@ -4011,29 +4041,6 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       </button>
                     </div>
                   </div>
-
-                  {/* Demandé (17/09/2026) : « rajoute ce micro pour la dictée
-                      vocale, positionné au centre tout en bas, pour y accéder
-                      plus vite » — la dictée existait déjà (menu "+" ci-dessus)
-                      mais nécessitait deux appuis. Bouton flottant dédié,
-                      mobile uniquement (`sm:hidden`, comme le reste de la
-                      messagerie), uniquement sur l'écran d'une conversation
-                      (ce bloc entier ne rend que dans ce cas). `absolute` +
-                      `bottom-full` sur ce conteneur `relative` (juste
-                      au-dessus, quelle que soit sa hauteur réelle) plutôt
-                      qu'un décalage fixe en pixels depuis le bas de l'écran,
-                      fragile à deviner et à maintenir. Réutilise exactement
-                      la même dictée (état, moteur de reconnaissance, texte)
-                      que celle du menu "+", pas une nouvelle instance. */}
-                  <button
-                    type="button"
-                    onClick={() => toggleDictee(isListeningConv, setIsListeningConv, recognitionConvRef, convDraft, setConvDraft)}
-                    className={`sm:hidden absolute left-1/2 -translate-x-1/2 bottom-full mb-3 z-20 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 text-white ${isListeningConv ? 'bg-rose-500 animate-pulse shadow-rose-500/50' : 'bg-rose-500/90 shadow-rose-500/30 hover:bg-rose-500'}`}
-                    title={isListeningConv ? 'Dictée en cours... (toucher pour arrêter)' : 'Dictée vocale'}
-                    aria-label={isListeningConv ? 'Dictée en cours, toucher pour arrêter' : 'Démarrer la dictée vocale'}
-                  >
-                    <Mic className="w-6 h-6" />
-                  </button>
                 </div>
               </>
             ) : (
