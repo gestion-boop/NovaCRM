@@ -2575,14 +2575,24 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               </span>
             )}
           </button>
-          {isSuperAdmin && (
+          {(isAdmin || isSuperAdmin) && (
             <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-              <button onClick={() => moveChannel(c, -1)} disabled={i === 0} className="p-1 text-slate-500 hover:text-white disabled:opacity-20">
-                <ChevronUp className="w-3 h-3" />
-              </button>
-              <button onClick={() => moveChannel(c, 1)} disabled={i === fratrie.length - 1} className="p-1 text-slate-500 hover:text-white disabled:opacity-20">
-                <ChevronDown className="w-3 h-3" />
-              </button>
+              {isSuperAdmin && (
+                <>
+                  <button onClick={() => moveChannel(c, -1)} disabled={i === 0} className="p-1 text-slate-500 hover:text-white disabled:opacity-20">
+                    <ChevronUp className="w-3 h-3" />
+                  </button>
+                  <button onClick={() => moveChannel(c, 1)} disabled={i === fratrie.length - 1} className="p-1 text-slate-500 hover:text-white disabled:opacity-20">
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                </>
+              )}
+              {/* Signalé (17/09/2026, Réseaux sociaux/Immosphera) : "il faut
+                  que les admins, pas seulement les super admins, puissent
+                  inviter des utilisateurs" — ouvrir la modale de gestion des
+                  participants (voir plus bas) est désormais accessible aux
+                  admins, pas seulement aux super admins. Réorganiser/
+                  supprimer un canal reste réservé aux super admins. */}
               <button
                 onClick={() => openChannelMembersModal(c.id)}
                 className="p-1 text-slate-500 hover:text-[#F7BC5F]"
@@ -2590,12 +2600,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               >
                 <Users className="w-3 h-3" />
               </button>
-              <button onClick={() => setNewSubChannelFor(c.id)} className="p-1 text-slate-500 hover:text-[#F7BC5F]" title="Ajouter un sous-dossier">
-                <FolderPlus className="w-3 h-3" />
-              </button>
-              <button onClick={() => deleteChannel(c)} className="p-1 text-slate-500 hover:text-rose-400">
-                <Trash2 className="w-3 h-3" />
-              </button>
+              {isSuperAdmin && (
+                <>
+                  <button onClick={() => setNewSubChannelFor(c.id)} className="p-1 text-slate-500 hover:text-[#F7BC5F]" title="Ajouter un sous-dossier">
+                    <FolderPlus className="w-3 h-3" />
+                  </button>
+                  <button onClick={() => deleteChannel(c)} className="p-1 text-slate-500 hover:text-rose-400">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -2798,7 +2812,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   const addChannelMember = async (channelId: string, userId: string) => {
-    if (!isSuperAdmin || !currentUser) return;
+    if (!isAdmin || !currentUser) return;
     const channel = Object.values(channelsByProject).flat().find((c) => c.id === channelId);
     if (!channel) return;
     // Signalé (16 septembre, Réseaux sociaux/Immosphera) : « Laetitia et
@@ -2845,7 +2859,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   const removeChannelMember = async (member: ChatChannelMember) => {
-    if (!isSuperAdmin) return;
+    if (!isAdmin) return;
     await supabase.from('chat_channel_members').delete().eq('id', member.id);
     setChannelMembers((prev) => prev.filter((m) => m.id !== member.id));
     setChannelMemberCounts((prev) => ({ ...prev, [member.channel_id]: Math.max(0, (prev[member.channel_id] || 1) - 1) }));
@@ -4647,9 +4661,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               </button>
             </div>
 
-            {!isSuperAdmin && (
+            {!isAdmin && (
               <p className="text-[11px] text-slate-400 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
-                Seuls les super admins peuvent inviter ou retirer des participants.
+                Seuls les admins et super admins peuvent inviter ou retirer des participants.
               </p>
             )}
 
@@ -4685,7 +4699,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         <p className="text-xs font-semibold truncate">{profile?.displayName || member.user_id}</p>
                         {profile?.email && <p className="text-[10px] text-slate-400 truncate">{profile.email}</p>}
                       </div>
-                      {isSuperAdmin && (
+                      {isAdmin && (
                         <button
                           onClick={() => removeChannelMember(member)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 shrink-0"
@@ -4700,8 +4714,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               )}
             </div>
 
-            {/* Invitation d'un participant (super admins uniquement) */}
-            {isSuperAdmin && (
+            {/* Invitation d'un participant (admins et super admins) */}
+            {isAdmin && (
               <div className="pt-3 border-t border-white/10 space-y-2">
                 <label className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
                   <UserPlus className="w-3.5 h-3.5 text-[#F7BC5F]" /> Inviter au canal
