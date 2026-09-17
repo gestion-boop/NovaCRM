@@ -3835,17 +3835,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               >
                                 <Clock className="w-5 h-5 text-[#F7BC5F]" /> Envoi différé
                               </button>
-                              {/* Message vocal (11 septembre) : retiré de la
-                                  rangée sur mobile (voir plus bas), déplacé
-                                  ici. */}
-                              <button
-                                type="button"
-                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); void handleStartRecordingConv(); }}
-                                disabled={uploadingConvMedia || !!convVocalPret}
-                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10 disabled:opacity-40"
-                              >
-                                <Mic className="w-5 h-5 text-[#F7BC5F]" /> Message vocal
-                              </button>
+                              {/* Message vocal : retiré d'ici (17/09/2026) —
+                                  redondant depuis que son bouton dédié (voir
+                                  la rangée juste en dessous) est visible sur
+                                  mobile aussi, plus seulement sur ordinateur. */}
                             </div>
                           </div>,
                           document.body
@@ -3910,38 +3903,25 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       </div>
                     </div>
 
-                    {/* Demande explicite (11 septembre, répétée) : « supprime
-                        dans la partie mobile le bouton micro à droite » —
-                        retiré de la rangée sur mobile, déplacé dans le menu
-                        "+" (voir plus haut, juste après "Dictée vocale").
-                        Toujours visible sur ordinateur, où il a sa place. */}
+                    {/* Demandé (17/09/2026) : « je veux que ça soit un
+                        enregistrement audio comme dans le "+", [...] qu'on
+                        puisse avant de l'envoyer le réécouter ou l'annuler »
+                        — revenu sur la demande du 11 septembre qui l'avait
+                        masqué sur mobile (déplacé dans le menu "+", voir
+                        "Message vocal" plus haut, retiré du menu puisqu'il
+                        a maintenant sa place ici) : visible partout
+                        (mobile ET ordinateur), même bouton, même
+                        comportement. La réécoute/annulation avant envoi
+                        existaient déjà (voir plus haut le bloc
+                        `convVocalPret`) — rien à ajouter de ce côté. */}
                     <button
                       type="button"
                       onClick={() => (isRecordingConv ? void handleStopRecordingConv(false) : void handleStartRecordingConv())}
                       disabled={uploadingConvMedia || !!convVocalPret}
-                      className="justify-self-center hidden sm:flex w-14 h-14 sm:w-12 sm:h-12 rounded-full items-center justify-center shadow-lg shadow-rose-500/30 transition-transform hover:scale-105 disabled:opacity-40 bg-rose-500/90 hover:bg-rose-500 text-white"
+                      className="justify-self-center flex w-14 h-14 sm:w-12 sm:h-12 rounded-full items-center justify-center shadow-lg shadow-rose-500/30 transition-transform hover:scale-105 disabled:opacity-40 bg-rose-500/90 hover:bg-rose-500 text-white"
                       title="Message vocal"
                     >
                       <Mic className="w-6 h-6 sm:w-5 sm:h-5" />
-                    </button>
-
-                    {/* Demandé (17/09/2026) : « rajoute ce micro pour la
-                        dictée vocale, [...] centré en bas [...] aligné avec
-                        le "+" et le bouton Envoyer » — équivalent mobile du
-                        bouton ci-dessus (même case centrale, même style),
-                        mais pour la DICTÉE (texte), pas l'enregistrement d'un
-                        message vocal (déjà accessible via le menu "+" sur
-                        mobile, voir plus haut). `sm:hidden` : uniquement
-                        mobile, l'ordinateur garde le bouton d'enregistrement
-                        ci-dessus dans cette même case. */}
-                    <button
-                      type="button"
-                      onClick={() => toggleDictee(isListeningConv, setIsListeningConv, recognitionConvRef, convDraft, setConvDraft)}
-                      className={`justify-self-center flex sm:hidden w-14 h-14 rounded-full items-center justify-center shadow-lg transition-transform hover:scale-105 text-white ${isListeningConv ? 'bg-rose-500 animate-pulse shadow-rose-500/50' : 'bg-rose-500/90 shadow-rose-500/30 hover:bg-rose-500'}`}
-                      title={isListeningConv ? 'Dictée en cours... (toucher pour arrêter)' : 'Dictée vocale'}
-                      aria-label={isListeningConv ? 'Dictée en cours, toucher pour arrêter' : 'Démarrer la dictée vocale'}
-                    >
-                      <Mic className="w-6 h-6" />
                     </button>
 
                     <div className="flex items-center gap-2 justify-self-end">
