@@ -71,6 +71,16 @@ interface EcritureEnAttente {
 // Une file par colonne : au plus une écriture en vol, et si plusieurs
 // changements arrivent pendant qu'elle roule, seule la dernière valeur de
 // chaque agence est écrite ensuite.
+//
+// Signalé (17/09/2026, famille du bug "les tuiles changent de place à la
+// reconnexion") : le lot était indexé PAR AGENCE SEULE (`lot.get(agencyId)`)
+// alors que la même file sert tout l'onglet navigateur. Sur un poste
+// partagé, si le compte A avait une écriture en attente pour l'agence X
+// quand le compte B (même agence, même onglet) en posait une aussi, la
+// deuxième écrasait purement et simplement `userId`/`valeur` de la première
+// dans la même entrée : la disposition de A ne partait jamais vers SA ligne
+// `user_ui_settings`, silencieusement. Clé composite utilisateur+agence.
+const clefLot = (userId: string, agencyId: string) => `${userId}::${agencyId}`;
 const enVol: Partial<Record<ColonneDisposition, Promise<void>>> = {};
 const enAttente: Partial<Record<ColonneDisposition, Map<string, EcritureEnAttente>>> = {};
 
@@ -137,14 +147,14 @@ export function ecrireDispositionAgence(
 ): Promise<{ error: { message: string } | null }> {
   return new Promise((resolve) => {
     const lot = (enAttente[colonne] ??= new Map());
-    const existante = lot.get(agencyId);
+    const clef = clefLot(userId, agencyId);
+    const existante = lot.get(clef);
     if (existante) {
       existante.valeur = valeur;
       existante.maj = Math.max(existante.maj, maj);
-      existante.userId = userId;
       existante.resolveurs.push(resolve);
     } else {
-      lot.set(agencyId, { userId, agencyId, valeur, maj, resolveurs: [resolve] });
+      lot.set(clef, { userId, agencyId, valeur, maj, resolveurs: [resolve] });
     }
     if (!enVol[colonne]) {
       // Petit délai : une rafale de changements (dossier créé puis rempli)

@@ -1241,12 +1241,25 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // (voir HOME_TILES_KEY juste en dessous).
   const { agencies, activeAgency, isSuperAdmin, currentUser } = useAuth() as any;
   const isLight = useIsLightMode();
+  // Signalé (17/09/2026) : "chaque utilisateur organise le placement comme
+  // il veut, sauf que les tuiles changent de place quand on se reconnecte"
+  // — les clés de cache (localStorage ci-dessous ET les deux Set
+  // module-level tout en haut du fichier, qui évitent de relire le serveur
+  // à chaque remontage) n'étaient indexées QUE par agence, jamais par
+  // utilisateur. Sur un même onglet (poste partagé en agence, ou simple
+  // reconnexion sans recharger la page), la disposition d'un compte
+  // s'appliquait donc à un autre : le Set croyait la lecture serveur déjà
+  // faite pour cette agence et ne la relançait pas pour le nouveau compte,
+  // qui héritait de l'ordre laissé en localStorage par le compte précédent.
+  // Clé composite utilisateur+agence partout où l'agence seule servait de
+  // clé de synchronisation.
+  const clefSyncTuiles = (agencyId: string) => `${currentUser?.uid || 'anon'}::${agencyId}`;
   // Signalé : un dossier créé en étant sur l'agence Immosphera se
   // retrouvait aussi visible en basculant sur une autre agence (Conseils
   // Finances...) — tout l'accueil personnalisé partageait la même clé de
   // stockage, sans distinction d'agence. Chaque agence a maintenant sa
   // propre clé, cloisonnée.
-  const HOME_TILES_KEY = `novasphere_home_tiles_v3_${activeAgency?.id || 'default'}`;
+  const HOME_TILES_KEY = `novasphere_home_tiles_v3_${currentUser?.uid || 'anon'}_${activeAgency?.id || 'default'}`;
   // Signalé : "plusieurs fois le dossier Amanda" (et d'autres tuiles en
   // double) — cause trouvée : la ré-injection automatique des nouvelles
   // tuiles Immosphera ci-dessous ne cherchait qu'au premier niveau de la
@@ -1530,7 +1543,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // dossiers ouverts, qui gardent leur grille dense classique).
   const ROOT_COLUMNS = 6;
   const ROOT_GRID_SLOTS = 36; // 6 colonnes × 6 lignes — large marge.
-  const ROOT_SLOTS_KEY = `novasphere_home_slots_v1_${activeAgency?.id || 'default'}`;
+  const ROOT_SLOTS_KEY = `novasphere_home_slots_v1_${currentUser?.uid || 'anon'}_${activeAgency?.id || 'default'}`;
   // Ancien id sentinelle du bouton "Ajouter" quand il faisait partie de la
   // grille — conservé ici uniquement pour filtrer d'éventuelles anciennes
   // valeurs encore présentes dans le localStorage de certains utilisateurs
@@ -1631,7 +1644,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // compte, donc même risque d'écrasement inter-agences sans `agencyId`.
     // Super admin : la case d'un dossier verrouillé suit ses déplacements
     // (voir Verrou.slot) — sans réécrire les verrous quand rien n'a bougé.
-    if (change && isSuperAdmin && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
+    if (change && isSuperAdmin && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) {
       const suivants: Record<string, Verrou> = { ...lockedTiles };
       let bouge = false;
       Object.entries(lockedTiles).forEach(([id, v]) => {
@@ -1640,7 +1653,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       });
       if (bouge) void enregistrerVerrous(suivants, lockedTiles);
     }
-    if (change && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
+    if (change && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) {
       ecrireDispositionAgence('home_root_slots', currentUser.uid, activeAgency.id, rootSlots, maj)
         // Signalé : "les tuiles déplacées ne se sauvegardent jamais à la
         // même place" — cette écriture serveur échouait en silence (erreur
@@ -1681,8 +1694,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // (tableau, sans agencyId) est ignoré ici plutôt que risqué à tort.
   useEffect(() => {
     const agencyId = activeAgency?.id;
-    if (!currentUser?.uid || !agencyId || homeSyncLoadedAgencies.has(agencyId)) return;
-    homeSyncLoadedAgencies.add(agencyId);
+    if (!currentUser?.uid || !agencyId) return;
+    const clefSync = clefSyncTuiles(agencyId);
+    if (homeSyncLoadedAgencies.has(clefSync)) return;
+    homeSyncLoadedAgencies.add(clefSync);
     (async () => {
       try {
         // Demandé le 2 septembre : « lors d'une mise à jour, je ne veux pas
@@ -1708,15 +1723,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         // Clés du navigateur pour CETTE agence (celle du chargement), et non
         // l'agence active du moment : un super admin peut avoir changé
         // d'agence pendant la lecture.
-        const cleTuiles = `novasphere_home_tiles_v3_${agencyId}`;
-        const cleSlots = `novasphere_home_slots_v1_${agencyId}`;
+        const cleTuiles = `novasphere_home_tiles_v3_${currentUser.uid}_${agencyId}`;
+        const cleSlots = `novasphere_home_slots_v1_${currentUser.uid}_${agencyId}`;
         const toujoursActive = () => homeTilesKeyRef.current === cleTuiles;
         const lectureTuiles = lireDispositionAgence((data as any)?.home_tiles, agencyId);
         const tuilesServeur = lectureTuiles.items;
         const majLocaleTuiles = lireHorodatageLocal(cleTuiles) ?? 0;
         const localeTuilesPlusFraiche = majLocaleTuiles > (lectureTuiles.maj ?? 0);
         if (localeTuilesPlusFraiche) {
-          homeSyncReadyAgencies.add(agencyId);
+          homeSyncReadyAgencies.add(clefSync);
           const locales = toujoursActive() ? tilesRef.current : JSON.parse(localStorage.getItem(cleTuiles) || '[]');
           void ecrireDispositionAgence('home_tiles', currentUser.uid, agencyId, locales, majLocaleTuiles);
         } else if (tuilesServeur && tuilesServeur.length > 0) {
@@ -1751,7 +1766,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         const slotsServeur = lectureSlots.items;
         const majLocaleSlots = lireHorodatageLocal(cleSlots) ?? 0;
         if (majLocaleSlots > (lectureSlots.maj ?? 0)) {
-          homeSyncReadyAgencies.add(agencyId);
+          homeSyncReadyAgencies.add(clefSync);
           const locaux = toujoursActive() ? rootSlotsRef.current : JSON.parse(localStorage.getItem(cleSlots) || '[]');
           void ecrireDispositionAgence('home_root_slots', currentUser.uid, agencyId, locaux, majLocaleSlots);
         } else if (slotsServeur) {
@@ -1765,7 +1780,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       } catch {
         /* best-effort — le navigateur reste la source si le serveur échoue */
       } finally {
-        homeSyncReadyAgencies.add(agencyId);
+        homeSyncReadyAgencies.add(clefSync);
         setSyncPrete((v) => v + 1);
       }
     })();
@@ -2037,13 +2052,13 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // chargement), pour qu'un appareil resté sur une vieille grille ne
   // réécrive pas un verrou plus récent.
   const synchroniserVerrous = (grille: TileItemNode[], base: Record<string, Verrou> = lockedTiles) => {
-    if (!isSuperAdmin || !activeAgency?.id) return;
+    if (!isSuperAdmin || !activeAgency?.id || !currentUser?.uid) return;
     const next: Record<string, Verrou> = { ...base };
     let change = false;
     // La grille du super admin fait foi, mais seulement une fois sa version
     // serveur chargée : un appareil resté sur une vieille grille ne doit pas
     // effacer un verrou posé ailleurs.
-    const grilleFiable = homeSyncReadyAgencies.has(activeAgency.id);
+    const grilleFiable = homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id));
     Object.entries(base).forEach(([id, verrou]) => {
       const tuile = findTileRecursive(grille, id);
       if (!tuile) {
@@ -2121,10 +2136,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // n'existe ni dans sa grille ni parmi les tuiles fournies est ignoré tout
   // de suite (verrousEffectifs) et effacé pour toute l'agence.
   const fantomesVerrous = useMemo<string[]>(() => {
-    if (!isSuperAdmin || !activeAgency?.id || !homeSyncReadyAgencies.has(activeAgency.id)) return [];
+    if (!isSuperAdmin || !activeAgency?.id || !currentUser?.uid || !homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) return [];
     return Object.keys(lockedTiles).filter((id) => !existsRecursive(tiles, id) && !findInitialTile(id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lockedTiles, tiles, isSuperAdmin, activeAgency?.id, syncPrete]);
+  }, [lockedTiles, tiles, isSuperAdmin, activeAgency?.id, currentUser?.uid, syncPrete]);
   const verrousEffectifs = useMemo<Record<string, Verrou>>(() => {
     if (fantomesVerrous.length === 0) return lockedTiles;
     const propres = { ...lockedTiles };
@@ -2439,7 +2454,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       maj = Date.now();
       ecrireHorodatageLocal(HOME_TILES_KEY, maj);
     }
-    if (change && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(activeAgency.id)) {
+    if (change && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) {
       ecrireDispositionAgence('home_tiles', currentUser.uid, activeAgency.id, tiles, maj)
         // Diagnostic temporaire (même raison que home_root_slots juste
         // au-dessus) : journaliser l'erreur réelle au lieu de l'avaler, et
@@ -3034,7 +3049,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   const idsDossiersAReposer = dossiersVerrouillesAReposer.map((d) => d.id).join('|');
   useEffect(() => {
     const agencyId = activeAgency?.id;
-    if (activeFolder || !agencyId || !homeSyncReadyAgencies.has(agencyId)) return;
+    if (activeFolder || !agencyId || !currentUser?.uid || !homeSyncReadyAgencies.has(clefSyncTuiles(agencyId))) return;
     const aPoser = dossiersVerrouillesAReposer.filter((d) => !existsRecursive(tiles, d.id));
     if (aPoser.length === 0) return;
     setTiles((prev) => [
