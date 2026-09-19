@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   LifeBuoy, Plus, X, Image as ImageIcon, Send, Loader2, AlertTriangle,
   ArrowRight, Paperclip, MessageCircle, CheckCircle2, Archive, ArchiveRestore,
-  ExternalLink, Rocket, Trash2,
+  ExternalLink, Rocket, Trash2, Check, CheckCheck,
 } from 'lucide-react';
 import {
   SupportTicket, SupportTicketMessage, SupportPriority, SupportCategory, SupportStatus, AGENCIES,
@@ -82,6 +82,7 @@ interface MessageRow {
   body: string;
   attachments: string[] | null;
   created_at: string;
+  read_by: { userId: string; userName?: string; readAt?: string }[] | null;
 }
 
 const rowToMessage = (row: MessageRow): SupportTicketMessage => ({
@@ -92,6 +93,7 @@ const rowToMessage = (row: MessageRow): SupportTicketMessage => ({
   body: row.body,
   attachments: row.attachments || [],
   createdAt: row.created_at,
+  readBy: Array.isArray(row.read_by) ? row.read_by : [],
 });
 
 export const SupportView: React.FC = () => {
@@ -129,6 +131,10 @@ export const SupportView: React.FC = () => {
   const isSylvain = currentUser?.uid === SYLVAIN_UID;
   const NOVA_BOT_ID = '00000000-0000-0000-0000-000000000001';
   const [novaRepliedTicketIds, setNovaRepliedTicketIds] = useState<Set<string>>(new Set());
+  // Demandé (19/09/2026, capture à l'appui) : « je ne vois pas sur la carte
+  // le nombre de messages » — le Kanban affichait déjà le nombre de pièces
+  // jointes mais jamais le nombre de messages de l'échange.
+  const [messageCounts, setMessageCounts] = useState<Record<string, number>>({});
 
   const handleValidateAndDeploy = async (ticket: SupportTicket) => {
     if (!currentUser || deployRequestState === 'sending') return;
@@ -191,8 +197,19 @@ export const SupportView: React.FC = () => {
           if (!readAt || new Date(lastAt).getTime() > new Date(readAt).getTime()) unread.add(ticketId);
         });
         setNovaRepliedTicketIds(unread);
+
+        const { data: allMsgs } = await supabase
+          .from('support_ticket_messages')
+          .select('ticket_id')
+          .in('ticket_id', rows.map((r) => r.id));
+        const counts: Record<string, number> = {};
+        (allMsgs || []).forEach((m: any) => {
+          counts[m.ticket_id] = (counts[m.ticket_id] || 0) + 1;
+        });
+        setMessageCounts(counts);
       } else {
         setNovaRepliedTicketIds(new Set());
+        setMessageCounts({});
       }
     } catch (e) {
       console.error('Erreur chargement des tickets support :', e);
@@ -216,7 +233,32 @@ export const SupportView: React.FC = () => {
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: true });
       if (err) throw err;
-      setMessages(((data as MessageRow[]) || []).map(rowToMessage));
+      const rows = (data as MessageRow[]) || [];
+      setMessages(rows.map(rowToMessage));
+
+      // Accusé de réception (19/09/2026, capture à l'appui) : « je ne vois
+      // pas l'accusé réception de lecture » — même mécanique que les canaux
+      // de discussion (read_by JSONB, voir ChatViewSupabase) : marque lu
+      // tout message d'un autre expéditeur pas encore lu par moi, dès
+      // l'ouverture du ticket.
+      if (currentUser) {
+        const toMarkRead = rows.filter(
+          (r) => r.sender_id !== currentUser.uid && !(r.read_by || []).some((x) => x.userId === currentUser.uid)
+        );
+        if (toMarkRead.length > 0) {
+          const displayName = userProfile?.displayName || currentUser.email || 'Utilisateur';
+          void Promise.all(
+            toMarkRead.map((r) =>
+              supabase
+                .from('support_ticket_messages')
+                .update({
+                  read_by: [...(r.read_by || []), { userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
+                } as any)
+                .eq('id', r.id)
+            )
+          );
+        }
+      }
     } catch (e) {
       console.warn('Erreur chargement des messages du ticket :', e);
     } finally {
@@ -643,6 +685,9 @@ export const SupportView: React.FC = () => {
                       {ticket.attachments.length > 0 && (
                         <span className="text-[9px] text-gray-500 flex items-center gap-0.5"><Paperclip className="w-2.5 h-2.5" />{ticket.attachments.length}</span>
                       )}
+                      {!!messageCounts[ticket.id] && (
+                        <span className="text-[9px] text-gray-500 flex items-center gap-0.5"><MessageCircle className="w-2.5 h-2.5" />{messageCounts[ticket.id]}</span>
+                      )}
                     </div>
                     <h4 className="text-xs font-bold text-white">{ticket.title}</h4>
                     <p className="text-[10px] text-gray-500 mt-1">{ticket.createdByName || 'Utilisateur'}</p>
@@ -956,7 +1001,16 @@ export const SupportView: React.FC = () => {
                                 ))}
                               </div>
                             )}
-                            <p className="text-[9px] text-gray-600 mt-1">{new Date(m.createdAt).toLocaleString('fr-FR')}</p>
+                            <div className="flex items-center gap-1 mt-1">
+                              <p className="text-[9px] text-gray-600">{new Date(m.createdAt).toLocaleString('fr-FR')}</p>
+                              {isMine && (
+                                m.readBy.some((r) => r.userId !== currentUser?.uid) ? (
+                                  <CheckCheck className="w-3 h-3 text-[#F7BC5F]" aria-label="Lu" />
+                                ) : (
+                                  <Check className="w-3 h-3 text-gray-600" aria-label="Envoyé" />
+                                )
+                              )}
+                            </div>
                           </div>
                         </div>
                       );

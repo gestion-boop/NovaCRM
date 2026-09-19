@@ -441,6 +441,7 @@ export interface SupportTicketMessage {
   body: string;
   attachments: string[];
   createdAt: string;
+  readBy: { userId: string; userName?: string; readAt?: string }[];
 }
 
 export interface CameraReservation {
