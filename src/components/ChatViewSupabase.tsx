@@ -2449,7 +2449,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setDraft('');
     try {
     const messageId = crypto.randomUUID();
-    await supabase.from('chat_messages').insert({
+    const { error } = await supabase.from('chat_messages').insert({
       // Signalé : "les Novadji dans les messages ne se mettent pas" — en
       // creusant, la colonne `id` de `chat_messages` n'a pas de valeur par
       // défaut côté base (corrigé séparément par une migration SQL), donc
@@ -2467,6 +2467,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       is_deleted: false,
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
     } as any);
+    // Signalé (19/09/2026, Laetitia Pioche/Réseaux sociaux) : "elle reçoit
+    // bien le message mais ne peut pas répondre" — l'erreur de cet insert
+    // n'était jamais lue : que la ligne parte réellement en base ou qu'elle
+    // soit refusée (RLS, contrainte...), le champ se vidait quand même
+    // (`setDraft('')` ci-dessus, avant même l'appel réseau) et rien
+    // n'indiquait un échec — un blocage strictement invisible. Le texte
+    // tapé est maintenant restauré et l'erreur réelle affichée.
+    if (error) {
+      setDraft(body);
+      toast.error(`Message non envoyé : ${error.message}`);
+      return;
+    }
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
     await notifierMembresDuDossier(activeChannel, body, messageId);
     } finally {
@@ -2478,7 +2490,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (!activeChannel || !currentUser) return;
     setShowChannelNovaPicker(false);
     const messageId = crypto.randomUUID();
-    await supabase.from('chat_messages').insert({
+    const { error } = await supabase.from('chat_messages').insert({
       id: messageId,
       channel: activeChannel.id,
       data: { body: novaSrc, sender_id: currentUser.uid, sender_name: displayName, created_at: new Date().toISOString() },
@@ -2486,6 +2498,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       is_deleted: false,
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
     } as any);
+    // Même correctif que sendMessage : une erreur ici restait invisible.
+    if (error) {
+      toast.error(`Mascotte non envoyée : ${error.message}`);
+      return;
+    }
     await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
     await notifierMembresDuDossier(activeChannel, 'a envoye une mini-expression', messageId);
   };
