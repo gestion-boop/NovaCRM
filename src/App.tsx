@@ -57,6 +57,7 @@ import { EVENEMENT_COMPOSER_MAIL } from './lib/composerMail';
 import UpdateBanner from './components/UpdateBanner';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
+import EnablePushPrompt from './components/EnablePushPrompt';
 import MobileHome from './components/MobileHome';
 import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -790,6 +791,7 @@ function App() {
       <UpdateBanner />
       <GoogleWorkspaceStatus />
       <AutoEnablePush />
+      <EnablePushPrompt />
       <AnnouncementBanner />
       {/* Top Header Bar */}
       <Header
