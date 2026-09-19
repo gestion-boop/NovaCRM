@@ -1254,6 +1254,33 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Clé composite utilisateur+agence partout où l'agence seule servait de
   // clé de synchronisation.
   const clefSyncTuiles = (agencyId: string) => `${currentUser?.uid || 'anon'}::${agencyId}`;
+  // Signalé (19/09/2026, persiste après le correctif ci-dessus) : « les
+  // tuiles ne gardent pas la même place, il faut se reconnecter et
+  // réorganiser à chaque fois ». Reproduit même pour un SEUL utilisateur,
+  // sans poste partagé : les deux Set module-level (tout en haut du
+  // fichier) sont volontairement conservés au-delà d'un démontage
+  // d'AccueilGrid, pour ne relire le serveur qu'une fois par onglet ouvert —
+  // mais une déconnexion/reconnexion dans NovaCRM est un simple changement
+  // d'état React (`supabase.auth.signOut()`), sans rechargement de page :
+  // le même onglet garde donc le même module JS, et la clé
+  // `${uid}::${agencyId}` de CE compte y est déjà marquée "déjà synchronisé"
+  // depuis la session précédente. En se reconnectant, la lecture serveur ne
+  // se relance donc plus — l'écriture repart directement de ce que le
+  // navigateur avait en mémoire, potentiellement périmé si un autre
+  // appareil a changé la disposition entre-temps, écrasant silencieusement
+  // la version serveur plus récente. Un changement d'identité (connexion,
+  // déconnexion, changement de compte) purge maintenant ces deux Set, pour
+  // forcer une vraie relecture serveur à chaque fois, comme au tout premier
+  // chargement de l'onglet.
+  const identitePrecedenteRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const uid = currentUser?.uid ?? null;
+    if (identitePrecedenteRef.current !== undefined && identitePrecedenteRef.current !== uid) {
+      homeSyncLoadedAgencies.clear();
+      homeSyncReadyAgencies.clear();
+    }
+    identitePrecedenteRef.current = uid;
+  }, [currentUser?.uid]);
   // Signalé : un dossier créé en étant sur l'agence Immosphera se
   // retrouvait aussi visible en basculant sur une autre agence (Conseils
   // Finances...) — tout l'accueil personnalisé partageait la même clé de
@@ -1323,6 +1350,25 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // (user_ui_settings.home_tiles) : ce chemin-là n'appliquait que
   // normalizeTile, jamais cette réconciliation — une tuile ajoutée après la
   // dernière sauvegarde n'y apparaissait donc jamais.
+  // Extrait de reconcilierGrille (voir son commentaire ci-dessous) pour être
+  // réutilisable ailleurs — notamment sur le chemin de synchronisation
+  // serveur, qui ne passe jamais par reconcilierGrille (voir "ATTENTION" plus
+  // bas) mais doit quand même respecter les tuiles masquées par l'utilisateur.
+  const listerIdsMasquesAplatis = (): Set<string> => {
+    try {
+      const hiddenRaw = localStorage.getItem('novasphere_hidden_tiles_v1');
+      const flattenIds = (items: TileItemNode[]): string[] =>
+        items.flatMap((t) => [t.id, ...(t.children ? flattenIds(t.children) : [])]);
+      return new Set(flattenIds(hiddenRaw ? JSON.parse(hiddenRaw) : []));
+    } catch {
+      return new Set();
+    }
+  };
+  const retirerTuilesMasqueesRecursif = (items: TileItemNode[], hiddenIds: Set<string>): TileItemNode[] =>
+    items
+      .filter((t) => !hiddenIds.has(t.id))
+      .map((t) => (t.children ? { ...t, children: retirerTuilesMasqueesRecursif(t.children, hiddenIds) } : t));
+
   const reconcilierGrille = (grille: TileItemNode[]): TileItemNode[] => {
     let base = grille;
     // Signalé (9 septembre, Sylvain) : « le dossier Communication se
@@ -1339,15 +1385,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // masquées elles aussi) et on l'intègre à `estAbsent` — plus aucun bloc
     // ci-dessous, générique ou dédié, ne peut donc réinjecter par erreur ce
     // qu'un dossier masqué emportait avec lui.
-    let hiddenIds = new Set<string>();
-    try {
-      const hiddenRaw = localStorage.getItem('novasphere_hidden_tiles_v1');
-      const flattenIds = (items: TileItemNode[]): string[] =>
-        items.flatMap((t) => [t.id, ...(t.children ? flattenIds(t.children) : [])]);
-      hiddenIds = new Set(flattenIds(hiddenRaw ? JSON.parse(hiddenRaw) : []));
-    } catch {
-      /* ignore */
-    }
+    const hiddenIds = listerIdsMasquesAplatis();
     // "Manquant" = absent de la grille brute ET pas déjà couvert par un
     // verrou (auquel cas applyLocks l'injectera tout seul, à sa vraie place,
     // sans jamais passer par ici — voir idsCouvertsParVerrou plus haut) ET
@@ -1743,8 +1781,23 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           // retrait qui n'aurait vécu que là-bas restait sans effet ici. Même
           // filtre, sûr sur une grille venue du serveur (ne touche que ces
           // identifiants précis, jamais le contenu d'un dossier verrouillé).
-          const normalisees = removeQuickBarDuplicates(
-            (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+          //
+          // Complété (19/09/2026) : cette liste fixe ne couvrait que 3 ids
+          // précis (Agenda/Rappels/Tableau de bord) — une tuile MASQUÉE par
+          // l'utilisateur (ex. tout un dossier "Communication", supprimé
+          // localement mais dont la suppression n'avait pas encore atteint
+          // le serveur au moment de cette lecture) réapparaissait donc quand
+          // même dès que la version serveur, plus ancienne, l'emportait.
+          // `retirerTuilesMasqueesRecursif` applique le MÊME filtre général
+          // que `reconcilierGrille` (masquage utilisateur, `novasphere_
+          // hidden_tiles_v1`) — sans toucher au contenu des dossiers
+          // verrouillés, qui vit ailleurs (agency_ui_settings), jamais dans
+          // cette liste.
+          const normalisees = retirerTuilesMasqueesRecursif(
+            removeQuickBarDuplicates(
+              (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+            ),
+            listerIdsMasquesAplatis()
           );
           try { localStorage.setItem(cleTuiles, JSON.stringify(normalisees)); } catch { /* ignore */ }
           if (lectureTuiles.maj) ecrireHorodatageLocal(cleTuiles, lectureTuiles.maj);
