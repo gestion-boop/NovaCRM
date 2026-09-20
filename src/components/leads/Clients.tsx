@@ -346,10 +346,18 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
     return new Date(date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
   };
 
-  const getCreatorName = (lead: any) =>
-    lead.creator_profile?.full_name || lead.creator_profile?.email || "Utilisateur inconnu";
-
   const getAssignedName = (lead: any) => lead.assigned_profile?.full_name || lead.assigned_profile?.email || null;
+
+  // Beaucoup de fiches Immosphera n'ont pas de created_by (import, création
+  // avant l'ajout du champ) mais ont bien un assigned_to — on l'affiche
+  // plutôt que d'annoncer "Utilisateur inconnu" à tort (signalé le 20
+  // septembre : « toute agence Immosphera, beaucoup de clients marqués
+  // utilisateur inconnu »). Le libellé s'adapte pour rester honnête.
+  const getCreatorName = (lead: any) =>
+    lead.creator_profile?.full_name || lead.creator_profile?.email || getAssignedName(lead) || "Utilisateur inconnu";
+
+  const getCreatorLabel = (lead: any) =>
+    lead.creator_profile?.full_name || lead.creator_profile?.email ? "Créé par" : "Attribué à";
 
   const shouldShowAssignedBadge = (lead: any) =>
     Boolean(
@@ -678,7 +686,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
               <div className="mt-auto shrink-0 px-5 py-3 bg-background/85 border-t border-border/40 flex items-center justify-between gap-2">
                 <div>
                   <p className="text-xs text-muted-foreground">
-                    Créé par <span className="font-semibold text-foreground">{getCreatorName(l)}</span>
+                    {getCreatorLabel(l)} <span className="font-semibold text-foreground">{getCreatorName(l)}</span>
                   </p>
                   <p className="text-xs text-muted-foreground">Le {formatCreatedDate(l.created_at)}</p>
                 </div>
