@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Camera, Plus, Clock, MapPin, Hash, Briefcase, CheckCircle2, XCircle } from 'lucide-react';
+import { Camera, Plus, Clock, MapPin, Hash, Briefcase, CheckCircle2, XCircle, Pencil } from 'lucide-react';
 import CameraReservationModal from './CameraReservationModal';
+import { useAuth } from '@/context/AuthContext';
 import { useCameraReservations, StoredCameraReservation, formatReservationDateFr } from '@/hooks/useCameraReservations';
 
 // Correctif (7 septembre, signalé « on ne voit pas trop bien la date qui
@@ -105,16 +106,31 @@ const ReviewRow: React.FC<{
 };
 
 export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenModal }) => {
+  const { currentUser } = useAuth();
   const { reservations, loading, error, isCameraAdmin, reviewingId, reviewReservation } = useCameraReservations();
   const [showModal, setShowModal] = useState(false);
+  // Demande explicite : pouvoir cliquer sur une réservation enregistrée
+  // pour la modifier si besoin, sans repasser par une nouvelle demande.
+  const [editingReservation, setEditingReservation] = useState<StoredCameraReservation | null>(null);
 
   const handleTriggerOpen = () => {
+    setEditingReservation(null);
     if (onOpenModal) {
       onOpenModal();
     } else {
       setShowModal(true);
     }
   };
+
+  const handleEdit = (r: StoredCameraReservation) => {
+    setEditingReservation(r);
+    setShowModal(true);
+  };
+
+  // Modifiable par son auteur tant qu'elle est en attente (même règle que la
+  // policy Supabase `cam_update`), ou par un admin caméra à tout moment.
+  const canEdit = (r: StoredCameraReservation) =>
+    isCameraAdmin || (r.createdByUserId === currentUser?.uid && r.status === 'En attente');
 
   // En attente d'abord (ce qui a besoin d'une action), puis le reste par
   // date décroissante — pour ne pas noyer une demande urgente au milieu
@@ -243,6 +259,16 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
                   }`}>
                     {r.status}
                   </span>
+                  {canEdit(r) && (
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(r)}
+                      title="Modifier cette réservation"
+                      className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:border-purple-500/40 transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -254,7 +280,11 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
 
       <CameraReservationModal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => {
+          setShowModal(false);
+          setEditingReservation(null);
+        }}
+        editReservation={editingReservation}
       />
     </div>
   );

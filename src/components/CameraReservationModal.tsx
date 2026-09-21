@@ -18,12 +18,17 @@ interface CameraReservationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddReservation?: (res: CameraReservation) => void;
+  // Demande explicite : pouvoir cliquer sur une réservation déjà enregistrée
+  // (depuis ReserverCameraView) pour la modifier au lieu d'en recréer une —
+  // ouvre ce même formulaire pré-rempli, en UPDATE plutôt qu'en INSERT.
+  editReservation?: StoredCameraReservation | null;
 }
 
 export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   isOpen,
   onClose,
   onAddReservation,
+  editReservation = null,
 }) => {
   const { currentUser, activeAgency, userProfile } = useAuth();
 
@@ -108,6 +113,32 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     setAltSlots(['', '', '']);
   }, [detailReservation]);
 
+  // Pré-remplissage du formulaire quand on ouvre la fenêtre pour MODIFIER
+  // une réservation existante (clic sur une carte dans ReserverCameraView) —
+  // y compris la date, pour que le calendrier s'ouvre directement sur le
+  // bon jour au lieu de rester sur celui parcouru la dernière fois.
+  useEffect(() => {
+    if (!isOpen || !editReservation) return;
+    const [datePart, timePart] = editReservation.startDate.split(' ');
+    const [y, m, d] = datePart.split('-').map(Number);
+    if (y && m && d) {
+      setViewDate(new Date(y, m - 1, 1));
+      setSelectedDayNum(d);
+    }
+    setStartTime(editReservation.startTime || timePart || '09:00');
+    setEndTime(editReservation.endTime || '10:00');
+    setSelectedEquipment(
+      editReservation.equipmentList?.length
+        ? editReservation.equipmentList
+        : editReservation.equipmentName.split(',').map((item) => item.trim())
+    );
+    setLocation(editReservation.location || editReservation.propertyAddress || '');
+    setMandateNumber(editReservation.mandateNumber || '');
+    setProjectName(editReservation.projectName || '');
+    setNote(editReservation.note || '');
+    setSubmitError(null);
+  }, [isOpen, editReservation]);
+
   if (!isOpen) return null;
 
   // Equipment options matching user's screenshot
@@ -151,8 +182,10 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     .filter((reservation) => reservation.startDate.startsWith(formattedDateStr))
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  const hasTimeConflict = (equipment: string, start: string, end: string) => {
+  const hasTimeConflict = (equipment: string, start: string, end: string, excludeId?: string) => {
     return selectedDayReservations.some((reservation) => {
+      if (excludeId && reservation.id === excludeId) return false;
+
       const bookedEquipment = reservation.equipmentList?.length
         ? reservation.equipmentList
         : reservation.equipmentName.split(',').map((item) => item.trim());
@@ -213,7 +246,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     }
 
     const conflictingEquipment = selectedEquipment.filter((equipment) =>
-      hasTimeConflict(equipment, startTime, endTime)
+      hasTimeConflict(equipment, startTime, endTime, editReservation?.id)
     );
 
     if (conflictingEquipment.length) {
@@ -270,22 +303,34 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
       const startAtIso = new Date(`${formattedDateStr}T${startTime}:00`).toISOString();
       const endAtIso = new Date(`${formattedDateStr}T${endTime}:00`).toISOString();
 
-      const { error: insertError } = await supabase.from('camera_reservations' as any).insert({
-        agency_id: activeAgency.id === 'all' ? null : activeAgency.id,
-        user_id: currentUser.uid,
-        title: 'Réservation matériel',
-        description,
-        start_at: startAtIso,
-        end_at: endAtIso,
-        status: 'pending',
-      } as any);
-      if (insertError) throw insertError;
+      if (editReservation) {
+        const { error: updateError } = await supabase
+          .from('camera_reservations' as any)
+          .update({
+            description,
+            start_at: startAtIso,
+            end_at: endAtIso,
+          } as any)
+          .eq('id', editReservation.id);
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase.from('camera_reservations' as any).insert({
+          agency_id: activeAgency.id === 'all' ? null : activeAgency.id,
+          user_id: currentUser.uid,
+          title: 'Réservation matériel',
+          description,
+          start_at: startAtIso,
+          end_at: endAtIso,
+          status: 'pending',
+        } as any);
+        if (insertError) throw insertError;
+      }
 
       // La liste se rafraîchit toute seule via l'abonnement temps réel du
       // hook partagé (useCameraReservations) — plus besoin de la mettre à
       // jour ici à la main.
 
-      if (onAddReservation) {
+      if (!editReservation && onAddReservation) {
         onAddReservation(newRes);
       }
 
@@ -340,9 +385,13 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
             <Camera className="w-6 h-6 text-purple-300" />
           </div>
           <div>
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">Réservation de matériel</h2>
+            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              {editReservation ? 'Modifier la réservation' : 'Réservation de matériel'}
+            </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Remplissez le formulaire. La demande sera validée par <span className="text-slate-200 font-semibold">Sylvain ou Mélanie Grazia</span>.
+              {editReservation
+                ? 'Ajustez le créneau ou le matériel, puis enregistrez.'
+                : <>Remplissez le formulaire. La demande sera validée par <span className="text-slate-200 font-semibold">Sylvain ou Mélanie Grazia</span>.</>}
             </p>
           </div>
         </div>
@@ -359,13 +408,26 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                 <button
                   key={res.id}
                   type="button"
-                  onClick={() => setDetailReservation(res)}
+                  onClick={() => {
+                    // Demande explicite : on perdait le fil de la date
+                    // demandée en parcourant le calendrier soi-même — on
+                    // recale systématiquement le calendrier sur le jour de
+                    // la demande ouverte, pour qu'il ne reste jamais sur un
+                    // mois parcouru entre-temps.
+                    const [datePart] = res.startDate.split(' ');
+                    const [y, m, d] = datePart.split('-').map(Number);
+                    if (y && m && d) {
+                      setViewDate(new Date(y, m - 1, 1));
+                      setSelectedDayNum(d);
+                    }
+                    setDetailReservation(res);
+                  }}
                   className="w-full flex items-center justify-between gap-3 bg-[#050f14] border border-[#182e38] rounded-xl p-3 text-left hover:border-[#F7BC5F]/40 transition-colors"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-white truncate">{res.equipmentName}</p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {res.agentName} • {res.startDate.slice(0, 10)} • {res.startTime}-{res.endTime}
+                      {res.agentName} • {formatReservationDateFr(res)}
                       {res.projectName ? ` • ${res.projectName}` : ''}
                     </p>
                   </div>
@@ -380,8 +442,14 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
         {isSuccess ? (
           <div className="p-12 text-center space-y-3 bg-[#051319] border border-emerald-500/30 rounded-2xl animate-scale-up">
             <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-            <h3 className="text-lg font-bold text-white">Demande enregistrée avec succès !</h3>
-            <p className="text-xs text-slate-400">Sylvain et Mélanie Grazia ont été notifiés et valideront votre demande.</p>
+            <h3 className="text-lg font-bold text-white">
+              {editReservation ? 'Réservation mise à jour !' : 'Demande enregistrée avec succès !'}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {editReservation
+                ? 'Les modifications ont été enregistrées.'
+                : 'Sylvain et Mélanie Grazia ont été notifiés et valideront votre demande.'}
+            </p>
           </div>
         ) : (
           <>
@@ -692,7 +760,13 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                   className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:opacity-95 text-white font-black text-xs shadow-lg shadow-purple-900/40 flex items-center gap-2 cursor-pointer transition-all active:scale-95"
                 >
                   <Camera className="w-4 h-4" />
-                  <span>{submitting ? 'Enregistrement...' : 'Envoyer la demande'}</span>
+                  <span>
+                    {submitting
+                      ? 'Enregistrement...'
+                      : editReservation
+                      ? 'Enregistrer les modifications'
+                      : 'Envoyer la demande'}
+                  </span>
                 </button>
               </div>
 
