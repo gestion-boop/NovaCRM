@@ -168,6 +168,31 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     });
   };
 
+  // Conflits avec les autres réservations (mêmes équipements, créneau qui se
+  // chevauche) — utilisé pour l'indicateur de disponibilité vu par l'admin
+  // dans la fenêtre de contrôle d'une demande.
+  const getConflictingReservations = (target: StoredCameraReservation) => {
+    return reservations.filter((reservation) => {
+      if (reservation.id === target.id) return false;
+      if (reservation.status === 'Refusée') return false;
+
+      const sameDay = reservation.startDate.slice(0, 10) === target.startDate.slice(0, 10);
+      if (!sameDay) return false;
+
+      const sharesEquipment = reservation.equipmentList.some((equipment) =>
+        target.equipmentList.includes(equipment)
+      );
+      if (!sharesEquipment) return false;
+
+      const rStart = reservation.startTime || reservation.startDate.slice(-5);
+      const rEnd = reservation.endTime || reservation.endDate.slice(-5);
+      const tStart = target.startTime || target.startDate.slice(-5);
+      const tEnd = target.endTime || target.endDate.slice(-5);
+
+      return tStart < rEnd && tEnd > rStart;
+    });
+  };
+
   // Submit reservation
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -737,6 +762,44 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Disponibilité du matériel demandé pour ce créneau, comparée aux
+                autres réservations (confirmées ou en attente) sur la même
+                journée — pour que l'admin sache tout de suite si le
+                matériel est libre avant de valider ou refuser. */}
+            {(() => {
+              const conflicts = getConflictingReservations(detailReservation);
+              return conflicts.length === 0 ? (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <p className="text-xs font-semibold text-emerald-300">
+                    Disponible — aucune autre réservation sur ce créneau pour {detailReservation.equipmentName}.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 space-y-2">
+                  <p className="text-xs font-semibold text-rose-300 flex items-center gap-2">
+                    <XCircle className="w-4 h-4 shrink-0" />
+                    Conflit avec {conflicts.length > 1 ? `${conflicts.length} autres réservations` : 'une autre réservation'}
+                  </p>
+                  <ul className="space-y-1.5">
+                    {conflicts.map((conflict) => (
+                      <li key={conflict.id} className="text-[11px] text-rose-200/90 pl-6">
+                        <span className="font-semibold">{conflict.agentName}</span>
+                        {' · '}
+                        {conflict.startTime || conflict.startDate.slice(-5)}–{conflict.endTime || conflict.endDate.slice(-5)}
+                        {' · '}
+                        {conflict.equipmentName}
+                        {' · '}
+                        <span className={conflict.status === 'Confirmée' ? 'text-rose-300' : 'text-amber-300'}>
+                          {conflict.status === 'Confirmée' ? 'validée' : 'en attente'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
 
             {/* Ticket #41 : compatibilité avec l'agenda avant de valider */}
             <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
