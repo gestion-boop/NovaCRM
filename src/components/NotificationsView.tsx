@@ -780,6 +780,12 @@ export const NotificationsView: React.FC<
             // ticket, voir SupportView.tsx / setTicketStatus).
             if (notification.rawType.startsWith('support_ticket')) {
               void dismissNotification(notification.id);
+            } else if (notification.rawType.startsWith('camera_reservation')) {
+              // Demande explicite : la notification de réservation caméra
+              // doit rester visible (et cliquable, pour la retrouver) tant
+              // qu'elle n'est pas supprimée à la main via le bouton "X" —
+              // ne pas la marquer lue ici, sinon elle disparaît de ce
+              // panneau (filtré sur is_read=false) dès le premier clic.
             } else {
               void markNotificationRead(notification.id);
             }

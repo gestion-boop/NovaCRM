@@ -73,12 +73,26 @@
     <script>
       (function () {
         // Purge complète puis rechargement, une seule fois par session.
+        // Correctif (21 septembre) : signalé sur un poste de bureau resté
+        // ouvert plusieurs jours (page bleue persistante côté chat, alors
+        // que le même compte fonctionnait sur tablette/téléphone) — le
+        // simple `location.reload()` pouvait retomber sur le MÊME
+        // index.html périmé si l'en-tête HTTP ne forçait pas la
+        // revalidation (corrigé côté serveur, voir vercel.json), et le
+        // drapeau sessionStorage empêchait alors tout nouvel essai. On
+        // ajoute un paramètre anti-cache à l'URL de rechargement pour
+        // contourner un éventuel proxy/cache intermédiaire qui ignorerait
+        // l'en-tête, en plus du correctif serveur.
         function reparer(motif) {
           try {
             if (sessionStorage.getItem('nv-repare')) return;
             sessionStorage.setItem('nv-repare', motif);
           } catch (e) { return; }
-          var fini = function () { location.reload(); };
+          var fini = function () {
+            var url = new URL(location.href);
+            url.searchParams.set('nv-cachebust', Date.now().toString());
+            location.replace(url.toString());
+          };
           var taches = [];
           if (window.caches && caches.keys) {
             taches.push(caches.keys().then(function (n) {

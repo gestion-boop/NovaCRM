@@ -181,10 +181,10 @@ export function useCameraReservations() {
         _message:
           message ||
           (approved
-            ? `Votre réservation "${res.equipmentName}" du ${res.startDate.slice(0, 10)} a été validée.`
-            : `Votre réservation "${res.equipmentName}" du ${res.startDate.slice(0, 10)} a été refusée.`),
+            ? `Votre réservation "${res.equipmentName}" du ${formatReservationDateFr(res)} a été validée.`
+            : `Votre réservation "${res.equipmentName}" du ${formatReservationDateFr(res)} a été refusée.`),
         _entity_type: 'camera_reservation',
-        _entity_id: null,
+        _entity_id: res.id,
         _agency_id: res.agencyId || null,
         _metadata: { url: '/reserver-camera' },
       } as any);
@@ -230,7 +230,7 @@ export function useCameraReservations() {
 
       const message = approve
         ? undefined
-        : `Votre réservation "${res.equipmentName}" du ${res.startDate.slice(0, 10)} a été refusée.${
+        : `Votre réservation "${res.equipmentName}" du ${formatReservationDateFr(res)} a été refusée.${
             refusalReason ? ` ${refusalReason}` : ''
           }`;
       await notifyRequester(res, approve, message);
