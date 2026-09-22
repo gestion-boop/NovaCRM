@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { assemblerDictee } from '@/lib/dictee';
+import { creerAccumulateurDictee } from '@/lib/dictee';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
 import { AGENCIES, NoteItem, DocItem, Task } from '@/types';
 import TransactionChecklistModal, {
@@ -653,6 +653,7 @@ export default function ClientProfileView({
   const [noteIsShared, setNoteIsShared] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = React.useRef<any>(null);
+  const dicteeRef = React.useRef<((results: any) => string) | null>(null);
 
   // Documents tab states
   const [clientDocs, setClientDocs] = useState<ClientDocItem[]>([]);
@@ -2104,10 +2105,20 @@ export default function ClientProfileView({
       //    « définitifs » ne suffit pas : sur Android, Chrome empile une
       //    nouvelle entrée définitive à chaque prolongement de la phrase, si
       //    bien qu'on obtenait « j'ai / j'ai vu / j'ai vu le / j'ai vu le
-      //    client... ». L'assemblage est désormais fait par assemblerDictee,
-      //    qui replie les segments qui se prolongent (voir src/lib/dictee.ts).
+      //    client... ».
+      //
+      // 4. DISPARITION EN COURS DE DICTÉE (signalé le 22 septembre) : « les
+      //    mots apparaissent puis disparaissent ». `event.results` n'est pas
+      //    toujours l'historique complet de la session — un aléa du moteur de
+      //    reconnaissance peut le faire repartir sans les segments déjà
+      //    dictés, ce qui effaçait une partie de la note en cours de route.
+      //    `creerAccumulateurDictee` (voir src/lib/dictee.ts) retient
+      //    lui-même, pour toute la session, ce qui est déjà confirmé — qui ne
+      //    peut donc plus disparaître. Seul l'aperçu de la phrase en cours
+      //    reste vivant, pour voir la dictée se construire en direct.
+      dicteeRef.current = creerAccumulateurDictee(texteDeBase);
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        setNoteContent(assemblerDictee(event.results, texteDeBase));
+        setNoteContent(dicteeRef.current!(event.results));
       };
 
       recognition.onerror = (event: any) => {
