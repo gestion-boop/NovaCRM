@@ -1383,6 +1383,39 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       .filter((t) => !hiddenIds.has(t.id))
       .map((t) => (t.children ? { ...t, children: retirerTuilesMasqueesRecursif(t.children, hiddenIds) } : t));
 
+  // Signalé (23 septembre) : « Lucie et peut-être les autres courtiers n'ont
+  // pas la tuile pipeline sur l'accueil ». Cause : leur grille vient du
+  // SERVEUR (user_ui_settings.home_tiles) et ne passe jamais par
+  // `reconcilierGrille` (voir "ATTENTION" plus bas dans cet effet) — un
+  // compte dont la grille a été enregistrée avant l'existence de la tuile
+  // "pipeline" à cet endroit ne la récupère donc jamais tout seul.
+  //
+  // On ne réactive PAS la réconciliation générale sur ce chemin (déjà
+  // essayé et annulé le 2 septembre : elle sort les tuiles d'un dossier
+  // VERROUILLÉ, dont le contenu n'est stocké nulle part dans la grille
+  // brute, et les repose en double à la racine — voir la note "ATTENTION").
+  // Ce correctif-ci reste volontairement étroit : il réinjecte 'pipeline'
+  // UNIQUEMENT à l'intérieur du dossier 'folder-business' déjà présent tel
+  // quel dans la grille brute (jamais à la racine, jamais si ce dossier
+  // lui-même est absent), et seulement si rien ne le couvre déjà (verrou,
+  // ou masquage volontaire de l'utilisateur) — donc sans le même risque de
+  // doublon à la racine que la réconciliation générale.
+  const reinjecterPipelineDansSonDossier = (items: TileItemNode[]): TileItemNode[] => {
+    if (
+      existsRecursive(items, 'pipeline') ||
+      idsCouvertsParVerrou('pipeline') ||
+      idsCouvertsParVerrou('folder-business') ||
+      listerIdsMasquesAplatis().has('pipeline')
+    ) {
+      return items;
+    }
+    const pipelineTile = findInitialTile('pipeline');
+    if (!pipelineTile) return items;
+    return items.map((t) =>
+      t.id === 'folder-business' ? { ...t, children: [...(t.children || []), pipelineTile] } : t
+    );
+  };
+
   const reconcilierGrille = (grille: TileItemNode[]): TileItemNode[] => {
     let base = grille;
     // Signalé (9 septembre, Sylvain) : « le dossier Communication se
@@ -1808,8 +1841,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           // verrouillés, qui vit ailleurs (agency_ui_settings), jamais dans
           // cette liste.
           const normalisees = retirerTuilesMasqueesRecursif(
-            removeQuickBarDuplicates(
-              (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+            reinjecterPipelineDansSonDossier(
+              removeQuickBarDuplicates(
+                (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+              )
             ),
             listerIdsMasquesAplatis()
           );

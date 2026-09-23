@@ -331,6 +331,12 @@ const PipelineColumn: React.FC<{
   stageAdvisorHt: number;
   accentColor: string;
   canManageStructure: boolean;
+  // Demande explicite (23 septembre) : le créateur d'un pipeline (non
+  // officiel/verrouillé) peut renommer ses colonnes, même sans être super
+  // admin — ajouter/supprimer/réordonner (canManageStructure) reste réservé
+  // aux super admins. Calculé par pipeline, pas par colonne (voir le site
+  // d'appel : `peutRenommerOuSupprimerPipeline(activePipeline)`).
+  canRenameStage: boolean;
   contactsById: Map<string, Contact>;
   taskStatusByContactId: Map<string, ReturnType<typeof getTaskDateStatus> | null>;
   onSelectContact?: (contactId: string) => void;
@@ -341,7 +347,7 @@ const PipelineColumn: React.FC<{
   onRequestDelete: (stage: string) => void;
   justArrived: boolean;
 }> = ({
-  stage, stageDeals, stageTotal, stageAdvisorHt, estSuperAdmin, stageMonHt, accentColor, canManageStructure, libelleMontant,
+  stage, stageDeals, stageTotal, stageAdvisorHt, estSuperAdmin, stageMonHt, accentColor, canManageStructure, canRenameStage, libelleMontant,
   contactsById, taskStatusByContactId, onSelectContact, onDeleteDeal, onOpenChecklist, onOpenNova, onRename, onRequestDelete, justArrived,
 }) => {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
@@ -430,22 +436,26 @@ const PipelineColumn: React.FC<{
           </div>
         </div>
 
-        {canManageStructure && (
+        {(canManageStructure || canRenameStage) && (
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => onRename(stage)}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white"
-              title="Renommer la colonne"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => onRequestDelete(stage)}
-              className="p-1.5 rounded-lg hover:bg-rose-500/10 text-gray-400 hover:text-rose-300"
-              title="Supprimer la colonne"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {canRenameStage && (
+              <button
+                onClick={() => onRename(stage)}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white"
+                title="Renommer la colonne"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {canManageStructure && (
+              <button
+                onClick={() => onRequestDelete(stage)}
+                className="p-1.5 rounded-lg hover:bg-rose-500/10 text-gray-400 hover:text-rose-300"
+                title="Supprimer la colonne"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -995,19 +1005,34 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
   const updatePipelineConfig = async (
     pipelineId: string,
-    updates: Partial<Pick<StoredPipeline, 'name' | 'stages' | 'sortOrder'>>
+    updates: Partial<Pick<StoredPipeline, 'name' | 'stages' | 'sortOrder'>>,
+    // Demande explicite (23 septembre) : « qu'un courtier puisse modifier le
+    // nom des colonnes de son pipeline qu'il aura créé ». Ajouter, supprimer
+    // ou réordonner des colonnes reste réservé aux super admins (une colonne
+    // supprimée déplace tous les dossiers qui s'y trouvent, un ajout/
+    // réordonnancement touche tout le monde sur ce pipeline) — mais
+    // RENOMMER une colonne ne fait que changer une étiquette, exactement
+    // comme renommer le pipeline lui-même : même droit que
+    // `peutRenommerOuSupprimerPipeline` (le propriétaire d'un pipeline non
+    // officiel/verrouillé, ou un super admin). `onlyRename` distingue ce cas
+    // précis des trois autres, qui continuent à passer par `updates.stages`
+    // sans ce marqueur.
+    { onlyRename = false }: { onlyRename?: boolean } = {}
   ) => {
-    // Le renommage suit la règle « sauf les pipelines officiels » ; tout ce
-    // qui touche aux COLONNES reste réservé aux super admins.
+    // Le renommage suit la règle « sauf les pipelines officiels » ; ce qui
+    // touche à la STRUCTURE des colonnes (ajout, suppression, réordre)
+    // reste réservé aux super admins.
     const cible = pipelines.find((p) => p.id === pipelineId);
-    const droitRequis = updates.stages
+    const droitRequis = updates.stages && !onlyRename
       ? canManageStructure
       : peutRenommerOuSupprimerPipeline(cible);
     if (!droitRequis) {
       setError(
-        updates.stages
-          ? "Seul un super admin peut modifier les colonnes d'un pipeline."
-          : 'Le pipeline officiel de la société ne peut être renommé que par un super admin.'
+        updates.stages && !onlyRename
+          ? "Seul un super admin peut ajouter, supprimer ou réordonner les colonnes d'un pipeline."
+          : updates.stages
+            ? 'Seul le créateur de ce pipeline (ou un super admin) peut renommer ses colonnes.'
+            : 'Seul le créateur de ce pipeline (ou un super admin) peut le renommer.'
       );
       throw new Error('Accès refusé');
     }
@@ -1420,9 +1445,11 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           stage === stageToRename ? newName : stage
         );
 
-        await updatePipelineConfig(activePipeline.id, {
-          stages: updatedStages,
-        });
+        await updatePipelineConfig(
+          activePipeline.id,
+          { stages: updatedStages },
+          { onlyRename: true }
+        );
 
         setPipelines((prev) =>
           prev.map((p) =>
@@ -2129,6 +2156,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                     stageMonHt={stageMonHt}
                     accentColor={accentColor}
                     canManageStructure={canManageStructure}
+                    canRenameStage={peutRenommerOuSupprimerPipeline(activePipeline)}
                     contactsById={contactsById}
                     taskStatusByContactId={taskStatusByContactId}
                     onSelectContact={onSelectContact}
