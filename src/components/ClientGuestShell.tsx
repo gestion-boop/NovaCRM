@@ -602,12 +602,18 @@ const ClientGuestShell: React.FC = () => {
             >
               <Mic className="w-4 h-4" />
             </button>
-            <input
+            {/* Demande explicite (23 septembre) : Entrée ne doit qu'aller à
+                la ligne, ordinateur comme téléphone — seul le bouton
+                d'envoi envoie. Un <input> ne peut de toute façon pas
+                contenir de retour à la ligne : passage en <textarea> pour
+                que ça devienne possible, comme le reste du chat (voir
+                ChatViewSupabase.tsx). */}
+            <textarea
+              rows={1}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void sendText(); } }}
               placeholder={isListening ? 'Je vous écoute...' : 'Écrire un message...'}
-              className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+              className="flex-1 min-w-0 resize-none bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F]"
             />
             {draft.trim() ? (
               <button

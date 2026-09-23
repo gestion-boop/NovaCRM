@@ -3751,26 +3751,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     rows={1}
                     value={convDraft}
                     onChange={(e) => setConvDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      // Signalé (11 septembre, Sylvain, iPhone) : « quand on va
-                      // à la ligne cela envoie le message » — sur mobile, il
-                      // n'y a pas de touche Maj physique pour faire
-                      // Maj+Entrée : Entrée est le SEUL moyen d'aller à la
-                      // ligne, donc Entrée=envoi y rend un message multi-ligne
-                      // impossible à écrire. Sur mobile, Entrée insère
-                      // simplement un retour à la ligne (comportement par
-                      // défaut du textarea, on ne fait rien de spécial) ;
-                      // seul le bouton d'envoi envoie. Sur ordinateur, Entrée
-                      // envoie toujours (Maj+Entrée pour la ligne), inchangé.
-                      if (isMobileSaisie) return;
-                      // `isComposing` : sur clavier mobile et en saisie
-                      // accentuée, Entrée peut arriver deux fois pour une
-                      // seule frappe. `repeat` : touche maintenue enfoncée.
-                      // `shiftKey` : retour à la ligne volontaire.
-                      if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.repeat) return;
-                      e.preventDefault();
-                      void sendConvMessage();
-                    }}
+                    // Demande explicite (23 septembre) : Entrée ne doit
+                    // qu'aller à la ligne, ordinateur comme téléphone —
+                    // seul le bouton d'envoi envoie. Avant, Entrée envoyait
+                    // sur ordinateur (Maj+Entrée pour la ligne) ; ce
+                    // comportement spécifique au clavier physique est
+                    // retiré, le textarea garde son insertion de retour à
+                    // la ligne par défaut, plus rien à intercepter ici.
                     placeholder="Écrire un message..."
                     disabled={isRecordingConv}
                     className="w-full resize-none bg-[#0b1c1e] border border-white/20 rounded-3xl px-5 max-sm:px-3 py-2.5 text-sm text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F] disabled:opacity-40"
@@ -4416,15 +4403,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   rows={1}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    // Voir commentaire équivalent côté conversations directes
-                    // (Entrée = retour à la ligne sur mobile, envoi uniquement
-                    // via le bouton).
-                    if (isMobileSaisie) return;
-                    if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.repeat) return;
-                    e.preventDefault();
-                    void sendMessage();
-                  }}
+                  // Voir commentaire équivalent côté conversations directes
+                  // (23 septembre) : Entrée n'envoie plus nulle part, ni
+                  // ordinateur ni téléphone — seul le bouton d'envoi envoie.
                   placeholder="Écrire un message..."
                   /* `min-w-0` : signalé (4 septembre, capture du canal « Comm
                      générale » sur téléphone) — le bouton d'envoi, le micro et
