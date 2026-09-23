@@ -1098,27 +1098,65 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
 
   // Signalé : "la fenêtre de Nova monte quand tu fais une recherche" (mobile)
   // — laissant voir l'accueil en dessous, à travers une bande vide en bas.
-  // Cause connue sur mobile : le clavier virtuel réduit le viewport visuel
-  // et fait défiler la page (le navigateur garde le champ de saisie visible
-  // au-dessus du clavier) ; à la fermeture du clavier, le viewport reprend
-  // sa taille mais le défilement résiduel du document, lui, ne revient pas
-  // toujours à zéro tout seul — ce panneau étant en `position: fixed`, ce
-  // défilement fantôme du document ne devrait jamais avoir d'effet visible,
-  // d'où le correctif : le forcer explicitement à 0 dès que le viewport
-  // visuel reprend sa hauteur normale (signe que le clavier vient de se
-  // fermer).
+  // Signalé à nouveau (23 septembre, Sylvain) : cette fois c'est la barre de
+  // saisie elle-même qui finissait sous le clavier, invisible.
+  //
+  // Cause : sur iPhone, le clavier ne rétrécit PAS la page, il se pose
+  // par-dessus. Ce panneau est en hauteur fixe (h-full, calée sur un
+  // ancêtre en position fixed/100dvh — voir App.tsx) : clavier ouvert, cette
+  // hauteur ne change pas, alors que la zone réellement visible (le viewport
+  // VISUEL), si. La barre de saisie, dernière de la colonne, se retrouve
+  // donc positionnée sous la zone visible, cachée par le clavier ; et à la
+  // fermeture, le défilement de page que iOS déclenche pour garder le champ
+  // visible ne revient pas toujours à zéro tout seul.
+  //
+  // Correctif (même principe que ChatViewSupabase.tsx, déjà éprouvé là-bas
+  // sur plusieurs signalements) : caler la hauteur du panneau sur
+  // `visualViewport.height` tant que le clavier est effectivement ouvert (au
+  // moins un cinquième de l'écran gagné en le fermant — en dessous, ce n'est
+  // qu'une variation de barre système iOS, pas un clavier). Dès qu'il se
+  // ferme, on relâche la main et `h-full` reprend le dessus, qui suit
+  // nativement la vraie fenêtre visible sans jamais rester figé dessus.
+  const [hauteurVisible, setHauteurVisible] = useState<number | null>(null);
+  const isIOSClavier = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
-    let lastHeight = vv.height;
-    const onResize = () => {
-      const grew = vv.height > lastHeight;
-      lastHeight = vv.height;
-      if (grew && window.scrollY !== 0) window.scrollTo(0, 0);
+    if (!vv || !isMobile || !isIOSClavier) {
+      setHauteurVisible(null);
+      return;
+    }
+    const appliquer = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      const ouvert = window.innerHeight - vv.height > window.innerHeight * 0.2;
+      setHauteurVisible(ouvert ? Math.round(vv.height) : null);
     };
-    vv.addEventListener('resize', onResize);
-    return () => vv.removeEventListener('resize', onResize);
-  }, []);
+    // Rattrapage : fermer le clavier via son petit bouton dédié (plutôt
+    // qu'en perdant le focus autrement) ne redéclenche pas toujours `resize`
+    // sur `visualViewport` de façon fiable pendant l'animation — un
+    // rattrapage différé, une fois l'animation forcément terminée, sécurise
+    // la mesure finale (voir ChatViewSupabase.tsx, même correctif).
+    let settle: number | null = null;
+    const appliquerAvecRattrapage = () => {
+      appliquer();
+      if (settle) window.clearTimeout(settle);
+      settle = window.setTimeout(appliquer, 350);
+    };
+    appliquer();
+    vv.addEventListener('resize', appliquerAvecRattrapage);
+    vv.addEventListener('scroll', appliquerAvecRattrapage);
+    const onBlurCapture = (e: FocusEvent) => {
+      if ((e.target as HTMLElement | null)?.tagName !== 'TEXTAREA') return;
+      if (settle) window.clearTimeout(settle);
+      settle = window.setTimeout(appliquer, 350);
+    };
+    document.addEventListener('focusout', onBlurCapture, true);
+    return () => {
+      vv.removeEventListener('resize', appliquerAvecRattrapage);
+      vv.removeEventListener('scroll', appliquerAvecRattrapage);
+      document.removeEventListener('focusout', onBlurCapture, true);
+      if (settle) window.clearTimeout(settle);
+    };
+  }, [isMobile, isIOSClavier]);
   // Signalé : "je voudrais que la fenêtre du texte qu'on dicte puisse
   // grandir pour avoir le visuel complet" — 160px (quelques lignes)
   // obligeait à défiler dans une case minuscule dès une dictée vocale un
@@ -2702,7 +2740,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     // "h-full" (strictement borné) force la zone de messages (juste en
     // dessous, en overflow-y-auto) à défiler EN INTERNE à la place — la
     // barre de saisie reste ainsi toujours ancrée et visible en bas.
-    <div className="relative h-full overflow-hidden flex flex-col items-center justify-between p-6 sm:p-10 animate-novaai-bg">
+    <div
+      className="relative h-full overflow-hidden flex flex-col items-center justify-between p-6 sm:p-10 animate-novaai-bg"
+      style={hauteurVisible ? { height: `${hauteurVisible}px` } : undefined}
+    >
       {/* Couche du fond d'écran choisi, posée par-dessus le dégradé par
           défaut. La clé sur l'URL force un remontage à chaque changement
           d'image, ce qui rejoue le fondu .animate-fade-in : le passage
