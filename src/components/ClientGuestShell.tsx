@@ -8,6 +8,7 @@ import { assemblerDictee } from '@/lib/dictee';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
 import { useAuth } from '@/context/AuthContext';
 import { useLeadChat, LeadMessage } from '@/hooks/useLeadChat';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
 
 // Ticket "Espace Client" (refonte) : demande explicite — un espace
@@ -53,6 +54,22 @@ const ClientGuestShell: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Demande explicite (23 septembre) : « le panneau des messages gagne en
+  // hauteur pour qu'on puisse lire tout le texte qu'on tape » — même
+  // mécanisme que ChatViewSupabase.tsx : le textarea grandit avec son
+  // contenu, jusqu'à un plafond au-delà duquel il défile plutôt que de
+  // manger tout l'écran (plafond plus haut sur mobile, où le clavier
+  // masque déjà la moitié de l'écran).
+  const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isMobileSaisie = useIsMobile();
+  const HAUTEUR_MAX_SAISIE = isMobileSaisie ? 220 : 132;
+  useEffect(() => {
+    const zone = draftTextareaRef.current;
+    if (!zone) return;
+    zone.style.height = 'auto';
+    zone.style.height = `${Math.min(zone.scrollHeight, HAUTEUR_MAX_SAISIE)}px`;
+    zone.style.overflowY = zone.scrollHeight > HAUTEUR_MAX_SAISIE ? 'auto' : 'hidden';
+  }, [draft, HAUTEUR_MAX_SAISIE]);
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [openMessageMenuId, setOpenMessageMenuId] = useState<string | null>(null);
@@ -609,11 +626,12 @@ const ClientGuestShell: React.FC = () => {
                 que ça devienne possible, comme le reste du chat (voir
                 ChatViewSupabase.tsx). */}
             <textarea
+              ref={draftTextareaRef}
               rows={1}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder={isListening ? 'Je vous écoute...' : 'Écrire un message...'}
-              className="flex-1 min-w-0 resize-none bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+              className="flex-1 min-w-0 resize-none bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white leading-relaxed placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F]"
             />
             {draft.trim() ? (
               <button

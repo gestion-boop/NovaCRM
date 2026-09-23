@@ -18,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { ChevronLeft, Plus, Trash2, Calendar, X, Loader2, User, CheckSquare, Image as ImageIcon, Mic, Square, Send, Paperclip, MessageCircle, Eye, Users as UsersIcon, Check, Pencil } from 'lucide-react';
 import { InternalTask, InternalTaskStatus, InternalTaskPriority } from '@/types';
 import { NovaSphereUserProfile, useAuth } from '@/context/AuthContext';
@@ -960,6 +961,22 @@ const TaskDetailModal: React.FC<{
   const chatMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chatAudioChunksRef = useRef<Blob[]>([]);
   const chatRecordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Demande explicite (23 septembre) : « le panneau des messages gagne en
+  // hauteur pour qu'on puisse lire tout le texte qu'on tape » — même
+  // mécanisme déjà en place dans ChatViewSupabase.tsx (le textarea grandit
+  // avec son contenu, jusqu'à un plafond au-delà duquel il défile plutôt
+  // que de manger tout l'écran ; plafond plus haut sur mobile, où le
+  // clavier masque déjà la moitié de l'écran).
+  const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isMobileSaisieChat = useIsMobile();
+  const HAUTEUR_MAX_SAISIE_CHAT = isMobileSaisieChat ? 220 : 132;
+  useEffect(() => {
+    const zone = chatTextareaRef.current;
+    if (!zone) return;
+    zone.style.height = 'auto';
+    zone.style.height = `${Math.min(zone.scrollHeight, HAUTEUR_MAX_SAISIE_CHAT)}px`;
+    zone.style.overflowY = zone.scrollHeight > HAUTEUR_MAX_SAISIE_CHAT ? 'auto' : 'hidden';
+  }, [chatDraft, HAUTEUR_MAX_SAISIE_CHAT]);
 
   useEffect(() => {
     if (tab === 'chat') chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -1372,11 +1389,12 @@ const TaskDetailModal: React.FC<{
                       d'un <input>, qui ne pouvait pas contenir de retour à
                       la ligne. */}
                   <textarea
+                    ref={chatTextareaRef}
                     rows={1}
                     value={chatDraft}
                     onChange={(e) => setChatDraft(e.target.value)}
                     placeholder="Écrire un message..."
-                    className="flex-1 min-w-0 resize-none bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                    className="flex-1 min-w-0 resize-none bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F]"
                   />
                   <button
                     type="button"

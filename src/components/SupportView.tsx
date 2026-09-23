@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LifeBuoy, Plus, X, Image as ImageIcon, Send, Loader2, AlertTriangle,
   ArrowRight, Paperclip, MessageCircle, CheckCircle2, Archive, ArchiveRestore,
@@ -9,6 +9,7 @@ import {
 } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Les 3 niveaux demandés (mineur/important/majeur) sont mappés sur l'enum
 // Postgres réel `support_priority` (basse/normale/haute/urgente) — pas de
@@ -119,6 +120,22 @@ export const SupportView: React.FC = () => {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatFiles, setChatFiles] = useState<File[]>([]);
+  // Demande explicite (23 septembre) : « le panneau des messages gagne en
+  // hauteur pour qu'on puisse lire tout le texte qu'on tape » — même
+  // mécanisme que ChatViewSupabase.tsx : le textarea grandit avec son
+  // contenu, jusqu'à un plafond au-delà duquel il défile plutôt que de
+  // manger tout l'écran (plafond plus haut sur mobile, où le clavier
+  // masque déjà la moitié de l'écran).
+  const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isMobileSaisie = useIsMobile();
+  const HAUTEUR_MAX_SAISIE = isMobileSaisie ? 220 : 132;
+  useEffect(() => {
+    const zone = chatTextareaRef.current;
+    if (!zone) return;
+    zone.style.height = 'auto';
+    zone.style.height = `${Math.min(zone.scrollHeight, HAUTEUR_MAX_SAISIE)}px`;
+    zone.style.overflowY = zone.scrollHeight > HAUTEUR_MAX_SAISIE ? 'auto' : 'hidden';
+  }, [chatInput, HAUTEUR_MAX_SAISIE]);
   const [sendingMsg, setSendingMsg] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deployRequestState, setDeployRequestState] = useState<'idle' | 'sending' | 'sent'>('idle');
@@ -1051,11 +1068,12 @@ export const SupportView: React.FC = () => {
                     d'un <input>, qui ne pouvait pas contenir de retour à
                     la ligne. */}
                 <textarea
+                  ref={chatTextareaRef}
                   rows={1}
                   placeholder="Écrire un message..."
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  className="flex-1 resize-none bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]/60"
+                  className="flex-1 resize-none bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F]/60"
                 />
                 <button
                   onClick={() => void sendMessage()}

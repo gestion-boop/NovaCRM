@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { creerAccumulateurDictee } from '@/lib/dictee';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { AGENCIES, NoteItem, DocItem, Task } from '@/types';
 import TransactionChecklistModal, {
   STAGE_CHECKLISTS,
@@ -240,6 +241,22 @@ export default function ClientProfileView({
   const leadChatScrollRef = useRef<HTMLDivElement>(null);
   const leadImageInputRef = useRef<HTMLInputElement>(null);
   const leadFileInputRef = useRef<HTMLInputElement>(null);
+  // Demande explicite (23 septembre) : « le panneau des messages gagne en
+  // hauteur pour qu'on puisse lire tout le texte qu'on tape » — même
+  // mécanisme que ChatViewSupabase.tsx : le textarea grandit avec son
+  // contenu, jusqu'à un plafond au-delà duquel il défile plutôt que de
+  // manger tout l'écran (plafond plus haut sur mobile, où le clavier
+  // masque déjà la moitié de l'écran).
+  const leadTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isMobileSaisieLead = useIsMobile();
+  const HAUTEUR_MAX_SAISIE_LEAD = isMobileSaisieLead ? 220 : 132;
+  useEffect(() => {
+    const zone = leadTextareaRef.current;
+    if (!zone) return;
+    zone.style.height = 'auto';
+    zone.style.height = `${Math.min(zone.scrollHeight, HAUTEUR_MAX_SAISIE_LEAD)}px`;
+    zone.style.overflowY = zone.scrollHeight > HAUTEUR_MAX_SAISIE_LEAD ? 'auto' : 'hidden';
+  }, [leadDraft, HAUTEUR_MAX_SAISIE_LEAD]);
   const [leadEmojiPickerOpen, setLeadEmojiPickerOpen] = useState(false);
   const [leadMessageMenuId, setLeadMessageMenuId] = useState<string | null>(null);
   const [leadEditingId, setLeadEditingId] = useState<string | null>(null);
@@ -4151,11 +4168,12 @@ export default function ClientProfileView({
                           <textarea> au lieu d'un <input>, qui ne pouvait
                           pas contenir de retour à la ligne. */}
                       <textarea
+                        ref={leadTextareaRef}
                         rows={1}
                         value={leadDraft}
                         onChange={(e) => setLeadDraft(e.target.value)}
                         placeholder="Répondre au client..."
-                        className="flex-1 min-w-0 resize-none bg-[#0a1e20] border border-[#144447]/60 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+                        className="flex-1 min-w-0 resize-none bg-[#0a1e20] border border-[#144447]/60 rounded-xl px-3.5 py-2.5 text-sm text-white leading-relaxed placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F]"
                       />
                       <button
                         onClick={() => void sendLeadText()}
