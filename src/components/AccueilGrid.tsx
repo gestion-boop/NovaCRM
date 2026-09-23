@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { assemblerDictee } from '@/lib/dictee';
@@ -1109,6 +1109,20 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     mail: unreadMailCount || 0,
     support: openSupportTicketsCount || 0,
   };
+
+  // Signalé (23 septembre, téléphone tourné en paysage) : le logo Nova
+  // flottant se retrouvait planté au milieu de la rangée de dossiers,
+  // chevauchant deux tuiles. Cause : ce bouton n'est prévu QUE pour les
+  // écrans assez larges pour lui laisser de la place en dessous de la
+  // grille (`hidden sm:flex`, seuil à 640px) — un téléphone en paysage
+  // dépasse allègrement ce seuil en largeur tout en restant un petit écran
+  // tactile tenu à la main, sans la place qu'aurait un vrai ordinateur.
+  // Même correctif déjà établi pour ce type de cas (voir le commentaire sur
+  // useIsCoarsePointer, hooks/use-mobile.tsx) : ne pas toucher au seuil de
+  // largeur, qui gouverne toute la mise en page, mais exclure en plus les
+  // écrans tactiles de ce comportement pensé pour la souris — sur mobile
+  // (portrait ou paysage), Nova reste accessible via la barre du bas.
+  const isCoarsePointer = useIsCoarsePointer();
 
   // Ticket #116 : la règle "tuile Mail -> non lus" était dupliquée dans deux
   // endroits (tuile racine, tuile dans un dossier) et avait déjà divergé une
@@ -3682,15 +3696,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       {/* Réserve la place du bouton Nova IA, fixé tout en bas de la fenêtre
           (voir plus bas) — avec beaucoup de tuiles (jusqu'à 24), la dernière
           rangée pouvait sinon se retrouver juste sous lui, difficile à
-          atteindre en scrollant. */}
-      <div className="hidden sm:block h-24" aria-hidden="true" />
+          atteindre en scrollant. Inutile (et laisserait un vide en bas de la
+          grille pour rien) sur les écrans tactiles, où ce bouton ne
+          s'affiche plus — voir plus bas, même correctif. */}
+      {!isCoarsePointer && <div className="hidden sm:block h-24" aria-hidden="true" />}
 
       {/* Barre NovaAI — remplace l'ancien bouton flottant rond (même
           destination "assistant-ia", pour ne pas dupliquer l'accès et rester
           "moins chargé" comme demandé). Réutilise le formulaire d'envoi déjà
           existant dans AssistantIAView via `onAskNovaAI`, pas de second appel
           IA ici. */}
-      {!openFolderStack.length && !novaOpen && (
+      {!openFolderStack.length && !novaOpen && !isCoarsePointer && (
         // Ticket #59 : seul le logo reste visible, centré en bas — la barre
         // de saisie se déploie en tiroir vers la droite au clic, au lieu
         // d'occuper en permanence toute la largeur.
