@@ -4145,12 +4145,17 @@ export default function ClientProfileView({
                       <button type="button" onClick={() => setLeadEmojiPickerOpen((v) => !v)} className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10" title="Emoji">
                         <Smile className="w-4 h-4" />
                       </button>
-                      <input
+                      {/* Même méthodologie que les autres chats du CRM (23
+                          septembre) : Entrée ne fait que revenir à la
+                          ligne, seul le bouton d'envoi envoie —
+                          <textarea> au lieu d'un <input>, qui ne pouvait
+                          pas contenir de retour à la ligne. */}
+                      <textarea
+                        rows={1}
                         value={leadDraft}
                         onChange={(e) => setLeadDraft(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void sendLeadText(); } }}
                         placeholder="Répondre au client..."
-                        className="flex-1 min-w-0 bg-[#0a1e20] border border-[#144447]/60 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+                        className="flex-1 min-w-0 resize-none bg-[#0a1e20] border border-[#144447]/60 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F]"
                       />
                       <button
                         onClick={() => void sendLeadText()}

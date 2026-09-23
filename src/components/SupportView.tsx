@@ -1045,13 +1045,17 @@ export const SupportView: React.FC = () => {
                     onChange={(e) => setChatFiles((cur) => [...cur, ...Array.from(e.target.files || [])])}
                   />
                 </label>
-                <input
-                  type="text"
+                {/* Même méthodologie que les autres chats du CRM (23
+                    septembre) : Entrée ne fait que revenir à la ligne,
+                    seul le bouton d'envoi envoie — <textarea> au lieu
+                    d'un <input>, qui ne pouvait pas contenir de retour à
+                    la ligne. */}
+                <textarea
+                  rows={1}
                   placeholder="Écrire un message..."
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !sendingMsg) void sendMessage(); }}
-                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]/60"
+                  className="flex-1 resize-none bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]/60"
                 />
                 <button
                   onClick={() => void sendMessage()}
