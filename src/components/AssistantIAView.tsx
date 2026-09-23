@@ -2281,6 +2281,20 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       const executedActions: ActionExecuted[] = [];
       const failedActions: ActionFailed[] = [];
       const pendingClientActions: PendingClientAction[] = [];
+      // Signalé (23 septembre) : « je crée une fiche client et lui demande
+      // une tâche/note, ça n'apparaît pas dans sa fiche ». Cause : quand un
+      // contact et sa tâche/note sont demandés dans le MÊME message, Nova ne
+      // peut jamais fournir le contactId de la tâche/note — ce contact
+      // n'existe pas encore au moment où Nova répond, il n'est donc pas dans
+      // la liste "Contacts existants" du system prompt (voir agent.ts, qui
+      // demande explicitement de laisser contactId vide dans ce cas). La
+      // tâche/note se créait donc sans lien vers ce contact, invisible sur
+      // sa fiche. On relie nous-mêmes : si create_task/create_note arrive
+      // sans contactId ET qu'un contact vient d'être créé plus tôt DANS CE
+      // MÊME lot d'actions, on utilise son id réel — c'est la seule cible
+      // plausible (create_contact suivi de create_task/create_note dans le
+      // même message ne vise jamais quelqu'un d'autre).
+      let dernierContactCreeId: string | undefined;
       for (const fc of functionCalls) {
         if (CLIENT_GUEST_TOOLS.has(fc.name) || NOVA_ADMIN_TOOLS.has(fc.name) || CALENDAR_TOOLS.has(fc.name) || SUPPORT_TOOLS.has(fc.name) || EMAIL_TOOLS.has(fc.name)) {
           pendingClientActions.push({
@@ -2292,9 +2306,20 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           });
           continue;
         }
-        const result = await executeFunctionCall(fc);
-        if (result.success) executedActions.push(result.action);
-        else failedActions.push({ label: result.label, reason: result.reason });
+        const besoinDeLierAuContactCree =
+          (fc.name === 'create_task' || fc.name === 'create_note') &&
+          !fc.args.contactId &&
+          dernierContactCreeId;
+        const fcAvecContact = besoinDeLierAuContactCree
+          ? { ...fc, args: { ...fc.args, contactId: dernierContactCreeId } }
+          : fc;
+        const result = await executeFunctionCall(fcAvecContact);
+        if (result.success) {
+          executedActions.push(result.action);
+          if (fc.name === 'create_contact' && result.action.contactId) {
+            dernierContactCreeId = result.action.contactId;
+          }
+        } else failedActions.push({ label: result.label, reason: result.reason });
         // Historique des actions de Nova (voir aussi confirmPendingAction) —
         // ces outils s'exécutent directement (sans confirmation manuelle),
         // mais restent des écritures dans le CRM ; on ne journalise pas les
@@ -2304,7 +2329,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           supabase.from('nova_action_log' as any).insert({
             agent_user_id: currentUser.uid,
             tool_name: fc.name,
-            args: fc.args,
+            args: fcAvecContact.args,
             ok: result.success,
             result_message: result.success ? result.action.title : result.label,
           } as any).then(() => {}, (err: any) => console.warn('Erreur journal Nova :', err));
