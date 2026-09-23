@@ -301,40 +301,24 @@ const INITIAL_TILES: TileItemNode[] = [
     badgeCount: 0,
     navTarget: 'rappels',
   },
+  // Demande explicite (23 septembre) : « le dossier Communication ne sert à
+  // rien, supprime-le sur tous les profils, mets la tuile [Support] à
+  // l'extérieur ». Ce dossier ne contenait plus grand-chose d'utile : Chat
+  // Équipe et Mail sont filtrés hors des dossiers par removeQuickBarDuplicates
+  // (déjà dans le bandeau "Ma journée" du haut), ne laissant que Support
+  // dedans — un dossier à une seule carte. Signalé plusieurs fois comme bug
+  // récurrent (9 septembre notamment : « le dossier Communication se recrée
+  // chez des utilisateurs ») avant même d'être supprimé pour de bon : la
+  // tuile "Support" vit maintenant directement à la racine, plus de dossier
+  // à faire revenir. Migration forcée des grilles déjà enregistrées avec
+  // l'ancien dossier : voir retirerDossierCommunication plus bas.
   {
-    id: 'folder-comm',
-    title: 'Communication & Mails',
-    iconName: 'Folder',
-    gradient: 'from-[#0083B0] via-[#005C8A] to-[#0F172A]',
-    badgeCount: 3,
-    navTarget: '',
-    isFolder: true,
-    children: [
-      {
-        id: 'chat',
-        title: 'Chat Équipe',
-        iconName: 'MessageSquare',
-        gradient: 'from-[#00B4DB] via-[#0083B0] to-[#005C8A]',
-        badgeCount: 2,
-        navTarget: 'chat',
-      },
-      {
-        id: 'mail',
-        title: 'Mail',
-        iconName: 'Mail',
-        gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]',
-        badgeCount: 1,
-        navTarget: 'mail',
-      },
-      {
-        id: 'support',
-        title: 'Support',
-        iconName: 'Headphones',
-        gradient: 'from-[#334155] via-[#1E293B] to-[#0F172A]',
-        badgeCount: 0,
-        navTarget: 'support',
-      }
-    ]
+    id: 'support',
+    title: 'Support',
+    iconName: 'Headphones',
+    gradient: 'from-[#334155] via-[#1E293B] to-[#0F172A]',
+    badgeCount: 0,
+    navTarget: 'support',
   },
   {
     id: 'agenda',
@@ -1416,6 +1400,30 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     );
   };
 
+  // Demande explicite (23 septembre) : « le dossier Communication ne sert
+  // à rien, supprime-le sur tous les profils, mets la tuile [Support] à
+  // l'extérieur, ça ne doit plus jamais revenir » — déjà signalé comme bug
+  // récurrent (9 septembre : « le dossier Communication se recrée chez des
+  // utilisateurs », voir le commentaire historique juste en dessous) avant
+  // même d'être supprimé pour de bon. Retiré de INITIAL_TILES (plus haut) ;
+  // migration forcée ici pour toute grille déjà enregistrée, quel que soit
+  // son contenu, réutilisée aussi bien pour la réconciliation locale que
+  // pour le chemin de synchronisation serveur (voir plus bas dans le
+  // fichier) : le dossier disparaît, sa carte Support (la seule utile —
+  // Chat/Mail sont de toute façon filtrées par removeQuickBarDuplicates)
+  // rejoint la racine si elle n'y est pas déjà, en conservant la
+  // personnalisation (couleur...) qu'elle avait dans le dossier plutôt que
+  // de repartir du modèle par défaut.
+  const retirerDossierCommunication = (items: TileItemNode[]): TileItemNode[] => {
+    const dossierCommunication = items.find((t) => t.id === 'folder-comm');
+    if (!dossierCommunication) return items;
+    const supportDuDossier = dossierCommunication.children?.find((c) => c.id === 'support');
+    const sansDossier = items.filter((t) => t.id !== 'folder-comm');
+    if (existsRecursive(sansDossier, 'support')) return sansDossier;
+    const supportTile = supportDuDossier || INITIAL_TILES.find((t) => t.id === 'support');
+    return supportTile ? [...sansDossier, supportTile] : sansDossier;
+  };
+
   const reconcilierGrille = (grille: TileItemNode[]): TileItemNode[] => {
     let base = grille;
     // Signalé (9 septembre, Sylvain) : « le dossier Communication se
@@ -1427,6 +1435,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // filtrés par removeQuickBarDuplicates) paraissent alors « manquantes »
     // comme une tuile toute neuve, et reviennent seules à la racine : ça
     // ressemble à des restes du dossier soi-disant supprimé qui repoussent.
+    // (Le dossier lui-même n'existe de toute façon plus : voir
+    // retirerDossierCommunication ci-dessus, correctif plus radical du 23
+    // septembre — ce paragraphe reste pour le contexte historique.)
     // On calcule donc la liste des ids masqués ICI, en amont, aplatie
     // récursivement (les cartes d'un dossier masqué comptent comme
     // masquées elles aussi) et on l'intègre à `estAbsent` — plus aucun bloc
@@ -1519,6 +1530,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         .filter((t) => t.id !== 'assistant-ia')
         .map((t) => (t.children ? { ...t, children: removeAssistantIaTile(t.children) } : t));
     base = removeAssistantIaTile(base);
+    base = retirerDossierCommunication(base);
     // Rappels & Alertes, Chat Équipe, Mail, Agenda & RDV, Tableau de bord :
     // déjà dans le bandeau "Ma journée / Priorités" (voir la fonction
     // `removeQuickBarDuplicates`, hissée au niveau module — même retrait
@@ -1841,9 +1853,11 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           // verrouillés, qui vit ailleurs (agency_ui_settings), jamais dans
           // cette liste.
           const normalisees = retirerTuilesMasqueesRecursif(
-            reinjecterPipelineDansSonDossier(
-              removeQuickBarDuplicates(
-                (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+            retirerDossierCommunication(
+              reinjecterPipelineDansSonDossier(
+                removeQuickBarDuplicates(
+                  (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+                )
               )
             ),
             listerIdsMasquesAplatis()
