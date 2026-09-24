@@ -14,11 +14,6 @@ drop policy if exists "Members add participants" on public.conversation_members;
 create policy "Members add participants"
   on public.conversation_members for insert to authenticated
   with check (
-    exists (
-      select 1 from public.conversations c
-      where c.id = conversation_members.conversation_id
-        and (c.agency_id is null or public.is_agency_member(auth.uid(), c.agency_id))
-        and (c.agency_id is null or public.is_agency_member(conversation_members.user_id, c.agency_id))
-        and (c.created_by = auth.uid() or public.is_conversation_member(auth.uid(), c.id))
-    )
+    public.est_auteur_conversation(conversation_id, auth.uid())
+    or public.is_conversation_member(auth.uid(), conversation_id)
   );
