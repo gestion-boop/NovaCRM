@@ -312,6 +312,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [selectedGroupMemberIds, setSelectedGroupMemberIds] = useState<Set<string>>(new Set());
   const [groupTitle, setGroupTitle] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
+  // Demande explicite (24/09/2026) : "dans les conversations des chats, je
+  // veux que chaque utilisateur puisse inviter des utilisateurs de
+  // Immosphera, Conseils Finances et Novavisio [...] et inviter plusieurs
+  // utilisateurs si possible" — jusqu'ici, seule la CRÉATION d'un groupe
+  // permettait de choisir plusieurs collègues multi-agences (createGroup
+  // ci-dessous) ; impossible d'agrandir un groupe déjà créé. Même principe
+  // de sélection multiple que la modale "Nouveau groupe", rejoué ici pour
+  // un groupe déjà ouvert.
+  const [showInviteConvModal, setShowInviteConvModal] = useState(false);
+  const [inviteConvQuery, setInviteConvQuery] = useState('');
+  const [selectedInviteIds, setSelectedInviteIds] = useState<Set<string>>(new Set());
+  const [invitingToConv, setInvitingToConv] = useState(false);
   const convScrollRef = useRef<HTMLDivElement>(null);
   const [convReactions, setConvReactions] = useState<Record<string, { userId: string; emoji: string }[]>>({});
   const [showConvReactionPickerFor, setShowConvReactionPickerFor] = useState<string | null>(null);
@@ -1998,6 +2010,32 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [conversations, conversationMembers, currentUser?.uid, newConvQuery, allProfiles, agencyIdsByUid]);
 
+  // Collègues proposés pour agrandir un groupe déjà ouvert — même source
+  // (toutes agences confondues) que colleaguesForNewConv ci-dessus, mais
+  // exclut les membres déjà présents dans CETTE conversation plutôt que de
+  // signaler une conversation directe existante.
+  const colleaguesToInvite = useMemo(() => {
+    if (!activeConversationId) return [];
+    const dejaMembres = new Set(conversationMembers[activeConversationId] || []);
+    const query = inviteConvQuery.toLowerCase();
+    return allProfiles
+      .filter((p) => p.uid !== currentUser?.uid && !dejaMembres.has(p.uid))
+      .filter((p) =>
+        p.displayName.toLowerCase().includes(query) || (p.email || '').toLowerCase().includes(query))
+      .map((p) => {
+        const habillage = TEAM_MEMBERS.find(
+          (m) => m.email.toLowerCase() === (p.email || '').toLowerCase());
+        const agences = agencyIdsByUid[p.uid] || [];
+        return {
+          id: p.uid,
+          name: p.displayName,
+          email: p.email || '',
+          agencyId: agences[0] || habillage?.agencyId || null,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [activeConversationId, conversationMembers, currentUser?.uid, inviteConvQuery, allProfiles, agencyIdsByUid]);
+
   const agencyNameById = (id: string | null | undefined) => AGENCIES.find((a) => a.id === id)?.name || null;
 
   const startConversation = async (otherUserId: string) => {
@@ -2147,6 +2185,52 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       openConversation((conv as any).id);
     } finally {
       setCreatingGroup(false);
+    }
+  };
+
+  // Agrandir un groupe déjà créé — voir colleaguesToInvite plus haut. Toute
+  // personne déjà dans le groupe peut désormais en inviter d'autres (pas
+  // seulement son créateur, voir migration RLS associée) : "chaque
+  // utilisateur puisse inviter des utilisateurs de Immosphera, Conseils
+  // Finances et Novavisio [...] et inviter plusieurs utilisateurs".
+  const inviteToConversation = async () => {
+    if (!currentUser || !activeConversationId || selectedInviteIds.size === 0) return;
+    setInvitingToConv(true);
+    try {
+      const memberIds = Array.from(selectedInviteIds);
+      const conv = conversations.find((c) => c.id === activeConversationId);
+      const agencyId = conv?.agency_id ?? null;
+      // Un groupe cantonné à une seule agence doit s'ouvrir "3 entités"
+      // (agency_id null) dès qu'on y invite quelqu'un qui n'en est pas
+      // membre — sinon l'ajout réussirait en silence mais la personne
+      // invitée ne verrait jamais la conversation (règle de lecture par
+      // agence, voir is_conversation_member).
+      const inviteHorsAgence = agencyId
+        ? memberIds.some((id) => !(agencyIdsByUid[id] || []).includes(agencyId))
+        : false;
+      if (inviteHorsAgence) {
+        const { error: agenceError } = await supabase
+          .from('conversations')
+          .update({ agency_id: null } as any)
+          .eq('id', activeConversationId);
+        if (agenceError) {
+          toast.error(`Ouverture aux autres agences impossible : ${agenceError.message}`);
+          return;
+        }
+      }
+      const { error } = await supabase.from('conversation_members').insert(
+        memberIds.map((id) => ({ conversation_id: activeConversationId, user_id: id })) as any
+      );
+      if (error) {
+        toast.error(`Participants non ajoutés : ${error.message}`);
+        return;
+      }
+      setShowInviteConvModal(false);
+      setSelectedInviteIds(new Set());
+      setInviteConvQuery('');
+      await loadConversations();
+    } finally {
+      setInvitingToConv(false);
     }
   };
 
@@ -3374,10 +3458,32 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       <ArrowLeft className="w-5 h-5" />
                     </button>
                   )}
-                  <MessageSquare className="w-4 h-4 text-[#F7BC5F]" />
-                  <span className="font-bold">
+                  <MessageSquare className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+                  <span className="font-bold truncate flex-1 min-w-0">
                     {conversationLabel(conversations.find((c) => c.id === activeConversationId))}
                   </span>
+                  {/* "chaque utilisateur puisse inviter [...] et inviter
+                      plusieurs utilisateurs si possible" — réservé aux
+                      groupes : une conversation directe reste un échange à
+                      deux, "Nouveau groupe" existe déjà pour en démarrer un
+                      à plusieurs. */}
+                  {conversations.find((c) => c.id === activeConversationId)?.type === 'group' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInviteConvQuery('');
+                        setSelectedInviteIds(new Set());
+                        setShowInviteConvModal(true);
+                        void ensureProfilesLoaded();
+                      }}
+                      title="Inviter des participants"
+                      aria-label="Inviter des participants"
+                      className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-[#F7BC5F] transition-colors"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      {!isMobile && <span className="text-xs font-semibold">Inviter</span>}
+                    </button>
+                  )}
                 </div>
 
                 <div ref={convScrollRef} className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-3">
@@ -5014,6 +5120,89 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 {creatingGroup ? 'Création…' : 'Créer le groupe'}
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal "Inviter des participants" — agrandir un groupe déjà créé,
+          voir inviteToConversation/colleaguesToInvite plus haut. Même
+          gabarit que la modale "Nouveau groupe" ci-dessus, ouverte à
+          n'importe quel membre du groupe (pas seulement son créateur). */}
+      {showInviteConvModal && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowInviteConvModal(false)}
+        >
+          <div
+            className="bg-[#0E1A20] border border-white/10 rounded-2xl max-w-md w-full p-6 text-white space-y-4 max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-[#F7BC5F]" />
+                <h3 className="text-base font-bold">Inviter des participants</h3>
+              </div>
+              <button
+                onClick={() => setShowInviteConvModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400">
+              {`Toutes les agences — sélectionnez qui inviter (${selectedInviteIds.size} sélectionné${selectedInviteIds.size > 1 ? 's' : ''}).`}
+            </p>
+            <input
+              value={inviteConvQuery}
+              onChange={(e) => setInviteConvQuery(e.target.value)}
+              placeholder="Rechercher par nom ou email…"
+              autoFocus
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+            />
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1">
+              {colleaguesToInvite.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-6">Aucun collègue trouvé.</p>
+              ) : (
+                colleaguesToInvite.map((m) => {
+                  const isSelected = selectedInviteIds.has(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setSelectedInviteIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(m.id)) next.delete(m.id); else next.add(m.id);
+                          return next;
+                        });
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors ${
+                        isSelected ? 'bg-[#F7BC5F]/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold truncate">{m.name}</p>
+                        <p className="text-[10px] text-slate-500 truncate">
+                          {m.email} · <span className="text-[#F9C977]/80">{agencyNameById(m.agencyId) || 'Agence inconnue'}</span>
+                        </p>
+                      </div>
+                      <div className={`w-4.5 h-4.5 rounded-md border shrink-0 flex items-center justify-center ${isSelected ? 'bg-[#F7BC5F] border-[#F7BC5F]' : 'border-white/20'}`}>
+                        {isSelected && <Check className="w-3 h-3 text-slate-950" />}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void inviteToConversation()}
+              disabled={invitingToConv || selectedInviteIds.size === 0}
+              className="w-full bg-[#F7BC5F] hover:bg-[#d9ab38] disabled:opacity-40 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-xl transition-all"
+            >
+              {invitingToConv ? 'Invitation…' : `Inviter${selectedInviteIds.size > 0 ? ` (${selectedInviteIds.size})` : ''}`}
+            </button>
           </div>
         </div>
       )}
