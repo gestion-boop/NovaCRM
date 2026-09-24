@@ -45,7 +45,7 @@ as $function$
 $function$;
 
 -- L'ancien nom a déjà été remplacé par "Members add participants" le 29/08.
--- Supprimer les deux variantes rend la migration rejouable et évite le conflit de nom.
+-- Supprimer les deux variantes évite le conflit de nom sur une base déjà migrée.
 drop policy if exists "Members add participants from same entity" on public.conversation_members;
 drop policy if exists "Members add participants" on public.conversation_members;
 create policy "Members add participants"
