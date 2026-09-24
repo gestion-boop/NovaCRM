@@ -904,7 +904,7 @@ async function handleSpeak(req: any, res: any) {
 async function handleDailySummaryCron(req: any, res: any) {
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers?.authorization || '';
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     res.status(401).json({ error: 'Non autorisé.' });
     return;
   }
@@ -1041,7 +1041,7 @@ async function handleDailySummaryCron(req: any, res: any) {
 }
 
 export default async function handler(req: any, res: any) {
-  if (req.method === 'GET' && req.query?.cron === 'daily-summary') {
+  if (req.method === 'GET') {
     return handleDailySummaryCron(req, res);
   }
 
