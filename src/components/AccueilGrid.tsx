@@ -301,17 +301,45 @@ const INITIAL_TILES: TileItemNode[] = [
     badgeCount: 0,
     navTarget: 'rappels',
   },
+  // Chat Équipe et Mail : comme "rappels" ci-dessus, jamais affichées dans
+  // la grille elle-même (retirées par removeQuickBarDuplicates, voir
+  // QUICK_BAR_DUPLICATE_IDS plus bas) — seul le bandeau "Ma journée /
+  // Priorités" (ORDRE_BARRE_HAUT) les affiche, en lisant ici leur icône/
+  // couleur/titre. Les avoir supprimées d'ici avec le dossier Communication
+  // (23 septembre, voir commentaire sur "support" plus bas) avait fait
+  // disparaître leur icône de ce bandeau par la même occasion — signalé le
+  // lendemain (« je n'ai plus le logo chat sur la barre du haut »).
+  // Remises en tuiles autonomes, hors de tout dossier, sans les rendre
+  // visibles dans la grille pour autant (elles y étaient déjà invisibles
+  // avant le 23 septembre).
+  {
+    id: 'chat',
+    title: 'Chat Équipe',
+    iconName: 'MessageSquare',
+    gradient: 'from-[#00B4DB] via-[#0083B0] to-[#005C8A]',
+    badgeCount: 2,
+    navTarget: 'chat',
+  },
+  {
+    id: 'mail',
+    title: 'Mail',
+    iconName: 'Mail',
+    gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]',
+    badgeCount: 1,
+    navTarget: 'mail',
+  },
   // Demande explicite (23 septembre) : « le dossier Communication ne sert à
   // rien, supprime-le sur tous les profils, mets la tuile [Support] à
   // l'extérieur ». Ce dossier ne contenait plus grand-chose d'utile : Chat
   // Équipe et Mail sont filtrés hors des dossiers par removeQuickBarDuplicates
-  // (déjà dans le bandeau "Ma journée" du haut), ne laissant que Support
-  // dedans — un dossier à une seule carte. Signalé plusieurs fois comme bug
-  // récurrent (9 septembre notamment : « le dossier Communication se recrée
-  // chez des utilisateurs ») avant même d'être supprimé pour de bon : la
-  // tuile "Support" vit maintenant directement à la racine, plus de dossier
-  // à faire revenir. Migration forcée des grilles déjà enregistrées avec
-  // l'ancien dossier : voir retirerDossierCommunication plus bas.
+  // (déjà dans le bandeau "Ma journée" du haut, voir ci-dessus), ne laissant
+  // que Support dedans — un dossier à une seule carte. Signalé plusieurs
+  // fois comme bug récurrent (9 septembre notamment : « le dossier
+  // Communication se recrée chez des utilisateurs ») avant même d'être
+  // supprimé pour de bon : la tuile "Support" vit maintenant directement à
+  // la racine, plus de dossier à faire revenir. Migration forcée des
+  // grilles déjà enregistrées avec l'ancien dossier : voir
+  // retirerDossierCommunication plus bas.
   {
     id: 'support',
     title: 'Support',
