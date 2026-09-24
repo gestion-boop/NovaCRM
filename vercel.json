@@ -1,5 +1,5 @@
 {
-  "buildCommand": "vite build",
+  "buildCommand": "npm run theme:check && npx tsc --noEmit && vite build",
   "ignoreCommand": "bash -c 'if [ \"$VERCEL_GIT_COMMIT_REF\" = \"main\" ] || [ \"$VERCEL_GIT_COMMIT_REF\" = \"test\" ]; then exit 1; else exit 0; fi'",
   "outputDirectory": "dist",
   "rewrites": [
@@ -51,7 +51,7 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/daily-summary",
+      "path": "/api/ai/agent",
       "schedule": "0 9 * * *"
     }
   ]
