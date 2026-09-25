@@ -85,6 +85,7 @@ interface ChatMessageRow {
   sender_id?: string | null;
   is_deleted?: boolean;
   read_by?: { userId: string; userName?: string; readAt?: string }[];
+  reactions?: { userId: string; emoji: string }[];
 }
 
 // Envoi différé : ligne de `scheduled_messages` en attente (id/corps/date
@@ -366,6 +367,31 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // ci-dessus, qui servent de modèle ici).
   const [editingChannelMsgId, setEditingChannelMsgId] = useState<string | null>(null);
   const [editingChannelMsgText, setEditingChannelMsgText] = useState('');
+  // Signalé (25/09/2026, capture à l'appui, canal "Nouveautés (biens)") :
+  // "les utilisateurs ne peuvent pas rajouter [de réaction] sur les textes
+  // qui sont postés, [ils sont] obligés de faire un message à part [...]
+  // comme ça se fait déjà dans notre interface" — les réactions existaient
+  // déjà pour les conversations directes (convReactions ci-dessus,
+  // message_reactions), jamais portées aux canaux d'équipe. Les canaux
+  // vivent dans une table à part (chat_messages, pas `messages`) : les
+  // réactions sont donc stockées directement sur la ligne du message
+  // (colonne JSONB `reactions`), même principe déjà en place ici pour
+  // `read_by`, plutôt que dans message_reactions (qui ne connaît que la
+  // table `messages`). Même modèle "toute personne du canal peut réagir",
+  // même sélecteur, rejoué pour chat_messages.
+  const [showChannelReactionPickerFor, setShowChannelReactionPickerFor] = useState<string | null>(null);
+  const [channelReactionPickerUp, setChannelReactionPickerUp] = useState(false);
+  const channelReactionPickerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!showChannelReactionPickerFor) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (channelReactionPickerRef.current && !channelReactionPickerRef.current.contains(e.target as Node)) {
+        setShowChannelReactionPickerFor(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick, true);
+    return () => document.removeEventListener('mousedown', handleOutsideClick, true);
+  }, [showChannelReactionPickerFor]);
   const [convLightboxUrl, setConvLightboxUrl] = useState<string | null>(null);
   const lightboxPressTimer = useRef<number | null>(null);
   // Ticket #24 (nouvelle base) : accusé de lecture — quel autre membre de la
@@ -1272,6 +1298,31 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       return;
     }
     if (activeConversationId) loadConvMessages(activeConversationId);
+  };
+
+  // Réactions sur un message de canal — même principe que
+  // handleToggleConvReaction, mais stocké directement sur la ligne
+  // (chat_messages.reactions, JSONB) plutôt que dans une table à part : pas
+  // de rechargement séparé nécessaire, la mise à jour optimiste EST l'état
+  // final, annulée si l'écriture échoue réellement.
+  const handleToggleChannelReaction = async (messageId: string, emoji: string) => {
+    if (!currentUser) return;
+    const target = messages.find((m) => m.id === messageId);
+    if (!target) return;
+    const previous = target.reactions || [];
+    const existing = previous.find((r) => r.userId === currentUser.uid);
+    setShowChannelReactionPickerFor(null);
+    const nextReactions = existing
+      ? existing.emoji === emoji
+        ? previous.filter((r) => r.userId !== currentUser.uid)
+        : previous.map((r) => (r.userId === currentUser.uid ? { ...r, emoji } : r))
+      : [...previous, { userId: currentUser.uid, emoji }];
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, reactions: nextReactions } : m)));
+    const { error } = await supabase.from('chat_messages').update({ reactions: nextReactions } as any).eq('id', messageId);
+    if (error) {
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, reactions: previous } : m)));
+      toast.error("La réaction n'a pas pu être enregistrée.");
+    }
   };
 
   // Demande explicite (30/08/2026) : mêmes actions modifier/supprimer que
@@ -4208,6 +4259,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     const mine = (m.sender_id || m.data?.sender_id) === currentUser?.uid;
                     const isNova = isNovaReaction(m.data?.body || '');
                     const isEditing = editingChannelMsgId === m.id;
+                    const groupedReactions: Record<string, { userId: string; emoji: string }[]> = {};
+                    (m.reactions || []).forEach((r) => { (groupedReactions[r.emoji] ||= []).push(r); });
                     return (
                     <div key={m.id} className={`group flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
                       {/* Même correctif de largeur que côté conversations
@@ -4270,9 +4323,61 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           un message" — modifier réservé à l'auteur (et aux
                           messages texte, pas aux mascottes Nova), supprimer
                           ouvert à l'auteur ET à isAdmin (super_admin ou admin,
-                          voir la définition en haut du composant). */}
-                      {!isEditing && (mine || isAdmin) && (
+                          voir la définition en haut du composant). Réagir (25/09/2026),
+                          lui, est ouvert à tout membre du canal — la barre d'outils
+                          n'est donc plus conditionnée à (mine || isAdmin) comme avant,
+                          seuls Modifier/Supprimer le restent individuellement. */}
+                      {!isEditing && (
                         <div className={`${classesOutilsMessage(m.id)} transition-opacity flex items-center gap-0.5 shrink-0`}>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                const opening = showChannelReactionPickerFor !== m.id;
+                                if (opening) {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const pickerHeight = 380;
+                                  setChannelReactionPickerUp(rect.bottom + pickerHeight > window.innerHeight);
+                                }
+                                setShowChannelReactionPickerFor(opening ? m.id : null);
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
+                              title="Réagir"
+                            >
+                              <Smile className="w-3.5 h-3.5" />
+                            </button>
+                            {showChannelReactionPickerFor === m.id && (() => {
+                              const pickerItems = (
+                                <>
+                                  {NOVA_QUICK_REACTIONS.map((e) => (
+                                    <button key={e} type="button" onClick={() => void handleToggleChannelReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
+                                      {renderEmojiOrNova(e, isMobile || isCoarsePointer ? 'w-14 h-14' : 'w-12 h-12')}
+                                    </button>
+                                  ))}
+                                  <div className={`${isMobile || isCoarsePointer ? 'col-span-5' : 'col-span-6'} h-px bg-[#153c3f] my-1`} />
+                                  {QUICK_EMOJIS.map((e) => (
+                                    <button key={e} type="button" onClick={() => void handleToggleChannelReaction(m.id, e)} className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}>
+                                      {e}
+                                    </button>
+                                  ))}
+                                </>
+                              );
+                              return isMobile ? (
+                                <div className="fixed inset-0 z-20 flex items-center justify-center p-6">
+                                  <div
+                                    ref={channelReactionPickerRef}
+                                    className="grid grid-cols-5 gap-2.5 bg-[#0b1c1e] border border-[#153c3f] rounded-2xl p-4 shadow-xl w-full max-w-[min(440px,calc(100vw-1.5rem))] max-h-[70vh] overflow-y-auto custom-scrollbar"
+                                  >
+                                    {pickerItems}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div ref={channelReactionPickerRef} className={`absolute z-20 ${channelReactionPickerUp ? 'bottom-full mb-1' : 'top-full mt-1'} grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-[#153c3f] rounded-xl p-3 shadow-xl w-max max-w-[min(440px,calc(100vw-1.5rem))] max-h-[340px] overflow-y-auto custom-scrollbar ${mine ? 'right-0' : 'left-0'}`}>
+                                  {pickerItems}
+                                </div>
+                              );
+                            })()}
+                          </div>
                           {mine && !isNova && (
                             <button
                               type="button"
@@ -4283,17 +4388,36 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteChannelMsg(m.id)}
-                            className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-400 hover:text-rose-400"
-                            title="Supprimer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {(mine || isAdmin) && (
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteChannelMsg(m.id)}
+                              className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-400 hover:text-rose-400"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       )}
                       </div>
+
+                      {Object.keys(groupedReactions).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {Object.entries(groupedReactions).map(([emoji, list]) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => void handleToggleChannelReaction(m.id, emoji)}
+                              className={`px-1.5 py-0.5 rounded-full text-xs flex items-center gap-1 border ${list.some((r) => r.userId === currentUser?.uid) ? 'border-[#F7BC5F]/50 bg-[#F7BC5F]/10' : 'border-[#153c3f] bg-[#0b1c1e]'}`}
+                            >
+                              <span>{renderEmojiOrNova(emoji, 'w-[1.4em] h-[1.4em]')}</span>
+                              {list.length > 1 && <span className="text-[10px] text-slate-400">{list.length}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-1 mt-1">
                         <span className="text-[10px] text-slate-500">{formatTime(m.created_at)}</span>
                         {/* Signalé (12 septembre, « dans les 3 agences, et les
