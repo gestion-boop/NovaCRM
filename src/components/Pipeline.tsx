@@ -273,6 +273,19 @@ const PipelineCardContent: React.FC<{
 // étaient déjà stables ici (passées telles quelles, pas de closure recréée
 // dans le `.map()`), donc React.memo suffit à éliminer ce re-rendu
 // inutile.
+// Signalé (25/09/2026, tablettes) : "on ne peut plus scroller en haut et en
+// bas quand on est [dans] pipelines" — la carte entière sert de poignée de
+// glisser (`{...listeners}` ci-dessous) et portait `touch-action: none`
+// (`touch-none`), qui coupe TOUT geste tactile natif dès qu'on pose le
+// doigt dessus, y compris le simple défilement vertical de la page — sur
+// tablette, où les cartes occupent une grande partie de l'écran, il ne
+// restait quasi aucune zone "libre" pour amorcer un scroll au doigt.
+// `TouchSensor` était pourtant déjà configuré en `delay: 200` (glisser
+// seulement après une pression tenue, pour laisser passer un balayage
+// rapide) — un réglage pensé pour cohabiter avec `touch-action: pan-y`
+// (scroll vertical natif autorisé, laissé au navigateur), pas avec `none`
+// (qui rend ce délai inopérant : le scroll est déjà bloqué dès le premier
+// contact, quoi que décide `TouchSensor` ensuite).
 const PipelineCard = React.memo<{
   deal: Deal;
   contact: Contact | undefined;
@@ -294,7 +307,7 @@ const PipelineCard = React.memo<{
       {...listeners}
       onClick={() => { if (contact && onSelectContact) onSelectContact(contact.id); }}
       style={couleur ? { borderLeft: `5px solid ${couleur}`, backgroundColor: `${couleur}1a` } : undefined}
-      className={`p-4 sm:p-3 rounded-xl bg-[#0b1719] border transition-colors duration-150 touch-none select-none ${
+      className={`p-4 sm:p-3 rounded-xl bg-[#0b1719] border transition-colors duration-150 touch-pan-y select-none ${
         contact ? 'cursor-pointer' : ''
       } ${
         isDragging
