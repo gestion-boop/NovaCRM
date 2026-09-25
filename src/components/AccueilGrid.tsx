@@ -1706,6 +1706,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Incrémenté quand la grille serveur de l'agence est chargée : les effets
   // qui ne doivent écrire qu'après (voir plus bas) s'y accrochent.
   const [syncPrete, setSyncPrete] = useState(0);
+  // La grille ne doit jamais être peinte avec une disposition provisoire
+  // (cache local ancien / agence précédente) puis "sauter" quand Supabase
+  // répond. On mémorise donc explicitement quelle paire utilisateur+agence
+  // a terminé son hydratation. Tant que la clé courante n'est pas hydratée,
+  // l'accueil affiche un état neutre au lieu de montrer une ancienne grille.
+  const [layoutHydratedKey, setLayoutHydratedKey] = useState<string | null>(null);
   const [rootSlots, setRootSlots] = useState<(string | null)[]>(() => loadRootSlots(ROOT_SLOTS_KEY, tiles));
   const rootSlotsKeyRef = useRef(ROOT_SLOTS_KEY);
   const rootSlotsRef = useRef(rootSlots);
@@ -1821,8 +1827,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     const agencyId = activeAgency?.id;
     if (!currentUser?.uid || !agencyId) return;
     const clefSync = clefSyncTuiles(agencyId);
-    if (homeSyncLoadedAgencies.has(clefSync)) return;
-    homeSyncLoadedAgencies.add(clefSync);
+    // Refaire une lecture à chaque montage / reconnexion / changement
+    // d'agence. L'ancien cache module-level évitait un appel réseau, mais il
+    // survivait aux démontages React et pouvait donc considérer à tort une
+    // nouvelle session comme "déjà synchronisée". Avec les horodatages
+    // local/serveur, relire est sûr : la version la plus récente gagne.
+    setLayoutHydratedKey((courante) => courante === clefSync ? courante : null);
     (async () => {
       try {
         // Demandé le 2 septembre : « lors d'une mise à jour, je ne veux pas
@@ -1926,6 +1936,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       } finally {
         homeSyncReadyAgencies.add(clefSync);
         setSyncPrete((v) => v + 1);
+        // N'autoriser l'affichage que si la réponse correspond toujours à
+        // l'utilisateur/agence actuellement visibles. Si l'utilisateur a
+        // changé d'agence pendant la requête, ce résultat reste en cache mais
+        // ne doit surtout pas faire apparaître la mauvaise grille.
+        const cleAttendue = `novasphere_home_tiles_v3_${currentUser.uid}_${agencyId}`;
+        if (homeTilesKeyRef.current === cleAttendue) setLayoutHydratedKey(clefSync);
       }
     })();
   }, [currentUser?.uid, activeAgency?.id]);
@@ -3391,6 +3407,30 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // dossier ouvert est animé par framer-motion (transform), ce qui casserait
   // le positionnement fixe du calque s'il restait dedans. Il reste dans
   // l'arbre React du DndContext qui l'inclut, donc dans son contexte.
+  const layoutHydrated = Boolean(
+    currentUser?.uid && activeAgency?.id && layoutHydratedKey === clefSyncTuiles(activeAgency.id)
+  );
+
+  // Important : ne jamais montrer la grille locale "en attendant" la
+  // configuration du compte. C'est précisément ce qui provoquait les
+  // artefacts visuels (anciennes tuiles visibles une fraction de seconde,
+  // puis déplacement/disparition à l'arrivée de Supabase). Le squelette
+  // conserve l'espace de la page sans exposer de disposition incorrecte.
+  if (!layoutHydrated) {
+    return (
+      <div className="min-h-full p-3 sm:p-5" aria-busy="true" aria-label="Chargement de votre espace">
+        <div className="max-w-7xl mx-auto w-full">
+          <div className="h-20 rounded-2xl bg-[#2b2b2b]/35 animate-pulse mb-4" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="h-28 sm:h-36 rounded-2xl sm:rounded-3xl bg-white/5 animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const calqueDeplacement = createPortal(
     <DragOverlay
       zIndex={1000}
