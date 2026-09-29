@@ -275,6 +275,26 @@ export const SupportView: React.FC = () => {
             )
           );
         }
+
+        // Signalé (29/09/2026) : "quand on lit un message sur un support, il
+        // faut qu'il s'enlève dans la notification" — ce qui précède ne
+        // marque lu QUE le message lui-même (read_by) et un simple drapeau
+        // localStorage local à cet appareil (novasphere:ticket-read:...,
+        // voir l'effet plus bas), jamais la vraie notification de la table
+        // `notifications` (celle qui alimente la cloche/le badge — voir
+        // useDashboardStats). Une notification de ce ticket restait donc
+        // marquée non lue indéfiniment, même après lecture, jusqu'à la
+        // fermeture du ticket (seul autre endroit qui la nettoie). Le badge
+        // se resynchronise seul ensuite (abonnement temps réel sur
+        // `notifications`, voir useDashboardStats) : pas d'appel supplémentaire
+        // nécessaire ici.
+        void supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .eq('user_id', currentUser.uid)
+          .eq('entity_type', 'support_ticket')
+          .eq('entity_id', ticketId)
+          .eq('is_read', false);
       }
     } catch (e) {
       console.warn('Erreur chargement des messages du ticket :', e);
