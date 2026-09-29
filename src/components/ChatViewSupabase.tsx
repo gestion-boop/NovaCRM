@@ -3610,7 +3610,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                 </div>
                               ) : (
                                 <>
-                                  {m.kind === 'text' && <p className="whitespace-pre-line">{linkifyText(m.body || '', mine)}</p>}
+                                  {/* Signalé (29/09/2026) : "on ne peut pas copier-coller le texte
+                                      d'un message" — cause : la racine de l'appli (App.tsx) porte
+                                      `select-none` pour tout le CRM (évite la sélection accidentelle
+                                      de libellés/boutons au doigt), ce qui désactivait aussi la
+                                      sélection du texte des messages, jamais réactivée localement.
+                                      `select-text` la restaure ici, sans toucher au reste de l'appli. */}
+                                  {m.kind === 'text' && <p className="whitespace-pre-line select-text">{linkifyText(m.body || '', mine)}</p>}
                                   {/* Signalé (30/08/2026, capture à l'appui) : "comme ils sont gros...
                                       divise par exemple par cinq" — une mascotte Nova envoyée comme
                                       message (insertConvMessage('image', ...)) était traitée
@@ -4314,7 +4320,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             )}
                           </div>
                         ) : (
-                          <p className="whitespace-pre-line">{linkifyText(m.data?.body || '', mine)}</p>
+                          // select-text : voir le commentaire équivalent côté conversations
+                          // directes plus haut (même correctif, même cause : select-none racine).
+                          <p className="whitespace-pre-line select-text">{linkifyText(m.data?.body || '', mine)}</p>
                         )}
                       </div>
                       {/* Demande explicite (30/08/2026) : "chaque utilisateur qui

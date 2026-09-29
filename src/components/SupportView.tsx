@@ -888,7 +888,10 @@ export const SupportView: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
-              <p className="text-xs text-gray-300 whitespace-pre-wrap leading-relaxed">{selectedTicket.description}</p>
+              {/* select-text : la racine de l'appli (App.tsx) porte select-none pour
+                  tout le CRM, ce qui empêchait aussi de copier ce texte — signalé
+                  (29/09/2026) : "on ne peut pas copier-coller le texte d'un message". */}
+              <p className="text-xs text-gray-300 whitespace-pre-wrap leading-relaxed select-text">{selectedTicket.description}</p>
 
               {selectedTicket.attachments.length > 0 && (
                 <div className="flex flex-wrap gap-2">
@@ -1003,7 +1006,9 @@ export const SupportView: React.FC = () => {
                         <div key={m.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                           <div className={`max-w-[80%] rounded-xl px-3 py-2 ${isMine ? 'bg-[#F7BC5F]/15 border border-[#F7BC5F]/30' : 'bg-white/5 border border-white/10'}`}>
                             <p className="text-[10px] font-bold text-gray-400 mb-0.5">{m.senderName}</p>
-                            {m.body && <p className="text-xs text-gray-200 whitespace-pre-wrap">{m.body}</p>}
+                            {/* select-text : voir le commentaire équivalent plus haut (même
+                                correctif, même cause : select-none racine dans App.tsx). */}
+                            {m.body && <p className="text-xs text-gray-200 whitespace-pre-wrap select-text">{m.body}</p>}
                             {m.attachments.length > 0 && (
                               <div className="flex gap-1.5 flex-wrap mt-1.5">
                                 {m.attachments.map((url, i) => (

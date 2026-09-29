@@ -1334,7 +1334,11 @@ const TaskDetailModal: React.FC<{
                             <span className="text-[9px] text-gray-600">{new Date(m.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                           <div className={`rounded-2xl px-3 py-2 text-xs ${isMe ? 'bg-[#F7BC5F]/15 text-[#F9C977] border border-[#F7BC5F]/30' : 'bg-white/5 text-gray-200 border border-white/10'} ${highlightedMessageId === m.id ? 'message-highlight-flash' : ''}`}>
-                            {m.kind === 'text' && <span className="whitespace-pre-wrap break-words">{m.body}</span>}
+                            {/* select-text : la racine de l'appli (App.tsx) porte select-none
+                                pour tout le CRM, ce qui empêchait aussi de copier le texte d'un
+                                message — signalé (29/09/2026). Réactivé ici sans rien changer
+                                ailleurs. */}
+                            {m.kind === 'text' && <span className="whitespace-pre-wrap break-words select-text">{m.body}</span>}
                             {m.kind === 'image' && m.attachmentUrl && (
                               <button
                                 type="button"

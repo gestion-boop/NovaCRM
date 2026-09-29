@@ -3774,7 +3774,12 @@ export default function ClientProfileView({
                                 </div>
                               ) : (
                                 <>
-                                  {m.body && <div className="whitespace-pre-wrap break-words">{m.body}</div>}
+                                  {/* select-text : la racine de l'appli (App.tsx) porte select-none
+                                      pour tout le CRM (évite la sélection accidentelle au doigt),
+                                      ce qui empêchait aussi de copier le texte d'un message —
+                                      signalé (29/09/2026) : "on ne peut pas copier-coller le texte
+                                      d'un message". Réactivé localement, sans toucher au reste. */}
+                                  {m.body && <div className="whitespace-pre-wrap break-words select-text">{m.body}</div>}
                                   {m.imageUrl && (
                                     <button
                                       type="button"
@@ -4066,7 +4071,9 @@ export default function ClientProfileView({
                                   </div>
                                 ) : (
                                   <>
-                                    {m.body && m.kind !== 'file' && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
+                                    {/* select-text : voir le commentaire équivalent plus haut (même
+                                        correctif, même cause : select-none racine dans App.tsx). */}
+                                    {m.body && m.kind !== 'file' && <p className="whitespace-pre-wrap break-words select-text">{m.body}</p>}
                                     {m.kind === 'image' && m.attachmentUrl && (
                                       <button type="button" onClick={() => setLeadLightboxUrl(m.attachmentUrl)} className="block cursor-pointer">
                                         <img src={m.attachmentUrl} alt="Pièce jointe" className="max-w-[220px] max-h-[220px] rounded-xl object-cover" />
