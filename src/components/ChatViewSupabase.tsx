@@ -2106,29 +2106,31 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // Entités" (chat_projects/chat_channels) — sinon, agence active comme
     // avant (comportement inchangé pour un échange au sein d'une même
     // agence).
-    // `agency_id` ne doit JAMAIS rester nul : la règle de lecture des
-    // conversations exige `agency_id IS NOT NULL`, donc une conversation sans
-    // agence est invisible pour tout le monde, y compris son auteur. On prend
-    // l'agence active si les deux personnes en sont membres, sinon la
-    // première agence qu'elles ont en commun, sinon celle de l'autre.
     const miennes = agencyIdsByUid[currentUser.uid] || [];
     const siennes = agencyIdsByUid[otherUserId] || [];
     const communes = miennes.filter((a) => siennes.includes(a));
-    // Ordre corrigé le 31/08/2026, signalé : « Sarah est activée dans
-    // Immosphera mais ne peut pas créer de conversation ».
+    // Signalé (30/09/2026, Diane → Eric) : « Eric reçoit la notification
+    // mais n'a pas accès à la conversation ». Cause : Diane et Eric n'ont
+    // AUCUNE agence en commun (Novavisio / Conseils Finances) — le repli
+    // ci-dessous retombait alors sur `miennes[0]`, l'agence PROPRE de
+    // Diane, ce qui rend la conversation illisible pour quiconque n'est pas
+    // membre de CETTE agence précise (voir is_conversation_member) : Eric
+    // avait bien sa ligne `conversation_members` (d'où la notification),
+    // mais ne passait plus la policy de lecture.
     //
-    // L'agence retenue était celle de l'AUTRE personne quand il n'y en avait
-    // aucune en commun — or c'est la règle d'écriture de l'auteur qui est
-    // évaluée à la création. Sarah, absente de l'agence du destinataire,
-    // voyait son insertion refusée. On retombe désormais sur SA propre
-    // agence : elle peut créer, et la lecture inter-agences est ouverte par
-    // la règle correspondante (voir CHAT_inter_agences.sql).
+    // Avant le correctif du 24/09/2026 sur `is_conversation_member`
+    // (agency_id NULL = pas de restriction d'agence, seule l'appartenance à
+    // conversation_members compte), NULL était effectivement invisible pour
+    // tout le monde, y compris l'auteur — d'où le repli sur une agence
+    // précise ci-dessous, coûte que coûte (31/08/2026, « Sarah ne peut pas
+    // créer de conversation »). Ce n'est plus vrai : NULL fonctionne
+    // maintenant correctement pour tous les membres, quelle que soit leur
+    // agence. Repli supprimé : à défaut d'agence VRAIMENT commune, la
+    // conversation reste multi-entités plutôt que de pencher arbitrairement
+    // vers l'agence de l'un des deux au détriment de l'autre.
     const agencePartagee =
       (communes.includes(activeAgency.id) ? activeAgency.id : null)
       || communes[0]
-      || (miennes.includes(activeAgency.id) ? activeAgency.id : null)
-      || miennes[0]
-      || siennes[0]
       || null;
 
     // L'identifiant est généré ici plutôt que demandé à la base.
@@ -2181,17 +2183,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setCreatingGroup(true);
     try {
       const memberIds = Array.from(selectedGroupMemberIds);
-      // Même correctif que pour les conversations directes : les agences sont
-      // lues en base, et `agency_id` ne peut pas rester nul sans rendre le
-      // groupe invisible à tous.
+      // Même correctif que pour les conversations directes (voir
+      // startConversation, signalé 30/09/2026 « Eric reçoit la notification
+      // mais n'a pas accès ») : à défaut d'agence commune à TOUS les
+      // membres, on reste en multi-entités (NULL) plutôt que de retomber
+      // sur l'agence d'une seule personne, invisible aux autres.
       const agencesDeChacun = memberIds.map((id) => agencyIdsByUid[id] || []);
       const miennesG = agencyIdsByUid[currentUser.uid] || [];
       const communesG = miennesG.filter((a) => agencesDeChacun.every((liste) => liste.includes(a)));
       const agenceGroupe =
         (communesG.includes(activeAgency.id) ? activeAgency.id : null)
         || communesG[0]
-        || miennesG[0]
-        || agencesDeChacun.flat()[0]
         || null;
       // Même raison que pour les conversations directes : pas de relecture
       // après insertion, elle échoue tant que le groupe n'a pas de membre.
