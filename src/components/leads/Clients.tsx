@@ -86,22 +86,37 @@ interface ClientsProps {
 }
 
 const Clients = ({ onSelectContact }: ClientsProps) => {
-  const { activeAgency: rawActiveAgency, currentUser: user } = useAuth();
+  const { activeAgency: rawActiveAgency, currentUser: user, userProfile } = useAuth();
   const activeAgency = rawActiveAgency?.id === 'all' ? null : rawActiveAgency;
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "chaud" | "tiede" | "froid">("all");
   const [scope, setScope] = useState<"mine" | "shared" | "all">("mine");
+
+  // 30/09/2026, demande explicite : dans l'agence Immosphera, chaque
+  // utilisateur ne voit que SES clients — le sélecteur « Tous (agence) » est
+  // retiré. Les admins / super admins gardent la vue complète. Les fiches
+  // « agence » sans propriétaire restent en base (réattribution prévue plus
+  // tard) : elles ne sont simplement plus visibles des conseillers.
+  const estImmosphera = !!activeAgency && matchesAgency(activeAgency.id, IMMOSPHERA_ID);
+  const estAdmin = userProfile?.role === "super_admin" || userProfile?.role === "admin";
+  const peutVoirToutAgence = !estImmosphera || estAdmin;
+  const scopesDisponibles = (peutVoirToutAgence ? ["all", "mine", "shared"] : ["mine", "shared"]) as ("all" | "mine" | "shared")[];
+  const scopeEffectif: "mine" | "shared" | "all" = scope === "all" && !peutVoirToutAgence ? "mine" : scope;
+
+  useEffect(() => {
+    if (!peutVoirToutAgence && scope === "all") setScope("mine");
+  }, [peutVoirToutAgence, scope]);
   const [editing, setEditing] = useState<any | null>(null);
   const [open, setOpen] = useState(false);
 
   const { data: leads = [] } = useQuery({
-    queryKey: ["leads", rawActiveAgency?.id, scope, user?.uid],
+    queryKey: ["leads", rawActiveAgency?.id, scopeEffectif, user?.uid],
     enabled: !!rawActiveAgency && !!user,
     queryFn: async () => {
       let rows: any[] = [];
 
-      if (scope === "shared") {
+      if (scopeEffectif === "shared") {
         const { data: shares, error: sErr } = await supabase
           .from("client_shares")
           .select("lead_id")
@@ -136,7 +151,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         // règle partout maintenant : on filtre côté application.
         // Tous les utilisateurs voient leurs propres clients par défaut
         // Le sélecteur "Tous" permet de voir tous les contacts de l'agence
-        if (scope !== "all") q = q.or(`created_by.eq.${user!.uid},assigned_to.eq.${user!.uid}`);
+        if (scopeEffectif !== "all") q = q.or(`created_by.eq.${user!.uid},assigned_to.eq.${user!.uid}`);
         const { data, error } = await q;
         if (error) throw error;
         rows = (data ?? []).filter((l: any) => !l.deleted_at && (!activeAgency || matchesAgency((l.agency_id as string) || "", activeAgency.id)));
@@ -299,7 +314,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
     .map(({ lead }) => lead);
 
   const handleDelete = async (id: string) => {
-    if (scope === "shared") return;
+    if (scopeEffectif === "shared") return;
     if (!confirm("Supprimer définitivement ce contact ?")) return;
     try {
       // 3 septembre : corbeille au lieu de l'effacement. Rappels, rendez-vous,
@@ -389,9 +404,9 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
               {filtered.length} client{filtered.length !== 1 ? "s" : ""}
               {filter !== "all" || search
                 ? " filtrés"
-                : scope === "all"
+                : scopeEffectif === "all"
                   ? " dans l'agence"
-                  : scope === "shared"
+                  : scopeEffectif === "shared"
                     ? " partagés"
                     : " mes clients"}
             </p>
@@ -400,7 +415,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
 
         {/* ── Scope : Mes clients / Partagés / Tous ── */}
         <div className="flex gap-2 flex-wrap mt-4">
-          {(["all", "mine", "shared"] as const).map((s) => (
+          {scopesDisponibles.map((s) => (
             <button
               key={s}
               onClick={() => setScope(s)}
@@ -411,7 +426,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                 // généré, donc le bouton actif se retrouvait sans fond ni
                 // bordure (quasi invisible sur le fond sombre). Remplacé par
                 // le même dégradé doré déjà utilisé ailleurs dans ce fichier.
-                scope === s
+                scopeEffectif === s
                   ? "bg-gradient-to-r from-[#FAD592] via-[#F9C977] to-[#D9A34E] text-[#1a1230] border-transparent shadow-lg shadow-[#F7BC5F]/30"
                   : "bg-background/70 border-border hover:bg-accent",
               )}
@@ -525,7 +540,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                     </div>
                   </div>
 
-                  {scope === "mine" ? (
+                  {scopeEffectif === "mine" ? (
                     <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => {
