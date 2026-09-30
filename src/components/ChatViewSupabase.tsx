@@ -398,6 +398,19 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // conversation a lu tel message (table `message_receipts`, déjà prête en
   // base mais jamais exploitée côté front).
   const [convReadBy, setConvReadBy] = useState<Record<string, string[]>>({});
+  // Demande explicite (30/09/2026) : "je voudrais savoir qui c'est qui lit
+  // donc en passant la souris sur la réception je voudrais que tu me mettes
+  // les noms des personnes qui ont lu le message [...] dans tous les
+  // messages chat" — la double coche ne dit aujourd'hui que "au moins une
+  // autre personne a lu", ce qui ne suffit pas dans un groupe/canal à
+  // plusieurs (on ne sait pas QUI, ni si TOUT LE MONDE a lu). Une seule
+  // info-bulle à la fois par surface (conversations/canaux, voir plus bas) :
+  // déclenchée au survol (souris) ET au clic (tactile, qui n'a pas de survol).
+  const [showConvReadByFor, setShowConvReadByFor] = useState<string | null>(null);
+  // Même bascule que ci-dessus, pour les canaux d'équipe (état séparé :
+  // conversations et canaux sont deux surfaces indépendantes partout
+  // ailleurs dans ce fichier).
+  const [showChannelReadByFor, setShowChannelReadByFor] = useState<string | null>(null);
 
   const profileByUid = useMemo(() => {
     const map: Record<string, MemberProfile> = {};
@@ -3808,14 +3821,36 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <div className="flex items-center gap-1 mt-1">
                             <span className="text-[10px] text-slate-500">{formatTime(m.created_at)}</span>
                             {/* Accusé de lecture (#24) : coché uniquement sur mes
-                                propres messages, une fois lus par l'autre. */}
-                            {mine && (
-                              (convReadBy[m.id] || []).some((uid) => uid !== currentUser?.uid) ? (
-                                <CheckCheck className="w-3.5 h-3.5 text-[#F7BC5F]" aria-label="Lu" />
-                              ) : (
-                                <Check className="w-3.5 h-3.5 text-slate-600" aria-label="Envoyé" />
-                              )
-                            )}
+                                propres messages, une fois lus par l'autre. Qui
+                                exactement (30/09/2026) : voir showConvReadByFor
+                                plus haut. */}
+                            {mine && (() => {
+                              const lecteurs = (convReadBy[m.id] || []).filter((uid) => uid !== currentUser?.uid);
+                              return (
+                                <div className="relative">
+                                  <button
+                                    type="button"
+                                    onMouseEnter={() => setShowConvReadByFor(m.id)}
+                                    onMouseLeave={() => setShowConvReadByFor(null)}
+                                    onClick={(e) => { e.stopPropagation(); setShowConvReadByFor((cur) => (cur === m.id ? null : m.id)); }}
+                                    className="flex items-center"
+                                  >
+                                    {lecteurs.length > 0 ? (
+                                      <CheckCheck className="w-3.5 h-3.5 text-[#F7BC5F]" aria-label="Lu" />
+                                    ) : (
+                                      <Check className="w-3.5 h-3.5 text-slate-600" aria-label="Envoyé" />
+                                    )}
+                                  </button>
+                                  {showConvReadByFor === m.id && (
+                                    <div className="absolute z-20 bottom-full right-0 mb-1 bg-[#0b1c1e] border border-[#153c3f] rounded-lg px-2.5 py-1.5 shadow-xl text-[10px] text-slate-300 whitespace-nowrap max-w-[220px] overflow-hidden text-ellipsis">
+                                      {lecteurs.length === 0
+                                        ? 'Pas encore vu'
+                                        : `Vu par ${lecteurs.map((uid) => profileByUid[uid]?.displayName || 'Utilisateur').join(', ')}`}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
@@ -4438,14 +4473,37 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             AFFICHÉ sur les messages d'un canal, contrairement
                             aux conversations directes (convReadBy plus haut,
                             même logique reprise ici : lu dès qu'un autre
-                            membre que moi apparaît dans read_by). */}
-                        {mine && (
-                          Array.isArray(m.read_by) && m.read_by.some((r) => r.userId !== currentUser?.uid) ? (
-                            <CheckCheck className="w-3.5 h-3.5 text-[#F7BC5F]" aria-label="Lu" />
-                          ) : (
-                            <Check className="w-3.5 h-3.5 text-slate-600" aria-label="Envoyé" />
-                          )
-                        )}
+                            membre que moi apparaît dans read_by). Qui
+                            exactement (30/09/2026) : voir showChannelReadByFor
+                            plus haut — utile surtout ici, un canal pouvant
+                            avoir bien plus de deux membres. */}
+                        {mine && (() => {
+                          const lecteurs = (Array.isArray(m.read_by) ? m.read_by : []).filter((r) => r.userId !== currentUser?.uid);
+                          return (
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onMouseEnter={() => setShowChannelReadByFor(m.id)}
+                                onMouseLeave={() => setShowChannelReadByFor(null)}
+                                onClick={(e) => { e.stopPropagation(); setShowChannelReadByFor((cur) => (cur === m.id ? null : m.id)); }}
+                                className="flex items-center"
+                              >
+                                {lecteurs.length > 0 ? (
+                                  <CheckCheck className="w-3.5 h-3.5 text-[#F7BC5F]" aria-label="Lu" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5 text-slate-600" aria-label="Envoyé" />
+                                )}
+                              </button>
+                              {showChannelReadByFor === m.id && (
+                                <div className="absolute z-20 bottom-full right-0 mb-1 bg-[#0b1c1e] border border-[#153c3f] rounded-lg px-2.5 py-1.5 shadow-xl text-[10px] text-slate-300 whitespace-nowrap max-w-[220px] overflow-hidden text-ellipsis">
+                                  {lecteurs.length === 0
+                                    ? 'Pas encore vu'
+                                    : `Vu par ${lecteurs.map((r) => r.userName || profileByUid[r.userId]?.displayName || 'Utilisateur').join(', ')}`}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );})

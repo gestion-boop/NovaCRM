@@ -118,6 +118,12 @@ export const SupportView: React.FC = () => {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [messages, setMessages] = useState<SupportTicketMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
+  // Demande explicite (30/09/2026) : "en passant la souris sur la réception
+  // je voudrais [...] les noms des personnes qui ont lu le message [...]
+  // dans tous les messages chat" — même mécanique que ChatViewSupabase
+  // (showConvReadByFor/showChannelReadByFor) : survol (souris) ET clic
+  // (tactile) ouvrent la même info-bulle.
+  const [showReadByFor, setShowReadByFor] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [chatFiles, setChatFiles] = useState<File[]>([]);
   // Demande explicite (23 septembre) : « le panneau des messages gagne en
@@ -1045,13 +1051,33 @@ export const SupportView: React.FC = () => {
                             )}
                             <div className="flex items-center gap-1 mt-1">
                               <p className="text-[9px] text-gray-600">{new Date(m.createdAt).toLocaleString('fr-FR')}</p>
-                              {isMine && (
-                                m.readBy.some((r) => r.userId !== currentUser?.uid) ? (
-                                  <CheckCheck className="w-3 h-3 text-[#F7BC5F]" aria-label="Lu" />
-                                ) : (
-                                  <Check className="w-3 h-3 text-gray-600" aria-label="Envoyé" />
-                                )
-                              )}
+                              {isMine && (() => {
+                                const lecteurs = m.readBy.filter((r) => r.userId !== currentUser?.uid);
+                                return (
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      onMouseEnter={() => setShowReadByFor(m.id)}
+                                      onMouseLeave={() => setShowReadByFor(null)}
+                                      onClick={(e) => { e.stopPropagation(); setShowReadByFor((cur) => (cur === m.id ? null : m.id)); }}
+                                      className="flex items-center"
+                                    >
+                                      {lecteurs.length > 0 ? (
+                                        <CheckCheck className="w-3 h-3 text-[#F7BC5F]" aria-label="Lu" />
+                                      ) : (
+                                        <Check className="w-3 h-3 text-gray-600" aria-label="Envoyé" />
+                                      )}
+                                    </button>
+                                    {showReadByFor === m.id && (
+                                      <div className="absolute z-20 bottom-full right-0 mb-1 bg-[#0b1c1e] border border-[#153c3f] rounded-lg px-2.5 py-1.5 shadow-xl text-[10px] text-slate-300 whitespace-nowrap max-w-[220px] overflow-hidden text-ellipsis">
+                                        {lecteurs.length === 0
+                                          ? 'Pas encore vu'
+                                          : `Vu par ${lecteurs.map((r) => r.userName || 'Utilisateur').join(', ')}`}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                         </div>

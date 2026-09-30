@@ -1354,7 +1354,9 @@ export default function ClientProfileView({
   const [showComposerEmoji, setShowComposerEmoji] = useState(false);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingChatText, setEditingChatText] = useState('');
-  const [readByModalMsg, setReadByModalMsg] = useState<ChatMessageRow | null>(null);
+  // Info-bulle "qui a lu" au survol/clic — remplace l'ancienne modale
+  // readByModalMsg (30/09/2026, voir le rendu du message plus bas).
+  const [showReadByFor, setShowReadByFor] = useState<string | null>(null);
   const [isRecordingChat, setIsRecordingChat] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [uploadingChatMedia, setUploadingChatMedia] = useState(false);
@@ -3877,16 +3879,36 @@ export default function ClientProfileView({
 
                           <div className={`flex items-center gap-1 mt-0.5 text-[10px] text-slate-500 ${mine ? 'flex-row-reverse' : ''}`}>
                             <span>{new Date(m.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                            {mine && (
-                              <button
-                                type="button"
-                                onClick={() => setReadByModalMsg(m)}
-                                className="flex items-center gap-0.5 hover:text-slate-300"
-                                title={otherRead ? 'Vu' : 'Envoyé'}
-                              >
-                                <CheckCheck className={`w-3 h-3 ${otherRead ? 'text-[#F9C977]' : ''}`} />
-                              </button>
-                            )}
+                            {/* Demande explicite (30/09/2026) : "en passant la
+                                souris sur la réception [...] les noms des
+                                personnes qui ont lu" — remplace l'ancienne
+                                modale (ouverte au clic seul) par la même
+                                info-bulle au survol/clic que les autres chats
+                                de l'appli (ChatViewSupabase, SupportView). */}
+                            {mine && (() => {
+                              const lecteurs = m.readBy.filter((r) => r.userId !== currentUserId);
+                              return (
+                                <div className="relative">
+                                  <button
+                                    type="button"
+                                    onMouseEnter={() => setShowReadByFor(m.id)}
+                                    onMouseLeave={() => setShowReadByFor(null)}
+                                    onClick={(e) => { e.stopPropagation(); setShowReadByFor((cur) => (cur === m.id ? null : m.id)); }}
+                                    className="flex items-center gap-0.5 hover:text-slate-300"
+                                    title={otherRead ? 'Vu' : 'Envoyé'}
+                                  >
+                                    <CheckCheck className={`w-3 h-3 ${otherRead ? 'text-[#F9C977]' : ''}`} />
+                                  </button>
+                                  {showReadByFor === m.id && (
+                                    <div className={`absolute z-20 bottom-full mb-1 bg-[#0b1c1e] border border-[#153c3f] rounded-lg px-2.5 py-1.5 shadow-xl text-[10px] text-slate-300 whitespace-nowrap max-w-[220px] overflow-hidden text-ellipsis ${mine ? 'right-0' : 'left-0'}`}>
+                                      {lecteurs.length === 0
+                                        ? 'Pas encore vu'
+                                        : `Vu par ${lecteurs.map((r) => r.userName || 'Utilisateur').join(', ')}`}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
@@ -4202,28 +4224,6 @@ export default function ClientProfileView({
               </div>
             )}
 
-            {readByModalMsg && (
-              <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => setReadByModalMsg(null)}>
-                <div onClick={(e) => e.stopPropagation()} className="bg-[#07191b] border border-[#1b4e52] rounded-2xl max-w-xs w-full p-5 text-white shadow-2xl">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-bold">Vu par</h4>
-                    <button onClick={() => setReadByModalMsg(null)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
-                  </div>
-                  {readByModalMsg.readBy.filter((r) => r.userId !== currentUserId).length === 0 ? (
-                    <p className="text-xs text-slate-500">Pas encore vu.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {readByModalMsg.readBy.filter((r) => r.userId !== currentUserId).map((r) => (
-                        <div key={r.userId} className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-slate-200">{r.userName}</span>
-                          <span className="text-slate-500">{new Date(r.readAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
