@@ -163,6 +163,19 @@ export default function AcademyView() {
   const [dossierEnDepot, setDossierEnDepot] = useState<string | null>(null);
   const [dossierSurvole, setDossierSurvole] = useState<string | null>(null);
   const [deplacementEnCours, setDeplacementEnCours] = useState<string | null>(null);
+  // Demande explicite (1er octobre) : « quand on rentre dans un dossier, je
+  // voudrais avoir la possibilité d'organiser comme je le souhaite en
+  // glisser-déposer, les documents qui sont à l'intérieur » — jusqu'ici, une
+  // procédure se glissait déjà (draggable={estSuperAdmin} sur chaque
+  // <article>, voir plus bas), mais UNIQUEMENT vers un autre dossier (les
+  // pastilles de rubrique) : rien ne consommait ce glisser en le déposant sur
+  // une AUTRE procédure, donc aucun moyen de les réordonner entre elles au
+  // sein d'un même dossier. Même mécanique que dossierSurvoleParDossier/
+  // dossierSurvolIntention ci-dessus (avant/après selon la moitié gauche/
+  // droite survolée), simplifiée : pas de notion "dans" ici, une procédure
+  // ne peut pas en contenir une autre.
+  const [ressourceSurvolee, setRessourceSurvolee] = useState<string | null>(null);
+  const [ressourceSurvolIntention, setRessourceSurvolIntention] = useState<'avant' | 'apres' | null>(null);
   const dossierPourVisuel = useRef<string | null>(null);
   const [menuDossier, setMenuDossier] = useState<string | null>(null);
   // Demandé le 2 septembre : « ici, je voudrais rajouter une image de fond au
@@ -491,16 +504,33 @@ export default function AcademyView() {
 
   const visibles = useMemo(() => {
     const q = recherche.trim().toLowerCase();
-    return ressources.filter((r) => {
-      if (dossierActif && r.rubrique !== dossierActif) return false;
-      if (!q) return true;
-      return (
-        r.titre.toLowerCase().includes(q) ||
-        (r.description || '').toLowerCase().includes(q) ||
-        (r.auteur || '').toLowerCase().includes(q) ||
-        r.rubrique.toLowerCase().includes(q)
+    return ressources
+      .filter((r) => {
+        if (dossierActif && r.rubrique !== dossierActif) return false;
+        if (!q) return true;
+        return (
+          r.titre.toLowerCase().includes(q) ||
+          (r.description || '').toLowerCase().includes(q) ||
+          (r.auteur || '').toLowerCase().includes(q) ||
+          r.rubrique.toLowerCase().includes(q)
+        );
+      })
+      // Tri explicite (1er octobre, glisser-déposer pour réordonner) :
+      // `ressources` n'est trié que lors du CHARGEMENT initial (même ordre à
+      // 3 clés que la requête `.order()` dans `charger` : rubrique, position,
+      // created_at) — après une mise à jour optimiste de position par
+      // renumeroterRessources, l'ORDRE du tableau ne change pas, seul le
+      // champ `position` de chaque élément change. Sans ce tri ici, la
+      // grille ne refléterait le nouvel ordre qu'après un rechargement
+      // complet. Rubrique conservée en première clé pour ne rien changer à
+      // l'affichage pendant une recherche (plusieurs rubriques mélangées) :
+      // sans objet ici (dossierActif filtre déjà à une seule rubrique) quand
+      // on réordonne réellement.
+      .sort((a, b) =>
+        a.rubrique.localeCompare(b.rubrique, 'fr') ||
+        a.position - b.position ||
+        a.created_at.localeCompare(b.created_at)
       );
-    });
   }, [ressources, recherche, dossierActif]);
 
   const reinitialiserFormulaire = () => {
@@ -838,6 +868,56 @@ export default function AcademyView() {
     if (position === 'apres') indexCible += 1;
     fratrie.splice(indexCible, 0, nomSource);
     await renumeroterFratrie(fratrie);
+  };
+
+  /**
+   * Même principe que renumeroterFratrie/reordonnerDossier ci-dessus, pour
+   * les procédures d'une même rubrique (dossier) — demande explicite (1er
+   * octobre) : glisser-déposer pour organiser les documents à l'intérieur
+   * d'un dossier. Écrit ligne par ligne (même raison que pour les dossiers :
+   * ne dépendre d'aucune hypothèse sur le comportement d'une écriture
+   * multi-lignes vis-à-vis des règles RLS).
+   */
+  const renumeroterRessources = async (rubrique: string, nouvelOrdre: string[]) => {
+    const avant = ressources;
+    setRessources((prev) => {
+      const parId = new Map(prev.map((r) => [r.id, r]));
+      nouvelOrdre.forEach((id, i) => {
+        const r = parId.get(id);
+        if (r) parId.set(id, { ...r, position: i });
+      });
+      return Array.from(parId.values());
+    });
+    try {
+      for (let i = 0; i < nouvelOrdre.length; i++) {
+        const { error } = await supabase
+          .from('academy_resources' as any)
+          .update({ position: i } as any)
+          .eq('id', nouvelOrdre[i]);
+        if (error) throw error;
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Impossible d'enregistrer ce nouvel ordre.");
+      setRessources(avant);
+    }
+  };
+
+  const reordonnerRessource = async (idSource: string, idCible: string, position: 'avant' | 'apres') => {
+    if (idSource === idCible) return;
+    const cible = ressources.find((r) => r.id === idCible);
+    const source = ressources.find((r) => r.id === idSource);
+    if (!cible || !source || source.rubrique !== cible.rubrique) return;
+    const fratrie = ressources
+      .filter((r) => r.rubrique === cible.rubrique)
+      .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at))
+      .map((r) => r.id)
+      .filter((id) => id !== idSource);
+    let indexCible = fratrie.indexOf(idCible);
+    if (indexCible === -1) return;
+    if (position === 'apres') indexCible += 1;
+    fratrie.splice(indexCible, 0, idSource);
+    await renumeroterRessources(cible.rubrique, fratrie);
   };
 
   /**
@@ -1752,9 +1832,42 @@ export default function AcademyView() {
                     key={r.id}
                     draggable={estSuperAdmin}
                     onDragStart={(e) => e.dataTransfer.setData('text/plain', r.id)}
+                    // Réordonner au sein du dossier (1er octobre) : déposer sur
+                    // la moitié gauche/droite d'une procédure la réordonne
+                    // avant/après elle — actif seulement dans un dossier ouvert
+                    // et hors recherche (dansUnDossier : visibles ne mélange
+                    // alors qu'une seule rubrique, comme pour les pastilles de
+                    // rubrique plus haut).
+                    onDragOver={(e) => {
+                      if (!estSuperAdmin || !dansUnDossier) return;
+                      e.preventDefault();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const fraction = (e.clientX - rect.left) / rect.width;
+                      setRessourceSurvolee(r.id);
+                      setRessourceSurvolIntention(fraction < 0.5 ? 'avant' : 'apres');
+                    }}
+                    onDragLeave={() => {
+                      setRessourceSurvolee((v) => (v === r.id ? null : v));
+                      setRessourceSurvolIntention((v) => (ressourceSurvolee === r.id ? null : v));
+                    }}
+                    onDrop={(e) => {
+                      if (!estSuperAdmin || !dansUnDossier) return;
+                      e.preventDefault();
+                      const intention = ressourceSurvolIntention;
+                      setRessourceSurvolee(null);
+                      setRessourceSurvolIntention(null);
+                      const idSource = e.dataTransfer.getData('text/plain');
+                      if (idSource && intention) void reordonnerRessource(idSource, r.id, intention);
+                    }}
                     className={`group relative bg-white rounded-sm overflow-hidden shadow-xl flex flex-col transition-transform duration-200 hover:-translate-y-1 ${
                       estSuperAdmin ? 'cursor-grab active:cursor-grabbing' : ''
-                    } ${deplacementEnCours === r.id ? 'opacity-50' : ''}`}
+                    } ${deplacementEnCours === r.id ? 'opacity-50' : ''} ${
+                      ressourceSurvolee === r.id
+                        ? ressourceSurvolIntention === 'avant'
+                          ? 'border-l-4 border-l-[#E0A21A]'
+                          : 'border-r-4 border-r-[#E0A21A]'
+                        : ''
+                    }`}
                   >
                     {/* Couverture */}
                     <button
