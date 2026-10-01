@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText, PlayCircle, Plus, Search, Trash2, X, Loader2, Upload, Link as LinkIcon, Pencil,
   CheckCircle2, Circle, Users, ImagePlus, GraduationCap, LayoutGrid, List as ListIcon,
-  MoreVertical, ImageOff, Maximize2, Minimize2, Unlock, ArrowUp, ArrowDown,
+  MoreVertical, ImageOff, Maximize2, Minimize2, Unlock, ArrowUp, ArrowDown, ArrowLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -249,6 +249,15 @@ export default function AcademyView() {
   const [enModification, setEnModification] = useState<Ressource | null>(null);
   const [titre, setTitre] = useState('');
   const [rubrique, setRubrique] = useState(RUBRIQUES_SUGGEREES[0]);
+  // Bascule le champ Rubrique vers la saisie libre d'un nom inédit — demandé
+  // le 1er octobre : « avoir plus de choix dans la rubrique pour pouvoir le
+  // déplacer facilement ». Par défaut (false), la rubrique est un menu
+  // déroulant listant tous les dossiers existants : en modification, changer
+  // de dossier tient en un seul choix dans la liste, visible d'un coup —
+  // l'ancien champ texte + suggestions au clavier (datalist) ne montrait
+  // aucun choix tant qu'on n'avait pas commencé à taper, et le datalist ne
+  // s'affiche pas du tout sur certaines tablettes.
+  const [nouvelleRubrique, setNouvelleRubrique] = useState(false);
   const [description, setDescription] = useState('');
   const [type, setType] = useState<'pdf' | 'video'>('pdf');
   const [duree, setDuree] = useState('');
@@ -540,6 +549,7 @@ export default function AcademyView() {
     // ajoute presque toujours une procédure DEPUIS le dossier où on veut la
     // ranger, pas en pigeant une rubrique au hasard dans la liste.
     setRubrique(dossierActif || rubriques[0]?.[0] || RUBRIQUES_SUGGEREES[0]);
+    setNouvelleRubrique(false);
     setDescription('');
     setType('pdf');
     setDuree('');
@@ -561,6 +571,7 @@ export default function AcademyView() {
     setEnModification(r);
     setTitre(r.titre);
     setRubrique(r.rubrique);
+    setNouvelleRubrique(false);
     setDescription(r.description || '');
     setType(r.type);
     setDuree(r.duree || '');
@@ -1226,24 +1237,35 @@ export default function AcademyView() {
   return (
     <div
       className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 min-h-[calc(100vh-4rem)]"
-      style={{
-        backgroundColor: '#F7F1E5',
-        backgroundImage: fond ? `url(${fond})` : undefined,
-        backgroundSize: 'cover',
-        backgroundPosition: 'top center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'local',
-      }}
+      style={{ backgroundColor: '#F7F1E5' }}
     >
-      {/* Signalé le 2 septembre, capture à l'appui : la barre passait encore
-          sur « ACADEMY ». L'image est affichée en `cover` et ancrée en haut :
-          sa hauteur à l'écran suit donc la LARGEUR de la fenêtre, et un
-          espacement en pixels fixes ne peut pas suivre. L'espacement est
-          exprimé en pourcentage de la largeur (17vw), borné pour rester
-          raisonnable sur un très petit et un très grand écran. */}
+      {/* Bandeau d'image séparé du reste — signalé le 2 septembre (la barre
+          passait sur « ACADEMY ») puis le 1er octobre (« le fond n'est pas
+          bien centré »). La première version posait l'image en `cover` sur
+          CE DIV EXTÉRIEUR, dont la hauteur suit tout le contenu (donc varie
+          selon le nombre de dossiers/procédures affichés) : `cover` zoomait
+          alors différemment selon l'écran consulté, et le logo n'était bien
+          centré que par coïncidence. Le bandeau a maintenant sa PROPRE
+          hauteur fixe (indépendante du contenu en dessous) : le même cadrage
+          de l'image est donc toujours visible, quel que soit le dossier
+          ouvert. La hauteur reste exprimée en pourcentage de la largeur
+          (17vw, bornée) pour garder le même cadrage apparent sur un petit
+          comme sur un grand écran. */}
+      {fond && (
+        <div
+          className="w-full"
+          style={{
+            height: 'clamp(140px, 17vw, 380px)',
+            backgroundImage: `url(${fond})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          }}
+        />
+      )}
       <div
         className="px-4 sm:px-6 lg:px-8 pb-16"
-        style={{ paddingTop: fond ? 'clamp(140px, 17vw, 380px)' : '2.5rem' }}
+        style={{ paddingTop: fond ? undefined : '2.5rem' }}
       >
         <div className="max-w-6xl mx-auto">
           {/* Sans image de fond, l'écran a besoin de son titre. Avec, l'image
@@ -2033,6 +2055,19 @@ export default function AcademyView() {
         <div ref={cadreLecteur} className="fixed inset-0 z-[100] bg-[#050f11] flex flex-col">
           <div className="flex items-center justify-between gap-4 px-4 sm:px-6 py-3 border-b border-[#144447]/60 bg-[#07191b] shrink-0">
             <div className="flex items-center gap-3 min-w-0">
+              {/* Flèche de retour — demandée le 1er octobre : « je n'ai pas
+                  la flèche au retour pour sortir du fichier que je suis en
+                  train de visualiser ». Le bouton « Fermer » existait déjà à
+                  droite, mais rien à gauche ne signalait qu'on pouvait
+                  revenir en arrière — le geste le plus naturel pour sortir
+                  d'un lecteur plein écran. */}
+              <button
+                onClick={() => setOuverte(null)}
+                title="Retour"
+                className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
               {ouverte.auteur_photo_url ? (
                 <img src={ouverte.auteur_photo_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0 ring-1 ring-white/10" />
               ) : (
@@ -2155,17 +2190,56 @@ export default function AcademyView() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">Rubrique</label>
-                <input
-                  list="academy-rubriques"
-                  value={rubrique}
-                  onChange={(e) => setRubrique(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#030d0f] border border-[#153c3f] text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
-                />
-                <datalist id="academy-rubriques">
-                  {[...new Set([...rubriques.map(([n]) => n), ...RUBRIQUES_SUGGEREES])].map((n) => (
-                    <option key={n} value={n} />
-                  ))}
-                </datalist>
+                {/* Menu déroulant plutôt qu'un champ texte + suggestions
+                    (datalist) — demandé le 1er octobre : « avoir plus de
+                    choix dans la rubrique pour pouvoir le déplacer
+                    facilement ». Tous les dossiers existants (y compris
+                    vides, voir `rubriques` plus haut) sont là, visibles d'un
+                    coup ; « + Nouvelle rubrique… » bascule vers la saisie
+                    libre pour en créer une qui n'existe pas encore. */}
+                {nouvelleRubrique ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      autoFocus
+                      value={rubrique}
+                      onChange={(e) => setRubrique(e.target.value)}
+                      placeholder="Nom de la rubrique"
+                      className="w-full min-w-0 px-3 py-2.5 rounded-xl bg-[#030d0f] border border-[#153c3f] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNouvelleRubrique(false);
+                        setRubrique(dossierActif || rubriques[0]?.[0] || RUBRIQUES_SUGGEREES[0]);
+                      }}
+                      title="Choisir dans la liste des dossiers existants"
+                      className="shrink-0 text-[10px] font-bold text-slate-400 hover:text-white underline decoration-dotted underline-offset-2"
+                    >
+                      Liste
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={rubrique}
+                    onChange={(e) => {
+                      if (e.target.value === '__nouvelle__') {
+                        setNouvelleRubrique(true);
+                        setRubrique('');
+                      } else {
+                        setRubrique(e.target.value);
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl bg-[#030d0f] border border-[#153c3f] text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
+                  >
+                    {[...new Set([...rubriques.map(([n]) => n), ...RUBRIQUES_SUGGEREES, rubrique])]
+                      .filter(Boolean)
+                      .sort((a, b) => a.localeCompare(b, 'fr'))
+                      .map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    <option value="__nouvelle__">+ Nouvelle rubrique…</option>
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">Type</label>
