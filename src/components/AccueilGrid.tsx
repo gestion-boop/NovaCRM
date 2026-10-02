@@ -2150,39 +2150,54 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
 
   // Écrit l'ensemble des verrous de l'agence — affichage optimiste, annulé
   // si l'écriture échoue.
+  //
+  // Signalé le 2 octobre (« j'ajoute une tuile dans le dossier verrouillé,
+  // elle ne s'ajoute pas aux autres ») : un aléa réseau passager (fréquent
+  // sur tablette) pendant l'un des deux aller-retours ci-dessous faisait
+  // échouer l'écriture UNE fois ; le verrou repartait alors en arrière côté
+  // serveur, et RIEN ne retentait — seul un toast, facile à manquer sur le
+  // moment, le signalait. La tuile restait bien visible dans `tiles` (jamais
+  // annulé, lui) : l'auteur de l'ajout continuait donc à la voir chez lui,
+  // sans aucun signe que les autres, eux, ne l'avaient jamais reçue. Trois
+  // essais, avec une courte pause entre chacun, avant d'abandonner pour de
+  // bon et d'avertir.
   const enregistrerVerrous = async (next: Record<string, Verrou>, precedent: Record<string, Verrou>) => {
     if (!activeAgency?.id) return;
+    const agencyId = activeAgency.id;
     setLockedTiles(next);
-    const { data: existing } = await supabase
-      .from('agency_ui_settings')
-      .select('home_layout')
-      .eq('agency_id', activeAgency.id)
-      .maybeSingle();
-    const nextHomeLayout = { ...((existing?.home_layout as any) || {}), lockedTiles: next };
-    // 3 septembre : un UPDATE refusé par la sécurité de la base, ou sans
-    // ligne pour cette agence, ne renvoie aucune erreur — zéro ligne
-    // modifiée, et le verrou revenait au rechargement suivant comme si de
-    // rien n'était (« je dissous le dossier, rien ne fonctionne »). On
-    // redemande la ligne écrite ; si elle manque, on la crée ; et si la base
-    // refuse, on le dit au lieu de faire comme si.
-    const { data: ecrites, error } = await supabase
-      .from('agency_ui_settings')
-      .update({ home_layout: nextHomeLayout, updated_at: new Date().toISOString() })
-      .eq('agency_id', activeAgency.id)
-      .select('agency_id');
-    let echec: string | null = error ? error.message : null;
-    if (!error && (!ecrites || ecrites.length === 0)) {
-      const { error: errInsert } = await supabase
+    let echec: string | null = null;
+    for (let tentative = 1; tentative <= 3; tentative += 1) {
+      const { data: existing } = await supabase
         .from('agency_ui_settings')
-        .insert({ agency_id: activeAgency.id, home_layout: nextHomeLayout, updated_at: new Date().toISOString() } as any)
+        .select('home_layout')
+        .eq('agency_id', agencyId)
+        .maybeSingle();
+      const nextHomeLayout = { ...((existing?.home_layout as any) || {}), lockedTiles: next };
+      // 3 septembre : un UPDATE refusé par la sécurité de la base, ou sans
+      // ligne pour cette agence, ne renvoie aucune erreur — zéro ligne
+      // modifiée, et le verrou revenait au rechargement suivant comme si de
+      // rien n'était (« je dissous le dossier, rien ne fonctionne »). On
+      // redemande la ligne écrite ; si elle manque, on la crée ; et si la
+      // base refuse, on le dit au lieu de faire comme si.
+      const { data: ecrites, error } = await supabase
+        .from('agency_ui_settings')
+        .update({ home_layout: nextHomeLayout, updated_at: new Date().toISOString() })
+        .eq('agency_id', agencyId)
         .select('agency_id');
-      if (errInsert) echec = `réglages de l'agence introuvables et impossibles à créer (${errInsert.message})`;
+      echec = error ? error.message : null;
+      if (!error && (!ecrites || ecrites.length === 0)) {
+        const { error: errInsert } = await supabase
+          .from('agency_ui_settings')
+          .insert({ agency_id: agencyId, home_layout: nextHomeLayout, updated_at: new Date().toISOString() } as any)
+          .select('agency_id');
+        echec = errInsert ? `réglages de l'agence introuvables et impossibles à créer (${errInsert.message})` : null;
+      }
+      if (!echec) return;
+      if (tentative < 3) await new Promise((resolve) => setTimeout(resolve, 600 * tentative));
     }
-    if (echec) {
-      console.error('Erreur verrouillage tuile :', echec);
-      setLockedTiles(precedent);
-      toast.error(`Verrou non enregistré : ${echec}`);
-    }
+    console.error('Erreur verrouillage tuile :', echec);
+    setLockedTiles(precedent);
+    toast.error(`Verrou non enregistré : ${echec}`);
   };
 
   // Audit du 2 septembre : le verrou était une PHOTO prise au moment du clic
