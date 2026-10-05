@@ -4,7 +4,7 @@ import {
   Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown, ChevronRight,
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Mic2, Square, Eye, ArrowLeft, Check, CheckCheck,
-  Clock, Camera, Lock, Paperclip,
+  Clock, Camera, Lock, Paperclip, FileText, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -419,6 +419,121 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     TEAM_MEMBERS.forEach((m) => { if (!map[m.id]) map[m.id] = { uid: m.id, displayName: m.name, email: m.email }; });
     return map;
   }, [allProfiles]);
+
+  // Bouton "Documents" (super admins) — demandé le 5 octobre : « avoir
+  // accès à tous les documents qui ont été envoyés... rechercher beaucoup
+  // plus rapidement ». Agrège les pièces jointes (images et fichiers) des
+  // conversations ET des canaux, pour l'agence active, avec une recherche
+  // texte. Nécessite les policies RLS messages_select_superadmin et
+  // conversations_select_superadmin (migrations du 5 octobre) : sans
+  // elles, un super admin ne verrait que les conversations dont il est
+  // lui-même membre — pas un accès réellement global. Les canaux, eux,
+  // étaient déjà entièrement lisibles par les super admins (can_access_chat_project
+  // et can_view_chat_channel ont toujours inclus ce bypass).
+  const [showDocuments, setShowDocuments] = useState(false);
+  const [chargementDocuments, setChargementDocuments] = useState(false);
+  const [documentsMessagerie, setDocumentsMessagerie] = useState<
+    { id: string; genre: 'image' | 'file'; nom: string; url: string; expediteur: string; lieu: string; lieuType: 'Conversation' | 'Canal'; date: string }[]
+  >([]);
+  const [rechercheDocuments, setRechercheDocuments] = useState('');
+
+  const LIMITE_DOCUMENTS = 300;
+
+  const chargerDocumentsMessagerie = async () => {
+    if (!activeAgency?.id) return;
+    setChargementDocuments(true);
+    try {
+      await ensureProfilesLoaded();
+
+      const [{ data: msgRows, error: errMsg }, { data: convRows }] = await Promise.all([
+        supabase
+          .from('messages')
+          .select('id, conversation_id, user_id, kind, body, attachment_url, created_at')
+          .not('conversation_id', 'is', null)
+          .in('kind', ['image', 'file'])
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(LIMITE_DOCUMENTS),
+        supabase.from('conversations').select('id, title, type, agency_id'),
+      ]);
+      if (errMsg) throw errMsg;
+      const convById = new Map(
+        ((convRows || []) as { id: string; title: string | null; type: string; agency_id: string | null }[]).map((c) => [c.id, c])
+      );
+      const docsConv = ((msgRows || []) as { id: string; conversation_id: string; user_id: string; kind: string; body: string | null; attachment_url: string | null; created_at: string }[])
+        .filter((m) => m.attachment_url)
+        .map((m) => {
+          const conv = convById.get(m.conversation_id);
+          return { m, conv };
+        })
+        .filter((x): x is { m: typeof x.m; conv: NonNullable<typeof x.conv> } =>
+          Boolean(x.conv) && (activeAgency.id === 'all' || x.conv!.agency_id === activeAgency.id || x.conv!.agency_id === null)
+        )
+        .map(({ m, conv }) => ({
+          id: m.id,
+          genre: m.kind as 'image' | 'file',
+          nom: m.body || (m.kind === 'image' ? 'Photo' : 'Document'),
+          url: m.attachment_url as string,
+          expediteur: profileByUid[m.user_id]?.displayName || 'Utilisateur',
+          lieu: conv.title || (conv.type === 'group' ? 'Groupe' : 'Conversation'),
+          lieuType: 'Conversation' as const,
+          date: m.created_at,
+        }));
+
+      const [{ data: chanRows, error: errChan }, { data: channelRows }, { data: projectRows }] = await Promise.all([
+        supabase
+          .from('chat_messages')
+          .select('id, channel, data, created_at')
+          .eq('is_deleted', false)
+          .order('created_at', { ascending: false })
+          .limit(LIMITE_DOCUMENTS),
+        supabase.from('chat_channels').select('id, name, project_id'),
+        supabase.from('chat_projects').select('id, agency_id'),
+      ]);
+      if (errChan) throw errChan;
+      const channelById = new Map(((channelRows || []) as { id: string; name: string; project_id: string }[]).map((c) => [c.id, c]));
+      const agencyByProjectId = new Map(((projectRows || []) as { id: string; agency_id: string | null }[]).map((p) => [p.id, p.agency_id]));
+      const docsChan = ((chanRows || []) as { id: string; channel: string; data: any; created_at: string }[])
+        .filter((r) => (r.data?.kind === 'image' || r.data?.kind === 'file') && r.data?.attachmentUrl)
+        .map((r) => {
+          const chan = channelById.get(r.channel);
+          const agencyId = chan ? agencyByProjectId.get(chan.project_id) : undefined;
+          return { r, chan, agencyId };
+        })
+        .filter((x) => x.chan && (activeAgency.id === 'all' || x.agencyId === activeAgency.id || x.agencyId === null || x.agencyId === undefined))
+        .map(({ r, chan }) => ({
+          id: r.id,
+          genre: r.data.kind as 'image' | 'file',
+          nom: r.data.body || (r.data.kind === 'image' ? 'Photo' : 'Document'),
+          url: r.data.attachmentUrl as string,
+          expediteur: r.data.sender_name || profileByUid[r.data.sender_id]?.displayName || 'Utilisateur',
+          lieu: chan!.name,
+          lieuType: 'Canal' as const,
+          date: r.created_at,
+        }));
+
+      setDocumentsMessagerie(
+        [...docsConv, ...docsChan].sort((a, b) => b.date.localeCompare(a.date))
+      );
+    } catch (e) {
+      toast.error((e as Error)?.message || 'Impossible de charger les documents.');
+    } finally {
+      setChargementDocuments(false);
+    }
+  };
+
+  const ouvrirDocuments = () => {
+    setShowDocuments(true);
+    void chargerDocumentsMessagerie();
+  };
+
+  const documentsFiltres = useMemo(() => {
+    const q = rechercheDocuments.trim().toLowerCase();
+    if (!q) return documentsMessagerie;
+    return documentsMessagerie.filter(
+      (d) => d.nom.toLowerCase().includes(q) || d.expediteur.toLowerCase().includes(q) || d.lieu.toLowerCase().includes(q)
+    );
+  }, [documentsMessagerie, rechercheDocuments]);
 
   const ensureProfilesLoaded = async () => {
     if (allProfiles.length > 0) return;
@@ -3383,17 +3498,35 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             );
           })}
         </div>
-        {tab === 'conversations' && (
-          <button
-            onClick={() => { setShowNewConvModal(true); ensureProfilesLoaded(); }}
-            aria-label="Nouvelle conversation"
-            title="Nouvelle conversation"
-            className={`shrink-0 ${isMobile ? 'w-10 h-10 rounded-full justify-center' : 'px-4 py-2 rounded-xl gap-1.5'} text-sm font-bold bg-[#F7BC5F] text-slate-950 hover:bg-[#d4a83b] flex items-center`}
-          >
-            <Plus className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
-            {!isMobile && 'Nouveau'}
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* "Documents" épinglé — super admins uniquement (5 octobre) :
+              accès global, recherchable, à toutes les pièces jointes
+              envoyées dans la messagerie (conversations + canaux), pour
+              retrouver un document sans se souvenir de la conversation où
+              il a été envoyé. */}
+          {isSuperAdmin && (
+            <button
+              onClick={ouvrirDocuments}
+              aria-label="Documents"
+              title="Tous les documents envoyés dans la messagerie"
+              className={`shrink-0 ${isMobile ? 'w-10 h-10 rounded-full justify-center' : 'px-3.5 py-2 rounded-xl gap-1.5'} text-sm font-bold bg-white/10 text-white hover:bg-white/20 flex items-center border border-white/10`}
+            >
+              <FileText className={isMobile ? 'w-4 h-4' : 'w-4 h-4'} />
+              {!isMobile && 'Documents'}
+            </button>
+          )}
+          {tab === 'conversations' && (
+            <button
+              onClick={() => { setShowNewConvModal(true); ensureProfilesLoaded(); }}
+              aria-label="Nouvelle conversation"
+              title="Nouvelle conversation"
+              className={`shrink-0 ${isMobile ? 'w-10 h-10 rounded-full justify-center' : 'px-4 py-2 rounded-xl gap-1.5'} text-sm font-bold bg-[#F7BC5F] text-slate-950 hover:bg-[#d4a83b] flex items-center`}
+            >
+              <Plus className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
+              {!isMobile && 'Nouveau'}
+            </button>
+          )}
+        </div>
       </div>
       )}
 
@@ -5202,6 +5335,75 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal "Documents" — accès global super admin (5 octobre), voir
+          chargerDocumentsMessagerie plus haut. */}
+      {showDocuments && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowDocuments(false)}
+        >
+          <div
+            className="bg-[#0E1A20] border border-white/10 rounded-2xl max-w-2xl w-full p-5 text-white space-y-4 max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between shrink-0">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#F7BC5F]" /> Documents de la messagerie
+              </h3>
+              <button onClick={() => setShowDocuments(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="relative shrink-0">
+              <input
+                value={rechercheDocuments}
+                onChange={(e) => setRechercheDocuments(e.target.value)}
+                placeholder="Rechercher par nom de fichier, expéditeur, conversation ou canal..."
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[#030d0f] border border-white/10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+                autoFocus
+              />
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1.5">
+              {chargementDocuments ? (
+                <div className="flex items-center justify-center py-10 text-slate-400 text-sm gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Chargement...
+                </div>
+              ) : documentsFiltres.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-10">
+                  {rechercheDocuments ? 'Aucun document ne correspond à cette recherche.' : 'Aucun document trouvé.'}
+                </p>
+              ) : (
+                documentsFiltres.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => void ouvrirPieceJointe(d.url)}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 text-left"
+                  >
+                    {d.genre === 'image' ? (
+                      <img src={d.url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 border border-white/10" />
+                    ) : (
+                      <span className="w-10 h-10 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] flex items-center justify-center shrink-0">
+                        <FileText className="w-4 h-4" />
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-white truncate">{d.nom}</p>
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {d.expediteur} · {d.lieuType} « {d.lieu} » · {new Date(d.date).toLocaleDateString('fr-FR')}
+                      </p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
