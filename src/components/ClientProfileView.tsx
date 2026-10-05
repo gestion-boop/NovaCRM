@@ -30,7 +30,7 @@ import { consentSignedAt, consentValidUntil, isConsentExpired, latestConsent, fo
 import ConsentViewDialog, { useLeadConsents, useConsentSenders, downloadConsentPdf } from './consent/ConsentViewDialog';
 import ConsentStatusBadge from './consent/ConsentStatusBadge';
 import ConsentDocument from './consent/ConsentDocument';
-import { formatCurrency, cn, htDepuisTtc, ttcDepuisHt } from '@/lib/utils';
+import { formatCurrency, cn, htDepuisTtc, ttcDepuisHt, ouvrirPieceJointe } from '@/lib/utils';
 import { NOVA_QUICK_REACTIONS, renderEmojiOrNova } from '@/lib/novaReactions';
 import { toast } from 'sonner';
 import TaskModal from './TaskModal';
@@ -4102,9 +4102,13 @@ export default function ClientProfileView({
                                       </button>
                                     )}
                                     {m.kind === 'file' && m.attachmentUrl && (
-                                      <a href={m.attachmentUrl} download={m.body || 'document'} className="flex items-center gap-2 underline">
+                                      <button
+                                        type="button"
+                                        onClick={() => void ouvrirPieceJointe(m.attachmentUrl as string)}
+                                        className="flex items-center gap-2 underline text-left"
+                                      >
                                         <FileText className="w-4 h-4 shrink-0" /> {m.body || 'Document'}
-                                      </a>
+                                      </button>
                                     )}
                                     {m.kind === 'voice' && m.attachmentUrl && (
                                       <div className="flex items-center gap-2">

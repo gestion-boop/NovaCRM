@@ -18,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
+import { ouvrirPieceJointe } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ChevronLeft, Plus, Trash2, Calendar, X, Loader2, User, CheckSquare, Image as ImageIcon, Mic, Square, Send, Paperclip, MessageCircle, Eye, Users as UsersIcon, Check, Pencil } from 'lucide-react';
 import { InternalTask, InternalTaskStatus, InternalTaskPriority } from '@/types';
@@ -1359,9 +1360,13 @@ const TaskDetailModal: React.FC<{
                               </div>
                             )}
                             {m.kind === 'file' && m.attachmentUrl && (
-                              <a href={m.attachmentUrl} download={m.body || 'document'} className="flex items-center gap-1.5 underline">
+                              <button
+                                type="button"
+                                onClick={() => void ouvrirPieceJointe(m.attachmentUrl as string)}
+                                className="flex items-center gap-1.5 underline text-left"
+                              >
                                 <Paperclip className="w-3 h-3 shrink-0" /> {m.body || 'Document'}
-                              </a>
+                              </button>
                             )}
                           </div>
                         </div>

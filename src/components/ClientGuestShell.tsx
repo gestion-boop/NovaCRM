@@ -6,6 +6,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { assemblerDictee } from '@/lib/dictee';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
+import { ouvrirPieceJointe } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { useLeadChat, LeadMessage } from '@/hooks/useLeadChat';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -494,9 +495,13 @@ const ClientGuestShell: React.FC = () => {
                         </button>
                       )}
                       {m.kind === 'file' && m.attachmentUrl && (
-                        <a href={m.attachmentUrl} download={m.body || 'document'} className="flex items-center gap-2 underline">
+                        <button
+                          type="button"
+                          onClick={() => void ouvrirPieceJointe(m.attachmentUrl as string)}
+                          className="flex items-center gap-2 underline text-left"
+                        >
                           <FileText className="w-4 h-4 shrink-0" /> {m.body || 'Document'}
-                        </a>
+                        </button>
                       )}
                       {m.kind === 'voice' && m.attachmentUrl && (
                         <div className="flex items-center gap-2">

@@ -81,3 +81,34 @@ export function formatVille(value: string): string {
       return mot.charAt(0).toLocaleUpperCase('fr') + mot.slice(1);
     });
 }
+
+/**
+ * Ouvre dans un nouvel onglet une pièce jointe de message stockée en data
+ * URL (photo, PDF — voir ChatViewSupabase.tsx, ClientProfileView.tsx,
+ * InternalProjectBoard.tsx : pas d'upload Storage séparé, le fichier vit
+ * directement dans la ligne du message).
+ *
+ * Signalé le 5 octobre : « les pdfs que j'ai inséré ne s'ouvre pas ». Un
+ * simple <a href="data:...;base64,..." target="_blank"> échoue en
+ * silence sur plusieurs navigateurs (Safari/iOS en tête) dès que l'URL
+ * dépasse quelques centaines de ko — un PDF de quelques Mo en base64 y
+ * arrive en quelques secondes. La reconversion en Blob puis en URL
+ * `blob:` (bien plus courte, sans cette limite) avant l'ouverture est la
+ * façon fiable de procéder, cross-navigateur.
+ */
+export async function ouvrirPieceJointe(dataUrl: string): Promise<void> {
+  try {
+    const reponse = await fetch(dataUrl);
+    const blob = await reponse.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    // Laisse le temps au nouvel onglet de charger le contenu avant de
+    // libérer la mémoire : un retrait immédiat casse l'ouverture sur
+    // certains navigateurs, qui chargent la ressource de façon différée.
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+  } catch {
+    // Au pire, ouverture directe de la data URL — le comportement d'avant
+    // ce correctif, toujours mieux que rien si fetch() échoue.
+    window.open(dataUrl, '_blank', 'noopener,noreferrer');
+  }
+}

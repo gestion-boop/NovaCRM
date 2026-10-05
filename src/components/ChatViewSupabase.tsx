@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
 import { assemblerDictee } from '@/lib/dictee';
+import { ouvrirPieceJointe } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { AGENCIES } from '@/types';
@@ -3732,9 +3733,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                     </div>
                                   )}
                                   {m.kind === 'file' && m.attachment_url && (
-                                    <a href={m.attachment_url} target="_blank" rel="noreferrer" className="underline text-xs">
+                                    <button
+                                      type="button"
+                                      onClick={() => void ouvrirPieceJointe(m.attachment_url as string)}
+                                      className="underline text-xs text-left"
+                                    >
                                       {m.body || 'Document'}
-                                    </a>
+                                    </button>
                                   )}
                                   {m.edited_at && <span className="text-[9px] italic opacity-60 ml-1">(modifié)</span>}
                                 </>
@@ -4446,10 +4451,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         ) : m.data?.kind === 'file' && m.data?.attachmentUrl ? (
                           // PDF dans un canal (5 octobre) : même rendu que les
                           // conversations directes (voir plus haut, m.kind === 'file').
-                          <a href={m.data.attachmentUrl} target="_blank" rel="noreferrer" className="underline text-xs flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => void ouvrirPieceJointe(m.data.attachmentUrl as string)}
+                            className="underline text-xs flex items-center gap-1.5 text-left"
+                          >
                             <Paperclip className="w-3.5 h-3.5 shrink-0" />
                             {m.data.body || 'Document'}
-                          </a>
+                          </button>
                         ) : (
                           // select-text : voir le commentaire équivalent côté conversations
                           // directes plus haut (même correctif, même cause : select-none racine).
