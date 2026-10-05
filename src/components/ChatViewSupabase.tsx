@@ -4,7 +4,7 @@ import {
   Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown, ChevronRight,
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Mic2, Square, Eye, ArrowLeft, Check, CheckCheck,
-  Clock, Camera, Lock,
+  Clock, Camera, Lock, Paperclip,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -1446,6 +1446,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // choisi passe par le même gestionnaire), seul l'attribut `capture` change,
   // qui demande au téléphone d'ouvrir l'appareil photo plutôt que la galerie.
   const channelCameraInputRef = useRef<HTMLInputElement>(null);
+  const channelFileInputRef = useRef<HTMLInputElement>(null);
   const convCameraInputRef = useRef<HTMLInputElement>(null);
   // Zones de saisie qui grandissent avec le texte : la hauteur est remise à
   // zéro puis recalée sur le contenu à chaque frappe (une zone de texte ne
@@ -1775,6 +1776,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [convVocalPret, setConvVocalPret] = useState<{ dataUrl: string; duree: number } | null>(null);
   const [uploadingConvMedia, setUploadingConvMedia] = useState(false);
   const convImageInputRef = useRef<HTMLInputElement>(null);
+  const convFileInputRef = useRef<HTMLInputElement>(null);
   const convMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const convAudioChunksRef = useRef<Blob[]>([]);
   const convRecordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1785,7 +1787,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
    * comportent comme avant ; l'envoi d'un vocal, lui, s'en sert pour prévenir
    * plutôt que de perdre l'enregistrement en silence.
    */
-  const insertConvMessage = async (kind: 'image' | 'voice', attachmentUrl: string, attachmentDuration?: number): Promise<string | null> => {
+  const insertConvMessage = async (
+    kind: 'image' | 'voice' | 'file',
+    attachmentUrl: string,
+    attachmentDuration?: number,
+    attachmentMime?: string,
+    fileName?: string
+  ): Promise<string | null> => {
     if (!activeConversationId || !currentUser) return 'Conversation introuvable.';
     // Audit (10 septembre) : cet insert n'avait pas le filet try/catch que
     // sendConvMessage a (voir son commentaire "Réseau coupé en plein
@@ -1799,7 +1807,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         conversation_id: activeConversationId,
         user_id: currentUser.uid,
         kind,
+        body: fileName ?? null,
         attachment_url: attachmentUrl,
+        attachment_mime: attachmentMime ?? null,
         attachment_duration: attachmentDuration ?? null,
       } as any);
       error = res.error;
@@ -1831,6 +1841,35 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     reader.readAsDataURL(file);
   };
 
+  // Envoi d'un PDF dans une conversation directe — demandé le 5 octobre
+  // (« je veux avoir la possibilité d'intégrer des pdfs dans les
+  // messages »). Même mécanique que l'image (data URL rangée directement
+  // dans `attachment_url`, pas d'upload Storage séparé) : le rendu du
+  // message (`m.kind === 'file'`) existait déjà, pensé à l'avance mais
+  // jamais atteignable faute de bouton pour l'envoyer.
+  const handleConvFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 4.5 * 1024 * 1024) {
+      toast.error('Fichier trop volumineux (4,5 Mo maximum).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (!dataUrl) return;
+      setUploadingConvMedia(true);
+      try {
+        const erreur = await insertConvMessage('file', dataUrl, undefined, file.type || 'application/pdf', file.name);
+        if (erreur) toast.error(erreur);
+      } finally {
+        setUploadingConvMedia(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   /**
    * Envoie une image ou un vocal dans le canal de projet actif.
    *
@@ -1839,7 +1878,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
    * colonnes dédiées. On range donc le média dans ce même objet `data`, à
    * côté du corps du message, sans migration de schéma.
    */
-  const insertChannelMedia = async (kind: 'image' | 'voice', attachmentUrl: string, attachmentDuration?: number): Promise<string | null> => {
+  const insertChannelMedia = async (
+    kind: 'image' | 'voice' | 'file',
+    attachmentUrl: string,
+    attachmentDuration?: number,
+    attachmentMime?: string,
+    fileName?: string
+  ): Promise<string | null> => {
     if (!activeChannel || !currentUser) return 'Canal introuvable.';
     // Audit (10 septembre) : même filet que insertConvMessage (voir son
     // commentaire) — sans lui, une coupure réseau ici devenait un rejet de
@@ -1853,9 +1898,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         is_deleted: false,
         read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
         data: {
-          body: '',
+          body: fileName ?? '',
           kind,
           attachmentUrl,
+          attachmentMime: attachmentMime ?? null,
           attachmentDuration: attachmentDuration ?? null,
           sender_id: currentUser.uid,
           sender_name: displayName,
@@ -1885,6 +1931,30 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     } finally {
       setUploadingChannelMedia(false);
       if (channelImageInputRef.current) channelImageInputRef.current.value = '';
+    }
+  };
+
+  // Même demande (5 octobre) que côté conversations directes — voir le
+  // commentaire détaillé sur handleConvFileSelected.
+  const handleChannelFilePick = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > 4.5 * 1024 * 1024) {
+      toast.error('Fichier trop volumineux (4,5 Mo maximum).');
+      return;
+    }
+    setUploadingChannelMedia(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const erreur = await insertChannelMedia('file', dataUrl, undefined, file.type || 'application/pdf', file.name);
+      if (erreur) toast.error(erreur);
+    } finally {
+      setUploadingChannelMedia(false);
+      if (channelFileInputRef.current) channelFileInputRef.current.value = '';
     }
   };
 
@@ -3874,6 +3944,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 <div className="relative p-3 max-sm:px-1 max-sm:pb-[env(safe-area-inset-bottom,0px)] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
                   <input ref={convImageInputRef} type="file" accept="image/*" hidden onChange={handleConvImageSelected} />
                   <input ref={convCameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleConvImageSelected} />
+                  <input ref={convFileInputRef} type="file" accept="application/pdf" hidden onChange={handleConvFileSelected} />
 
                   {isRecordingConv && (
                     <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30">
@@ -4030,6 +4101,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               </button>
                               <button
                                 type="button"
+                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convFileInputRef.current?.click(); }}
+                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                              >
+                                <Paperclip className="w-5 h-5 text-[#F7BC5F]" /> Document (PDF)
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvEmoji(true); }}
                                 className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                               >
@@ -4083,6 +4161,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         title="Envoyer une image"
                       >
                         <ImageIcon className="w-5 h-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => convFileInputRef.current?.click()}
+                        disabled={uploadingConvMedia || isRecordingConv}
+                        className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                        title="Envoyer un PDF"
+                      >
+                        <Paperclip className="w-5 h-5" />
                       </button>
                       <div className="sm:relative" ref={convEmojiRef}>
                         <button
@@ -4356,6 +4443,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               <span className="text-[10px] opacity-70">{m.data.attachmentDuration}s</span>
                             )}
                           </div>
+                        ) : m.data?.kind === 'file' && m.data?.attachmentUrl ? (
+                          // PDF dans un canal (5 octobre) : même rendu que les
+                          // conversations directes (voir plus haut, m.kind === 'file').
+                          <a href={m.data.attachmentUrl} target="_blank" rel="noreferrer" className="underline text-xs flex items-center gap-1.5">
+                            <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                            {m.data.body || 'Document'}
+                          </a>
                         ) : (
                           // select-text : voir le commentaire équivalent côté conversations
                           // directes plus haut (même correctif, même cause : select-none racine).
@@ -4599,6 +4693,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         </button>
                         <button
                           type="button"
+                          onClick={() => { fermerFeuille(() => setShowChannelPlus(false)); channelFileInputRef.current?.click(); }}
+                          className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                        >
+                          <Paperclip className="w-5 h-5 text-[#F7BC5F]" /> Document (PDF)
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => { fermerFeuille(() => setShowChannelPlus(false)); setShowChannelEmoji(true); }}
                           className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                         >
@@ -4735,6 +4836,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   className="hidden"
                   onChange={(e) => void handleChannelImagePick(e.target.files?.[0] || null)}
                 />
+                <input
+                  ref={channelFileInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={(e) => void handleChannelFilePick(e.target.files?.[0] || null)}
+                />
                 <button
                   type="button"
                   onClick={() => channelImageInputRef.current?.click()}
@@ -4743,6 +4851,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   className="p-2.5 rounded-xl hidden sm:block text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
                 >
                   <ImageIcon className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => channelFileInputRef.current?.click()}
+                  disabled={uploadingChannelMedia || isRecordingChannel}
+                  title="Envoyer un PDF"
+                  className="p-2.5 rounded-xl hidden sm:block text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                >
+                  <Paperclip className="w-4 h-4" />
                 </button>
                 {isRecordingChannel ? (
                   <>

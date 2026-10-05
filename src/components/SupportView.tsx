@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LifeBuoy, Plus, X, Image as ImageIcon, Send, Loader2, AlertTriangle,
   ArrowRight, Paperclip, MessageCircle, CheckCircle2, Archive, ArchiveRestore,
-  ExternalLink, Rocket, Trash2, Check, CheckCheck,
+  ExternalLink, Rocket, Trash2, Check, CheckCheck, FileText,
 } from 'lucide-react';
 import {
   SupportTicket, SupportTicketMessage, SupportPriority, SupportCategory, SupportStatus, AGENCIES,
@@ -41,6 +41,13 @@ const priorityMeta = (p: SupportPriority) =>
 const categoryLabel = (c: SupportCategory) => CATEGORY_OPTIONS.find((o) => o.value === c)?.label || c;
 
 const statusLabel = (s: SupportStatus) => STATUS_COLUMNS.find((c) => c.value === s)?.label || s;
+
+// Pièces jointes : seule l'URL est conservée (pas de mime stocké à part),
+// l'extension suffit à distinguer un PDF d'une image — demandé le 5
+// octobre (« je veux avoir la possibilité d'intégrer des pdfs »). Une
+// image continue de s'afficher en vignette ; un PDF s'ouvre directement
+// dans un nouvel onglet plutôt que dans l'aperçu plein écran des images.
+const estPdf = (url: string) => /\.pdf(\?|#|$)/i.test(url);
 
 interface TicketRow {
   id: string;
@@ -851,17 +858,17 @@ export const SupportView: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold mb-1 flex items-center gap-1.5">
-                  <ImageIcon className="w-3.5 h-3.5" /> Images (facultatif)
+                  <Paperclip className="w-3.5 h-3.5" /> Images ou PDF (facultatif)
                 </label>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,application/pdf"
                   multiple
                   onChange={(e) => setFiles(Array.from(e.target.files || []))}
                   className="w-full text-xs text-gray-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20"
                 />
                 {files.length > 0 && (
-                  <p className="text-[10px] text-gray-500 mt-1">{files.length} image(s) sélectionnée(s)</p>
+                  <p className="text-[10px] text-gray-500 mt-1">{files.length} fichier(s) sélectionné(s)</p>
                 )}
               </div>
 
@@ -921,16 +928,29 @@ export const SupportView: React.FC = () => {
 
               {selectedTicket.attachments.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {selectedTicket.attachments.map((url, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setPreviewImageUrl(url)}
-                      className="block w-20 h-20 rounded-lg overflow-hidden border border-white/10 hover:border-[#F7BC5F]/40 cursor-pointer"
-                    >
-                      <img src={url} alt={`Pièce jointe ${i + 1}`} className="w-full h-full object-cover" />
-                    </button>
-                  ))}
+                  {selectedTicket.attachments.map((url, i) =>
+                    estPdf(url) ? (
+                      <a
+                        key={i}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-20 h-20 rounded-lg border border-white/10 hover:border-[#F7BC5F]/40 flex flex-col items-center justify-center gap-1 text-gray-300 hover:text-white"
+                      >
+                        <FileText className="w-6 h-6" />
+                        <span className="text-[9px] font-semibold">PDF</span>
+                      </a>
+                    ) : (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setPreviewImageUrl(url)}
+                        className="block w-20 h-20 rounded-lg overflow-hidden border border-white/10 hover:border-[#F7BC5F]/40 cursor-pointer"
+                      >
+                        <img src={url} alt={`Pièce jointe ${i + 1}`} className="w-full h-full object-cover" />
+                      </button>
+                    )
+                  )}
                 </div>
               )}
 
@@ -1037,16 +1057,29 @@ export const SupportView: React.FC = () => {
                             {m.body && <p className="text-xs text-gray-200 whitespace-pre-wrap select-text">{m.body}</p>}
                             {m.attachments.length > 0 && (
                               <div className="flex gap-1.5 flex-wrap mt-1.5">
-                                {m.attachments.map((url, i) => (
-                                  <button
-                                    key={i}
-                                    type="button"
-                                    onClick={() => setPreviewImageUrl(url)}
-                                    className="block w-16 h-16 rounded-lg overflow-hidden border border-white/10 hover:border-[#F7BC5F]/40"
-                                  >
-                                    <img src={url} alt={`Pièce jointe ${i + 1}`} className="w-full h-full object-cover" />
-                                  </button>
-                                ))}
+                                {m.attachments.map((url, i) =>
+                                  estPdf(url) ? (
+                                    <a
+                                      key={i}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="w-16 h-16 rounded-lg border border-white/10 hover:border-[#F7BC5F]/40 flex flex-col items-center justify-center gap-0.5 text-gray-300 hover:text-white"
+                                    >
+                                      <FileText className="w-5 h-5" />
+                                      <span className="text-[8px] font-semibold">PDF</span>
+                                    </a>
+                                  ) : (
+                                    <button
+                                      key={i}
+                                      type="button"
+                                      onClick={() => setPreviewImageUrl(url)}
+                                      className="block w-16 h-16 rounded-lg overflow-hidden border border-white/10 hover:border-[#F7BC5F]/40"
+                                    >
+                                      <img src={url} alt={`Pièce jointe ${i + 1}`} className="w-full h-full object-cover" />
+                                    </button>
+                                  )
+                                )}
                               </div>
                             )}
                             <div className="flex items-center gap-1 mt-1">
@@ -1103,11 +1136,11 @@ export const SupportView: React.FC = () => {
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <label className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 flex items-center justify-center shrink-0 cursor-pointer">
+                <label className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 flex items-center justify-center shrink-0 cursor-pointer" title="Joindre une image ou un PDF">
                   <Paperclip className="w-4 h-4" />
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,application/pdf"
                     multiple
                     className="hidden"
                     onChange={(e) => setChatFiles((cur) => [...cur, ...Array.from(e.target.files || [])])}
