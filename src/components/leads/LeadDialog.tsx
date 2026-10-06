@@ -45,7 +45,7 @@ const TEMP_OPTIONS = [
   { value: "froid", label: "Froid - Prospect peu intéressé", dot: "bg-blue-500" },
 ];
 
-const LEAD_TYPES = ["Acheteur", "Vendeur", "Bailleur"];
+const LEAD_TYPES_BASE = ["Acheteur", "Vendeur"];
 
 // Provenances proposées (Immosphera uniquement)
 const SOURCE_OPTIONS = ["Le Bon Coin", "Bien'ici", "Le Figaro", "Se Loger"];
@@ -85,6 +85,10 @@ export const LeadDialog = ({
 
   // Champ "Provenance" réservé à l'agence Immosphera
   const isImmosphera = (activeAgency?.name ?? "").toLowerCase().includes("immosphera");
+  // "Bailleur" (propriétaire qui met en location) : demandé le 6 octobre,
+  // visible uniquement sur Immosphera — même principe que SOURCE_OPTIONS
+  // juste au-dessus.
+  const LEAD_TYPES = isImmosphera ? [...LEAD_TYPES_BASE, "Bailleur"] : LEAD_TYPES_BASE;
   // Demandé le 2 septembre : « supprimer sur cette fiche type de biens,
   // secteur, budget max et seconde personne » — pour Novavisio seulement :
   // ces champs restent utilisés par les autres agences.
