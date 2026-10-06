@@ -375,6 +375,9 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   if (!isOpen) return null;
 
   const currentAgency = AGENCIES.find((a) => matchesAgency(agencyId, a.id)) || AGENCIES[0];
+  // "Bailleur" (propriétaire qui met en location) : demandé le 6 octobre,
+  // visible uniquement sur Immosphera.
+  const isImmosphera = (currentAgency?.name ?? '').toLowerCase().includes('immosphera');
 
   // Ticket #119 : `status` est un affichage plus large ('Froid'/'Tiède'/
   // 'Chaud' avec majuscule+accent) que la vraie valeur enregistrée en base
@@ -590,6 +593,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                       <option value="Conciergerie">Conciergerie</option>
                       <option value="Locataire">Locataire</option>
                       <option value="Investisseur">Investisseur</option>
+                      {isImmosphera && <option value="Bailleur">Bailleur</option>}
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                   </div>
