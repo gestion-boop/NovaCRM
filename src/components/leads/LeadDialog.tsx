@@ -45,7 +45,7 @@ const TEMP_OPTIONS = [
   { value: "froid", label: "Froid - Prospect peu intéressé", dot: "bg-blue-500" },
 ];
 
-const LEAD_TYPES = ["Acheteur", "Vendeur"];
+const LEAD_TYPES = ["Acheteur", "Vendeur", "Bailleur"];
 
 // Provenances proposées (Immosphera uniquement)
 const SOURCE_OPTIONS = ["Le Bon Coin", "Bien'ici", "Le Figaro", "Se Loger"];
