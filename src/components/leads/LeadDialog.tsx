@@ -45,7 +45,7 @@ const TEMP_OPTIONS = [
   { value: "froid", label: "Froid - Prospect peu intéressé", dot: "bg-blue-500" },
 ];
 
-const LEAD_TYPES_BASE = ["Acheteur", "Vendeur"];
+const LEAD_TYPES_BASE = ["Acquéreur", "Vendeur"];
 
 // Provenances proposées (Immosphera uniquement)
 const SOURCE_OPTIONS = ["Le Bon Coin", "Bien'ici", "Le Figaro", "Se Loger"];
@@ -772,13 +772,13 @@ export const LeadDialog = ({
             </div>
             {isImmosphera && (
               <div className="space-y-2">
-                <Label>Acheteur / Vendeur</Label>
+                <Label>Acquéreur / Vendeur</Label>
                 <Select value={form.lead_type} onValueChange={(v) => setForm({ ...form, lead_type: v })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Choisir" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Acheteur">Acheteur</SelectItem>
+                    <SelectItem value="Acquéreur">Acquéreur</SelectItem>
                     <SelectItem value="Vendeur">Vendeur</SelectItem>
                   </SelectContent>
                 </Select>

@@ -94,7 +94,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
   // Demandé le 7 octobre : « un filtre acquéreurs et vendeurs pour
   // facilement retrouver les dossiers » — sur le type de fiche
   // (lead_type), à côté du filtre de température déjà existant.
-  const [typeFilter, setTypeFilter] = useState<"all" | "Acheteur" | "Vendeur">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "Acquéreur" | "Vendeur">("all");
   const [scope, setScope] = useState<"mine" | "shared" | "all">("mine");
 
   // 30/09/2026, demande explicite : dans l'agence Immosphera, chaque
@@ -501,7 +501,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
             que la température, séparée pour rester lisible comme un second
             critère plutôt qu'une suite de la même liste. */}
         <div className="flex gap-2 flex-wrap sm:border-l sm:border-border sm:pl-3">
-          {(["all", "Acheteur", "Vendeur"] as const).map((t) => (
+          {(["all", "Acquéreur", "Vendeur"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTypeFilter(t)}
@@ -512,7 +512,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                   : "border-border hover:bg-accent",
               )}
             >
-              {t === "all" ? "Tous types" : t === "Acheteur" ? "Acquéreurs" : "Vendeurs"}
+              {t === "all" ? "Tous types" : t === "Acquéreur" ? "Acquéreurs" : "Vendeurs"}
             </button>
           ))}
         </div>

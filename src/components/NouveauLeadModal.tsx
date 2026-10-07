@@ -116,7 +116,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   const [phone, setPhone] = useState('');
 
   // Qualification & Project
-  const [clientType, setClientType] = useState('Acheteur');
+  const [clientType, setClientType] = useState('Acquéreur');
   const [contactType, setContactType] = useState('Particulier');
   const [budgetMax, setBudgetMax] = useState<number | ''>('');
   const [secteur, setSecteur] = useState('');
@@ -276,7 +276,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
     setLastName(nom);
     setEmail(c?.email || '');
     setPhone(c?.phone || '');
-    setClientType(c?.clientType || 'Acheteur');
+    setClientType(c?.clientType || 'Acquéreur');
     setContactType(c?.contactType || 'Particulier');
     setBudgetMax(c?.budgetMax ? Number(c.budgetMax) : '');
     setSecteur(c?.secteur || '');
@@ -587,7 +587,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                       onChange={(e) => setClientType(e.target.value)}
                       className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 pr-7 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none"
                     >
-                      <option value="Acheteur">Acheteur</option>
+                      <option value="Acquéreur">Acquéreur</option>
                       <option value="Vendeur">Vendeur</option>
                       <option value="Location">Location</option>
                       <option value="Conciergerie">Conciergerie</option>
