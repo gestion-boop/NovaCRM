@@ -124,7 +124,8 @@ export default function Dashboard({
   const { deals = [], allDeals = [] } = useDeals();
   const { tasks = [] } = useTasks();
   // 1. Calculate general statistics
-  const totalContacts = contacts.length;
+  // (totalContacts est calculé plus bas, une fois voitChiffresAgence connu —
+  // voir son commentaire)
 
   // "Dossiers actifs" porte sur TOUTES les opportunités actuellement
   // visibles dans le Pipeline pour cette agence — sans filtre sur un nom
@@ -235,6 +236,18 @@ export default function Dashboard({
   const identite = `${userProfile?.displayName || currentUser?.displayName || ''} ${userProfile?.email || currentUser?.email || ''}`;
   const estDirectionCF = /grazia|melanie|gestion@immosphera\.fr/i.test(identite);
   const voitChiffresAgence = estConseilsFinances ? estDirectionCF : isSuperAdmin;
+  // Signalé le 7 octobre : « ne compte pas les clients qui n'appartiennent
+  // pas à l'utilisateur [...] laetitia a 95 clients, alors qu'elle a moins
+  // de contacts ». Cause : la tuile « Prospects & Clients » plus bas
+  // affichait `contacts.length`, soit TOUTES les fiches de l'agence active
+  // — pour tout le monde, agents compris — alors que chaque autre tuile de
+  // ce même tableau de bord (CA, commissions...) restreint déjà un agent
+  // simple à son propre périmètre via `voitChiffresAgence`. Même règle de
+  // "mes clients" que l'écran Clients (créé par moi OU qui m'est assigné).
+  const mesContacts = currentUser?.uid
+    ? contacts.filter((c) => c.ownerUserId === currentUser.uid || c.assignedTo === currentUser.uid).length
+    : 0;
+  const totalContacts = voitChiffresAgence ? contacts.length : mesContacts;
   // « Toutes les sociétés » (id 'all') n'a pas de nom qui matche
   // /conseils?\s*finances?/i, donc les blocs réservés à la direction CF
   // (Sylvain/Mélanie) disparaissaient dès qu'on quittait l'agence Conseils
