@@ -2755,8 +2755,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             _type: 'message',
             _title: `💬 ${projet ? projet.name : 'Projet interne'} · ${canal.name}`,
             _message: `${displayName} : ${apercu}`.slice(0, 180),
-            _entity_type: 'chat_channel',
-            _entity_id: canal.id,
+            // Signalé le 7 octobre : "quand on lit des messages sur le
+            // téléphone cela ne se met pas à jour sur l'ordinateur et les
+            // autres supports". Cause réelle (aucun rapport avec l'appareil) :
+            // `loadMessages` marque lu par IDENTIFIANT DE MESSAGE
+            // (`entity_id IN (...message ids)`, voir plus bas), mais l'entité
+            // enregistrée ici était celle du CANAL — les deux ne
+            // correspondaient jamais, donc ce `.update(is_read)` ne touchait
+            // 0 ligne, sur n'importe quel appareil. Même correctif déjà
+            // appliqué à `internal_task_message` (voir useTaskMessages.ts) :
+            // l'entité est le MESSAGE lui-même.
+            _entity_type: messageId ? 'chat_message' : 'chat_channel',
+            _entity_id: messageId || canal.id,
             _agency_id: /^[0-9a-f-]{36}$/i.test(activeAgency.id) ? activeAgency.id : null,
             _metadata: { url },
           } as any)
