@@ -353,6 +353,20 @@ export default function Dashboard({
         if (actuel === undefined || s.position < actuel) seuilDepart.set(s.pipeline_id, s.position);
       }
     });
+    // ImmoSphera (agents immobiliers) : demandé le 7 octobre, « le chiffre
+    // remonte dans le tableau du moment que les vendeurs signent le mandat ».
+    // Même mécanisme que seuilDepart ci-dessus (Accord banque / Rendez-vous
+    // pour Conseils Finances), mais sur l'étape "Mandat" du pipeline
+    // Transaction V2 — qui n'a pas d'étape Accord banque, donc aucun seuil ne
+    // s'appliquait jusqu'ici : un dossier comptait dès "Récolte docs", avant
+    // même la signature du mandat.
+    const seuilDepartMandat = new Map<string, number>();
+    stagesWithPosition.forEach((s) => {
+      if (/^mandat$/i.test(s.name.trim())) {
+        const actuel = seuilDepartMandat.get(s.pipeline_id);
+        if (actuel === undefined || s.position < actuel) seuilDepartMandat.set(s.pipeline_id, s.position);
+      }
+    });
 
     // Demandé le 1er septembre : « mets le chiffre facturé, et tout ce qui
     // n'est pas encore facturé — donc archivé avec un prix confirmé — sera en
@@ -487,6 +501,18 @@ export default function Dashboard({
         const seuil = seuilDepart.get(pipelineReel);
         const position = positionEtape.get(`${pipelineReel}::${d.stage}`);
         if (seuil === undefined || position === undefined || position < seuil) return;
+      }
+      // ImmoSphera : un dossier vivant (pas encore archivé) ne compte en
+      // "CA à venir" qu'à partir de l'étape "Mandat" — avant la signature,
+      // rien n'est encore acquis. Un dossier archivé et signé continue de
+      // compter en réalisé quelle que soit l'étape (voir plus bas), comme
+      // pour les autres agences.
+      if (!estNovavisio && !estConseilsFinances && !d.archivedAt && pipelineReel) {
+        const seuilMandat = seuilDepartMandat.get(pipelineReel);
+        if (seuilMandat !== undefined) {
+          const position = positionEtape.get(`${pipelineReel}::${d.stage}`);
+          if (position === undefined || position < seuilMandat) return;
+        }
       }
       dansLePipeline += 1;
       if (montant <= 0) {
