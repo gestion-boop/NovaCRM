@@ -82,10 +82,17 @@ function App() {
   const isMobile = useIsMobile();
   const isCoarsePointer = useIsCoarsePointer();
   // Onglets (7 octobre, « ouvrir dans un nouvel onglet [...] dans
-  // l'application ») : seulement dans l'app installée (PWA standalone) sur
-  // un écran assez large pour une barre d'onglets — pas de sens sur mobile,
-  // où la version Web garde son comportement actuel.
-  const canUseTabs = isStandaloneApp() && !isMobile;
+  // l'application ») : seulement dans l'app installée (PWA standalone), peu
+  // importe la largeur — ce qui compte est "application installée" (voir la
+  // demande initiale : "pas la version Web"), pas la taille de la fenêtre.
+  // Signalé le 7 octobre : la barre n'apparaissait pas dans l'app installée
+  // réelle (macOS/Chrome) alors que isStandaloneApp() était vrai — cause la
+  // plus probable, `!isMobile` ci-dessous, qui dépendait de la LARGEUR de la
+  // fenêtre (seuil 768px, voir use-mobile.tsx) : une app installée peut très
+  // bien s'ouvrir dans une fenêtre plus étroite que ça sans être un
+  // téléphone. Retiré — le composant (TabBar.tsx) dégrade déjà proprement
+  // sur un écran étroit (libellés tronqués, défilement horizontal).
+  const canUseTabs = isStandaloneApp();
   // Agence active = Immosphera ? Sert au cloisonnement des écrans réservés à
   // cette agence (voir la vue Statistiques plus bas).
   const estAgenceImmosphera = /immosphera/i.test(activeAgency?.name ?? '');
