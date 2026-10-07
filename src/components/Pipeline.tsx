@@ -405,11 +405,31 @@ const PipelineColumn: React.FC<{
       // précisément en CSS (voir index.css), sans toucher aux autres
       // éléments qui partagent le même bg-[#0a1e20] ailleurs dans l'appli
       // (essai isolé, pas encore généralisé).
-      className={`pipeline-column-bg w-[85vw] max-w-[320px] sm:w-[310px] shrink-0 snap-center snap-always bg-[#0a1e20] border border-white/20 border-t-4 rounded-2xl overflow-hidden transition-shadow duration-200 ${
+      className={`pipeline-column-bg w-[85vw] max-w-[320px] sm:w-[310px] shrink-0 snap-center snap-always bg-[#0a1e20] border border-white/20 border-t-4 rounded-2xl transition-shadow duration-200 max-h-[65dvh] overflow-y-auto sm:max-h-none sm:overflow-visible ${
         isDragging ? 'scale-[1.01] opacity-70 z-30' : ''
       }`}
     >
-      <div className="p-3 border-b border-white/20 flex items-center justify-between gap-2">
+      {/* Demandé le 7 octobre (mobile) : « fige les cartes à l'intérieur du
+          pipeline pour rendre le scroll plus simple » — confirmé : l'en-tête
+          (nom d'étape + total) devait rester visible pendant qu'on scrolle
+          les cartes d'une colonne.
+          Premier essai (sticky tout seul, retiré) : ne fonctionnait PAS,
+          vérifié avec une reproduction isolée sous Playwright — la ligne de
+          colonnes a `overflow-x-auto` (nécessaire au swipe horizontal entre
+          colonnes), ce qui force `overflow-y` à se calculer en `auto` sur
+          CETTE ligne aussi (règle CSS : un axe non-`visible` empêche l'autre
+          de rester `visible`). La ligne devient donc malgré elle le
+          "conteneur de scroll" le plus proche pour `sticky`, au lieu de la
+          vraie page qui défile plus haut (`<main>`) — et comme la ligne ne
+          défile jamais elle-même (sa hauteur suit son contenu), l'en-tête ne
+          se fige nulle part.
+          Solution qui fonctionne (vérifiée de la même façon) : chaque
+          colonne défile maintenant elle-même (`overflow-y-auto`, hauteur
+          plafonnée), donc `sticky` s'accroche à SA PROPRE colonne — plus
+          besoin de dépendre du scroll de la page. Uniquement sur mobile
+          (où la demande porte) : `sm:` restaure le comportement d'origine
+          (colonne non plafonnée, page qui défile) sur tablette/desktop. */}
+      <div className="pipeline-column-bg bg-[#0a1e20] sticky top-0 z-10 rounded-t-2xl p-3 border-b border-white/20 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {canManageStructure && (
             <span {...attributes} {...listeners} className="text-gray-500 cursor-grab touch-none">
