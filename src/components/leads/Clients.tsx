@@ -91,6 +91,10 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "chaud" | "tiede" | "froid">("all");
+  // Demandé le 7 octobre : « un filtre acquéreurs et vendeurs pour
+  // facilement retrouver les dossiers » — sur le type de fiche
+  // (lead_type), à côté du filtre de température déjà existant.
+  const [typeFilter, setTypeFilter] = useState<"all" | "Acheteur" | "Vendeur">("all");
   const [scope, setScope] = useState<"mine" | "shared" | "all">("mine");
 
   // 30/09/2026, demande explicite : dans l'agence Immosphera, chaque
@@ -258,6 +262,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
 
   const filtered = leads.filter((l: any) => {
     if (filter !== "all" && l.temperature !== filter) return false;
+    if (typeFilter !== "all" && l.lead_type !== typeFilter) return false;
     if (search) {
       const s = search.toLowerCase();
       return (
@@ -402,7 +407,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
               {filtered.length} client{filtered.length !== 1 ? "s" : ""}
-              {filter !== "all" || search
+              {filter !== "all" || typeFilter !== "all" || search
                 ? " filtrés"
                 : scopeEffectif === "all"
                   ? " dans l'agence"
@@ -489,6 +494,25 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
               )}
             >
               {f === "all" ? "Tous" : tempLabel[f]}
+            </button>
+          ))}
+        </div>
+        {/* Filtre Acquéreurs/Vendeurs (7 octobre) — même famille de pastilles
+            que la température, séparée pour rester lisible comme un second
+            critère plutôt qu'une suite de la même liste. */}
+        <div className="flex gap-2 flex-wrap sm:border-l sm:border-border sm:pl-3">
+          {(["all", "Acheteur", "Vendeur"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTypeFilter(t)}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-150",
+                typeFilter === t
+                  ? "gradient-gold text-primary-foreground border-transparent shadow-gold"
+                  : "border-border hover:bg-accent",
+              )}
+            >
+              {t === "all" ? "Tous types" : t === "Acheteur" ? "Acquéreurs" : "Vendeurs"}
             </button>
           ))}
         </div>
