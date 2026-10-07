@@ -488,8 +488,12 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
               onClick={() => setFilter(f)}
               className={cn(
                 "px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-150",
+                // "gradient-gold"/"shadow-gold" n'existent pas dans la config
+                // Tailwind du projet, aucun style généré — bouton actif sans
+                // fond ni bordure. Signalé le 7 octobre (« celui sélectionné
+                // n'est pas avec un fond jaune »).
                 filter === f
-                  ? "gradient-gold text-primary-foreground border-transparent shadow-gold"
+                  ? "bg-gradient-to-r from-[#FAD592] via-[#F9C977] to-[#D9A34E] text-[#1a1230] border-transparent shadow-lg shadow-[#F7BC5F]/30"
                   : "border-border hover:bg-accent",
               )}
             >
@@ -508,7 +512,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
               className={cn(
                 "px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-150",
                 typeFilter === t
-                  ? "gradient-gold text-primary-foreground border-transparent shadow-gold"
+                  ? "bg-gradient-to-r from-[#FAD592] via-[#F9C977] to-[#D9A34E] text-[#1a1230] border-transparent shadow-lg shadow-[#F7BC5F]/30"
                   : "border-border hover:bg-accent",
               )}
             >
