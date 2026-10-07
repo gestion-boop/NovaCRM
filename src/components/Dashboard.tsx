@@ -360,11 +360,25 @@ export default function Dashboard({
     // Transaction V2 — qui n'a pas d'étape Accord banque, donc aucun seuil ne
     // s'appliquait jusqu'ici : un dossier comptait dès "Récolte docs", avant
     // même la signature du mandat.
+    //
+    // Précisé le même jour : deux seuils différents selon qui regarde (même
+    // principe que `perimetre` plus bas, qui restreint déjà aux seules
+    // affaires du conseiller quand il n'est pas en droit de voir celles de
+    // l'agence). Vue personnelle de l'agent (perimetre = ses seules
+    // affaires) : dès "Mandat", visibilité précoce sur son propre travail.
+    // Vue agence/direction (perimetre = toute l'agence) : seulement à partir
+    // de "Offre d'achat", pour un chiffre agrégé plus consolidé — « active-le
+    // en agence quand l'offre est signée ».
     const seuilDepartMandat = new Map<string, number>();
+    const seuilDepartOffre = new Map<string, number>();
     stagesWithPosition.forEach((s) => {
       if (/^mandat$/i.test(s.name.trim())) {
         const actuel = seuilDepartMandat.get(s.pipeline_id);
         if (actuel === undefined || s.position < actuel) seuilDepartMandat.set(s.pipeline_id, s.position);
+      }
+      if (/^offre\s*d.?achat$/i.test(s.name.trim())) {
+        const actuel = seuilDepartOffre.get(s.pipeline_id);
+        if (actuel === undefined || s.position < actuel) seuilDepartOffre.set(s.pipeline_id, s.position);
       }
     });
 
@@ -503,15 +517,18 @@ export default function Dashboard({
         if (seuil === undefined || position === undefined || position < seuil) return;
       }
       // ImmoSphera : un dossier vivant (pas encore archivé) ne compte en
-      // "CA à venir" qu'à partir de l'étape "Mandat" — avant la signature,
-      // rien n'est encore acquis. Un dossier archivé et signé continue de
-      // compter en réalisé quelle que soit l'étape (voir plus bas), comme
-      // pour les autres agences.
+      // "CA à venir" qu'à partir de "Mandat" (vue personnelle de l'agent) ou
+      // "Offre d'achat" (vue agence/direction, perimetre = toute l'agence) —
+      // voir le commentaire sur seuilDepartMandat/seuilDepartOffre plus haut.
+      // Un dossier archivé et signé continue de compter en réalisé quelle
+      // que soit l'étape (voir plus bas), comme pour les autres agences.
       if (!estNovavisio && !estConseilsFinances && !d.archivedAt && pipelineReel) {
-        const seuilMandat = seuilDepartMandat.get(pipelineReel);
-        if (seuilMandat !== undefined) {
+        const seuilImmo = voitChiffresAgence
+          ? seuilDepartOffre.get(pipelineReel)
+          : seuilDepartMandat.get(pipelineReel);
+        if (seuilImmo !== undefined) {
           const position = positionEtape.get(`${pipelineReel}::${d.stage}`);
-          if (position === undefined || position < seuilMandat) return;
+          if (position === undefined || position < seuilImmo) return;
         }
       }
       dansLePipeline += 1;
@@ -1458,8 +1475,16 @@ export default function Dashboard({
             l'année, avec un camembert ». Hors Novavisio, la rangée compte donc
             trois cases ; Novavisio garde ses quatre. Le CA à venir est le
             même chiffre que le cercle plus bas, sans sa répartition par
-            colonne : ici, le total, à côté du réalisé. */}
-        {isSuperAdmin && !estNovavisio && !estConseilsFinances && (
+            colonne : ici, le total, à côté du réalisé.
+            Ouverte aux agents (pas seulement super admin) le 7 octobre :
+            « je veux que tu le mette en entrée pour l'utilisateur sur CA à
+            venir ». `perimetre` (plus haut) restreint déjà les données à ses
+            seules affaires quand il n'est pas en droit de voir celles de
+            l'agence (voitChiffresAgence) — même mécanisme que la case
+            individuelle de Conseils Finances. Seuls le libellé et le seuil
+            (Mandat pour l'agent, Offre d'achat pour l'agence, voir
+            seuilDepartMandat/seuilDepartOffre) changent selon qui regarde. */}
+        {!estNovavisio && !estConseilsFinances && (
           <div
             role="button"
             tabIndex={0}
@@ -1468,14 +1493,20 @@ export default function Dashboard({
             title="Voir le détail des affaires à venir, ligne par ligne"
             className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">CA à venir</span>
+              <span className="text-xs text-slate-400 font-medium tracking-wide">
+                {voitChiffresAgence ? 'CA à venir agence' : 'CA à venir'}
+              </span>
               <div className="text-2xl font-black text-white tracking-tight">
                 {formatCurrency(chiffreAffairesAgence.aVenir)}
               </div>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
                 {chiffreAffairesAgence.comptessAVenir === 0
-                  ? 'Aucun montant HT en attente dans Transaction V2'
-                  : `${chiffreAffairesAgence.comptessAVenir} affaire${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} encore dans Transaction V2, commission agence HT`}
+                  ? (voitChiffresAgence
+                      ? "Aucun dossier à partir de l'étape Offre d'achat"
+                      : "Aucun de vos dossiers à partir de l'étape Mandat")
+                  : (voitChiffresAgence
+                      ? `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Offre d'achat, commission agence HT`
+                      : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Mandat, commission agence HT`)}
               </span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
