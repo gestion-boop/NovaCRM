@@ -35,6 +35,7 @@ import {
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
+import { isStandaloneApp } from '@/hooks/useIsStandalone';
 
 interface RealNotificationRow {
   id: string;
@@ -290,9 +291,7 @@ export const NotificationsView: React.FC<
   // sans jamais recevoir la moindre notification, pour une raison invisible
   // depuis l'appli elle-même.
   const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const isStandalone =
-    typeof window !== 'undefined' &&
-    (window.matchMedia?.('(display-mode: standalone)').matches || (window.navigator as any).standalone === true);
+  const isStandalone = isStandaloneApp();
   const needsHomeScreenInstall = isIOS && !isStandalone;
   // Signalé (10 septembre, Pauline) : « ça marque permission refusée » sur
   // le raccourci Chrome Android, alors que « tout est bien mis en place ».
