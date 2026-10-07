@@ -127,14 +127,9 @@ export default function Dashboard({
   // (totalContacts est calculé plus bas, une fois voitChiffresAgence connu —
   // voir son commentaire)
 
-  // "Dossiers actifs" porte sur TOUTES les opportunités actuellement
-  // visibles dans le Pipeline pour cette agence — sans filtre sur un nom
-  // d'étape ("Perdu", "Dossier facture"...), car ces noms sont
-  // personnalisables par agence/pipeline et ne correspondent déjà plus aux
-  // étapes réellement configurées. Ainsi, ce chiffre correspond toujours
-  // exactement à ce que montre le Pipeline, quelle que soit la façon dont
-  // les étapes ont été renommées.
-  const activeDeals = deals.length;
+  // "Dossiers actifs" (activeDeals) et "Volume financier" (totalDealValue)
+  // sont calculés plus bas, une fois voitChiffresAgence connu — voir leurs
+  // commentaires respectifs.
 
   // Position (ordre) réelle de chaque étape, par pipeline — nécessaire pour
   // déterminer ce qui se trouve "à partir de la colonne Accord banque".
@@ -147,43 +142,6 @@ export default function Dashboard({
       return (data as { id: string; pipeline_id: string; name: string; position: number }[]) || [];
     },
   });
-
-  // "Volume financier" = somme des opportunités arrivées à l'étape "Accord
-  // banque" (ou équivalent, ex. "Accord banque / Rendez-vous") ou au-delà,
-  // dans l'ordre réel des étapes de LEUR pipeline (chaque pipeline peut
-  // avoir un ordre/nommage différent). Les opportunités dont le pipeline ne
-  // comporte aucune étape "Accord banque" ne sont pas comptabilisées ici :
-  // cet indicateur est spécifique au processus de financement.
-  // Demandé le 5 septembre (Conseils Finances) : la tuile « CA à venir » des
-  // super admins est « le CA à partir de Accord banque » — exactement ce
-  // chiffre. On garde aussi le nombre de dossiers, pour le dire sous le
-  // montant.
-  const accordBanque = useMemo(() => {
-    const accordBanquePositionByPipeline = new Map<string, number>();
-    stagesWithPosition.forEach((s) => {
-      if (/accord\s*banque/i.test(s.name)) {
-        const current = accordBanquePositionByPipeline.get(s.pipeline_id);
-        if (current === undefined || s.position < current) {
-          accordBanquePositionByPipeline.set(s.pipeline_id, s.position);
-        }
-      }
-    });
-
-    const positionByPipelineAndStage = new Map<string, number>();
-    stagesWithPosition.forEach((s) => {
-      positionByPipelineAndStage.set(`${s.pipeline_id}::${s.name}`, s.position);
-    });
-
-    return deals.reduce((acc, d) => {
-      if (!d.pipelineId) return acc;
-      const threshold = accordBanquePositionByPipeline.get(d.pipelineId);
-      if (threshold === undefined) return acc; // pipeline sans étape "Accord banque"
-      const dealPosition = positionByPipelineAndStage.get(`${d.pipelineId}::${d.stage}`);
-      if (dealPosition === undefined || dealPosition < threshold) return acc;
-      return { total: acc.total + d.amount, nb: acc.nb + 1 };
-    }, { total: 0, nb: 0 });
-  }, [deals, stagesWithPosition]);
-  const totalDealValue = accordBanque.total;
 
   const completedTasks = tasks.filter(t => t.completed).length;
   const pendingTasks = tasks.length - completedTasks;
@@ -643,6 +601,29 @@ export default function Dashboard({
       ),
     };
   }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, voitChiffresAgence, currentUser?.uid, estNovavisio, estConseilsFinances, parPipelinePrincipal]);
+
+  // Signalé le 7 octobre : « ils ne doivent voir que le chiffre de leur
+  // productivité pas celui de l'agence ». "Dossiers actifs" n'était filtré
+  // ni par agent : tout le monde y voyait le total agence. On garde
+  // volontairement la même base que l'origine (`deals`, sans filtre de
+  // seuil d'étape — "Dossiers actifs" doit rester le nombre BRUT de
+  // dossiers non archivés, pas une version gated comme CA à venir) ; seul
+  // un filtre par conseiller s'ajoute, même règle que `voitChiffresAgence`
+  // partout ailleurs dans ce tableau de bord.
+  const activeDeals = voitChiffresAgence
+    ? deals.length
+    : deals.filter((d) => d.advisorId === currentUser?.uid).length;
+  // "Volume financier" : demandé aussi le 7 octobre, « remonte les chiffres
+  // [...] du moment que les agents mettent leurs dossiers sur pipeline
+  // transaction [V2] ». Cette tuile restait à 0 pour ImmoSphera (son
+  // pipeline Transaction V2 n'a pas d'étape Accord banque, seul seuil
+  // reconnu jusqu'ici) et n'était pas filtrée par agent. `chiffreAffairesAgence.aVenir`
+  // résout déjà les deux : seuil Accord banque/Mandat/Offre d'achat/
+  // facturation selon l'agence (voir plus haut), et `perimetre` restreint
+  // déjà aux seules affaires du conseiller via voitChiffresAgence. On
+  // réutilise donc ce calcul plutôt que d'en dupliquer un troisième
+  // (l'ancien calcul séparé, limité à "Accord banque", est retiré).
+  const totalDealValue = chiffreAffairesAgence.aVenir;
 
   // « Rajoute sur le tableau de bord une autre case avec CA de Natacha » —
   // repérée par son prénom dans la liste des collaborateurs de l'agence
