@@ -16,6 +16,8 @@ import Auth from './components/Auth';
 import ClientAuth from './components/ClientAuth';
 import Header from './components/Header';
 import Sidebar, { NAV_ITEMS } from './components/Sidebar';
+import TabBar from './components/TabBar';
+import { isStandaloneApp } from '@/hooks/useIsStandalone';
 import AccueilGrid from './components/AccueilGrid';
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Contacts = lazy(() => import('./components/Contacts'));
@@ -75,10 +77,15 @@ const ChargementEcran = () => (
 function App() {
   const { currentUser, userProfile, activeAgency, setActiveAgency, authLoading, internGateMessage, logout } = useAuth();
   const { unreadNotificationsCount, unreadMobileNotificationsCount, unreadMessagesCount, unreadMailCount, openSupportTicketsCount, refreshUnreadNotifications, refreshUnreadMail } = useDashboardStats();
-  const { addContact } = useContacts();
+  const { addContact, contacts } = useContacts();
   const { tasks = [] } = useTasks();
   const isMobile = useIsMobile();
   const isCoarsePointer = useIsCoarsePointer();
+  // Onglets (7 octobre, « ouvrir dans un nouvel onglet [...] dans
+  // l'application ») : seulement dans l'app installée (PWA standalone) sur
+  // un écran assez large pour une barre d'onglets — pas de sens sur mobile,
+  // où la version Web garde son comportement actuel.
+  const canUseTabs = isStandaloneApp() && !isMobile;
   // Agence active = Immosphera ? Sert au cloisonnement des écrans réservés à
   // cette agence (voir la vue Statistiques plus bas).
   const estAgenceImmosphera = /immosphera/i.test(activeAgency?.name ?? '');
@@ -661,6 +668,93 @@ function App() {
     setSelectedClientProfileId(contactId);
     setSelectedClientProfileTab(contactId ? tab : undefined);
   };
+
+  // Onglets internes (7 octobre, app installée) : chaque onglet retient
+  // l'écran et la fiche client ouverts, pour pouvoir par exemple garder un
+  // client ouvert dans un onglet et travailler sur un autre dossier (ou le
+  // même, sur un autre sous-onglet) dans un second. Version 1 confirmée
+  // explicitement avec l'utilisateur : changer d'onglet recharge la vue —
+  // pas de mémoire de défilement/brouillon entre deux changements — pour
+  // éviter de reconstruire toute la zone de rendu ci-dessous (aujourd'hui,
+  // une seule vue à la fois y est montée, voir le commentaire sur `key=`
+  // plus bas), partagée par toute l'application et déjà très sensible.
+  interface AppTab {
+    id: string;
+    nav: string;
+    selectedClientProfileId: string | null;
+    selectedClientProfileTab: 'espace-client' | undefined;
+    title: string;
+  }
+  const [tabs, setTabs] = useState<AppTab[]>(() => [{
+    id: 'tab-initial',
+    nav: currentNav,
+    selectedClientProfileId: null,
+    selectedClientProfileTab: undefined,
+    title: NAV_ITEMS.find((i) => i.id === currentNav)?.label || 'Accueil',
+  }]);
+  const [activeTabId, setActiveTabId] = useState('tab-initial');
+
+  const titreOnglet = React.useCallback((nav: string, clientId: string | null): string => {
+    if (clientId) {
+      const c = contacts.find((contact) => contact.id === clientId);
+      if (c?.name) return c.name;
+    }
+    return NAV_ITEMS.find((i) => i.id === nav)?.label || nav;
+  }, [contacts]);
+
+  // Ouvre un NOUVEL onglet sur `nav` (et une fiche client déjà identifiée,
+  // le cas échéant — ex. depuis une carte contact). Capture d'abord l'état
+  // courant dans l'onglet qu'on quitte, pour le retrouver intact à son
+  // prochain tour (voir switchToTab/closeTab, même principe).
+  const openInNewTab = React.useCallback((nav: string, clientId: string | null = null, clientTab?: 'espace-client') => {
+    const newId = crypto.randomUUID();
+    const tabsAJour = tabs.map((t) =>
+      t.id === activeTabId
+        ? { ...t, nav: currentNav, selectedClientProfileId, selectedClientProfileTab, title: titreOnglet(currentNav, selectedClientProfileId) }
+        : t
+    );
+    setTabs([
+      ...tabsAJour,
+      { id: newId, nav, selectedClientProfileId: clientId, selectedClientProfileTab: clientTab, title: titreOnglet(nav, clientId) },
+    ]);
+    setNovaOpen(false);
+    setCurrentNav(nav);
+    setSelectedClientProfileId(clientId);
+    setSelectedClientProfileTab(clientId ? clientTab : undefined);
+    setActiveTabId(newId);
+  }, [tabs, activeTabId, currentNav, selectedClientProfileId, selectedClientProfileTab, titreOnglet]);
+
+  const switchToTab = React.useCallback((tabId: string) => {
+    if (tabId === activeTabId) return;
+    const tabsAJour = tabs.map((t) =>
+      t.id === activeTabId
+        ? { ...t, nav: currentNav, selectedClientProfileId, selectedClientProfileTab, title: titreOnglet(currentNav, selectedClientProfileId) }
+        : t
+    );
+    const cible = tabsAJour.find((t) => t.id === tabId);
+    if (!cible) return;
+    setTabs(tabsAJour);
+    setNovaOpen(false);
+    setCurrentNav(cible.nav);
+    setSelectedClientProfileId(cible.selectedClientProfileId);
+    setSelectedClientProfileTab(cible.selectedClientProfileTab);
+    setActiveTabId(tabId);
+  }, [tabs, activeTabId, currentNav, selectedClientProfileId, selectedClientProfileTab, titreOnglet]);
+
+  const closeTab = React.useCallback((tabId: string) => {
+    if (tabs.length <= 1) return; // toujours garder au moins un onglet ouvert
+    const idx = tabs.findIndex((t) => t.id === tabId);
+    const restants = tabs.filter((t) => t.id !== tabId);
+    setTabs(restants);
+    if (tabId === activeTabId) {
+      const suivant = restants[Math.max(0, idx - 1)] || restants[0];
+      setNovaOpen(false);
+      setCurrentNav(suivant.nav);
+      setSelectedClientProfileId(suivant.selectedClientProfileId);
+      setSelectedClientProfileTab(suivant.selectedClientProfileTab);
+      setActiveTabId(suivant.id);
+    }
+  }, [tabs, activeTabId]);
   // Signalé (9 septembre, capture à l'appui) : ouvrir une fiche client ne
   // remontait pas en haut — le pipeline/les onglets (Tâches, Notes...)
   // restaient hors champ tant qu'on n'avait pas fait défiler soi-même.
@@ -793,6 +887,25 @@ function App() {
       <AutoEnablePush />
       <EnablePushPrompt />
       <AnnouncementBanner />
+      {/* Onglets (7 octobre) : « dans l'application ça ouvre des onglets
+          tout en haut » — au-dessus même du Header, comme un navigateur. */}
+      {canUseTabs && (
+        <TabBar
+          tabs={tabs.map((t) => ({
+            id: t.id,
+            // L'onglet ACTIF reflète l'écran/la fiche réels, pas son dernier
+            // instantané enregistré (qui ne se met à jour qu'au moment de
+            // changer d'onglet, voir switchToTab) — sinon son libellé
+            // resterait figé sur l'écran où il a été ouvert tant qu'on ne
+            // l'a pas quitté une fois.
+            label: t.id === activeTabId ? titreOnglet(currentNav, selectedClientProfileId) : t.title,
+          }))}
+          activeTabId={activeTabId}
+          onSwitch={switchToTab}
+          onClose={closeTab}
+          onNewTab={() => openInNewTab('accueil')}
+        />
+      )}
       {/* Top Header Bar */}
       <Header
         onOpenNouveauLead={() => setShowNouveauLead(true)}
@@ -848,6 +961,7 @@ function App() {
           unreadMailCount={unreadMailCount}
           mobileOpen={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
+          onOpenInNewTab={canUseTabs ? (nav) => openInNewTab(nav) : undefined}
         />}
 
         {/* Main View Display */}

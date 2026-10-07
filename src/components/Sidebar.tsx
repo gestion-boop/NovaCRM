@@ -5,7 +5,8 @@ import {
   Bell, MessageSquare, Mail, UserPlus, FileText, FileEdit,
   LifeBuoy, Settings, ChevronDown, ChevronLeft, ChevronRight, LogOut,
   Building2, Calculator,
-  GraduationCap, Sparkles, Camera as CameraIcon, X, Map as MapIcon, Sun, Moon
+  GraduationCap, Sparkles, Camera as CameraIcon, X, Map as MapIcon, Sun, Moon,
+  ExternalLink,
 } from 'lucide-react';
 import { AGENCIES, Agency } from '@/types';
 import { useAuth } from '@/context/AuthContext';
@@ -29,6 +30,11 @@ export interface SidebarProps {
   onCloseMobile?: () => void;
   isDarkMode?: boolean;
   onToggleTheme?: () => void;
+  // Onglets (7 octobre, app installée uniquement — voir App.tsx,
+  // `canUseTabs`) : présent seulement quand la fonctionnalité est
+  // disponible, undefined sinon pour masquer le bouton "nouvel onglet"
+  // partout ailleurs (Web, mobile).
+  onOpenInNewTab?: (navId: string) => void;
 }
 
 export const NAV_ITEMS = [
@@ -81,6 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   isDarkMode,
   onToggleTheme,
+  onOpenInNewTab,
 }) => {
   const { userProfile, currentUser, activeAgency } = useAuth();
   const [showAgencyMenu, setShowAgencyMenu] = useState(false);
@@ -349,11 +356,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   entrées + texte/icônes agrandis sur mobile, pour une
                   lecture plus confortable dans le menu plein écran. */}
               {isMobile && itemIndex > 0 && <div className="h-px bg-white/10 mx-2" />}
+              <div className="flex items-center gap-1">
               <button
                 data-tour={`nav-${item.id}`}
                 onClick={() => handleNavClick(item.id)}
                 title={collapsed && !isMobile ? `${item.label}${showBadge ? ` (${badgeCount})` : ''}` : undefined}
-                className={`w-full flex items-center justify-between transition-all duration-150 cursor-pointer ${
+                className={`flex-1 min-w-0 flex items-center justify-between transition-all duration-150 cursor-pointer ${
                   isMobile ? 'px-4 py-4 rounded-2xl text-base font-semibold' : 'px-3 py-2.5 rounded-xl text-xs font-medium'
                 } ${
                   isActive
@@ -374,6 +382,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-[#081318]" />
               )}
               </button>
+              {/* Onglets (7 octobre) : « dans le menu burger, il faut ouvrir
+                  l'élément dans un nouvel onglet ». Absent sur Nova
+                  (assistant-ia) — ce n'est pas une vraie destination, le clic
+                  normal bascule juste un panneau. `onOpenInNewTab` n'est
+                  fourni par App.tsx que dans l'app installée (voir
+                  `canUseTabs`) : invisible ailleurs. */}
+              {onOpenInNewTab && item.id !== 'assistant-ia' && (!collapsed || isMobile) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOpenInNewTab(item.id); if (onCloseMobile) onCloseMobile(); }}
+                  title={`Ouvrir "${item.label}" dans un nouvel onglet`}
+                  className={`shrink-0 rounded-xl text-gray-500 hover:text-[#F7BC5F] hover:bg-white/5 transition-colors cursor-pointer ${
+                    isMobile ? 'p-3' : 'p-2'
+                  }`}
+                >
+                  <ExternalLink className={isMobile ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
+                </button>
+              )}
+              </div>
             </React.Fragment>
           );
         })}
