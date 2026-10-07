@@ -85,14 +85,28 @@ function App() {
   // l'application ») : seulement dans l'app installée (PWA standalone), peu
   // importe la largeur — ce qui compte est "application installée" (voir la
   // demande initiale : "pas la version Web"), pas la taille de la fenêtre.
-  // Signalé le 7 octobre : la barre n'apparaissait pas dans l'app installée
-  // réelle (macOS/Chrome) alors que isStandaloneApp() était vrai — cause la
-  // plus probable, `!isMobile` ci-dessous, qui dépendait de la LARGEUR de la
-  // fenêtre (seuil 768px, voir use-mobile.tsx) : une app installée peut très
-  // bien s'ouvrir dans une fenêtre plus étroite que ça sans être un
-  // téléphone. Retiré — le composant (TabBar.tsx) dégrade déjà proprement
-  // sur un écran étroit (libellés tronqués, défilement horizontal).
-  const canUseTabs = isStandaloneApp();
+  // Signalé le 7 octobre : même après avoir retiré le filtre de largeur,
+  // toujours invisible pour l'utilisateur — sa "NovaSphere" n'est pas une
+  // PWA installée via Chrome (barre de menu macOS native "NovaSphere
+  // Fichier Édition..." visible sur sa capture) mais passe par un outil
+  // tiers qui transforme le site en appli Mac. ISStandaloneApp (display-mode:
+  // standalone) ne se déclare fiablement que pour une PWA installée par le
+  // navigateur lui-même — un outil tiers de ce genre ne le signale en
+  // général pas correctement, et aucune détection automatique ne peut s'y
+  // fier. Repli manuel : interrupteur "Onglets" dans le menu (à côté de
+  // Mode sombre, Sidebar.tsx), mémorisé, qui prend le dessus sur la
+  // détection automatique une fois activé.
+  const [forcerOnglets, setForcerOnglets] = useState(() => {
+    try { return localStorage.getItem('novasphere_forcer_onglets') === '1'; } catch { return false; }
+  });
+  const basculerForcerOnglets = React.useCallback(() => {
+    setForcerOnglets((v) => {
+      const next = !v;
+      try { localStorage.setItem('novasphere_forcer_onglets', next ? '1' : '0'); } catch { /* noop */ }
+      return next;
+    });
+  }, []);
+  const canUseTabs = isStandaloneApp() || forcerOnglets;
   // Agence active = Immosphera ? Sert au cloisonnement des écrans réservés à
   // cette agence (voir la vue Statistiques plus bas).
   const estAgenceImmosphera = /immosphera/i.test(activeAgency?.name ?? '');
@@ -969,6 +983,8 @@ function App() {
           mobileOpen={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
           onOpenInNewTab={canUseTabs ? (nav) => openInNewTab(nav) : undefined}
+          tabsForced={forcerOnglets}
+          onToggleForceTabs={basculerForcerOnglets}
         />}
 
         {/* Main View Display */}
