@@ -1333,7 +1333,32 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // reposait une copie à la racine, tout en bas. `lockedTilesRef` (alimentée
   // dès que lockedTiles charge, voir plus bas) laisse reconcilierGrille
   // reconnaître ces id comme déjà couverts, sans jamais les dupliquer.
-  const lockedTilesRef = useRef<Record<string, Verrou>>({});
+  // Signalé (8 octobre) : malgré le garde-fou ci-dessus (8 septembre), le
+  // même symptôme revenait — parce qu'il arrive trop tard. `reconcilierGrille`
+  // tourne de façon SYNCHRONE, dès `useState` (voir plus bas), donc avant
+  // même le tout premier rendu ; `lockedTiles`, lui, n'est connu qu'après un
+  // aller-retour réseau, dans un effet qui ne peut se déclencher qu'APRÈS ce
+  // premier rendu. `lockedTilesRef.current` valait donc toujours `{}` au
+  // moment précis où `idsCouvertsParVerrou` était consulté pour la toute
+  // première fois de la session (et à chaque changement d'agence, pour la
+  // même raison) : le garde-fou ajouté le 8 septembre ne protégeait donc en
+  // pratique jamais personne, d'où des tuiles qui reviennent en double à la
+  // racine, différentes à chaque fois selon ce qui était verrouillé ou non
+  // au moment de CE chargement précis. Même remède déjà en place pour les
+  // tuiles masquées (novasphere_hidden_tiles_v1, voir listerIdsMasquesAplatis
+  // plus haut) : une dernière copie connue, gardée en localStorage et relue
+  // ici de façon SYNCHRONE (écrite dès que la vraie réponse serveur arrive,
+  // voir plus bas), donne à cette toute première réconciliation une réponse
+  // même un peu ancienne plutôt que rien.
+  const lockedTilesRef = useRef<Record<string, Verrou>>((() => {
+    try {
+      const brut = localStorage.getItem(`novasphere_locked_tiles_v1_${activeAgency?.id || 'default'}`);
+      const valeur = brut ? JSON.parse(brut) : null;
+      return valeur && typeof valeur === 'object' ? valeur : {};
+    } catch {
+      return {};
+    }
+  })());
   const idsCouvertsParVerrou = (id: string): boolean => {
     for (const [lockId, lock] of Object.entries(lockedTilesRef.current)) {
       if (lockId === id) return true;
@@ -2053,7 +2078,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       if (!active) return;
       if (error) { console.warn('Erreur chargement tuiles verrouillées :', error); return; }
       const locked = (data?.home_layout as any)?.lockedTiles;
-      if (locked && typeof locked === 'object') setLockedTiles(locked);
+      if (locked && typeof locked === 'object') {
+        setLockedTiles(locked);
+        try { localStorage.setItem(`novasphere_locked_tiles_v1_${activeAgency.id}`, JSON.stringify(locked)); } catch { /* ignore */ }
+      }
     })();
     const channel = supabase
       .channel(`agency_ui_settings_home_layout_${activeAgency.id}`)
@@ -2062,7 +2090,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         { event: '*', schema: 'public', table: 'agency_ui_settings', filter: `agency_id=eq.${activeAgency.id}` },
         (payload) => {
           const locked = (payload.new as any)?.home_layout?.lockedTiles;
-          setLockedTiles(locked && typeof locked === 'object' ? locked : {});
+          const valeur = locked && typeof locked === 'object' ? locked : {};
+          setLockedTiles(valeur);
+          try { localStorage.setItem(`novasphere_locked_tiles_v1_${activeAgency.id}`, JSON.stringify(valeur)); } catch { /* ignore */ }
         }
       )
       .subscribe();
