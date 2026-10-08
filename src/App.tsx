@@ -17,7 +17,6 @@ import ClientAuth from './components/ClientAuth';
 import Header from './components/Header';
 import Sidebar, { NAV_ITEMS } from './components/Sidebar';
 import TabBar from './components/TabBar';
-import { isStandaloneApp } from '@/hooks/useIsStandalone';
 import AccueilGrid from './components/AccueilGrid';
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Contacts = lazy(() => import('./components/Contacts'));
@@ -82,31 +81,16 @@ function App() {
   const isMobile = useIsMobile();
   const isCoarsePointer = useIsCoarsePointer();
   // Onglets (7 octobre, « ouvrir dans un nouvel onglet [...] dans
-  // l'application ») : seulement dans l'app installée (PWA standalone), peu
-  // importe la largeur — ce qui compte est "application installée" (voir la
-  // demande initiale : "pas la version Web"), pas la taille de la fenêtre.
-  // Signalé le 7 octobre : même après avoir retiré le filtre de largeur,
-  // toujours invisible pour l'utilisateur — sa "NovaSphere" n'est pas une
-  // PWA installée via Chrome (barre de menu macOS native "NovaSphere
-  // Fichier Édition..." visible sur sa capture) mais passe par un outil
-  // tiers qui transforme le site en appli Mac. ISStandaloneApp (display-mode:
-  // standalone) ne se déclare fiablement que pour une PWA installée par le
-  // navigateur lui-même — un outil tiers de ce genre ne le signale en
-  // général pas correctement, et aucune détection automatique ne peut s'y
-  // fier. Repli manuel : interrupteur "Onglets" dans le menu (à côté de
-  // Mode sombre, Sidebar.tsx), mémorisé, qui prend le dessus sur la
-  // détection automatique une fois activé.
-  const [forcerOnglets, setForcerOnglets] = useState(() => {
-    try { return localStorage.getItem('novasphere_forcer_onglets') === '1'; } catch { return false; }
-  });
-  const basculerForcerOnglets = React.useCallback(() => {
-    setForcerOnglets((v) => {
-      const next = !v;
-      try { localStorage.setItem('novasphere_forcer_onglets', next ? '1' : '0'); } catch { /* noop */ }
-      return next;
-    });
-  }, []);
-  const canUseTabs = isStandaloneApp() || forcerOnglets;
+  // l'application »). Essayé d'abord réservé à l'app installée (PWA
+  // standalone) : la détection (display-mode: standalone) s'est avérée peu
+  // fiable en pratique — l'app de l'utilisateur passe par un outil tiers qui
+  // transforme le site en appli Mac sans toujours déclarer ce mode
+  // correctement, et perdait même l'état en plein écran. Demandé ensuite
+  // (toujours le 7 octobre) : « mets ce système en place aussi en version
+  // web mais pas mobile » — la distinction web/app installée n'a donc plus
+  // lieu d'être, seule la largeur d'écran compte désormais (comme déjà pour
+  // la plupart des choix d'interface mobile/desktop de cette application).
+  const canUseTabs = !isMobile;
   // Agence active = Immosphera ? Sert au cloisonnement des écrans réservés à
   // cette agence (voir la vue Statistiques plus bas).
   const estAgenceImmosphera = /immosphera/i.test(activeAgency?.name ?? '');
@@ -983,8 +967,6 @@ function App() {
           mobileOpen={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
           onOpenInNewTab={canUseTabs ? (nav) => openInNewTab(nav) : undefined}
-          tabsForced={forcerOnglets}
-          onToggleForceTabs={basculerForcerOnglets}
         />}
 
         {/* Main View Display */}
