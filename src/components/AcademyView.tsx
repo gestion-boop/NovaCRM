@@ -1789,39 +1789,50 @@ export default function AcademyView() {
               ne fait que changer le dossier d'une procédure : rien n'est copié
               ni supprimé, et le chemin inverse est le même geste. */}
           {!auNiveauDossiers && estSuperAdmin && rubriques.length > 1 && (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="mt-4">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 Glisser une procédure vers
               </span>
-              {rubriques
-                .filter(([nom]) => nom !== dossierActif)
-                .map(([nom, nombre]) => (
-                  <span
-                    key={nom}
-                    onDragOver={(e) => { e.preventDefault(); setDossierSurvole(nom); }}
-                    onDragLeave={() => setDossierSurvole((v) => (v === nom ? null : v))}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setDossierSurvole(null);
-                      const id = e.dataTransfer.getData('text/plain');
-                      const ressource = ressources.find((r) => r.id === id);
-                      if (ressource) void deplacerVers(ressource, nom);
-                    }}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold transition-colors ${
-                      dossierSurvole === nom
-                        ? 'bg-[#E0A21A] border-[#E0A21A] text-white scale-105'
-                        : 'bg-white/85 border-black/10 text-slate-700'
-                    }`}
-                  >
-                    <span className="relative w-5 h-4 shrink-0">
-                      <span className="absolute inset-x-0 top-[16%] bottom-0 rounded-sm bg-gradient-to-b from-[#E8B33A] to-[#C88C12]" />
-                      <span className="absolute left-[8%] top-0 h-[22%] w-[46%] rounded-t-[2px] bg-[#F2C55C]" />
-                      <span className="absolute inset-x-0 top-[34%] bottom-0 rounded-sm bg-gradient-to-b from-[#FFD976] to-[#EFB52C]" />
+              {/* Demandé le 7 octobre : « diminue les icônes et qu'on en
+                  mette 5 par ligne » — grille à 5 colonnes fixes (au lieu du
+                  flex-wrap d'origine, qui enchaînait les pastilles selon la
+                  largeur de leur texte, d'où des rangées irrégulières).
+                  Libellé tronqué avec points de suspension si trop long pour
+                  sa colonne — le nom complet reste lisible via l'infobulle
+                  (`title`). Réduit sur mobile (2 colonnes) pour rester
+                  lisible, 5 à partir de `sm`. */}
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                {rubriques
+                  .filter(([nom]) => nom !== dossierActif)
+                  .map(([nom, nombre]) => (
+                    <span
+                      key={nom}
+                      title={nom}
+                      onDragOver={(e) => { e.preventDefault(); setDossierSurvole(nom); }}
+                      onDragLeave={() => setDossierSurvole((v) => (v === nom ? null : v))}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDossierSurvole(null);
+                        const id = e.dataTransfer.getData('text/plain');
+                        const ressource = ressources.find((r) => r.id === id);
+                        if (ressource) void deplacerVers(ressource, nom);
+                      }}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-full border text-[10px] font-bold transition-colors min-w-0 ${
+                        dossierSurvole === nom
+                          ? 'bg-[#E0A21A] border-[#E0A21A] text-white scale-105'
+                          : 'bg-white/85 border-black/10 text-slate-700'
+                      }`}
+                    >
+                      <span className="relative w-3.5 h-3 shrink-0">
+                        <span className="absolute inset-x-0 top-[16%] bottom-0 rounded-sm bg-gradient-to-b from-[#E8B33A] to-[#C88C12]" />
+                        <span className="absolute left-[8%] top-0 h-[22%] w-[46%] rounded-t-[2px] bg-[#F2C55C]" />
+                        <span className="absolute inset-x-0 top-[34%] bottom-0 rounded-sm bg-gradient-to-b from-[#FFD976] to-[#EFB52C]" />
+                      </span>
+                      <span className="truncate">{nom}</span>
+                      <span className="opacity-60 shrink-0">{nombre}</span>
                     </span>
-                    {nom}
-                    <span className="opacity-60">{nombre}</span>
-                  </span>
-                ))}
+                  ))}
+              </div>
             </div>
           )}
 
