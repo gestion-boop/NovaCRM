@@ -1856,7 +1856,14 @@ export default function AcademyView() {
               Aucune procédure ne correspond à « {recherche} ».
             </div>
           ) : (
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            // Demandé le 7 octobre : « les dossiers sont beaucoup trop
+            // importants [...] je voudrais qu'il y en ait cinq par ligne
+            // pour que le visuel soit plus confortable » — 5 colonnes à
+            // partir de xl (au lieu de 3), montée en charge progressive en
+            // dessous. Gap réduit en conséquence (6 → 4) : des colonnes plus
+            // nombreuses et plus étroites avec un grand espacement
+            // paraissent plus vides qu'aérées.
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
               {visibles.map((r) => {
                 const estVideo = r.type === 'video';
                 const estValidee = validees.has(r.id);
@@ -1922,8 +1929,8 @@ export default function AcademyView() {
                           className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-[1.03]"
                         />
                       ) : (
-                        <span className="w-full h-full flex flex-col items-center justify-center gap-3 bg-slate-100 text-slate-400">
-                          {estVideo ? <PlayCircle className="w-10 h-10" /> : <FileText className="w-10 h-10" />}
+                        <span className="w-full h-full flex flex-col items-center justify-center gap-2 bg-slate-100 text-slate-400">
+                          {estVideo ? <PlayCircle className="w-7 h-7" /> : <FileText className="w-7 h-7" />}
                           {/* Poser l'image depuis la fiche : ouvrir le
                               formulaire complet pour une seule photo faisait
                               un détour inutile. */}
@@ -1959,37 +1966,37 @@ export default function AcademyView() {
                       )}
                     </button>
 
-                    <div className="flex-1 flex flex-col p-6">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-[#B45309]">{r.rubrique}</p>
+                    <div className="flex-1 flex flex-col p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#B45309]">{r.rubrique}</p>
                       <button onClick={() => ouvrirRessource(r)} className="text-left">
-                        <h3 className="mt-2 text-xl font-extrabold uppercase text-slate-900 leading-tight">
+                        <h3 className="mt-1.5 text-sm font-extrabold uppercase text-slate-900 leading-tight">
                           {r.titre}
                         </h3>
                       </button>
                       {r.description && (
-                        <p className="mt-4 text-sm text-slate-600 leading-relaxed">{r.description}</p>
+                        <p className="mt-2 text-xs text-slate-600 leading-relaxed line-clamp-2">{r.description}</p>
                       )}
 
                       {/* Auteur — c'est lui qui fait qu'une fiche se lit comme
                           une formation et non comme un fichier. */}
-                      <div className="mt-6 pt-4 flex items-center gap-3">
+                      <div className="mt-3 pt-3 flex flex-wrap items-center gap-2">
                         {r.auteur_photo_url ? (
                           <img
                             src={r.auteur_photo_url}
                             alt=""
-                            className="w-10 h-10 rounded-full object-cover ring-1 ring-slate-200"
+                            className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-200 shrink-0"
                           />
                         ) : r.auteur ? (
-                          <span className="w-10 h-10 rounded-full bg-slate-200 text-slate-600 text-xs font-bold flex items-center justify-center">
+                          <span className="w-7 h-7 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold flex items-center justify-center shrink-0">
                             {initiales(r.auteur)}
                           </span>
                         ) : null}
-                        {r.auteur && <span className="text-sm text-slate-700">{r.auteur}</span>}
+                        {r.auteur && <span className="text-xs text-slate-700 truncate min-w-0">{r.auteur}</span>}
 
                         <button
                           onClick={() => void basculerValidation(r)}
                           disabled={validationEnCours === r.id}
-                          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors disabled:opacity-60 ${
+                          className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors disabled:opacity-60 ${
                             estValidee
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
