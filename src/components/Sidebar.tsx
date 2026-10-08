@@ -356,12 +356,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   entrées + texte/icônes agrandis sur mobile, pour une
                   lecture plus confortable dans le menu plein écran. */}
               {isMobile && itemIndex > 0 && <div className="h-px bg-white/10 mx-2" />}
-              <div className="flex items-center gap-1">
+              <div className="relative group">
               <button
                 data-tour={`nav-${item.id}`}
                 onClick={() => handleNavClick(item.id)}
                 title={collapsed && !isMobile ? `${item.label}${showBadge ? ` (${badgeCount})` : ''}` : undefined}
-                className={`flex-1 min-w-0 flex items-center justify-between transition-all duration-150 cursor-pointer ${
+                className={`w-full flex items-center justify-between transition-all duration-150 cursor-pointer ${
                   isMobile ? 'px-4 py-4 rounded-2xl text-base font-semibold' : 'px-3 py-2.5 rounded-xl text-xs font-medium'
                 } ${
                   isActive
@@ -382,18 +382,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-[#081318]" />
               )}
               </button>
-              {/* Onglets (7 octobre) : « dans le menu burger, il faut ouvrir
-                  l'élément dans un nouvel onglet ». Absent sur Nova
-                  (assistant-ia) — ce n'est pas une vraie destination, le clic
-                  normal bascule juste un panneau. `onOpenInNewTab` n'est
-                  fourni par App.tsx que dans l'app installée (voir
-                  `canUseTabs`) : invisible ailleurs. */}
+              {/* Icône "nouvel onglet" (7 octobre) : posée en survol
+                  seulement, PAR-DESSUS le bouton — corrigé le 8 octobre :
+                  elle prenait avant sa propre place à côté du bouton et
+                  rétrécissait toutes les lignes du menu en permanence
+                  (icônes/badges décalés même pour qui n'ouvre jamais
+                  d'onglet). Absente sur Nova (assistant-ia) — ce n'est pas
+                  une vraie destination. `onOpenInNewTab` n'est fourni par
+                  App.tsx que sur web/app installée, jamais mobile (voir
+                  `canUseTabs`). */}
               {onOpenInNewTab && item.id !== 'assistant-ia' && (!collapsed || isMobile) && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onOpenInNewTab(item.id); if (onCloseMobile) onCloseMobile(); }}
                   title={`Ouvrir "${item.label}" dans un nouvel onglet`}
-                  className={`shrink-0 rounded-xl text-gray-500 hover:text-[#F7BC5F] hover:bg-white/5 transition-colors cursor-pointer ${
-                    isMobile ? 'p-3' : 'p-2'
+                  className={`absolute top-1/2 -translate-y-1/2 right-1.5 shrink-0 rounded-lg bg-[#0E1A20] text-gray-400 hover:text-[#F7BC5F] hover:bg-white/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer ${
+                    isMobile ? 'p-2.5' : 'p-1.5'
                   }`}
                 >
                   <ExternalLink className={isMobile ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
