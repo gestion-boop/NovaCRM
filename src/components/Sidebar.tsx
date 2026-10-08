@@ -30,18 +30,11 @@ export interface SidebarProps {
   onCloseMobile?: () => void;
   isDarkMode?: boolean;
   onToggleTheme?: () => void;
-  // Onglets (7 octobre, app installée uniquement — voir App.tsx,
+  // Onglets (7 octobre, web et app installée, pas mobile — voir App.tsx,
   // `canUseTabs`) : présent seulement quand la fonctionnalité est
   // disponible, undefined sinon pour masquer le bouton "nouvel onglet"
-  // partout ailleurs (Web, mobile).
+  // partout ailleurs (mobile).
   onOpenInNewTab?: (navId: string) => void;
-  // Repli manuel (7 octobre) : la détection automatique "application
-  // installée" (display-mode: standalone) ne se déclare pas pour tous les
-  // outils qui transforment le site en appli de bureau — certains ne la
-  // signalent jamais correctement. `tabsForced`/`onToggleForceTabs` donnent
-  // un interrupteur explicite qui prend le dessus (voir canUseTabs, App.tsx).
-  tabsForced?: boolean;
-  onToggleForceTabs?: () => void;
 }
 
 export const NAV_ITEMS = [
@@ -95,8 +88,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isDarkMode,
   onToggleTheme,
   onOpenInNewTab,
-  tabsForced,
-  onToggleForceTabs,
 }) => {
   const { userProfile, currentUser, activeAgency } = useAuth();
   const [showAgencyMenu, setShowAgencyMenu] = useState(false);
@@ -331,26 +322,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Mode {isDarkMode ? 'sombre' : 'clair'}
               </span>
               <span className="text-[10px] text-gray-400">Changer</span>
-            </button>
-          </div>
-        )}
-
-        {/* Repli manuel (7 octobre) : la détection automatique "application
-            installée" ne se déclare pas pour tous les outils qui
-            transforment le site en appli de bureau (ex. hors Chrome PWA).
-            Interrupteur explicite pour forcer l'affichage des onglets quand
-            la détection automatique ne suffit pas. */}
-        {onToggleForceTabs && (
-          <div className="px-3 pb-1">
-            <button
-              onClick={onToggleForceTabs}
-              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
-            >
-              <span className="flex items-center gap-2.5 text-xs font-semibold text-white">
-                <ExternalLink className="w-4 h-4 text-[#F7BC5F]" />
-                Onglets {tabsForced ? 'activés' : 'désactivés'}
-              </span>
-              <span className="text-[10px] text-gray-400">{tabsForced ? 'Désactiver' : 'Activer'}</span>
             </button>
           </div>
         )}
