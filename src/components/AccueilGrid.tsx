@@ -2696,29 +2696,37 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     if (!findTileRecursive(tiles, activeId)) {
       setTiles((prev) => inscrireAffichage(prev, activeId));
     }
+    // 9 octobre (« les tuiles une fois en place reviennent souvent à leur
+    // position d'origine, voire se mettent en aléatoire ») : les index
+    // étaient calculés dans `rootSlots`, alors que l'écran affiche
+    // `rootDisplaySlots`. Les deux divergent dès qu'une tuile est posée à
+    // l'affichage sans case enregistrée (nouveauté, dossier verrouillé
+    // reposé) : elle flottait dans « la première case vide » — donc changeait
+    // de place à chaque déplacement d'une autre tuile — et lâcher une tuile
+    // SUR elle ne trouvait aucun index (-1) : retour à la case de départ.
+    // On part désormais de ce que l'utilisateur VOIT, on l'inscrit tel quel
+    // dans `rootSlots`, puis on échange les deux cases.
+    const affichage = rootDisplaySlots.map((t) => (t ? t.id : null));
+    const fromIndex = affichage.indexOf(activeId);
+    const toIndex = overId.startsWith('__empty-')
+      ? Number(overId.slice('__empty-'.length, -2))
+      : affichage.indexOf(overId);
+    if (fromIndex === -1 || toIndex === -1 || Number.isNaN(toIndex) || toIndex >= ROOT_GRID_SLOTS) return;
     setRootSlots((prev) => {
-      const fromIndex = prev.findIndex((id) => id === activeId);
-      const toIndex = overId.startsWith('__empty-')
-        ? Number(overId.slice('__empty-'.length, -2))
-        : prev.findIndex((id) => id === overId);
-      if (toIndex === -1 || toIndex >= prev.length || Number.isNaN(toIndex)) return prev;
-      const next = [...prev];
-      if (fromIndex === -1) {
-        // Nouvelle venue : elle prend la case visée ; l'occupante éventuelle
-        // part dans la première case libre.
-        const occupante = next[toIndex];
-        next[toIndex] = activeId;
-        if (occupante) {
-          const libre = next.findIndex((id, i) => id === null && i !== toIndex);
-          if (libre === -1) return prev;
-          next[libre] = occupante;
-        }
-        return next;
+      const next: (string | null)[] = Array.from({ length: ROOT_GRID_SLOTS }, (_, i) => prev[i] ?? null);
+      const visibles = new Set(affichage.filter((id): id is string => Boolean(id)));
+      // Les tuiles visibles quittent leur ancienne case enregistrée...
+      for (let i = 0; i < next.length; i++) {
+        if (next[i] && visibles.has(next[i] as string)) next[i] = null;
       }
-      const fromVal = next[fromIndex];
+      // ...et sont reposées exactement là où elles s'affichent. Une case
+      // tenue par une tuile masquée/invisible est simplement libérée (elle
+      // retrouvera la première case libre si elle redevient visible).
+      affichage.forEach((id, i) => { if (id && i < next.length) next[i] = id; });
+      const tmp = next[fromIndex];
       next[fromIndex] = next[toIndex];
-      next[toIndex] = fromVal;
-      return next;
+      next[toIndex] = tmp;
+      return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
     });
   };
 
@@ -3421,6 +3429,41 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     overflowTiles = currentDisplayTiles.slice(MAX_VISIBLE_TILES);
     visibleTiles = currentDisplayTiles.slice(0, MAX_VISIBLE_TILES);
   }
+
+  // 9 octobre : une tuile affichée à la racine sans case dans `rootSlots`
+  // (nouveauté posée à l'affichage, dossier verrouillé reposé sans case
+  // libre…) occupait « la première case vide » recalculée à chaque rendu —
+  // elle sautait d'une place à l'autre dès qu'on déplaçait une autre tuile.
+  // On lui attribue une case fixe, une seule fois, et seulement après le
+  // chargement de la grille serveur (sinon cette écriture locale, datée de
+  // maintenant, passerait pour plus récente que la grille serveur).
+  const idsRacineSansCase = activeFolder
+    ? ''
+    : rootDisplaySlots
+        .filter((t): t is TileItemNode => Boolean(t) && t!.id !== 'nova-lock-spacer' && !rootSlots.includes(t!.id))
+        .map((t) => t.id)
+        .join('|');
+  useEffect(() => {
+    const agencyId = activeAgency?.id;
+    if (!idsRacineSansCase || !agencyId || !homeSyncReadyAgencies.has(clefSyncTuiles(agencyId))) return;
+    const aAncrer = idsRacineSansCase.split('|');
+    const positions = new Map(rootDisplaySlots.map((t, i) => [t?.id, i] as const));
+    setRootSlots((prev) => {
+      const next: (string | null)[] = Array.from({ length: ROOT_GRID_SLOTS }, (_, i) => prev[i] ?? null);
+      let change = false;
+      for (const id of aAncrer) {
+        if (next.includes(id)) continue;
+        // De préférence la case où elle s'affiche déjà (aucun saut visible).
+        const ici = positions.get(id);
+        const cible = typeof ici === 'number' && next[ici] === null ? ici : next.indexOf(null);
+        if (cible === -1) continue;
+        next[cible] = id;
+        change = true;
+      }
+      return change ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsRacineSansCase, activeAgency?.id, syncPrete]);
   const moreTile: TileItemNode | null = overflowTiles.length > 0 ? {
     id: '__voir-plus__',
     title: 'Voir plus',
