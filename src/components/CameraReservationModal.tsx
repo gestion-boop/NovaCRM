@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import {
-  Camera, X, ChevronLeft, ChevronRight, Clock, MapPin, Calendar,
-  Hash, Briefcase, CheckCircle2, XCircle, Video, Film, Package, Clapperboard, Send
+  Camera, X, ChevronLeft, ChevronRight, ChevronDown, Clock, MapPin, Calendar,
+  Hash, Briefcase, CheckCircle2, XCircle, Video, Film, Package, Clapperboard, Send,
+  FileText, Check,
 } from 'lucide-react';
 import { CameraReservation } from '@/types';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
@@ -141,12 +142,14 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Equipment options matching user's screenshot
+  // Demande explicite (10 octobre) : « comme une appli, avec des boutons
+  // comme des pads plus gros, et plus facile à utiliser » — icônes vectorielles
+  // (déjà présentes ici, juste jamais affichées) à la place des emoji.
   const EQUIPMENT_OPTIONS = [
-    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', icon: Video, emoji: '🎥' },
-    { id: 'Caméra DJI', label: 'Caméra DJI', icon: Camera, emoji: '📷' },
-    { id: 'Caméra X4', label: 'Caméra X4', icon: Package, emoji: '📦' },
-    { id: 'Community Manager', label: 'Community Manager', icon: Clapperboard, emoji: '🎬' },
+    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', icon: Video },
+    { id: 'Caméra DJI', label: 'Caméra DJI', icon: Camera },
+    { id: 'Caméra X4', label: 'Caméra X4', icon: Package },
+    { id: 'Community Manager', label: 'Community Manager', icon: Clapperboard },
   ];
 
   // Calendar calculations
@@ -158,9 +161,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   ];
   const dayNames = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
-  const firstDayIndex = new Date(year, month, 1).getDay(); // 0 = Sunday
   const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
-  const totalDaysInPrevMonth = new Date(year, month, 0).getDate();
 
   // Navigate month
   const handlePrevMonth = () => setViewDate(new Date(year, month - 1, 1));
@@ -359,11 +360,6 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     }
   };
 
-  // Selected date object for status text
-  const selectedDateObj = new Date(year, month, selectedDayNum);
-  const selectedDayName = dayNames[selectedDateObj.getDay()];
-  const selectedFormattedStr = `${selectedDayName} ${String(selectedDayNum).padStart(2, '0')} ${monthNames[month].toLowerCase()}`;
-
   const hasExistingReservation = selectedDayReservations.length > 0;
 
   return (
@@ -465,60 +461,46 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
               </div>
             )}
 
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            
-            {/* Left Column: Calendar & Availability Status (5 columns) */}
-            <div className="lg:col-span-5 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-white mb-2.5">
-                  Sélectionner une date *
-                </label>
+          {/* Demande explicite (10 octobre) : « comme une appli, avec des
+              boutons comme des pads plus gros, et plus facile à utiliser » —
+              étapes numérotées et grandes cartes tactiles à la place de la
+              grille de calendrier et des petits champs texte, sur le modèle
+              validé par Sylvain (capture d'écran fournie). */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-                {/* Calendar Card */}
-                <div className="bg-[#050f14] border border-[#142832] rounded-2xl p-4 shadow-inner">
-                  {/* Month Switcher Header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <button
-                      type="button"
-                      onClick={handlePrevMonth}
-                      className="w-8 h-8 rounded-full bg-[#8b2fc9] hover:bg-[#7823b2] text-white flex items-center justify-center transition-all cursor-pointer shadow-md shadow-purple-900/30"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <span className="font-extrabold text-white text-sm sm:text-base tracking-wide">
-                      {monthNames[month]} {year}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleNextMonth}
-                      className="w-8 h-8 rounded-full bg-[#8b2fc9] hover:bg-[#7823b2] text-white flex items-center justify-center transition-all cursor-pointer shadow-md shadow-purple-900/30"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
+              {/* Colonne gauche : date, horaire, matériel */}
+              <div className="lg:col-span-7 space-y-5">
 
-                  {/* Days of Week Header */}
-                  <div className="grid grid-cols-7 text-center mb-2">
-                    {['DI', 'LU', 'MA', 'ME', 'JE', 'VE', 'SA'].map((d) => (
-                      <span key={d} className="text-[10px] font-extrabold text-slate-400 uppercase py-1">
-                        {d}
+                {/* 1. Date */}
+                <div>
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">1</span>
+                      <label className="text-sm font-extrabold text-white">Sélectionner une date *</label>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={handlePrevMonth}
+                        className="w-7 h-7 rounded-full bg-[#051319] border border-[#132c37] hover:border-purple-500/50 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-xs font-bold text-slate-300 min-w-[90px] text-center">
+                        {monthNames[month]} {year}
                       </span>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={handleNextMonth}
+                        className="w-7 h-7 rounded-full bg-[#051319] border border-[#132c37] hover:border-purple-500/50 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Calendar Grid */}
-                  <div className="grid grid-cols-7 gap-y-1.5 gap-x-1 text-center text-xs">
-                    {/* Prev month tail days */}
-                    {Array.from({ length: firstDayIndex }).map((_, idx) => {
-                      const prevDay = totalDaysInPrevMonth - firstDayIndex + idx + 1;
-                      return (
-                        <div key={`prev-${idx}`} className="text-slate-600 py-1.5 font-medium text-[11px]">
-                          {prevDay}
-                        </div>
-                      );
-                    })}
-
-                    {/* Current month days */}
+                  <div className="flex gap-2.5 overflow-x-auto pb-1 custom-scrollbar">
                     {Array.from({ length: totalDaysInMonth }).map((_, idx) => {
                       const dayNum = idx + 1;
                       const isSelected = selectedDayNum === dayNum;
@@ -526,176 +508,169 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                       const hasBookings = reservations.some((reservation) =>
                         reservation.startDate.startsWith(dayDate)
                       );
+                      const dow = dayNames[new Date(year, month, dayNum).getDay()].slice(0, 3).toUpperCase();
 
                       return (
                         <button
                           key={`day-${dayNum}`}
                           type="button"
                           onClick={() => setSelectedDayNum(dayNum)}
-                          className={`relative py-1 flex flex-col items-center justify-center transition-all rounded-full cursor-pointer h-9 w-9 mx-auto ${
+                          className={`shrink-0 w-[68px] h-[92px] rounded-2xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                             isSelected
-                              ? 'bg-[#e5ab2a] text-slate-950 font-black shadow-lg shadow-[#F7BC5F]/20'
-                              : 'text-slate-200 hover:bg-white/10 font-bold'
+                              ? 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-600 text-white shadow-lg shadow-purple-900/40'
+                              : 'bg-[#051319] border border-[#132c37] text-slate-300 hover:border-purple-500/40'
                           }`}
                         >
-                          <span>{dayNum}</span>
-                          {hasBookings && !isSelected && (
-                            <span className="w-1.5 h-1.5 bg-[#c084fc] rounded-full absolute bottom-1" />
-                          )}
-                          {hasBookings && isSelected && (
-                            <span className="w-1.5 h-1.5 bg-slate-950 rounded-full absolute bottom-1" />
+                          <span className="text-[10px] font-extrabold tracking-wide opacity-80">{dow}</span>
+                          <span className="text-xl font-black">{dayNum}</span>
+                          {hasBookings && (
+                            <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-[#c084fc]'}`} />
                           )}
                         </button>
                       );
                     })}
                   </div>
+                </div>
 
-                  {/* Legend below calendar */}
-                  <div className="flex items-center justify-center gap-4 border-t border-[#142832] pt-3 mt-3 text-[11px] text-slate-300 font-medium">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#e5ab2a]" />
-                      Jour sélectionné
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#c084fc]" />
-                      Réservation existante
-                    </span>
+                {/* 2. Horaire */}
+                <div>
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span>
+                    <label className="text-sm font-extrabold text-white">Choisir l'horaire *</label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex items-center gap-3 bg-[#051319] border border-[#132c37] rounded-2xl px-4 py-3 cursor-pointer focus-within:border-purple-500 transition-colors">
+                      <span className="w-9 h-9 rounded-full bg-purple-950/50 text-purple-300 flex items-center justify-center shrink-0">
+                        <Clock className="w-4 h-4" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[11px] text-slate-400 font-semibold">Heure de début</span>
+                        <input
+                          type="time"
+                          required
+                          value={startTime}
+                          onChange={(e) => setStartTime(e.target.value)}
+                          className="w-full bg-transparent border-none p-0 text-lg font-extrabold text-white focus:outline-none [color-scheme:dark]"
+                        />
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+                    </label>
+
+                    <label className="flex items-center gap-3 bg-[#051319] border border-[#132c37] rounded-2xl px-4 py-3 cursor-pointer focus-within:border-purple-500 transition-colors">
+                      <span className="w-9 h-9 rounded-full bg-purple-950/50 text-purple-300 flex items-center justify-center shrink-0">
+                        <Clock className="w-4 h-4" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[11px] text-slate-400 font-semibold">Heure de fin</span>
+                        <input
+                          type="time"
+                          required
+                          value={endTime}
+                          onChange={(e) => setEndTime(e.target.value)}
+                          className="w-full bg-transparent border-none p-0 text-lg font-extrabold text-white focus:outline-none [color-scheme:dark]"
+                        />
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+                    </label>
                   </div>
                 </div>
-              </div>
 
-              {/* Slots Availability Card (below calendar) */}
-              <div className="bg-[#050f14] border border-[#142832] rounded-2xl p-4 text-center space-y-2">
-                <div className="flex items-center justify-center gap-1.5 text-xs text-slate-300 font-bold">
-                  <Clock className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Créneaux — {selectedFormattedStr}</span>
-                </div>
-
-                {!hasExistingReservation ? (
-                  <div className="pt-2 pb-1 space-y-1">
-                    <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto mb-1.5">
-                      <CheckCircle2 className="w-5 h-5" />
+                {/* 3. Matériel */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">3</span>
+                      <label className="text-sm font-extrabold text-white">Matériel requis *</label>
                     </div>
-                    <p className="text-xs font-black text-emerald-400">Créneau libre</p>
-                    <p className="text-[11px] text-slate-400">Aucune réservation ce jour</p>
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      {selectedEquipment.length} sélectionné
+                    </span>
                   </div>
-                ) : (
-                  <div className="pt-2 pb-1 text-left space-y-1.5 bg-purple-950/20 border border-purple-500/20 rounded-xl p-2.5">
-                    <p className="text-[10px] uppercase font-bold text-purple-300 tracking-wider">
-                      {selectedDayReservations.length} réservation(s) ce jour
-                    </p>
-                    {selectedDayReservations.map((reservation) => (
-                      <div key={reservation.id} className="border-t border-purple-500/10 pt-1.5 first:border-t-0 first:pt-0">
-                        <p className="text-xs font-semibold text-white">
-                          {reservation.equipmentName} • {reservation.startTime || reservation.startDate.slice(-5)} - {reservation.endTime || reservation.endDate.slice(-5)}
-                        </p>
-                        <p className="text-[11px] text-slate-400">
-                          Agent : {reservation.agentName} • {reservation.status}
-                        </p>
-                      </div>
-                    ))}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {EQUIPMENT_OPTIONS.map((item) => {
+                      const isSelected = selectedEquipment.includes(item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => toggleEquipment(item.id)}
+                          aria-pressed={isSelected}
+                          className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all select-none text-left ${
+                            isSelected
+                              ? 'bg-[#28133b] border-purple-500 text-white shadow-sm shadow-purple-900/20'
+                              : 'bg-[#051319] border-[#132c37] text-slate-300 hover:border-purple-500/40'
+                          }`}
+                        >
+                          <span className="w-11 h-11 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
+                            <item.icon className="w-5 h-5" />
+                          </span>
+                          <span className="flex-1 min-w-0 text-sm font-extrabold truncate">{item.label}</span>
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center border shrink-0 transition-colors ${
+                            isSelected ? 'bg-purple-500 border-purple-400 text-white' : 'border-slate-600'
+                          }`}>
+                            {isSelected && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-            </div>
 
-            {/* Right Column: Form Inputs (7 columns) */}
-            <div className="lg:col-span-7 space-y-4">
-              
-              {/* Start and End Times */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-white mb-1.5">
-                    Heure de début *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      className="w-full bg-[#051319] border border-[#132c37] focus:border-purple-500 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-colors"
-                    />
-                    <Clock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-white mb-1.5">
-                    Heure de fin *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
-                      className="w-full bg-[#051319] border border-[#132c37] focus:border-purple-500 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-colors"
-                    />
-                    <Clock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Matériel requis */}
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-bold text-white">
-                    Matériel requis *
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-medium">
-                    {selectedEquipment.length} sélectionné
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {EQUIPMENT_OPTIONS.map((item) => {
-                    const isSelected = selectedEquipment.includes(item.id);
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => toggleEquipment(item.id)}
-                        className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all select-none ${
-                          isSelected
-                            ? 'bg-[#28133b] border-purple-500 text-white shadow-sm shadow-purple-900/20'
-                            : 'bg-[#051319] border-[#132c37] text-slate-300 hover:border-purple-500/40'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-base">{item.emoji}</span>
-                          <span className="text-xs font-extrabold">{item.label}</span>
+                  {/* Réservations existantes ce jour */}
+                  <div className="mt-3 bg-purple-950/15 border border-purple-500/25 rounded-2xl p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2 text-xs font-bold text-slate-200">
+                        <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                        Réservations existantes ce jour
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-200 bg-white/10 px-2.5 py-0.5 rounded-full shrink-0">
+                        {selectedDayReservations.length} réservation{selectedDayReservations.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    {!hasExistingReservation ? (
+                      <p className="text-xs text-emerald-400 font-semibold">Aucune réservation ce jour — créneau libre.</p>
+                    ) : (
+                      selectedDayReservations.map((reservation) => (
+                        <div key={reservation.id} className="flex items-center justify-between gap-3 bg-white/5 rounded-xl px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-white truncate">{reservation.equipmentName}</p>
+                            <p className="text-[11px] text-slate-400 truncate">Agent : {reservation.agentName} • {reservation.status}</p>
+                          </div>
+                          <span className="text-[11px] font-bold text-slate-200 shrink-0">
+                            {reservation.startTime || reservation.startDate.slice(-5)} - {reservation.endTime || reservation.endDate.slice(-5)}
+                          </span>
                         </div>
-                        <div className={`w-4 h-4 rounded-full flex items-center justify-center border transition-colors ${
-                          isSelected ? 'bg-purple-500 border-purple-400 text-white' : 'border-slate-600'
-                        }`}>
-                          {isSelected && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Lieu & Mandat */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-white mb-1.5 flex items-center gap-1.5">
+              {/* Colonne droite : informations complémentaires */}
+              <div className="lg:col-span-5 space-y-3">
+                <div className="flex items-center gap-2.5 mb-1">
+                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">4</span>
+                  <label className="text-sm font-extrabold text-white">Informations complémentaires</label>
+                </div>
+
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
                     <MapPin className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Lieu</span>
+                    Lieu
                   </label>
                   <input
                     type="text"
                     placeholder="Adresse, ville..."
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    className="w-full bg-[#051319] border border-[#132c37] focus:border-purple-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
+                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-white mb-1.5 flex items-center gap-1.5">
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
                     <Hash className="w-3.5 h-3.5 text-purple-400" />
-                    <span>N° mandat (optionnel)</span>
+                    N° mandat (optionnel)
                   </label>
                   {/* Signalé (8 septembre, Mélanie, ImmoSphera/NovaVisio) :
                       « la réservation ne fonctionne pas » — en réalité, ce
@@ -711,65 +686,63 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                     placeholder="Ex : 2024-001"
                     value={mandateNumber}
                     onChange={(e) => setMandateNumber(e.target.value)}
-                    className="w-full bg-[#051319] border border-[#132c37] focus:border-purple-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
+                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
+                    <Briefcase className="w-3.5 h-3.5 text-purple-400" />
+                    Projet
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Nom du projet..."
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
+                    <FileText className="w-3.5 h-3.5 text-purple-400" />
+                    Note (optionnel)
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Informations supplémentaires..."
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none resize-none transition-colors"
                   />
                 </div>
               </div>
+            </div>
 
-              {/* Projet */}
-              <div>
-                <label className="block text-xs font-bold text-white mb-1.5 flex items-center gap-1.5">
-                  <Briefcase className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Projet</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Nom du projet..."
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  className="w-full bg-[#051319] border border-[#132c37] focus:border-purple-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
-                />
-              </div>
-
-              {/* Note */}
-              <div>
-                <label className="block text-xs font-bold text-white mb-1.5">
-                  Note (optionnel)
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Informations supplémentaires..."
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  className="w-full bg-[#051319] border border-[#132c37] focus:border-purple-500 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none resize-none transition-colors"
-                />
-              </div>
-
-              {/* Footer Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#142832]">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-5 py-2.5 rounded-xl text-slate-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                    disabled={submitting || loadingReservations}
-                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:opacity-95 text-white font-black text-xs shadow-lg shadow-purple-900/40 flex items-center gap-2 cursor-pointer transition-all active:scale-95"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>
-                    {submitting
-                      ? 'Enregistrement...'
-                      : editReservation
-                      ? 'Enregistrer les modifications'
-                      : 'Envoyer la demande'}
-                  </span>
-                </button>
-              </div>
-
+            {/* Footer Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#142832]">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-3 rounded-full border border-[#132c37] bg-[#051319] text-slate-300 hover:text-white hover:border-purple-500/40 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || loadingReservations}
+                className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:opacity-95 text-white font-black text-xs shadow-lg shadow-purple-900/40 flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+                <span>
+                  {submitting
+                    ? 'Enregistrement...'
+                    : editReservation
+                    ? 'Enregistrer les modifications'
+                    : 'Envoyer la demande'}
+                </span>
+              </button>
             </div>
           </form>
           </>
