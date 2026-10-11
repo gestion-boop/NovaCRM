@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Camera, Plus, Clock, MapPin, Hash, Briefcase, CheckCircle2, XCircle, Pencil } from 'lucide-react';
+import { Camera, Plus, Clock, MapPin, Hash, Briefcase, CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import CameraReservationModal from './CameraReservationModal';
 import { useAuth } from '@/context/AuthContext';
 import { useCameraReservations, StoredCameraReservation, formatReservationDateFr } from '@/hooks/useCameraReservations';
@@ -33,9 +34,14 @@ const ReviewRow: React.FC<{
   const [refuseReason, setRefuseReason] = useState('');
   const [altSlots, setAltSlots] = useState<string[]>(['', '', '']);
   const isPending = res.status === 'En attente';
+  // Demande explicite (11 octobre) : un admin doit pouvoir refuser une
+  // réservation déjà CONFIRMÉE (pas seulement une demande en attente) —
+  // « Valider » n'a en revanche de sens que tant que rien n'est encore
+  // confirmé. Une réservation déjà refusée n'a plus besoin de ce bloc.
+  const isConfirmed = res.status === 'Confirmée';
   const busy = reviewingId === res.id;
 
-  if (!isCameraAdmin || !isPending) return null;
+  if (!isCameraAdmin || (!isPending && !isConfirmed)) return null;
 
   return (
     <div className="mt-3 pt-3 border-t border-white/10 space-y-2.5">
@@ -90,14 +96,16 @@ const ReviewRow: React.FC<{
             >
               <XCircle className="w-3.5 h-3.5" /> Refuser
             </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void reviewReservation(res, true)}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 flex items-center gap-2"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" /> Valider
-            </button>
+            {isPending && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void reviewReservation(res, true)}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> Valider
+              </button>
+            )}
           </>
         )}
       </div>
@@ -107,7 +115,7 @@ const ReviewRow: React.FC<{
 
 export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenModal }) => {
   const { currentUser } = useAuth();
-  const { reservations, loading, error, isCameraAdmin, reviewingId, reviewReservation } = useCameraReservations();
+  const { reservations, loading, error, isCameraAdmin, reviewingId, reviewReservation, deleteReservation } = useCameraReservations();
   const [showModal, setShowModal] = useState(false);
   // Demande explicite : pouvoir cliquer sur une réservation enregistrée
   // pour la modifier si besoin, sans repasser par une nouvelle demande.
@@ -125,6 +133,21 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
   const handleEdit = (r: StoredCameraReservation) => {
     setEditingReservation(r);
     setShowModal(true);
+  };
+
+  // Demande explicite (11 octobre) : « je veux que les admins puissent
+  // modifier, supprimer ou refuser les réservations en cours et déjà
+  // créées » — suppression définitive, quel que soit le statut.
+  const handleDelete = async (r: StoredCameraReservation) => {
+    if (!window.confirm(`Supprimer définitivement cette réservation (${r.equipmentName}, ${formatReservationDateFr(r)}) ? Impossible à annuler.`)) {
+      return;
+    }
+    try {
+      await deleteReservation(r);
+      toast.success('Réservation supprimée.');
+    } catch {
+      toast.error("Impossible de supprimer cette réservation.");
+    }
   };
 
   // Modifiable par son auteur tant qu'elle est en attente (même règle que la
@@ -267,6 +290,17 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
                       className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:border-purple-500/40 transition-colors"
                     >
                       <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {isCameraAdmin && (
+                    <button
+                      type="button"
+                      disabled={reviewingId === r.id}
+                      onClick={() => void handleDelete(r)}
+                      title="Supprimer définitivement cette réservation"
+                      className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-rose-300 hover:border-rose-500/40 transition-colors disabled:opacity-40"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>

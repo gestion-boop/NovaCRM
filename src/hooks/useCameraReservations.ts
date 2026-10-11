@@ -171,13 +171,13 @@ export function useCameraReservations() {
     return () => { supabase.removeChannel(channel); };
   }, [currentUser?.uid, load]);
 
-  const notifyRequester = async (res: StoredCameraReservation, approved: boolean, message?: string) => {
+  const notifyRequester = async (res: StoredCameraReservation, approved: boolean, message?: string, title?: string) => {
     if (!res.createdByUserId) return;
     try {
       await supabase.rpc('create_notification', {
         _user_id: res.createdByUserId,
         _type: approved ? 'camera_reservation_approved' : 'camera_reservation_rejected',
-        _title: approved ? '✅ Réservation confirmée' : '❌ Réservation refusée',
+        _title: title || (approved ? '✅ Réservation confirmée' : '❌ Réservation refusée'),
         _message:
           message ||
           (approved
@@ -250,6 +250,40 @@ export function useCameraReservations() {
   // tous les super admins + Mélanie (voir camera_reservation_approvers()
   // côté SQL), donc plus besoin de dupliquer l'envoi ici.
 
+  // Demande explicite (11 octobre) : « je veux que les admins puissent
+  // modifier, supprimer ou refuser les réservations en cours et déjà
+  // créées » — modifier existait déjà (canEdit, sans égard au statut pour
+  // un admin) et la policy RLS `cam_delete`/« delete owner or approver »
+  // autorise déjà un approbateur (camera_reservation_approvers(), déjà
+  // utilisée par reviewReservation) à supprimer n'importe quelle
+  // réservation : il manquait seulement cette fonction côté client.
+  const deleteReservation = async (res: StoredCameraReservation) => {
+    if (!currentUser) return;
+    setReviewingId(res.id);
+    try {
+      const { error: sbError } = await supabase
+        .from('camera_reservations' as any)
+        .delete()
+        .eq('id', res.id);
+      if (sbError) throw sbError;
+
+      setReservations((current) => current.filter((r) => r.id !== res.id));
+
+      await notifyRequester(
+        res,
+        false,
+        `Votre réservation "${res.equipmentName}" du ${formatReservationDateFr(res)} a été supprimée par un administrateur.`,
+        '🗑️ Réservation supprimée'
+      );
+    } catch (e) {
+      console.error('Erreur suppression réservation caméra :', e);
+      setError('Impossible de supprimer cette réservation.');
+      throw e;
+    } finally {
+      setReviewingId(null);
+    }
+  };
+
   const pendingReservations = reservations.filter((r) => r.status === 'En attente');
 
   return {
@@ -261,6 +295,7 @@ export function useCameraReservations() {
     isCameraAdmin,
     reviewingId,
     reviewReservation,
+    deleteReservation,
     reload: load,
   };
 }
