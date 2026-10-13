@@ -42,7 +42,7 @@ const priorityMeta = (p: SupportPriority) =>
 // que useLeadChat.ts/useTaskMessages.ts, ici sans pagination ni `.limit()` :
 // tout l'historique du ticket était rechargé à chaque ouverture. Même
 // correctif (derniers messages seulement).
-const RECENT_TICKET_MESSAGES_PAGE = 60;
+const RECENT_TICKET_MESSAGES_PAGE = 30;
 
 const categoryLabel = (c: SupportCategory) => CATEGORY_OPTIONS.find((o) => o.value === c)?.label || c;
 
