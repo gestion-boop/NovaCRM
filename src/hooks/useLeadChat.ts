@@ -44,6 +44,18 @@ function rowToMessage(row: Record<string, unknown>): LeadMessage {
   };
 }
 
+// Signalé (13 octobre) : « les messages tardent à arriver » en ouvrant la
+// conversation d'une fiche depuis une notification — cette requête n'avait
+// ni `.limit()` ni pagination : TOUT l'historique du lead était retéléchargé
+// ET re-rendu sans fenêtrage, à l'ouverture ET à chaque événement temps réel
+// (y compris ses propres messages et l'accusé de lecture, voir plus bas —
+// chacun invalide la requête). Même correctif déjà posé le 10 septembre pour
+// le chat des tâches de Projets internes (useTaskMessages.ts,
+// RECENT_TASK_MESSAGES_PAGE) et pour la messagerie d'équipe
+// (ChatViewSupabase.tsx, RECENT_MESSAGES_PAGE) : on ne charge plus que les
+// messages les plus récents.
+const RECENT_LEAD_MESSAGES_PAGE = 60;
+
 export const useLeadChat = (leadId: string | null) => {
   const queryClient = useQueryClient();
   const queryKey = ['lead-chat', leadId];
@@ -56,9 +68,10 @@ export const useLeadChat = (leadId: string | null) => {
         .from('messages')
         .select('*')
         .eq('lead_id', leadId as string)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(RECENT_LEAD_MESSAGES_PAGE);
       if (error) throw new Error(error.message);
-      return ((data as Record<string, unknown>[]) || []).map(rowToMessage);
+      return ((data as Record<string, unknown>[]) || []).map(rowToMessage).reverse();
     },
   });
 
