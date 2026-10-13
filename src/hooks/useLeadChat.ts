@@ -54,7 +54,7 @@ function rowToMessage(row: Record<string, unknown>): LeadMessage {
 // RECENT_TASK_MESSAGES_PAGE) et pour la messagerie d'équipe
 // (ChatViewSupabase.tsx, RECENT_MESSAGES_PAGE) : on ne charge plus que les
 // messages les plus récents.
-const RECENT_LEAD_MESSAGES_PAGE = 60;
+const RECENT_LEAD_MESSAGES_PAGE = 30;
 
 export const useLeadChat = (leadId: string | null) => {
   const queryClient = useQueryClient();
