@@ -38,6 +38,12 @@ const STATUS_COLUMNS: { value: SupportStatus; label: string }[] = [
 const priorityMeta = (p: SupportPriority) =>
   PRIORITY_OPTIONS.find((o) => o.value === p) || { value: p, label: p, classes: 'bg-white/10 text-gray-300 border-white/10' };
 
+// Signalé (13 octobre) : « les messages tardent à arriver » — même défaut
+// que useLeadChat.ts/useTaskMessages.ts, ici sans pagination ni `.limit()` :
+// tout l'historique du ticket était rechargé à chaque ouverture. Même
+// correctif (derniers messages seulement).
+const RECENT_TICKET_MESSAGES_PAGE = 60;
+
 const categoryLabel = (c: SupportCategory) => CATEGORY_OPTIONS.find((o) => o.value === c)?.label || c;
 
 const statusLabel = (s: SupportStatus) => STATUS_COLUMNS.find((c) => c.value === s)?.label || s;
@@ -261,9 +267,10 @@ export const SupportView: React.FC = () => {
         .from('support_ticket_messages')
         .select('*')
         .eq('ticket_id', ticketId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(RECENT_TICKET_MESSAGES_PAGE);
       if (err) throw err;
-      const rows = (data as MessageRow[]) || [];
+      const rows = ((data as MessageRow[]) || []).reverse();
       setMessages(rows.map(rowToMessage));
 
       // Accusé de réception (19/09/2026, capture à l'appui) : « je ne vois
