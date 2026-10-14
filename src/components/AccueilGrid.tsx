@@ -1,6 +1,23 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
+// Signalé (14 octobre) : « les tuiles sont encore différentes, ça bouge à
+// chaque fois ». Cause trouvée : le shim ci-dessous (@/contexts/AuthContext,
+// PLURIEL — fait pour le module ImmoSphera 360, voir ce fichier) ne
+// renvoyait jamais `currentUser` (seulement `user`, une forme différente) ;
+// la déstructuration plus bas le lisait quand même via un `as any`, qui a
+// masqué l'erreur de type. `currentUser` valait donc TOUJOURS `undefined`
+// dans tout ce composant — ce qui désactivait silencieusement, depuis
+// toujours : la synchronisation serveur de la disposition (HOME_TILES_KEY
+// ne formait jamais que des clés "_anon_", jamais par utilisateur réel),
+// et par ricochet l'ancrage des tuiles flottantes posé le 9 octobre
+// (homeSyncReadyAgencies ne se remplit que dans cette synchronisation). Les
+// dossiers verrouillés sans case enregistrée flottaient donc réellement «
+// dans la première case vide », recalculée à chaque rendu, pour toujours —
+// pas seulement avant un correctif, EN PERMANENCE. Corrigé à la source,
+// dans le shim lui-même (il expose maintenant aussi `currentUser`) plutôt
+// qu'ici : un autre composant (NovaSearchBar.tsx) avait exactement le même
+// bug avec ce même shim.
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { assemblerDictee } from '@/lib/dictee';
@@ -1313,6 +1330,13 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // stockage, sans distinction d'agence. Chaque agence a maintenant sa
   // propre clé, cloisonnée.
   const HOME_TILES_KEY = `novasphere_home_tiles_v3_${currentUser?.uid || 'anon'}_${activeAgency?.id || 'default'}`;
+  // Migration (14 octobre, voir la note sur `currentUser` en haut du
+  // fichier) : tant que `currentUser` valait `undefined`, cette clé était
+  // TOUJOURS "_anon_", quel que soit le compte — la disposition
+  // personnalisée de chacun vit donc encore là, sous une clé que son
+  // compte (désormais réel) ne relira plus jamais tout seul. Repli
+  // explicite, utilisé une seule fois par `loadTilesForKey` ci-dessous.
+  const HOME_TILES_KEY_ANON = `novasphere_home_tiles_v3_anon_${activeAgency?.id || 'default'}`;
   // Signalé : "plusieurs fois le dossier Amanda" (et d'autres tuiles en
   // double) — cause trouvée : la ré-injection automatique des nouvelles
   // tuiles Immosphera ci-dessous ne cherchait qu'au premier niveau de la
@@ -1665,8 +1689,28 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     return dedupeRecursive(base);
   };
 
-  const loadTilesForKey = (key: string): TileItemNode[] => {
-    const saved = localStorage.getItem(key);
+  const loadTilesForKey = (key: string, cleAnonRepli?: string): TileItemNode[] => {
+    let saved = localStorage.getItem(key);
+    // Migration (14 octobre) : rien sous la nouvelle clé par utilisateur ?
+    // Reprise unique depuis l'ancienne clé "_anon_" si elle a quelque
+    // chose, pour que l'affichage ne semble pas avoir disparu. Copiée
+    // SANS horodatage frais — un poste partagé entre plusieurs comptes
+    // écrivait tous sous cette même clé "_anon_" (currentUser valant
+    // toujours undefined, voir plus haut), elle peut donc appartenir à
+    // quelqu'un d'autre. Sans date, la règle déjà en place dans l'effet
+    // de synchronisation plus bas s'applique : « à date inconnue, le
+    // serveur reste la référence » — la vraie disposition de CE compte
+    // (si elle existe déjà côté serveur, depuis un autre appareil) la
+    // remplacera donc proprement dès la réponse serveur, au lieu de
+    // l'écraser. Un compte qui n'a encore rien côté serveur (cas neuf)
+    // garde cette reprise locale telle quelle.
+    if (!saved && cleAnonRepli) {
+      const ancien = localStorage.getItem(cleAnonRepli);
+      if (ancien) {
+        saved = ancien;
+        try { localStorage.setItem(key, ancien); } catch { /* ignore */ }
+      }
+    }
     let base = INITIAL_TILES;
     if (saved) {
       try {
@@ -1680,7 +1724,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     }
     return reconcilierGrille(base);
   };
-  const [tiles, setTiles] = useState<TileItemNode[]>(() => loadTilesForKey(HOME_TILES_KEY));
+  const [tiles, setTiles] = useState<TileItemNode[]>(() => loadTilesForKey(HOME_TILES_KEY, HOME_TILES_KEY_ANON));
 
   // Ticket #256 : "positionnement libre comme sur mobile — pouvoir poser une
   // tuile où on veut, y compris seule sur une ligne à droite" (desktop
@@ -1694,17 +1738,28 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   const ROOT_COLUMNS = 6;
   const ROOT_GRID_SLOTS = 36; // 6 colonnes × 6 lignes — large marge.
   const ROOT_SLOTS_KEY = `novasphere_home_slots_v1_${currentUser?.uid || 'anon'}_${activeAgency?.id || 'default'}`;
+  // Même migration que HOME_TILES_KEY_ANON ci-dessus, pour les positions.
+  const ROOT_SLOTS_KEY_ANON = `novasphere_home_slots_v1_anon_${activeAgency?.id || 'default'}`;
   // Ancien id sentinelle du bouton "Ajouter" quand il faisait partie de la
   // grille — conservé ici uniquement pour filtrer d'éventuelles anciennes
   // valeurs encore présentes dans le localStorage de certains utilisateurs
   // (voir plus bas) : le bouton est désormais remonté dans le bandeau du
   // haut (demande explicite), et n'est plus une tuile de la grille.
   const ADD_TILE_ID = '__add-tile__';
-  const loadRootSlots = (key: string, currentTiles: TileItemNode[]): (string | null)[] => {
+  const loadRootSlots = (key: string, currentTiles: TileItemNode[], cleAnonRepli?: string): (string | null)[] => {
     const realIds = currentTiles.filter((t) => t.id !== 'nova-lock-spacer').map((t) => t.id);
     let saved: (string | null)[] = [];
     try {
-      const raw = localStorage.getItem(key);
+      let raw = localStorage.getItem(key);
+      // Même migration que loadTilesForKey (voir sa note, 14 octobre) —
+      // SANS horodatage frais non plus, même raison (poste partagé).
+      if (!raw && cleAnonRepli) {
+        const ancien = localStorage.getItem(cleAnonRepli);
+        if (ancien) {
+          raw = ancien;
+          localStorage.setItem(key, ancien);
+        }
+      }
       const parsed = raw ? JSON.parse(raw) : null;
       if (Array.isArray(parsed)) saved = parsed;
     } catch { /* ignore */ }
@@ -1731,7 +1786,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Incrémenté quand la grille serveur de l'agence est chargée : les effets
   // qui ne doivent écrire qu'après (voir plus bas) s'y accrochent.
   const [syncPrete, setSyncPrete] = useState(0);
-  const [rootSlots, setRootSlots] = useState<(string | null)[]>(() => loadRootSlots(ROOT_SLOTS_KEY, tiles));
+  const [rootSlots, setRootSlots] = useState<(string | null)[]>(() => loadRootSlots(ROOT_SLOTS_KEY, tiles, ROOT_SLOTS_KEY_ANON));
   const rootSlotsKeyRef = useRef(ROOT_SLOTS_KEY);
   const rootSlotsRef = useRef(rootSlots);
   useEffect(() => { rootSlotsRef.current = rootSlots; }, [rootSlots]);
@@ -1751,7 +1806,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // juste en dessous pour `tiles`/HOME_TILES_KEY).
   if (rootSlotsKeyRef.current !== ROOT_SLOTS_KEY) {
     rootSlotsKeyRef.current = ROOT_SLOTS_KEY;
-    const recharges = loadRootSlots(ROOT_SLOTS_KEY, tiles);
+    const recharges = loadRootSlots(ROOT_SLOTS_KEY, tiles, ROOT_SLOTS_KEY_ANON);
     derniersSlotsRef.current = JSON.stringify(recharges);
     setRootSlots(recharges);
   }
@@ -1984,7 +2039,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   if (homeTilesKeyRef.current !== HOME_TILES_KEY) {
     homeTilesKeyRef.current = HOME_TILES_KEY;
     skipNextTilesSaveRef.current = true;
-    const rechargees = loadTilesForKey(HOME_TILES_KEY);
+    const rechargees = loadTilesForKey(HOME_TILES_KEY, HOME_TILES_KEY_ANON);
     derniersTilesRef.current = JSON.stringify(rechargees);
     setTiles(rechargees);
   }
@@ -2320,10 +2375,22 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // et quand on le dissout il revient au rafraîchissement ») : des verrous
   // FANTÔMES — anciens dossiers du même nom, supprimés avant que le verrou ne
   // parte avec — reposaient un dossier que le super admin venait de
-  // dissoudre, et en retiraient les cartes de la racine. Chez le super
-  // admin, une fois sa grille serveur chargée, un verrou dont le dossier
-  // n'existe ni dans sa grille ni parmi les tuiles fournies est ignoré tout
-  // de suite (verrousEffectifs) et effacé pour toute l'agence.
+  // dissoudre, et en retiraient les cartes de la racine. Un verrou dont le
+  // dossier n'existe ni dans la grille de CE super admin ni parmi les
+  // tuiles fournies est filtré de l'affichage local (verrousEffectifs).
+  //
+  // Signalé (14 octobre, voir la note sur `currentUser` en haut du fichier) :
+  // l'écriture automatique qui effaçait aussi ce fantôme CÔTÉ SERVEUR, pour
+  // toute l'agence, n'a jamais pu s'exécuter tant que `currentUser` valait
+  // `undefined` (elle dépendait de `homeSyncReadyAgencies`, alimentée
+  // uniquement par la synchronisation serveur, bloquée par le même bug).
+  // Retirée plutôt que réactivée telle quelle : elle ne compare un verrou
+  // qu'à la grille du SEUL super admin connecté à cet instant — un dossier
+  // verrouillé par un AUTRE super admin (Mélanie), absent de la grille de
+  // celui-ci, serait pris pour un fantôme et effacé pour toute l'agence.
+  // Le filtrage d'affichage ci-dessous reste sans danger (local, jamais
+  // écrit nulle part) ; une vraie purge partagée demande un garde-fou entre
+  // super admins qui n'existe pas encore.
   const fantomesVerrous = useMemo<string[]>(() => {
     if (!isSuperAdmin || !activeAgency?.id || !currentUser?.uid || !homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) return [];
     return Object.keys(lockedTiles).filter((id) => !existsRecursive(tiles, id) && !findInitialTile(id));
@@ -2335,12 +2402,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     fantomesVerrous.forEach((id) => { delete propres[id]; });
     return propres;
   }, [lockedTiles, fantomesVerrous]);
-  const clesFantomes = fantomesVerrous.join('|');
-  useEffect(() => {
-    if (!clesFantomes) return;
-    void enregistrerVerrous(verrousEffectifs, lockedTiles);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clesFantomes]);
 
   // Folder Stack state for navigation inside open folders/nested folders
   const [openFolderStack, setOpenFolderStack] = useState<TileItemNode[]>([]);
