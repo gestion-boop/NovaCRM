@@ -1703,12 +1703,18 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // (si elle existe déjà côté serveur, depuis un autre appareil) la
     // remplacera donc proprement dès la réponse serveur, au lieu de
     // l'écraser. Un compte qui n'a encore rien côté serveur (cas neuf)
-    // garde cette reprise locale telle quelle.
+    // garde cette reprise locale telle quelle. La clé "_anon_" est retirée
+    // juste après : sur un poste partagé, un DEUXIÈME compte qui ouvrirait
+    // l'accueil pour la toute première fois ne doit pas hériter à son tour
+    // de la disposition du premier — il repart alors proprement de zéro.
     if (!saved && cleAnonRepli) {
       const ancien = localStorage.getItem(cleAnonRepli);
       if (ancien) {
         saved = ancien;
-        try { localStorage.setItem(key, ancien); } catch { /* ignore */ }
+        try {
+          localStorage.setItem(key, ancien);
+          localStorage.removeItem(cleAnonRepli);
+        } catch { /* ignore */ }
       }
     }
     let base = INITIAL_TILES;
@@ -1752,12 +1758,14 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     try {
       let raw = localStorage.getItem(key);
       // Même migration que loadTilesForKey (voir sa note, 14 octobre) —
-      // SANS horodatage frais non plus, même raison (poste partagé).
+      // SANS horodatage frais non plus, même raison (poste partagé), et
+      // même retrait de la clé "_anon_" une fois reprise.
       if (!raw && cleAnonRepli) {
         const ancien = localStorage.getItem(cleAnonRepli);
         if (ancien) {
           raw = ancien;
           localStorage.setItem(key, ancien);
+          localStorage.removeItem(cleAnonRepli);
         }
       }
       const parsed = raw ? JSON.parse(raw) : null;
