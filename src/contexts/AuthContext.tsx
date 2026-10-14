@@ -29,6 +29,14 @@ export function useAuth() {
 
   return {
     user,
+    // Signalé (14 octobre) : plusieurs consommateurs de ce shim (AccueilGrid.tsx,
+    // NovaSearchBar.tsx) déstructurent `currentUser` (la forme NovaCRM native,
+    // voir @/context/AuthContext, singulier) alors que ce shim ne renvoyait
+    // QUE `user` (la forme ImmoSphera) — `currentUser` valait donc TOUJOURS
+    // `undefined` chez eux, silencieusement masqué par un `as any`. Exposé
+    // ici aussi, en plus de `user`, pour que ce bug de fond ne se reproduise
+    // pas ailleurs à chaque nouveau composant qui consomme ce shim.
+    currentUser,
     agencies: undefined,
     activeAgency: resolvedAgency,
     isSuperAdmin,
