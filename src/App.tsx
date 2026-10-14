@@ -1684,12 +1684,13 @@ function App() {
         onClose={() => setShowNouveauLead(false)}
         onSubmit={async (data) => {
           const created = await addContact.mutateAsync(data);
-          // Visite guidée : si c'est elle qui a fait ouvrir cette modale
-          // ("À vous de jouer"), on enchaîne directement sur la fiche du
-          // contact fraîchement créé pour montrer son interface.
+          // Demande explicite (14 octobre) : une fois le contact enregistré,
+          // ouvrir directement sa fiche — plus seulement pendant la visite
+          // guidée (qui, elle, enchaîne en plus sur l'étape suivante du
+          // tour). La modale se ferme déjà toute seule juste après (voir
+          // NouveauLeadModal.tsx, onClose() après onSubmit réussi).
+          openClientProfile(created.id);
           if (showProductTour) {
-            setShowNouveauLead(false);
-            openClientProfile(created.id);
             setTourSignalNext((n) => n + 1);
           }
           return created;
