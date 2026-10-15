@@ -182,7 +182,11 @@ export default function Index({
           ? filteredProperties.filter((p) => ((p as any).listing_type ?? "sale") === "sale")
           : activeChip === "Locations"
             ? filteredProperties.filter((p) => (p as any).listing_type === "rental")
-            : filteredProperties;
+            : activeChip === "Sous offre"
+              ? filteredProperties.filter((p) => (p as any).status === "under_offer")
+              : activeChip === "Sous compromis"
+                ? filteredProperties.filter((p) => (p as any).status === "under_compromise")
+                : filteredProperties;
 
   const baseProperties = typeFilter
     ? chipProperties.filter((p) => matchesPropertyType(p.property_type, typeFilter))
@@ -378,7 +382,11 @@ export default function Index({
                   ? "récents"
                   : activeChip === "Propal clients"
                     ? "sélectionnés"
-                    : "trouvés"}
+                    : activeChip === "Sous offre"
+                      ? "sous offre"
+                      : activeChip === "Sous compromis"
+                        ? "sous compromis"
+                        : "trouvés"}
             </h2>
             <div className="flex items-center gap-2">
               <button
