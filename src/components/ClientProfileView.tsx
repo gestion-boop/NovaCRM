@@ -1886,6 +1886,7 @@ export default function ClientProfileView({
     e.preventDefault();
 
     if (!client || !currentUser) return;
+    if (docSaving) return;
 
     if (!docName.trim()) {
       setProfileError('Le nom du document est obligatoire.');
@@ -1989,9 +1990,9 @@ export default function ClientProfileView({
       setDocName('');
       setDocFile(null);
       setDocIsShared(false);
-      await loadDocs();
       setShowDocModal(false);
       setProfileSuccess('Document ajouté à la fiche client.');
+      await loadDocs();
     } catch (error) {
       console.error('Erreur ajout document client :', error);
       setProfileError(
@@ -3722,9 +3723,10 @@ export default function ClientProfileView({
                           </button>
                           <button
                             type="submit"
-                            className="px-5 py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-sm shadow-lg cursor-pointer"
+                            disabled={docSaving}
+                            className="px-5 py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-sm shadow-lg cursor-pointer disabled:opacity-50"
                           >
-                            Enregistrer le document
+                            {docSaving ? 'Enregistrement...' : 'Enregistrer le document'}
                           </button>
                         </div>
                       </form>
