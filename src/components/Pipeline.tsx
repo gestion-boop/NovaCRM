@@ -1762,39 +1762,6 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     }
   };
 
-  // Demande explicite : "quand on déplace un dossier dans une colonne, on
-  // puisse mettre un message relance programmé — 3/5/10/15 jours — et Nova
-  // nous dise où on en est quand ça fait un moment qu'il n'y a pas eu de
-  // mouvement." Proposée juste après un déplacement réel de carte (voir
-  // handlePipelineDragEnd) — jamais bloquant, comme pendingAutomationPrompt
-  // juste au-dessus. `contactId` d'un deal = l'id du lead (voir useDeals.ts).
-  const [pendingFollowupPrompt, setPendingFollowupPrompt] = useState<{
-    dealId: string;
-    dealTitle: string;
-    leadId: string;
-  } | null>(null);
-
-  const scheduleFollowup = async (days: number) => {
-    if (!pendingFollowupPrompt || !currentUser?.uid) { setPendingFollowupPrompt(null); return; }
-    const { leadId, dealTitle } = pendingFollowupPrompt;
-    setPendingFollowupPrompt(null);
-    const dueAt = new Date(Date.now() + days * 86400_000).toISOString();
-    const { error } = await supabase.from('deal_followups' as any).insert({
-      lead_id: leadId,
-      agency_id: activeAgency.id,
-      created_by: currentUser.uid,
-      due_at: dueAt,
-      message: `Où en êtes-vous sur le dossier "${dealTitle}" ?`,
-      status: 'pending',
-    } as any);
-    if (error) {
-      console.error('Erreur programmation relance :', error);
-      toast.error("Impossible de programmer la relance — la fonctionnalité n'est peut-être pas encore activée côté base.");
-    } else {
-      toast.success(`Relance programmée dans ${days} jour${days > 1 ? 's' : ''}.`);
-    }
-  };
-
   // Une relance en attente n'a plus lieu d'être si le dossier a réellement
   // bougé depuis — c'est exactement le signal "il y a eu du mouvement" qui
   // évite une relance inutile.
@@ -1830,18 +1797,12 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
         },
       });
 
-      // Relance programmée (voir plus haut) : un vrai mouvement vient
-      // d'avoir lieu, toute relance en attente sur ce dossier n'a plus lieu
-      // d'être — et on propose d'en programmer une nouvelle depuis cette
-      // étape fraîchement atteinte.
-      // Une seule fenêtre à la fois : sur « À facturer », c'est le montant
-      // qui prime — la relance n'a pas de sens sur un dossier qu'on facture.
+      // Relance programmée (voir plus bas, cancelPendingFollowups) : un vrai
+      // mouvement vient d'avoir lieu, toute relance en attente sur ce
+      // dossier n'a plus lieu d'être.
       const demandeMontant = estEtapeAFacturer(destinationStage);
       if (deal.contactId) {
         cancelPendingFollowups(deal.contactId);
-        if (!demandeMontant) {
-          setPendingFollowupPrompt({ dealId: deal.id, dealTitle: deal.title, leadId: deal.contactId });
-        }
       }
       if (demandeMontant) {
         const fiche = contacts.find((c) => c.id === deal.contactId);
@@ -2566,31 +2527,6 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
               Enregistrer
             </button>
           </div>
-        </ModalShell>
-      )}
-
-      {pendingFollowupPrompt && (
-        <ModalShell title="Programmer une relance ?" onClose={() => setPendingFollowupPrompt(null)}>
-          <p className="text-sm text-gray-300 mb-4">
-            "{pendingFollowupPrompt.dealTitle}" vient de changer d'étape. Nova peut vous demander où vous en êtes si le dossier reste sans mouvement.
-          </p>
-          <div className="grid grid-cols-2 gap-2 mb-2">
-            {[3, 5, 10, 15].map((days) => (
-              <button
-                key={days}
-                onClick={() => void scheduleFollowup(days)}
-                className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-[#F7BC5F]/15 border border-white/10 hover:border-[#F7BC5F]/40 text-sm font-semibold text-white transition-colors"
-              >
-                Dans {days} jours
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => setPendingFollowupPrompt(null)}
-            className="w-full text-center text-xs text-gray-500 hover:text-gray-300 mt-2"
-          >
-            Non merci
-          </button>
         </ModalShell>
       )}
 
