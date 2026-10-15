@@ -2399,9 +2399,23 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Le filtrage d'affichage ci-dessous reste sans danger (local, jamais
   // écrit nulle part) ; une vraie purge partagée demande un garde-fou entre
   // super admins qui n'existe pas encore.
+  //
+  // 15 octobre (« les tuiles d'Immosphera sont sorties du dossier ») : ce
+  // filtre local, lui aussi inactif jusqu'au 14 (même bug `currentUser`),
+  // s'est mis à tourner — et il écartait le dossier verrouillé
+  // « Immosphera » chez tout super admin dont la grille ne le contenait pas
+  // (Mélanie). Le verrou écarté, ses cartes (Site internet, Partenaires,
+  // Netty, Pool…) n'étaient plus « imposées par un dossier » et
+  // réapparaissaient à la racine. Même raison que pour la purge serveur : on
+  // ne peut pas juger un verrou d'après la grille d'UN super admin. Un
+  // verrou qui décrit un vrai dossier (avec `children`) n'est donc plus
+  // jamais traité comme fantôme ; seuls les anciens verrous sans contenu le
+  // restent (ils ne reposent rien de toute façon).
   const fantomesVerrous = useMemo<string[]>(() => {
     if (!isSuperAdmin || !activeAgency?.id || !currentUser?.uid || !homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) return [];
-    return Object.keys(lockedTiles).filter((id) => !existsRecursive(tiles, id) && !findInitialTile(id));
+    return Object.keys(lockedTiles).filter(
+      (id) => !Array.isArray(lockedTiles[id]?.children) && !existsRecursive(tiles, id) && !findInitialTile(id)
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lockedTiles, tiles, isSuperAdmin, activeAgency?.id, currentUser?.uid, syncPrete]);
   const verrousEffectifs = useMemo<Record<string, Verrou>>(() => {
@@ -3327,14 +3341,29 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // 3 septembre : le dossier prend la case qu'il occupe chez le super admin
     // (Verrou.slot) si elle est libre ; sinon la première libre, comme avant.
     // Une fois posé, il ne bouge plus (la grille du membre est enregistrée).
+    // 15 octobre : les cartes du dossier qui traînaient à la racine libèrent
+    // leurs cases (sinon des trous restaient à leur place), et si la case du
+    // super admin est prise, le dossier prend celle de sa première carte.
     setRootSlots((prev) => {
       const next = [...prev];
       let change = false;
       aPoser.forEach((d) => {
+        const idsEnfants = new Set((d.children || []).map((c) => c.id));
+        let caseEnfant = -1;
+        next.forEach((id, i) => {
+          if (id && idsEnfants.has(id)) {
+            if (caseEnfant === -1) caseEnfant = i;
+            next[i] = null;
+            change = true;
+          }
+        });
         if (next.includes(d.id)) return;
         const voulu = verrousEffectifs[d.id]?.slot;
         if (typeof voulu === 'number' && voulu >= 0 && voulu < next.length && next[voulu] === null) {
           next[voulu] = d.id;
+          change = true;
+        } else if (caseEnfant !== -1) {
+          next[caseEnfant] = d.id;
           change = true;
         }
       });
