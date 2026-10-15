@@ -13,6 +13,8 @@ import {
   Plus,
   Users,
   MapPinned,
+  FileText,
+  FileSignature,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -30,6 +32,12 @@ const PANEL_CHIPS = [
   { chip: "Ventes", label: "Ventes", icon: Tag },
   { chip: "Locations", label: "Locations", icon: KeyIcon },
   { chip: "Nouveautés 15J", label: "Nouveautés", icon: Sparkles },
+  // Demandé explicitement : filtrer directement sur le statut (déjà affiché
+  // en badge sur chaque bien, mais jusque-là sans aucun moyen de le
+  // rechercher) pour retrouver plus facilement les biens sous offre ou sous
+  // compromis.
+  { chip: "Sous offre", label: "Sous offre", icon: FileText },
+  { chip: "Sous compromis", label: "Sous compromis", icon: FileSignature },
 ] as const;
 
 const PILL_BASE =
