@@ -1113,6 +1113,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       if (channelRow) {
         setTab('projets');
         setActiveChannel(channelRow as ChatChannel);
+        // Signalé (15 octobre) : « le message ne se présente pas, il faut
+        // aller à la cible » — pour un canal d'équipe uniquement. La branche
+        // conversation juste au-dessus pose déjà highlightedMessageId ;
+        // cette branche-ci ouvrait le bon canal mais ne le faisait jamais,
+        // donc rien ne distinguait le message visé des autres (et voir plus
+        // bas, le défilement auto vers le bas du canal l'emportait).
+        setHighlightedMessageId(initialHighlightMessageId);
+        setTimeout(() => setHighlightedMessageId((cur) => (cur === initialHighlightMessageId ? null : cur)), 5000);
       }
       onHighlightConsumed?.();
     })();
@@ -1125,7 +1133,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     const el = document.getElementById(`msg-${highlightedMessageId}`);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightedMessageId, convMessages.length]);
+  }, [highlightedMessageId, convMessages.length, messages.length]);
 
   // Rechargement ciblé des réactions seules (sans retoucher aux messages ni
   // aux accusés de lecture) — voir convMessageIdsRef plus haut.
@@ -2684,8 +2692,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   }, [activeChannel?.id, isActive]);
 
   // Ticket #9 (nouvelle base) : voir le correctif identique sur convScrollRef
-  // ci-dessus — même cause, même fix, pour les canaux d'équipe.
+  // ci-dessus — même cause, même fix, pour les canaux d'équipe. Signalé (15
+  // octobre) : ce garde-fou n'avait en réalité jamais été reporté ici — ce
+  // défilement systématique vers le bas du canal l'emportait donc toujours
+  // sur le rebond ciblé (highlightedMessageId) au clic sur une notification
+  // de message de canal, exactement la course déjà corrigée côté
+  // conversations directes le 10 septembre.
   useEffect(() => {
+    if (highlightedMessageId) return;
     const pane = scrollRef.current;
     if (!pane) return;
     const frame = window.requestAnimationFrame(() => {
@@ -2698,7 +2712,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       window.cancelAnimationFrame(frame);
       window.clearTimeout(settle);
     };
-  }, [messages.length, activeChannel?.id]);
+  }, [messages.length, activeChannel?.id, highlightedMessageId]);
 
   // Bug nº 6 (consigne du 1er septembre), deuxieme partie. Signale a la
   // recette : « quand je mets un chat dans le dossier, elle ne recoit rien ».
@@ -4540,7 +4554,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     const groupedReactions: Record<string, { userId: string; emoji: string }[]> = {};
                     (m.reactions || []).forEach((r) => { (groupedReactions[r.emoji] ||= []).push(r); });
                     return (
-                    <div key={m.id} className={`group flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+                    <div
+                      key={m.id}
+                      id={`msg-${m.id}`}
+                      className={`group flex flex-col ${mine ? 'items-end' : 'items-start'} ${
+                        highlightedMessageId === m.id ? 'message-highlight-flash rounded-2xl' : ''
+                      }`}
+                    >
                       {/* Même correctif de largeur que côté conversations
                           directes (voir le commentaire là-haut) — les canaux
                           étaient encore plus étroits : 70 %. */}
