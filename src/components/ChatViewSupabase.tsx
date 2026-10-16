@@ -397,8 +397,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const lightboxPressTimer = useRef<number | null>(null);
   // Ticket #24 (nouvelle base) : accusé de lecture — quel autre membre de la
   // conversation a lu tel message (table `message_receipts`, déjà prête en
-  // base mais jamais exploitée côté front).
-  const [convReadBy, setConvReadBy] = useState<Record<string, string[]>>({});
+  // base mais jamais exploitée côté front). `readAt` gardé en plus de l'id
+  // (16 octobre) : la requête le lisait déjà (voir loadReactionsAndReceiptsFor)
+  // mais le jetait aussitôt — nécessaire maintenant pour l'afficher dans la
+  // fenêtre détaillée (readReceiptModal, plus bas).
+  const [convReadBy, setConvReadBy] = useState<Record<string, { userId: string; readAt?: string }[]>>({});
   // Demande explicite (30/09/2026) : "je voudrais savoir qui c'est qui lit
   // donc en passant la souris sur la réception je voudrais que tu me mettes
   // les noms des personnes qui ont lu le message [...] dans tous les
@@ -406,12 +409,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // autre personne a lu", ce qui ne suffit pas dans un groupe/canal à
   // plusieurs (on ne sait pas QUI, ni si TOUT LE MONDE a lu). Une seule
   // info-bulle à la fois par surface (conversations/canaux, voir plus bas) :
-  // déclenchée au survol (souris) ET au clic (tactile, qui n'a pas de survol).
+  // déclenchée au survol (souris, un coup d'œil rapide).
   const [showConvReadByFor, setShowConvReadByFor] = useState<string | null>(null);
   // Même bascule que ci-dessus, pour les canaux d'équipe (état séparé :
   // conversations et canaux sont deux surfaces indépendantes partout
   // ailleurs dans ce fichier).
   const [showChannelReadByFor, setShowChannelReadByFor] = useState<string | null>(null);
+  // Signalé (16 octobre) : « une fenêtre un peu plus grande pour voir qui a
+  // lu les messages » — l'info-bulle ci-dessus (petite, texte tronqué au-delà
+  // de 220px) reste pour le survol rapide ; un clic ouvre maintenant cette
+  // fenêtre, commune aux conversations ET aux canaux (la liste de lecteurs
+  // est normalisée au clic, voir plus bas, pour que le rendu de la fenêtre
+  // ignore d'où elle vient).
+  const [readReceiptModal, setReadReceiptModal] = useState<{
+    readers: { userId: string; name: string; readAt?: string }[];
+  } | null>(null);
 
   const profileByUid = useMemo(() => {
     const map: Record<string, MemberProfile> = {};
@@ -873,9 +885,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // source de vérité complète pour les suppressions de réaction.
     setConvReactions((prev) => ({ ...prev, ...grouped }));
 
-    const readBy: Record<string, string[]> = {};
+    const readBy: Record<string, { userId: string; readAt?: string }[]> = {};
     ((receipts ?? []) as any[]).forEach((r) => {
-      (readBy[r.message_id] ||= []).push(r.user_id);
+      (readBy[r.message_id] ||= []).push({ userId: r.user_id, readAt: r.read_at });
     });
     setConvReadBy((prev) => ({ ...prev, ...readBy }));
 
@@ -887,7 +899,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // écritures en base pour des messages déjà lus depuis longtemps.
     if (currentUser) {
       const toMarkRead = rows.filter(
-        (r) => r.user_id !== currentUser.uid && !(readBy[r.id] || []).includes(currentUser.uid)
+        (r) => r.user_id !== currentUser.uid && !(readBy[r.id] || []).some((x) => x.userId === currentUser.uid)
       );
       if (toMarkRead.length > 0) {
         // Perf : ces deux écritures (accusé de lecture + pastille de
@@ -4055,16 +4067,28 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             {/* Accusé de lecture (#24) : coché uniquement sur mes
                                 propres messages, une fois lus par l'autre. Qui
                                 exactement (30/09/2026) : voir showConvReadByFor
-                                plus haut. */}
+                                plus haut — survol pour l'info-bulle rapide,
+                                clic pour la fenêtre détaillée (readReceiptModal,
+                                16 octobre). */}
                             {mine && (() => {
-                              const lecteurs = (convReadBy[m.id] || []).filter((uid) => uid !== currentUser?.uid);
+                              const lecteurs = (convReadBy[m.id] || []).filter((r) => r.userId !== currentUser?.uid);
                               return (
                                 <div className="relative">
                                   <button
                                     type="button"
                                     onMouseEnter={() => setShowConvReadByFor(m.id)}
                                     onMouseLeave={() => setShowConvReadByFor(null)}
-                                    onClick={(e) => { e.stopPropagation(); setShowConvReadByFor((cur) => (cur === m.id ? null : m.id)); }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setShowConvReadByFor(null);
+                                      setReadReceiptModal({
+                                        readers: lecteurs.map((r) => ({
+                                          userId: r.userId,
+                                          name: profileByUid[r.userId]?.displayName || 'Utilisateur',
+                                          readAt: r.readAt,
+                                        })),
+                                      });
+                                    }}
                                     className="flex items-center"
                                   >
                                     {lecteurs.length > 0 ? (
@@ -4077,7 +4101,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                     <div className="absolute z-20 bottom-full right-0 mb-1 bg-[#0b1c1e] border border-[#153c3f] rounded-lg px-2.5 py-1.5 shadow-xl text-[10px] text-slate-300 whitespace-nowrap max-w-[220px] overflow-hidden text-ellipsis">
                                       {lecteurs.length === 0
                                         ? 'Pas encore vu'
-                                        : `Vu par ${lecteurs.map((uid) => profileByUid[uid]?.displayName || 'Utilisateur').join(', ')}`}
+                                        : `Vu par ${lecteurs.map((r) => profileByUid[r.userId]?.displayName || 'Utilisateur').join(', ')}`}
                                     </div>
                                   )}
                                 </div>
@@ -4742,7 +4766,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             membre que moi apparaît dans read_by). Qui
                             exactement (30/09/2026) : voir showChannelReadByFor
                             plus haut — utile surtout ici, un canal pouvant
-                            avoir bien plus de deux membres. */}
+                            avoir bien plus de deux membres. Survol pour
+                            l'info-bulle rapide, clic pour la fenêtre détaillée
+                            (readReceiptModal, 16 octobre). */}
                         {mine && (() => {
                           const lecteurs = (Array.isArray(m.read_by) ? m.read_by : []).filter((r) => r.userId !== currentUser?.uid);
                           return (
@@ -4751,7 +4777,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                 type="button"
                                 onMouseEnter={() => setShowChannelReadByFor(m.id)}
                                 onMouseLeave={() => setShowChannelReadByFor(null)}
-                                onClick={(e) => { e.stopPropagation(); setShowChannelReadByFor((cur) => (cur === m.id ? null : m.id)); }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowChannelReadByFor(null);
+                                  setReadReceiptModal({
+                                    readers: lecteurs.map((r) => ({
+                                      userId: r.userId,
+                                      name: r.userName || profileByUid[r.userId]?.displayName || 'Utilisateur',
+                                      readAt: r.readAt,
+                                    })),
+                                  });
+                                }}
                                 className="flex items-center"
                               >
                                 {lecteurs.length > 0 ? (
@@ -5786,6 +5822,63 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             onPointerLeave={() => { if (lightboxPressTimer.current) window.clearTimeout(lightboxPressTimer.current); }}
             className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl select-none"
           />
+        </div>,
+        document.body
+      )}
+
+      {/* Signalé (16 octobre) : « une fenêtre un peu plus grande pour voir
+          qui a lu les messages » — l'info-bulle au survol (voir
+          showConvReadByFor/showChannelReadByFor plus haut) tronquait le texte
+          au-delà de 220px, illisible dès que plusieurs personnes avaient lu.
+          Un clic sur l'accusé de lecture ouvre maintenant cette fenêtre à la
+          place : une ligne par lecteur (avatar, nom, heure de lecture),
+          commune aux conversations et aux canaux. */}
+      {readReceiptModal && createPortal(
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
+          onClick={() => setReadReceiptModal(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#0b1c1e] border border-[#153c3f] rounded-2xl w-full max-w-sm max-h-[70vh] flex flex-col shadow-2xl"
+          >
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-[#153c3f] shrink-0">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2 min-w-0">
+                <CheckCheck className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+                <span className="truncate">
+                  {readReceiptModal.readers.length === 0
+                    ? 'Pas encore vu'
+                    : `Vu par ${readReceiptModal.readers.length} personne${readReceiptModal.readers.length > 1 ? 's' : ''}`}
+                </span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setReadReceiptModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+              {readReceiptModal.readers.length === 0 ? (
+                <p className="text-center text-sm text-slate-500 py-8 px-4">
+                  Personne n'a encore vu ce message.
+                </p>
+              ) : (
+                readReceiptModal.readers.map((r) => (
+                  <div key={r.userId} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5">
+                    <div className="w-9 h-9 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] font-bold text-xs flex items-center justify-center shrink-0">
+                      {r.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <p className="flex-1 min-w-0 text-sm font-semibold text-white truncate">{r.name}</p>
+                    {r.readAt && (
+                      <span className="text-[11px] text-slate-500 shrink-0">{formatTime(r.readAt)}</span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>,
         document.body
       )}
