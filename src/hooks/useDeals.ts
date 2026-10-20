@@ -109,6 +109,17 @@ export const useDeals = () => {
     queryKey: ['deals', activeAgency.id, allStages.length],
     enabled: Boolean(currentUser),
     queryFn: async () => {
+      // Perf (audit du 20 octobre) : envisagé un filtre serveur par agence
+      // ici, écarté — `allDeals` est PAR CONCEPTION non scopé par
+      // `activeAgency` (voir Pipeline.tsx, "agencyDeals" : son propre
+      // sélecteur d'agence, `currentAgencyId`, est indépendant du
+      // sélecteur global et a besoin de piocher dans TOUTES les agences).
+      // Un filtre serveur ici casserait ce changement d'agence depuis
+      // Pipeline. Le volume réel (~700 lignes toutes agences confondues,
+      // vérifié en base) reste modeste ; voir useDeals/useContacts/
+      // Clients.tsx pour la vraie piste d'amélioration (mutualiser les
+      // trois requêtes identiques plutôt que forcer un filtre qui casse
+      // des fonctionnalités existantes).
       const { data, error: sbError } = await supabase
         .from('leads')
         .select('*')

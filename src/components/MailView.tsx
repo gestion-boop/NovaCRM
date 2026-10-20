@@ -88,6 +88,19 @@ const getAvatarColor = (seed: string) => {
 
 const getInitial = (name: string) => (name.trim()[0] || '?').toUpperCase();
 
+// Perf (audit du 20 octobre) : marquer lu/non lu ou supprimer une sélection
+// de messages appelait l'API Gmail une fois PAR MESSAGE, strictement l'un
+// après l'autre — une sélection de plusieurs dizaines de messages prenait
+// plusieurs secondes. Traité par lots de LOT_MAX en parallèle plutôt que
+// tout d'un coup, pour accélérer sans risquer de heurter les quotas par
+// seconde de l'API Gmail sur une très grosse sélection.
+const LOT_MAX_API_GMAIL = 5;
+async function executerParLots<T>(items: T[], tache: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += LOT_MAX_API_GMAIL) {
+    await Promise.all(items.slice(i, i + LOT_MAX_API_GMAIL).map(tache));
+  }
+}
+
 /**
  * Convertit la signature Gmail (HTML) en texte lisible pour l'insérer dans le
  * corps du message, qui reste en texte brut (Content-Type: text/plain côté
@@ -679,13 +692,13 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
     const done: string[] = [];
     try {
       const token = await getGoogleToken();
-      for (const mail of list) {
+      await executerParLots(list, async (mail) => {
         if (mail.isRead !== read) {
           if (read) await modifyGmailMessageLabels(token, mail.id, [], ['UNREAD']);
           else await modifyGmailMessageLabels(token, mail.id, ['UNREAD'], []);
         }
         done.push(mail.id);
-      }
+      });
     } catch (err: any) {
       setError(err.message || 'Erreur lors du changement de statut de lecture.');
     } finally {
@@ -728,11 +741,11 @@ export const MailView: React.FC<MailViewProps> = ({ fullScreen = false, onToggle
     const done: string[] = [];
     try {
       const token = await getGoogleToken();
-      for (const mail of list) {
+      await executerParLots(list, async (mail) => {
         if (permanent) await deleteGmailMessagePermanently(token, mail.id);
         else await trashGmailMessage(token, mail.id);
         done.push(mail.id);
-      }
+      });
       setSuccess(
         permanent
           ? (list.length > 1 ? `${list.length} messages supprimés définitivement.` : 'Message supprimé définitivement.')

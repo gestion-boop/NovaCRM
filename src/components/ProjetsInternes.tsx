@@ -686,8 +686,13 @@ export const ProjetsInternes: React.FC<
       await loadTodoItems();
       if (!cancelled) setTodoLoading(false);
     })();
+    // Audit stabilité (20 octobre) : nom de canal scopé par agence mais pas
+    // par instance — deux montages simultanés de cet écran pour la même
+    // agence (ex. modale + vue principale) provoqueraient la même panne
+    // déjà rencontrée ailleurs (8 septembre, voir useCameraReservations.ts)
+    // quand Supabase refuse un deuxième canal de même nom.
     const channel = supabase
-      .channel(`internal_todo_items:${effectiveAgencyIdForTodo}`)
+      .channel(`internal_todo_items:${effectiveAgencyIdForTodo}:${crypto.randomUUID()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'internal_todo_items', filter: `agency_id=eq.${effectiveAgencyIdForTodo}` }, () => {
         void loadTodoItems();
       })

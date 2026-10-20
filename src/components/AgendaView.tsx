@@ -324,8 +324,14 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
 
     void loadCameraEvents();
 
+    // Audit stabilité (20 octobre) : nom de canal fixe — exactement la
+    // panne déjà rencontrée (8 septembre, voir useCameraReservations.ts)
+    // quand deux instances créent un canal Realtime de même nom : Supabase
+    // refuse la deuxième souscription (« cannot add postgres_changes
+    // callbacks ... after subscribe() »). Identifiant unique par montage,
+    // même correctif que celui déjà appliqué là-bas.
     const channel = supabase
-      .channel('camera_reservations_agenda')
+      .channel(`camera_reservations_agenda_${crypto.randomUUID()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'camera_reservations' }, () => loadCameraEvents())
       .subscribe();
 

@@ -187,6 +187,14 @@ export const useContacts = () => {
     queryKey: ['contacts_all'],
     enabled: Boolean(currentUser),
     queryFn: async () => {
+      // Perf (audit du 20 octobre) : envisagé un filtre serveur par agence
+      // ici, écarté — `allContacts` est PAR CONCEPTION non scopé par
+      // `activeAgency` (voir Contacts.tsx : les compteurs par structure,
+      // conseilsFinancesCount/novavisioCount/immospheraCount, ont besoin de
+      // piocher dans TOUTES les agences en même temps, quelle que soit
+      // l'agence active du sélecteur global). Un filtre serveur ici
+      // casserait cet écran. Le volume réel (~700 lignes toutes agences
+      // confondues, vérifié en base) reste modeste.
       const { data, error: sbError } = await supabase
         .from('leads')
         .select('*')
