@@ -22,10 +22,18 @@ export interface DriveDocumentUploadResult {
 export const uploadDocumentToDrive = async (
   token: string,
   file: File,
-  agencyName: string
+  agencyName: string,
+  // Demande explicite (20 octobre) : « pas de partage, ça reste en interne,
+  // juste l'œil pour prévisualiser » — l'aperçu intégré (ClientProfileView)
+  // ne fonctionne que si le document est au moins partagé avec QUELQU'UN
+  // d'autre que l'envoyeur ; un lien public (type "anyone") était exclu
+  // explicitement. Avec l'adresse de l'envoyeur, le fichier est partagé
+  // seulement avec son propre domaine Google Workspace (voir
+  // partagerAvecLeDomaine plus bas) — jamais au-delà de l'entreprise.
+  uploaderEmail?: string | null
 ): Promise<DriveDocumentUploadResult> => {
   try {
-    return await envoyerVersDrive(token, file, agencyName);
+    return await envoyerVersDrive(token, file, agencyName, uploaderEmail);
   } catch (e) {
     // Jeton Google expiré (voir workspace.ts, isGoogleAuthError) : on en
     // demande un frais et on refait UNE tentative. Sans jeton plus frais,
@@ -40,14 +48,39 @@ export const uploadDocumentToDrive = async (
       erreur.code = 'google-reconnect';
       throw erreur;
     }
-    return envoyerVersDrive(frais, file, agencyName);
+    return envoyerVersDrive(frais, file, agencyName, uploaderEmail);
+  }
+};
+
+// Partage le fichier avec tout le domaine Google Workspace de l'envoyeur
+// (ex. @immosphera.fr), jamais plus large — un compte grand public (gmail.com,
+// outlook.com...) n'a pas de domaine Workspace à restreindre : Google refuse
+// alors la demande, ce qui est normal, pas une panne. Best-effort : le
+// document reste utilisable (lien de secours côté fiche client) même si ce
+// partage échoue, pour ne jamais bloquer l'envoi pour un simple confort
+// d'aperçu.
+const partagerAvecLeDomaine = async (token: string, fileId: string, uploaderEmail?: string | null): Promise<void> => {
+  const domaine = uploaderEmail?.split('@')[1]?.trim().toLowerCase();
+  if (!domaine) return;
+  try {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ type: 'domain', role: 'reader', domain: domaine }),
+    });
+  } catch {
+    // Silencieux : voir le commentaire de la fonction.
   }
 };
 
 const envoyerVersDrive = async (
   token: string,
   file: File,
-  agencyName: string
+  agencyName: string,
+  uploaderEmail?: string | null
 ): Promise<DriveDocumentUploadResult> => {
   const rootFolderId =
     await getOrCreateDriveFolder(
@@ -126,6 +159,8 @@ const envoyerVersDrive = async (
 
   const data =
     await response.json();
+
+  await partagerAvecLeDomaine(token, data.id, uploaderEmail);
 
   return {
     fileId: data.id,

@@ -1923,7 +1923,8 @@ export default function ClientProfileView({
       const upload = await uploadDocumentToDrive(
         token,
         docFile,
-        agencyName
+        agencyName,
+        currentUser.email
       );
 
       const now = new Date().toISOString();

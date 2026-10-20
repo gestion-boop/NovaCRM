@@ -216,7 +216,7 @@ export const DocumentsView: React.FC = () => {
 
     try {
       const token = await getGoogleToken();
-      const upload = await uploadDocumentToDrive(token, file, activeAgency.name);
+      const upload = await uploadDocumentToDrive(token, file, activeAgency.name, currentUser.email);
       const now = new Date().toISOString();
 
       const { error: insErr } = await supabase.from('documents').insert({
