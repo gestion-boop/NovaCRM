@@ -11,35 +11,11 @@ import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGmailUnreadCoun
 // Intervalle de rafraîchissement du compteur de mails non lus (5 min)
 const MAIL_COUNT_REFRESH_MS = 5 * 60 * 1000;
 
-interface ChatMessageStatsRow {
-  senderId?: string;
-  channel?: string;
-  agencyId?: string;
-  readBy?: {
-    userId: string;
-    userName?: string;
-    readAt?: string;
-  }[];
-  isDeleted?: boolean;
-}
-
 interface SupportTicketStatsRow {
   agencyId?: string;
   status?: string;
   createdByUserId?: string;
   archivedAt?: string | null;
-}
-
-interface CameraReservationStatsRow {
-  agencyId?: string;
-  status?: string;
-  createdByUserId?: string;
-}
-
-interface InternalProjectStatsRow {
-  agencyId?: string;
-  status?: string;
-  assignedUserId?: string;
 }
 
 export function useDashboardStats() {
@@ -49,10 +25,7 @@ export function useDashboardStats() {
     activeAgency,
   } = useAuth();
 
-  const [chatMessages, setChatMessages] = useState<ChatMessageStatsRow[]>([]);
   const [supportTickets, setSupportTickets] = useState<SupportTicketStatsRow[]>([]);
-  const [cameraReservations, setCameraReservations] = useState<CameraReservationStatsRow[]>([]);
-  const [internalProjects, setInternalProjects] = useState<InternalProjectStatsRow[]>([]);
   // Bug remonté : le badge "Chat" (tuile Accueil, barre du haut, notif
   // desktop) ne comptait que les canaux d'équipe (`chat_messages`) — les
   // messages directs/fiche client (`messages` + accusés `message_receipts`,
@@ -62,46 +35,25 @@ export function useDashboardStats() {
 
   useEffect(() => {
     if (!currentUser) {
-      setChatMessages([]);
       return;
     }
 
+    // Perf (audit du 20 octobre) : cette fonction téléchargeait 5 tables
+    // ENTIÈRES en parallèle (chat_messages, camera_reservations,
+    // task_boards, chat_channels + chat_projects joints) à chaque appel —
+    // au chargement, à chaque message de chat (voir l'abonnement plus bas)
+    // ET toutes les 30s. Or seul `support_tickets` est réellement lu
+    // quelque part dans ce fichier (openSupportTicketsCount, plus bas) :
+    // chatMessages/cameraReservations/internalProjects étaient calculés
+    // puis jamais consultés nulle part, ni ici ni dans la valeur renvoyée
+    // par ce hook — mort depuis le correctif qui a arrêté de compter
+    // chat_messages pour la pastille (voir commentaire plus bas, "Bug
+    // racine trouvé"), jamais nettoyé depuis. Supprimé : 4 des 5 requêtes
+    // disparaissent sans aucun changement de comportement visible.
     const loadData = async () => {
       try {
-        const [
-          { data: chats },
-          { data: tickets },
-          { data: cameras },
-          { data: projects },
-          { data: channels },
-        ] = await Promise.all([
-          supabase.from('chat_messages').select('*'),
-          supabase.from('support_tickets').select('*'),
-          supabase.from('camera_reservations').select('*'),
-          supabase.from('task_boards').select('*'),
-          // Bug remonté : `chat_messages` n'a pas de colonne agency_id (elle
-          // n'a jamais existé) — le filtre par agence retombait toujours
-          // sur "non trouvé", masquant le badge pour tout utilisateur non
-          // super_admin. L'agence réelle vient du projet du canal.
-          supabase.from('chat_channels').select('id, project_id, chat_projects(agency_id)'),
-        ]);
-
-        const agencyByChannel: Record<string, string | undefined> = {};
-        (channels || []).forEach((ch: any) => {
-          agencyByChannel[ch.id] = ch.chat_projects?.agency_id;
-        });
-
-        if (chats) {
-          setChatMessages(
-            chats.map((c: any) => ({
-              senderId: c.sender_id,
-              channel: c.channel,
-              agencyId: agencyByChannel[c.channel],
-              readBy: c.read_by || [],
-              isDeleted: c.is_deleted || false,
-            }))
-          );
-        }
+        const { data: tickets, error } = await supabase.from('support_tickets').select('*');
+        if (error) throw error;
 
         if (tickets) {
           setSupportTickets(
@@ -110,26 +62,6 @@ export function useDashboardStats() {
               status: t.status,
               createdByUserId: t.created_by,
               archivedAt: t.archived_at,
-            }))
-          );
-        }
-
-        if (cameras) {
-          setCameraReservations(
-            cameras.map((cr: any) => ({
-              agencyId: cr.agency_id,
-              status: cr.status,
-              createdByUserId: cr.created_by,
-            }))
-          );
-        }
-
-        if (projects) {
-          setInternalProjects(
-            projects.map((p: any) => ({
-              agencyId: p.agency_id,
-              status: 'En cours',
-              assignedUserId: p.created_by,
             }))
           );
         }
@@ -164,15 +96,19 @@ export function useDashboardStats() {
     loadData();
     loadDirectUnread();
 
-    // Le badge "Chat" (barre du bas mobile + tuile Accueil) doit refléter les
-    // nouveaux messages instantanément, pas seulement au chargement initial —
-    // même mécanisme temps réel + filet de sécurité par sondage que pour le
-    // compteur de notifications ci-dessous.
-    const chatChannel = supabase
-      .channel(`dashboard_chat_messages_${currentUser.uid}`)
+    // Perf/correction (audit du 20 octobre) : ce canal écoutait
+    // `chat_messages` SANS AUCUN FILTRE (tout message envoyé par tout le
+    // monde, toutes agences confondues) pour redéclencher loadData() — un
+    // effet de bord qui ne rafraîchissait le compteur de tickets support
+    // qu'à l'occasion fortuite d'un message de chat, et jamais sur un vrai
+    // changement de ticket survenu sans message en même temps. Retargeté
+    // directement sur `support_tickets` : plus correct (un ticket
+    // fermé/rouvert se reflète enfin en direct) ET beaucoup plus léger.
+    const ticketsChannel = supabase
+      .channel(`dashboard_support_tickets_${currentUser.uid}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'chat_messages' },
+        { event: '*', schema: 'public', table: 'support_tickets' },
         () => {
           loadData();
         }
@@ -192,15 +128,43 @@ export function useDashboardStats() {
       )
       .subscribe();
 
-    const chatPollInterval = setInterval(() => {
-      loadData();
-      loadDirectUnread();
-    }, 30000);
+    // Perf (audit du 20 octobre) : ce sondage tournait toutes les 30s en
+    // permanence, même onglet/app en arrière-plan indéfiniment. Mis en
+    // pause pendant ce temps (même principe déjà éprouvé sur Chat, voir
+    // ChatViewSupabase.tsx) + rafraîchissement immédiat au retour au
+    // premier plan, pour ne pas rater une mise à jour survenue pendant la
+    // pause.
+    let chatPollInterval: ReturnType<typeof setInterval> | null = null;
+    const demarrerSondage = () => {
+      if (chatPollInterval) return;
+      chatPollInterval = setInterval(() => {
+        loadData();
+        loadDirectUnread();
+      }, 30000);
+    };
+    const arreterSondage = () => {
+      if (chatPollInterval) {
+        clearInterval(chatPollInterval);
+        chatPollInterval = null;
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadData();
+        loadDirectUnread();
+        demarrerSondage();
+      } else {
+        arreterSondage();
+      }
+    };
+    demarrerSondage();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      supabase.removeChannel(chatChannel);
+      supabase.removeChannel(ticketsChannel);
       supabase.removeChannel(directChannel);
-      clearInterval(chatPollInterval);
+      arreterSondage();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [currentUser?.uid]);
 
