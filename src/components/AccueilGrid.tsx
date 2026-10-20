@@ -2339,12 +2339,36 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       const ancien = instantaneVerrou(verrou);
       const slot = rootSlotsRef.current.indexOf(id);
       const slotChange = slot >= 0 && verrou.slot !== slot;
-      if (JSON.stringify(nouveau) === JSON.stringify(ancien) && !slotChange) return;
-      const idsApres = new Set((nouveau.children || []).map((c) => c.id));
+
+      // Audit stabilité (20 octobre, récidive du dossier Immosphera) :
+      // `ancien` (issu de `base`, par défaut `lockedTiles`) est déjà tenu à
+      // jour par le temps réel — l'ajout d'un raccourci par un AUTRE super
+      // admin s'y reflète donc déjà correctement. Le vrai danger : `grille`
+      // (l'arbre de CET appareil) peut contenir une copie figée, posée une
+      // fois pour toutes (voir la repose automatique plus bas), d'un
+      // dossier verrouillé que CET appareil ne maintient pas activement —
+      // rien ne la rafraîchit jamais toute seule. Comparée à `ancien`, elle
+      // semblait alors "différente", et N'IMPORTE QUELLE action SANS AUCUN
+      // RAPPORT avec ce dossier (renommer un autre raccourci, changer une
+      // couleur ailleurs...) réécrivait le verrou avec cette copie figée et
+      // périmée, effaçant ce que l'autre super admin venait d'y ajouter.
+      // On ne fait confiance à `nouveau` pour le CONTENU que si la copie de
+      // CET appareil a elle-même changé entre l'arbre d'avant cette action
+      // (tilesRef.current, pas encore mis à jour à cet instant précis de
+      // l'événement) et celui d'après (grille) — seule preuve que c'est
+      // bien CETTE action, sur CET appareil, qui a touché ce dossier.
+      // Sinon, seule une éventuelle position différente sur la grille
+      // racine est reprise ; le contenu enregistré, lui, ne bouge pas.
+      const tuileAvant = findTileRecursive(tilesRef.current, id);
+      const contenuToucheIci = !tuileAvant || JSON.stringify(instantaneVerrou(tuileAvant)) !== JSON.stringify(nouveau);
+      const contenuAEcrire = contenuToucheIci ? nouveau : ancien;
+
+      if (JSON.stringify(contenuAEcrire) === JSON.stringify(ancien) && !slotChange) return;
+      const idsApres = new Set((contenuAEcrire.children || []).map((c) => c.id));
       const retires = new Set<string>((verrou.retires || []).filter((r) => !idsApres.has(r)));
       (ancien.children || []).forEach((c) => { if (!idsApres.has(c.id)) retires.add(c.id); });
       next[id] = {
-        ...nouveau,
+        ...contenuAEcrire,
         ...(retires.size > 0 ? { retires: Array.from(retires) } : {}),
         ...(slot >= 0 ? { slot } : verrou.slot !== undefined ? { slot: verrou.slot } : {}),
         maj: Date.now(),

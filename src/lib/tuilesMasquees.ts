@@ -83,14 +83,52 @@ export async function chargerMasqueesDepuisServeur(userId: string): Promise<Tuil
   }
 }
 
+// Audit stabilité (20 octobre) : même bug, même classe, que celui déjà
+// corrigé sur les dossiers verrouillés de l'accueil (enregistrerVerrous,
+// AccueilGrid.tsx) — masquerTuile/reafficherTuile ne regardaient QUE la
+// copie locale (localStorage) de CET appareil, et écrasaient purement et
+// simplement hidden_tiles côté serveur avec elle. Un second appareil/onglet
+// resté ouvert plus longtemps (donc avec une copie locale plus ancienne)
+// effaçait ainsi silencieusement, pour tout le compte, une tuile masquée
+// entre-temps depuis un AUTRE appareil. Les deux fonctions relisent
+// désormais la liste serveur juste avant d'écrire et fusionnent (union, pas
+// remplacement) avant d'appliquer la seule action demandée ici.
+async function listeServeurFraiche(userId: string): Promise<TuileMasquee[]> {
+  try {
+    const { data, error } = await supabase
+      .from('user_ui_settings')
+      .select('hidden_tiles')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw error;
+    return Array.isArray((data as any)?.hidden_tiles) ? ((data as any).hidden_tiles as TuileMasquee[]) : [];
+  } catch {
+    // Lecture fraîche indisponible (réseau, droits...) : l'appelant retombe
+    // sur la seule copie locale, comme avant ce correctif.
+    return [];
+  }
+}
+
 export async function masquerTuile(userId: string | null | undefined, tuile: TuileMasquee): Promise<void> {
-  const liste = fusionner(lireMasquees(), [tuile]);
-  ecrireMasquees(liste);
-  if (userId) await ecrireSurServeur(userId, liste);
+  const locale = fusionner(lireMasquees(), [tuile]);
+  if (!userId) {
+    ecrireMasquees(locale);
+    return;
+  }
+  const serveur = await listeServeurFraiche(userId);
+  const fraiche = fusionner(serveur, locale);
+  ecrireMasquees(fraiche);
+  await ecrireSurServeur(userId, fraiche);
 }
 
 export async function reafficherTuile(userId: string | null | undefined, id: string): Promise<void> {
-  const liste = lireMasquees().filter((t) => t.id !== id);
-  ecrireMasquees(liste);
-  if (userId) await ecrireSurServeur(userId, liste);
+  const locale = lireMasquees().filter((t) => t.id !== id);
+  if (!userId) {
+    ecrireMasquees(locale);
+    return;
+  }
+  const serveur = await listeServeurFraiche(userId);
+  const fraiche = fusionner(serveur, locale).filter((t) => t.id !== id);
+  ecrireMasquees(fraiche);
+  await ecrireSurServeur(userId, fraiche);
 }
