@@ -218,6 +218,19 @@ export default function ClientProfileView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, initialTab]);
 
+  // Audit stabilité (20 octobre) : ce composant n'est PAS remonté quand on
+  // change de client (App.tsx le rend sans key sur clientId) — un fetch
+  // lancé pour le client A qui résout APRÈS qu'on soit passé au client B
+  // écrasait silencieusement les données de B avec celles de A (chat,
+  // documents, notes, questionnaires confidentiels, emails, partages).
+  // Même pattern que le correctif déjà livré sur ChatViewSupabase.tsx
+  // (activeConversationIdRef) : on compare toujours l'id capturé par la
+  // closure au moment de l'appel à l'id réellement affiché à la résolution.
+  const clientIdRef = useRef(clientId);
+  useEffect(() => {
+    clientIdRef.current = clientId;
+  }, [clientId]);
+
   // Ticket "Clients invités" (8/13) : "Espace client / Conversation" — le
   // client discute avec son conseiller depuis son mobile (ClientGuestShell),
   // le conseiller répond ici. Toujours séparé des "Commentaires" internes.
@@ -717,6 +730,7 @@ export default function ClientProfileView({
         .select('id, lead_id, shared_by, shared_with')
         .eq('lead_id', clientId);
       if (error) throw error;
+      if (clientIdRef.current !== clientId) return;
       setShares(
         (data ?? []).map((r: any) => ({
           id: r.id,
@@ -1118,6 +1132,7 @@ export default function ClientProfileView({
         .eq('lead_id', clientId)
         .order('sent_at', { ascending: false });
       if (error) throw error;
+      if (clientIdRef.current !== clientId) return;
       setQuestionnaires(
         ((data ?? []) as any[]).map((r) => ({
           id: r.id,
@@ -1155,6 +1170,7 @@ export default function ClientProfileView({
         maxResults: 25,
         includeSpamTrash: false,
       });
+      if (clientIdRef.current !== clientId) return;
       setClientEmails(msgs);
     } catch (e: any) {
       setClientEmailsError(e?.message || "Impossible de charger les e-mails.");
@@ -1401,9 +1417,10 @@ export default function ClientProfileView({
         .eq('lead_id', clientId)
         .order('created_at', { ascending: true });
       if (error) throw error;
+      if (clientIdRef.current !== clientId) return;
       setChatMessages(((data ?? []) as any[]).map(mapChatRow));
     } catch (e) {
-      setChatMessages([]);
+      if (clientIdRef.current === clientId) setChatMessages([]);
     } finally {
       setChatLoading(false);
     }
@@ -1437,10 +1454,12 @@ export default function ClientProfileView({
     );
     if (toMark.length === 0) return;
     (async () => {
-      for (const m of toMark) {
-        const nextReadBy = [...m.readBy, { userId: currentUserId, userName: currentUserName, readAt: new Date().toISOString() }];
-        await supabase.from('client_share_messages' as any).update({ read_by: nextReadBy } as any).eq('id', m.id);
-      }
+      await Promise.all(
+        toMark.map((m) => {
+          const nextReadBy = [...m.readBy, { userId: currentUserId, userName: currentUserName, readAt: new Date().toISOString() }];
+          return supabase.from('client_share_messages' as any).update({ read_by: nextReadBy } as any).eq('id', m.id);
+        })
+      );
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, chatLoading, chatMessages.length]);
@@ -1682,10 +1701,11 @@ export default function ClientProfileView({
         };
       });
 
+      if (clientIdRef.current !== client.id) return;
       setClientNotes(rows);
     } catch (error) {
       console.error('Erreur chargement notes client :', error);
-      setProfileError("Impossible de charger les notes de ce client.");
+      if (clientIdRef.current === client.id) setProfileError("Impossible de charger les notes de ce client.");
     } finally {
       setNotesLoading(false);
     }
@@ -1764,10 +1784,11 @@ export default function ClientProfileView({
         isShared: !!item.is_shared,
       }));
 
+      if (clientIdRef.current !== client.id) return;
       setClientDocs(rows);
     } catch (error) {
       console.error('Erreur chargement documents client :', error);
-      setProfileError("Impossible de charger les documents de ce client.");
+      if (clientIdRef.current === client.id) setProfileError("Impossible de charger les documents de ce client.");
     } finally {
       setDocsLoading(false);
     }
@@ -2083,6 +2104,26 @@ export default function ClientProfileView({
     );
 
     setClientNotes(updatedWithOrder);
+
+    // Audit stabilité (20 octobre) : le nouvel ordre n'était jamais
+    // persisté — il revenait à celui de la base au prochain chargement ou
+    // à la prochaine synchro temps réel. `comments.position` est trié en
+    // DESC (voir loadNotes), donc l'élément affiché en premier reçoit la
+    // valeur la plus haute. Pas besoin de recharger explicitement : l'abonnement
+    // temps réel juste en dessous rafraîchit déjà la liste sur toute écriture
+    // sur `comments` pour ce client.
+    try {
+      await Promise.all(
+        items.map((item, index) =>
+          supabase
+            .from('comments')
+            .update({ position: items.length - 1 - index })
+            .eq('id', item.id)
+        )
+      );
+    } catch (e) {
+      console.error('Erreur persistance ordre des notes :', e);
+    }
   };
 
   const toggleDictation = () => {

@@ -181,6 +181,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [activeChannel, setActiveChannel] = useState<ChatChannel | null>(null);
   const [messages, setMessages] = useState<ChatMessageRow[]>([]);
+  // Audit stabilité (20 octobre) : même bug que celui corrigé côté
+  // conversations (voir activeConversationIdRef plus bas) mais côté canaux
+  // d'équipe — loadMessages n'avait ni ref ni cache et remplaçait `messages`
+  // sans jamais vérifier que le canal demandé était encore celui affiché.
+  // Changer rapidement de canal pouvait donc faire apparaître, pour
+  // quelques secondes, les messages d'un AUTRE canal sous le nom du canal
+  // actif.
+  const activeChannelIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeChannelIdRef.current = activeChannel?.id || null;
+  }, [activeChannel?.id]);
+  const channelMessagesCacheRef = useRef<Record<string, ChatMessageRow[]>>({});
   const [draft, setDraft] = useState('');
   const [showChannelEmoji, setShowChannelEmoji] = useState(false);
   // Signalé : "les Novadji dans les messages ne se mettent pas" — le
@@ -216,12 +228,28 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // ── Gestion des membres par projet (table chat_project_members) ─────────
   const [membersModalProjectId, setMembersModalProjectId] = useState<string | null>(null);
   const [projectMembers, setProjectMembers] = useState<ChatProjectMember[]>([]);
+  // Audit stabilité (20 octobre) : openMembersModal/openChannelMembersModal
+  // (plus bas) remplaçaient sans condition projectMembers/channelMembers à
+  // la résolution — ouvrir "Gérer les membres" du dossier/canal X puis,
+  // avant que ça réponde, l'ouvrir pour Y affichait la liste de X sous le
+  // nom de Y (et une suppression cliquée dessus visait alors X). Ces refs
+  // (toujours à jour, contrairement à la closure de l'id au moment de
+  // l'appel) permettent de vérifier que la modale concernée est toujours
+  // ouverte sur ce même projet/canal avant d'écrire dans l'état affiché.
+  const membersModalProjectIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    membersModalProjectIdRef.current = membersModalProjectId;
+  }, [membersModalProjectId]);
 
   // ── Gestion des membres par CANAL (table chat_channel_members) ──────────
   // Demande explicite : « je veux choisir qui participe à chaque canal »
   // (ex. un canal "Laetitia" au sein du dossier "Réseaux sociaux", visible
   // seulement d'elle + les personnes qu'on y invite).
   const [membersModalChannelId, setMembersModalChannelId] = useState<string | null>(null);
+  const membersModalChannelIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    membersModalChannelIdRef.current = membersModalChannelId;
+  }, [membersModalChannelId]);
   const [channelMembers, setChannelMembers] = useState<ChatChannelMember[]>([]);
   const [channelMembersLoading, setChannelMembersLoading] = useState(false);
   const [channelMemberPickerQuery, setChannelMemberPickerQuery] = useState('');
@@ -471,6 +499,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     try {
       await ensureProfilesLoaded();
 
+      // Perf (audit du 20 octobre) : ces deux tables servaient uniquement à
+      // résoudre le nom/l'agence des pièces jointes des LIMITE_DOCUMENTS
+      // messages ci-dessus, mais étaient téléchargées intégralement — TOUTE
+      // conversation et TOUT dossier de l'entreprise, toutes agences
+      // confondues — alors que le filtrage par agence qui suit (plus bas)
+      // ne garde de toute façon que celles de l'agence active. `agency_id
+      // is null` reste inclus : certaines conversations/dossiers sont
+      // partagés, visibles de toutes les agences.
+      const filtreAgence = activeAgency.id === 'all' ? null : `agency_id.eq.${activeAgency.id},agency_id.is.null`;
+      let conversationsQuery = supabase.from('conversations').select('id, title, type, agency_id');
+      if (filtreAgence) conversationsQuery = conversationsQuery.or(filtreAgence);
+
       const [{ data: msgRows, error: errMsg }, { data: convRows }] = await Promise.all([
         supabase
           .from('messages')
@@ -480,7 +520,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(LIMITE_DOCUMENTS),
-        supabase.from('conversations').select('id, title, type, agency_id'),
+        conversationsQuery,
       ]);
       if (errMsg) throw errMsg;
       const convById = new Map(
@@ -506,6 +546,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           date: m.created_at,
         }));
 
+      let projectsQuery = supabase.from('chat_projects').select('id, agency_id');
+      if (filtreAgence) projectsQuery = projectsQuery.or(filtreAgence);
+
       const [{ data: chanRows, error: errChan }, { data: channelRows }, { data: projectRows }] = await Promise.all([
         supabase
           .from('chat_messages')
@@ -514,7 +557,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           .order('created_at', { ascending: false })
           .limit(LIMITE_DOCUMENTS),
         supabase.from('chat_channels').select('id, name, project_id'),
-        supabase.from('chat_projects').select('id, agency_id'),
+        projectsQuery,
       ]);
       if (errChan) throw errChan;
       const channelById = new Map(((channelRows || []) as { id: string; name: string; project_id: string }[]).map((c) => [c.id, c]));
@@ -879,7 +922,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // Réactions + accusés de lecture pour un LOT de messages donné — factorisé
   // pour être réutilisé par loadConvMessages (lot récent) ET
   // loadOlderConvMessages (lot plus ancien, chargé à la demande).
-  const loadReactionsAndReceiptsFor = async (rows: DirectMessageRow[]) => {
+  const loadReactionsAndReceiptsFor = async (rows: DirectMessageRow[], forConversationId?: string) => {
     if (rows.length === 0) return;
     const rowIds = rows.map((r) => r.id);
     // Perf (30/08/2026, signalé "18 secondes") : réactions et accusés de
@@ -904,6 +947,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       (readBy[r.message_id] ||= []).push({ userId: r.user_id, readAt: r.read_at });
     });
     setConvReadBy((prev) => ({ ...prev, ...readBy }));
+
+    // Audit stabilité (20 octobre) : si ces lignes appartiennent à une
+    // conversation qu'on a quittée entre-temps (sondage/pagination resté en
+    // vol pendant un changement de conversation), ne pas les marquer "lu" —
+    // l'utilisateur ne les a en réalité jamais vues affichées à l'écran.
+    if (forConversationId && activeConversationIdRef.current !== forConversationId) return;
 
     // Accuse réception : tout message reçu (pas envoyé par moi) dans cette
     // conversation est marqué lu dès qu'on l'affiche à l'écran.
@@ -1026,8 +1075,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       setConvMessages(fusion);
     }
     if (rows.length > 0) {
-      await loadReactionsAndReceiptsFor(rows);
-    } else {
+      await loadReactionsAndReceiptsFor(rows, conversationId);
+    } else if (activeConversationIdRef.current === conversationId) {
+      // Audit stabilité (20 octobre) : cette remise à zéro ne doit viser que
+      // la conversation réellement affichée — sinon un appel resté en vol
+      // pour une conversation A (devenue vide, ou dont tous les messages ont
+      // été supprimés) pouvait effacer les réactions/accusés de lecture de
+      // la conversation B affichée entre-temps.
       setConvReactions({});
       setConvReadBy({});
     }
@@ -1037,13 +1091,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // ancien message actuellement affiché et le préfixe à la liste.
   const loadOlderConvMessages = async () => {
     if (!activeConversationId || loadingOlderConv || convMessages.length === 0) return;
+    // Audit stabilité (20 octobre) : même bug que loadConvMessages, jamais
+    // couvert par son correctif — `activeConversationId` était relu tel
+    // quel après l'attente réseau, qui reflète alors la conversation
+    // ouverte à la RÉSOLUTION, pas celle pour laquelle la requête a été
+    // lancée. Capturé une fois ici, comparé à activeConversationIdRef (la
+    // conversation réellement affichée) avant de toucher à l'écran.
+    const convIdAtCall = activeConversationId;
     const oldest = convMessages[0];
     setLoadingOlderConv(true);
     try {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .eq('conversation_id', activeConversationId)
+        .eq('conversation_id', convIdAtCall)
         .lt('created_at', oldest.created_at)
         .order('created_at', { ascending: false })
         .limit(RECENT_MESSAGES_PAGE);
@@ -1052,10 +1113,26 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         return;
       }
       const older = ((data as DirectMessageRow[]) || []).slice().reverse();
-      setConvHasMoreOlder(older.length === RECENT_MESSAGES_PAGE);
-      if (older.length === 0) return;
-      setConvMessages((prev) => [...older, ...prev]);
-      await loadReactionsAndReceiptsFor(older);
+      if (older.length === 0) {
+        if (activeConversationIdRef.current === convIdAtCall) setConvHasMoreOlder(false);
+        return;
+      }
+      if (activeConversationIdRef.current === convIdAtCall) {
+        // Cas normal (pas de changement de conversation entre-temps) :
+        // fusion directe dans l'état affiché, comme avant.
+        const fusion = [...older, ...convMessages];
+        convMessagesCacheRef.current[convIdAtCall] = fusion;
+        setConvHasMoreOlder(older.length === RECENT_MESSAGES_PAGE);
+        setConvMessages(fusion);
+      } else {
+        // L'utilisateur a changé de conversation pendant le chargement :
+        // on ne touche plus à l'écran (qui affiche déjà une AUTRE
+        // conversation) — seul le cache de convIdAtCall est mis à jour,
+        // pour qu'un retour dessus retrouve ces messages plus anciens.
+        const base = convMessagesCacheRef.current[convIdAtCall] || [];
+        convMessagesCacheRef.current[convIdAtCall] = [...older, ...base];
+      }
+      await loadReactionsAndReceiptsFor(older, convIdAtCall);
     } finally {
       setLoadingOlderConv(false);
     }
@@ -1184,11 +1261,32 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     ((reactions ?? []) as any[]).forEach((r) => {
       (grouped[r.message_id] ||= []).push({ userId: r.user_id, emoji: r.emoji });
     });
-    setConvReactions(grouped);
+    // Audit stabilité (20 octobre) : remplaçait tout `convReactions` par les
+    // seules réactions des ids capturés en début d'appel — un changement de
+    // conversation pendant l'attente réseau (ids alors ceux de l'ANCIENNE
+    // conversation) effaçait les réactions affichées de la conversation
+    // actuelle. Fusion ciblée sur ces ids uniquement (id de message = unique
+    // globalement, jamais partagé entre deux conversations) : tout le reste
+    // de l'état, y compris celui d'une autre conversation, reste intact.
+    setConvReactions((prev) => {
+      const next = { ...prev };
+      ids.forEach((id) => {
+        if (grouped[id]) next[id] = grouped[id];
+        else delete next[id];
+      });
+      return next;
+    });
   };
 
   useEffect(() => {
-    if (!activeConversationId) return;
+    // Audit stabilité (20 octobre) : ni isActive ni activeConversationId ne
+    // tenaient compte du SOUS-onglet interne à Chat ('conversations' vs
+    // 'projets', voir `tab`) — passer sur Projets sans fermer la
+    // conversation laissait ce canal temps réel ET ce sondage 4s tourner
+    // indéfiniment, EN PLUS de leurs équivalents côté canal d'équipe,
+    // doublant pour rien les requêtes/abonnements pendant qu'on ne regarde
+    // plus cette conversation.
+    if (!activeConversationId || tab !== 'conversations') return;
     const channel = supabase
       .channel(`conversation_${activeConversationId}`)
       .on(
@@ -1259,7 +1357,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       window.removeEventListener('focus', handleVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConversationId, isActive]);
+  }, [activeConversationId, isActive, tab]);
 
   // Ticket #9 (nouvelle base) : à l'ouverture d'une conversation le défilement
   // ne se produisait pas — un scrollTo immédiat tirait souvent avant que la
@@ -1940,6 +2038,34 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const convMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const convAudioChunksRef = useRef<Blob[]>([]);
   const convRecordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Audit stabilité (20 octobre) : un enregistrement vocal (canal ou
+  // conversation) en cours n'était jamais arrêté si l'utilisateur quittait
+  // Chat (navigation ailleurs dans le CRM, déconnexion...) pendant qu'il
+  // parlait — ni handleStopRecordingChannel/Conv ni aucun autre code ne
+  // s'exécute au démontage. Le micro restait alors capturé indéfiniment
+  // (indicateur navigateur allumé en permanence, aucun moyen de l'éteindre
+  // sans recharger l'onglet) : fuite mémoire ET problème de confidentialité
+  // dans un CRM. Filet de secours au démontage : coupe les deux pistes
+  // micro et les deux minuteurs s'ils tournent encore, sans tenter de
+  // finaliser/envoyer l'enregistrement en cours (il n'y a plus d'écran pour
+  // le proposer à la réécoute).
+  useEffect(() => {
+    return () => {
+      if (channelRecordingTimerRef.current) clearInterval(channelRecordingTimerRef.current);
+      const canalRecorder = channelMediaRecorderRef.current;
+      if (canalRecorder && canalRecorder.state !== 'inactive') {
+        try { canalRecorder.stop(); } catch { /* déjà arrêté */ }
+        canalRecorder.stream.getTracks().forEach((t) => t.stop());
+      }
+      if (convRecordingTimerRef.current) clearInterval(convRecordingTimerRef.current);
+      const convRecorder = convMediaRecorderRef.current;
+      if (convRecorder && convRecorder.state !== 'inactive') {
+        try { convRecorder.stop(); } catch { /* déjà arrêté */ }
+        convRecorder.stream.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
 
   /**
    * Renvoie `null` si l'insertion a réussi, sinon le message d'erreur de la
@@ -2639,15 +2765,24 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       .eq('channel', channelId)
       .order('created_at', { ascending: false })
       .limit(RECENT_MESSAGES_PAGE);
-    const rows = ((data as any[]) || []).slice().reverse();
-    setMessages(rows as ChatMessageRow[]);
+    const rows = ((data as any[]) || []).slice().reverse() as ChatMessageRow[];
+
+    // Audit stabilité (20 octobre) : même bug, même correctif que
+    // loadConvMessages — un appel (sondage, retour au premier plan, ou
+    // maintenant le temps réel ci-dessous) resté en vol pendant un
+    // changement de canal remplaçait sans condition l'affichage, faisant
+    // apparaître les messages d'un AUTRE canal sous le nom du canal actif.
+    channelMessagesCacheRef.current[channelId] = rows;
+    if (activeChannelIdRef.current === channelId) {
+      setMessages(rows);
+    }
 
     // Bug remonté : lire les messages d'un canal ne marquait jamais rien —
     // le badge "Chat" grossissait indéfiniment. On marque ici lu tout
     // message d'un autre membre pas encore lu par moi, et on synchronise la
     // notification correspondante (même logique que pour les conversations
     // directes).
-    if (currentUser) {
+    if (currentUser && activeChannelIdRef.current === channelId) {
       const toMarkRead = rows.filter(
         (r) => r.sender_id !== currentUser.uid && !(Array.isArray(r.read_by) && r.read_by.some((x: any) => x.userId === currentUser.uid))
       );
@@ -2682,17 +2817,28 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   useEffect(() => {
-    if (!activeChannel) return;
+    // Audit stabilité (20 octobre) : même correctif que côté conversations
+    // juste au-dessus — sans la dépendance à `tab`, ce canal temps réel et
+    // ce sondage 4s continuaient de tourner même après être passé sur
+    // l'onglet Conversations, tant qu'un canal d'équipe restait "actif" en
+    // arrière-plan.
+    if (!activeChannel || tab !== 'projets') return;
     loadMessages(activeChannel.id);
 
     const channel = supabase
       .channel(`chat_${activeChannel.id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `channel=eq.${activeChannel.id}` },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as ChatMessageRow]);
-        }
+        // Audit stabilité (20 octobre) : élargi de 'INSERT' à '*' (comme
+        // côté conversations) — une édition, une suppression ou une
+        // réaction (stockée inline dans chat_messages.reactions) sur un
+        // message déjà affiché ne se reflétait avant qu'au sondage suivant
+        // (jusqu'à 4s). Et un ajout direct dans `messages` (prev => [...])
+        // contournait le cache/garde de loadMessages ci-dessus — recharger
+        // via loadMessages (déjà protégé) plutôt que fusionner à la main
+        // corrige les deux en même temps.
+        { event: '*', schema: 'public', table: 'chat_messages', filter: `channel=eq.${activeChannel.id}` },
+        () => loadMessages(activeChannel.id)
       )
       .subscribe();
 
@@ -2725,7 +2871,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       window.removeEventListener('focus', handleVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChannel?.id, isActive]);
+  }, [activeChannel?.id, isActive, tab]);
 
   // Ticket #9 (nouvelle base) : voir le correctif identique sur convScrollRef
   // ci-dessus — même cause, même fix, pour les canaux d'équipe. Signalé (15
@@ -2961,7 +3107,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     const majParId = new Map(fratrie.map((c) => [c.id, c] as [string, ChatChannel]));
     const nouvelleListe = tous.map((c) => majParId.get(c.id) || c);
     setChannelsByProject((prev) => ({ ...prev, [channel.project_id]: nouvelleListe }));
-    await Promise.all(fratrie.map((c) => supabase.from('chat_channels').update({ position: c.position }).eq('id', c.id)));
+    // Perf (20 octobre) : échange adjacent — seuls ces deux éléments
+    // changent réellement de position. Écrire aussi tous leurs frères
+    // inchangés (comme avant) coûtait jusqu'à N écritures pour un simple
+    // clic flèche haut/bas, au lieu de 2.
+    await Promise.all([
+      supabase.from('chat_channels').update({ position: fratrie[idx].position }).eq('id', fratrie[idx].id),
+      supabase.from('chat_channels').update({ position: fratrie[swapIdx].position }).eq('id', fratrie[swapIdx].id),
+    ]);
   };
 
   // Sous-dossiers (4 septembre) : un canal peut désormais en contenir
@@ -3095,6 +3248,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         ensureProfilesLoaded(),
       ]);
 
+      if (membersModalProjectIdRef.current !== projectId) return;
       setProjectMembers((members as ChatProjectMember[]) || []);
     } finally {
       setMembersLoading(false);
@@ -3245,6 +3399,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         supabase.from('chat_channel_members').select('*').eq('channel_id', channelId),
         ensureProfilesLoaded(),
       ]);
+      if (membersModalChannelIdRef.current !== channelId) return;
       setChannelMembers((membres as ChatChannelMember[]) || []);
     } finally {
       setChannelMembersLoading(false);
