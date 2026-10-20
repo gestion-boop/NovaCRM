@@ -383,7 +383,12 @@ export default function ClientProfileView({
   const [loadingClientEmails, setLoadingClientEmails] = useState(false);
   const [clientEmailsError, setClientEmailsError] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [lightboxKind, setLightboxKind] = useState<'image' | 'audio' | null>(null);
+  // 'pdf' ajouté (20 octobre) : un document PDF (devis...) ouvrait jusqu'ici
+  // un nouvel onglet externe au clic sur l'œil — cette même fenêtre d'aperçu
+  // sait déjà afficher un fichier Google Drive dans un cadre intégré (voir
+  // plus bas, lightboxUrl.includes('drive.google.com')), qui montre toutes
+  // les pages d'un PDF avec défilement, sans quitter la fiche client.
+  const [lightboxKind, setLightboxKind] = useState<'image' | 'audio' | 'pdf' | null>(null);
   // Ticket #47 : ouvrir un e-mail en grand depuis la fiche client, avec
   // réponse directe sans quitter la fiche.
   const [openEmail, setOpenEmail] = useState<GmailMessageSummary | null>(null);
@@ -3598,11 +3603,17 @@ export default function ClientProfileView({
 
                         <div className="flex items-center gap-1.5 opacity-90 group-hover:opacity-100">
                           {doc.url ? (
-                            doc.mimeType?.startsWith('image/') || doc.mimeType?.startsWith('audio/') ? (
+                            doc.mimeType?.startsWith('image/') || doc.mimeType?.startsWith('audio/') || doc.mimeType === 'application/pdf' ? (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setLightboxKind(doc.mimeType?.startsWith('audio/') ? 'audio' : 'image');
+                                  setLightboxKind(
+                                    doc.mimeType?.startsWith('audio/')
+                                      ? 'audio'
+                                      : doc.mimeType === 'application/pdf'
+                                        ? 'pdf'
+                                        : 'image'
+                                  );
                                   setLightboxUrl(doc.url!);
                                 }}
                                 className="p-2 text-slate-300 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
