@@ -2265,7 +2265,21 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         .select('home_layout')
         .eq('agency_id', agencyId)
         .maybeSingle();
-      const nextHomeLayout = { ...((existing?.home_layout as any) || {}), lockedTiles: next };
+      // Signalé (20 octobre, récidive du dossier Immosphera) : `next` part de
+      // `lockedTiles` tel que CET appareil le connaît — un onglet resté
+      // ouvert depuis avant qu'un autre super admin pose un nouveau verrou ne
+      // le voit jamais, et toute action de ce côté-là réécrivait alors la
+      // base sans lui, l'effaçant pour tout le monde. Un verrou que ni `next`
+      // ni `precedent` ne mentionnent n'est pas un retrait voulu par CET
+      // appareil : forcément posé ailleurs entretemps, il est conservé.
+      const verrousServeur = ((existing?.home_layout as any)?.lockedTiles || {}) as Record<string, Verrou>;
+      const aPreserver: Record<string, Verrou> = {};
+      Object.keys(verrousServeur).forEach((id) => {
+        if (!(id in next) && !(id in precedent)) aPreserver[id] = verrousServeur[id];
+      });
+      const nextFinal = Object.keys(aPreserver).length > 0 ? { ...aPreserver, ...next } : next;
+      if (nextFinal !== next) setLockedTiles(nextFinal);
+      const nextHomeLayout = { ...((existing?.home_layout as any) || {}), lockedTiles: nextFinal };
       // 3 septembre : un UPDATE refusé par la sécurité de la base, ou sans
       // ligne pour cette agence, ne renvoie aucune erreur — zéro ligne
       // modifiée, et le verrou revenait au rechargement suivant comme si de
