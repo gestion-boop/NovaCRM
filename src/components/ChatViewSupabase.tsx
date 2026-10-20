@@ -262,6 +262,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // permanence, peu importe l'historique réel.
   const [lastMessageByConv, setLastMessageByConv] = useState<Record<string, { body: string | null; kind: DirectMessageRow['kind']; created_at: string }>>({});
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  // Signalé (20 octobre) : « je suis sur la conversation de Laetitia et je
+  // vois que c'est sur Natacha » — loadConvMessages (plus bas) reste en vol
+  // pendant un changement de conversation ; à sa résolution, il fusionnait
+  // ses lignes fraîches dans `prev` (l'état PARTAGÉ, celui affiché À CET
+  // INSTANT, désormais celui de l'AUTRE conversation) au lieu de la
+  // conversation pour laquelle il avait été lancé. Une fermeture React
+  // (`activeConversationId` lu directement) peut dater d'un rendu plus
+  // ancien que cette résolution tardive ; cette ref, mise à jour à chaque
+  // changement, donne toujours la conversation RÉELLEMENT affichée à
+  // l'instant de la fusion.
+  const activeConversationIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
   const [convMessages, setConvMessages] = useState<DirectMessageRow[]>([]);
   // Perf (30/08/2026, signalé "plus de 10 secondes avant que tout
   // apparaisse" + proposition de l'utilisateur "classer des antécédents") :
@@ -970,37 +984,47 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // déjà chargés via "Charger les messages précédents" pendant que la
     // conversation reste ouverte (le sondage toutes les 4s rappelle cette
     // même fonction).
-    setConvMessages((prev) => {
-      const byId = new Map(prev.map((m) => [m.id, m]));
-      rows.forEach((m) => byId.set(m.id, m));
+    //
+    // Signalé (20 octobre, « je suis sur la conversation de Laetitia et je
+    // vois que c'est sur Natacha ») : fusionné jusqu'ici dans `prev`, l'état
+    // AFFICHÉ au moment où cet appel se termine — partagé par toutes les
+    // conversations, donc celui de la conversation qu'on a ouverte ENTRE-
+    // TEMPS si cet appel (sondage, temps réel, chargement initial...) est
+    // resté en vol pendant un changement de conversation. Base de fusion
+    // reprise sur le cache PROPRE à `conversationId` (jamais partagé) ;
+    // `convMessages` (l'affichage réel) n'est lui touché que si cette
+    // conversation est encore celle à l'écran (activeConversationIdRef).
+    const base = convMessagesCacheRef.current[conversationId] || [];
+    const byId = new Map(base.map((m) => [m.id, m]));
+    rows.forEach((m) => byId.set(m.id, m));
 
-      // Signalé (31/08/2026) : "le message dans chat part deux fois".
-      // Cette fusion par id a remplacé un remplacement pur de la liste ; or
-      // `sendConvMessage` affiche d'abord un écho optimiste portant un id
-      // provisoire (`optimistic-…`) qui ne correspondra JAMAIS à l'uuid de
-      // la ligne réelle. Il n'était donc plus jamais retiré, et le message
-      // restait affiché en double. Le correctif principal est dans
-      // `sendConvMessage` (l'id provisoire y devient l'id réel dès la
-      // réponse de la base) ; ce filet rattrape les cas où cette réponse
-      // n'est jamais arrivée — perte de réseau juste après l'écriture.
-      const reels = Array.from(byId.values()).filter((m) => !m.id.startsWith('optimistic-'));
-      Array.from(byId.keys())
-        .filter((id) => id.startsWith('optimistic-'))
-        .forEach((id) => {
-          const echo = byId.get(id)!;
-          const couvert = reels.some(
-            (r) => r.user_id === echo.user_id && r.kind === echo.kind && r.body === echo.body,
-          );
-          if (couvert) byId.delete(id);
-        });
+    // Signalé (31/08/2026) : "le message dans chat part deux fois".
+    // Cette fusion par id a remplacé un remplacement pur de la liste ; or
+    // `sendConvMessage` affiche d'abord un écho optimiste portant un id
+    // provisoire (`optimistic-…`) qui ne correspondra JAMAIS à l'uuid de
+    // la ligne réelle. Il n'était donc plus jamais retiré, et le message
+    // restait affiché en double. Le correctif principal est dans
+    // `sendConvMessage` (l'id provisoire y devient l'id réel dès la
+    // réponse de la base) ; ce filet rattrape les cas où cette réponse
+    // n'est jamais arrivée — perte de réseau juste après l'écriture.
+    const reels = Array.from(byId.values()).filter((m) => !m.id.startsWith('optimistic-'));
+    Array.from(byId.keys())
+      .filter((id) => id.startsWith('optimistic-'))
+      .forEach((id) => {
+        const echo = byId.get(id)!;
+        const couvert = reels.some(
+          (r) => r.user_id === echo.user_id && r.kind === echo.kind && r.body === echo.body,
+        );
+        if (couvert) byId.delete(id);
+      });
 
-      const fusion = Array.from(byId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
-      // Mis à jour ici, scopé par `conversationId` (le paramètre de cette
-      // fonction) et non `activeConversationId` : reste correct même si la
-      // réponse arrive après que l'utilisateur a changé de conversation.
-      convMessagesCacheRef.current[conversationId] = fusion;
-      return fusion;
-    });
+    const fusion = Array.from(byId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    // Toujours mis à jour, scopé par `conversationId` : au retour sur cette
+    // conversation plus tard, elle doit refléter ce lot frais.
+    convMessagesCacheRef.current[conversationId] = fusion;
+    if (activeConversationIdRef.current === conversationId) {
+      setConvMessages(fusion);
+    }
     if (rows.length > 0) {
       await loadReactionsAndReceiptsFor(rows);
     } else {
