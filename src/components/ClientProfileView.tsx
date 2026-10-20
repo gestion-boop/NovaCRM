@@ -4437,11 +4437,28 @@ export default function ClientProfileView({
             {lightboxKind === 'audio' ? (
               <audio src={lightboxUrl} controls autoPlay className="w-full" />
             ) : lightboxUrl.includes('drive.google.com') ? (
-              <iframe
-                src={lightboxUrl.replace('/view', '/preview')}
-                className="w-full h-[80vh] rounded-xl shadow-2xl border-0"
-                allow="autoplay"
-              />
+              // Signalé (20 octobre) : un document Drive partagé en privé
+              // (permission par défaut, non "tous les détenteurs du lien") ne
+              // s'affiche pas dans ce cadre pour quiconque n'est pas connecté
+              // au bon compte Google — écran vide/bloqué sans échappatoire.
+              // Lien de secours toujours visible, quel que soit le rendu du
+              // cadre, vers Drive directement (même comportement qu'avant
+              // cette fenêtre d'aperçu pour les PDF).
+              <div className="w-full flex flex-col gap-2">
+                <iframe
+                  src={lightboxUrl.replace('/view', '/preview')}
+                  className="w-full h-[75vh] rounded-xl shadow-2xl border-0 bg-white"
+                  allow="autoplay"
+                />
+                <a
+                  href={lightboxUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="self-center text-xs text-slate-400 hover:text-white underline"
+                >
+                  L'aperçu ne s'affiche pas ? Ouvrir dans Google Drive
+                </a>
+              </div>
             ) : (
               <img src={lightboxUrl} alt="Aperçu" className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl" />
             )}
