@@ -465,30 +465,33 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-      {/* Demande explicite (21 octobre) : « plein écran sur PC pour ne pas
-          scrolled » — hauteur désormais fixée à (quasi) toute la fenêtre au
-          lieu de s'ajuster au contenu (qui dépassait sur les écrans moins
-          hauts) ; le défilement, s'il en reste besoin sur un tout petit
-          écran, se fait maintenant DANS la fenêtre plutôt que sur tout le
-          fond derrière elle. */}
-      <div className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full sm:max-w-[1760px] sm:h-[calc(100vh-32px)] p-6 sm:p-9 text-white shadow-2xl relative space-y-7 overflow-y-auto custom-scrollbar">
-        
+      {/* Demande explicite (21 octobre, répétée une 2e fois plus fermement :
+          « sur pc l'écran prenne toute la place... en une vue on doit avoir
+          les infos ») — la première tentative (hauteur fixée à la fenêtre
+          seule) ne suffisait pas : le contenu lui-même dépassait encore.
+          Ici on compacte tout (grille de créneaux en 5 colonnes au lieu de
+          3, paddings et espacements resserrés partout) pour que ça tienne
+          réellement dans un écran PC classique sans le moindre défilement.
+          Le scroll interne est conservé seulement comme filet de sécurité
+          sur un très petit écran, il ne devrait normalement jamais servir. */}
+      <div className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full sm:max-w-[1680px] sm:h-[calc(100vh-32px)] p-5 sm:p-6 text-white shadow-2xl relative space-y-4 overflow-y-auto custom-scrollbar">
+
         {/* Top Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer border border-white/10"
+          className="absolute top-4 right-4 p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer border border-white/10"
           title="Fermer"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Modal Header */}
-        <div className="flex items-start gap-3.5 pr-10">
-          <div className="w-11 h-11 rounded-2xl bg-[#2a133d] border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0 shadow-lg shadow-purple-950/40">
-            <Camera className="w-6 h-6 text-purple-300" />
+        <div className="flex items-start gap-3 pr-10">
+          <div className="w-9 h-9 rounded-2xl bg-[#2a133d] border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0 shadow-lg shadow-purple-950/40">
+            <Camera className="w-5 h-5 text-purple-300" />
           </div>
           <div>
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+            <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
               {editReservation ? 'Modifier la réservation' : 'Réservation de matériel'}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -501,7 +504,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 
         {/* Panneau admin : demandes en attente (Sylvain / Mélanie uniquement) */}
         {isCameraAdmin && pendingReservations.length > 0 && !isSuccess && (
-          <div className="bg-purple-950/20 border border-purple-500/30 rounded-2xl p-4 space-y-3">
+          <div className="bg-purple-950/20 border border-purple-500/30 rounded-2xl p-3 space-y-2">
             <p className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
               {pendingReservations.length} demande(s) en attente de validation
@@ -574,17 +577,17 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
               un avatar nominatif dès qu'ils sont déjà pris, plus un bandeau
               listant qui a déjà réservé ce jour-là : qui a quoi est visible
               d'un coup d'œil, sans recouper une liste séparée. */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
 
             {hasExistingReservation && (
-              <div className="flex items-center gap-3 px-4 py-2.5 bg-purple-950/20 border border-purple-500/25 rounded-2xl">
+              <div className="flex items-center gap-3 px-3.5 py-2 bg-purple-950/20 border border-purple-500/25 rounded-2xl">
                 <div className="flex shrink-0">
                   {todaysAgents.map((agent, idx) => (
                     <span
                       key={agent.id}
                       title={agent.agentName}
                       style={{ backgroundColor: getAgentColor(agent.agentName), marginLeft: idx === 0 ? 0 : -8 }}
-                      className="w-7 h-7 rounded-full border-2 border-[#09151c] flex items-center justify-center text-[10px] font-extrabold text-[#04090c]"
+                      className="w-6 h-6 rounded-full border-2 border-[#09151c] flex items-center justify-center text-[10px] font-extrabold text-[#04090c]"
                     >
                       {getAgentInitials(agent.agentName)}
                     </span>
@@ -596,20 +599,20 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
               </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
 
               {/* 1. Date */}
               <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-sm font-black flex items-center justify-center shrink-0">1</span>
-                  <label className="text-base font-extrabold text-white">Choisir une date *</label>
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">1</span>
+                  <label className="text-sm font-extrabold text-white">Choisir une date *</label>
                 </div>
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-5">
-                  <div className="flex items-center justify-between mb-4">
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
+                  <div className="flex items-center justify-between mb-2.5">
                     <button
                       type="button"
                       onClick={handlePrevMonth}
-                      className="w-8 h-8 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                      className="w-7 h-7 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
@@ -617,24 +620,24 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                     <button
                       type="button"
                       onClick={handleNextMonth}
-                      className="w-8 h-8 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                      className="w-7 h-7 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+                  <div className="grid grid-cols-7 gap-1 mb-1">
                     {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((wd, i) => (
                       <span key={i} className="text-center text-[10px] font-extrabold text-slate-500">{wd}</span>
                     ))}
                   </div>
-                  <div className="grid grid-cols-7 gap-1.5">
+                  <div className="grid grid-cols-7 gap-1">
                     {calendarCells.map((cell, idx) => (
                       <button
                         key={idx}
                         type="button"
                         disabled={!cell.inMonth}
                         onClick={() => cell.inMonth && cell.dayNum && setSelectedDayNum(cell.dayNum)}
-                        className={`relative h-11 rounded-lg flex items-center justify-center text-sm font-bold transition-colors ${
+                        className={`relative h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
                           !cell.inMonth
                             ? 'text-slate-700 cursor-default'
                             : cell.isSelected
@@ -645,14 +648,14 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                         {cell.label}
                         {cell.inMonth && cell.density && !cell.isSelected && (
                           <span
-                            className="absolute bottom-1.5 w-1.5 h-1.5 rounded-full"
+                            className="absolute bottom-1 w-1.5 h-1.5 rounded-full"
                             style={{ backgroundColor: cell.density === 'full' ? '#fb7185' : cell.density === 'busy' ? '#fbbf24' : '#a78bfa' }}
                           />
                         )}
                       </button>
                     ))}
                   </div>
-                  <div className="flex items-center gap-3.5 mt-4 pt-4 border-t border-[#132c37] flex-wrap">
+                  <div className="flex items-center gap-3 mt-2.5 pt-2.5 border-t border-[#132c37] flex-wrap">
                     <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#a78bfa]" />Disponible</span>
                     <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24]" />Peu de créneaux</span>
                     <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#fb7185]" />Complet</span>
@@ -662,15 +665,19 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 
               {/* 2. Créneau */}
               <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-sm font-black flex items-center justify-center shrink-0">2</span>
-                  <label className="text-base font-extrabold text-white">Choisir un créneau *</label>
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span>
+                  <label className="text-sm font-extrabold text-white">Choisir un créneau *</label>
                 </div>
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-5">
-                  <p className="text-xs font-bold text-slate-400 mb-4 capitalize">
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
+                  <p className="text-xs font-bold text-slate-400 mb-2.5 capitalize">
                     {dayNames[new Date(year, month, selectedDayNum).getDay()]} {selectedDayNum} {monthNames[month].toLowerCase()} {year}
                   </p>
-                  <div className="grid grid-cols-3 gap-2.5 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                  {/* 5 colonnes au lieu de 3 (demande explicite « en une vue,
+                      sans scroller ») : 23 créneaux tiennent sur 5 lignes au
+                      lieu de 8, et le cap de défilement interne a été retiré
+                      — il contredisait justement la demande. */}
+                  <div className="grid grid-cols-5 gap-1.5">
                     {SLOT_TIMES.map((time) => {
                       const conflict = findSlotConflict(time);
                       const taken = !!conflict;
@@ -681,7 +688,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                           type="button"
                           disabled={taken}
                           onClick={() => handleSlotClick(time)}
-                          className={`h-14 rounded-xl flex flex-col items-center justify-center gap-1 border transition-colors ${
+                          className={`h-11 rounded-lg flex flex-col items-center justify-center gap-0.5 border transition-colors ${
                             taken
                               ? 'bg-[#0a1319] border-[#1c2b32] cursor-default'
                               : inRange
@@ -689,25 +696,25 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                               : 'bg-[#09151c] border-[#16303b] hover:border-purple-500/40 cursor-pointer'
                           }`}
                         >
-                          <span className={`text-xs font-extrabold ${taken ? 'text-slate-600 line-through' : inRange ? 'text-white' : 'text-slate-200'}`}>
+                          <span className={`text-[11px] font-extrabold ${taken ? 'text-slate-600 line-through' : inRange ? 'text-white' : 'text-slate-200'}`}>
                             {time}
                           </span>
                           {conflict && (
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-0.5">
                               <span
                                 style={{ backgroundColor: getAgentColor(conflict.agentName) }}
-                                className="w-4 h-4 rounded-full flex items-center justify-center text-[6.5px] font-extrabold text-[#04090c] shrink-0"
+                                className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-extrabold text-[#04090c] shrink-0"
                               >
                                 {getAgentInitials(conflict.agentName)}
                               </span>
-                              <span className="text-[8.5px] font-bold text-slate-500 truncate max-w-[46px]">{conflict.agentName.split(' ')[0]}</span>
+                              <span className="text-[7.5px] font-bold text-slate-500 truncate max-w-[36px]">{conflict.agentName.split(' ')[0]}</span>
                             </span>
                           )}
                         </button>
                       );
                     })}
                   </div>
-                  <p className="mt-4 pt-4 border-t border-[#132c37] text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <p className="mt-2.5 pt-2.5 border-t border-[#132c37] text-xs font-bold text-slate-300 flex items-center gap-1.5">
                     <Clock className="w-4 h-4 text-purple-400" />
                     {startTime} – {endTime}
                   </p>
@@ -716,17 +723,17 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 
               {/* 3. Matériel */}
               <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-sm font-black flex items-center justify-center shrink-0">3</span>
-                    <label className="text-base font-extrabold text-white">Matériel requis *</label>
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">3</span>
+                    <label className="text-sm font-extrabold text-white">Matériel requis *</label>
                   </div>
                   <span className="text-xs text-slate-400 font-medium">
                     {selectedEquipment.length} sélectionné
                   </span>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="space-y-2">
                   {EQUIPMENT_OPTIONS.map((item) => {
                     const isSelected = selectedEquipment.includes(item.id);
                     const conflict = findConflictingReservation(item.id, startTime, endTime, editReservation?.id);
@@ -736,14 +743,14 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                         type="button"
                         onClick={() => toggleEquipment(item.id)}
                         aria-pressed={isSelected}
-                        className={`w-full p-4 rounded-2xl border flex items-center gap-3.5 cursor-pointer transition-all select-none text-left ${
+                        className={`w-full p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all select-none text-left ${
                           isSelected
                             ? 'bg-[#28133b] border-purple-500 text-white shadow-sm shadow-purple-900/20'
                             : 'bg-[#051319] border-[#132c37] text-slate-300 hover:border-purple-500/40'
                         }`}
                       >
-                        <span className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 text-white ${item.tileClass}`}>
-                          <item.icon className="w-6 h-6" strokeWidth={1.8} />
+                        <span className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 text-white ${item.tileClass}`}>
+                          <item.icon className="w-5 h-5" strokeWidth={1.8} />
                         </span>
                         <span className="flex-1 min-w-0">
                           <span className="block text-sm font-extrabold truncate">{item.label}</span>
@@ -779,13 +786,13 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 
             {/* 4. Informations complémentaires */}
             <div>
-              <div className="flex items-center gap-2.5 mb-3">
-                <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">4</span>
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">4</span>
                 <label className="text-sm font-extrabold text-white">Informations complémentaires</label>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-1.5">
                     <MapPin className="w-3.5 h-3.5 text-purple-400" />
                     Lieu
                   </label>
@@ -794,12 +801,12 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                     placeholder="Adresse, ville..."
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
+                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
                   />
                 </div>
 
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-1.5">
                     <Hash className="w-3.5 h-3.5 text-purple-400" />
                     N° mandat (optionnel)
                   </label>
@@ -817,12 +824,12 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                     placeholder="Ex : 2024-001"
                     value={mandateNumber}
                     onChange={(e) => setMandateNumber(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
+                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
                   />
                 </div>
 
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-1.5">
                     <Briefcase className="w-3.5 h-3.5 text-purple-400" />
                     Projet
                   </label>
@@ -831,39 +838,39 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                     placeholder="Nom du projet..."
                     value={projectName}
                     onChange={(e) => setProjectName(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
+                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
                   />
                 </div>
 
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-1.5">
                     <FileText className="w-3.5 h-3.5 text-purple-400" />
                     Note (optionnel)
                   </label>
                   <textarea
-                    rows={2}
+                    rows={1}
                     placeholder="Informations supplémentaires..."
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none resize-none transition-colors"
+                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none resize-none transition-colors"
                   />
                 </div>
               </div>
             </div>
 
             {/* Footer Action Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#142832]">
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#142832]">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-5 py-3 rounded-full border border-[#132c37] bg-[#051319] text-slate-300 hover:text-white hover:border-purple-500/40 text-xs font-bold transition-colors cursor-pointer"
+                className="px-5 py-2.5 rounded-full border border-[#132c37] bg-[#051319] text-slate-300 hover:text-white hover:border-purple-500/40 text-xs font-bold transition-colors cursor-pointer"
               >
                 Annuler
               </button>
               <button
                 type="submit"
                 disabled={submitting || loadingReservations}
-                className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:opacity-95 text-white font-black text-xs shadow-lg shadow-purple-900/40 flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                className="px-6 py-2.5 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:opacity-95 text-white font-black text-xs shadow-lg shadow-purple-900/40 flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
               >
                 <Send className="w-4 h-4" />
                 <span>
