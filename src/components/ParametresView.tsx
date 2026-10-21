@@ -1531,9 +1531,11 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
           </div>
 
           {showUserPicker && (() => {
+            const agenceOuverte = agenceUniqueAnnonce(selectedAgency.id);
+            const filtreAgence = agenceOuverte?.id || userPickerAgencyFilter;
             const q = userPickerQuery.trim().toLowerCase();
             const filtered = users.filter((u) => {
-              if (userPickerAgencyFilter && !(u.agency_ids || []).includes(userPickerAgencyFilter)) return false;
+              if (filtreAgence && !(u.agency_ids || []).includes(filtreAgence)) return false;
               if (!q) return true;
               return (u.full_name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
             });
@@ -1557,35 +1559,33 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                         className="w-full bg-[#071f21] border border-[#1c4448] rounded-lg pl-8 pr-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
                       />
                     </div>
-                    {/* Demandé (30/08/2026) : "le logo au-dessus bien centré,
-                        qui se rapproche du cadre" — logo empilé au-dessus du
-                        nom de société plutôt qu'à côté, dans chaque puce de
-                        filtre. */}
-                    <div className="flex flex-wrap gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setUserPickerAgencyFilter('')}
-                        className={`flex flex-col items-center gap-1 w-16 px-1.5 py-2 rounded-xl border text-[10px] font-semibold transition-colors ${
-                          !userPickerAgencyFilter ? 'border-[#F7BC5F] bg-[#F7BC5F]/10 text-[#F9C977] ring-2 ring-[#F7BC5F]/40' : 'border-[#1c4448] text-slate-400 hover:border-white/20'
-                        }`}
-                      >
-                        <Users className="w-6 h-6" />
-                        Toutes
-                      </button>
-                      {sortByAgencyOrder(AGENCIES.filter((a) => a.id !== 'all')).map((a) => (
+                    {!agenceOuverte && (
+                      <div className="flex flex-wrap gap-1.5">
                         <button
-                          key={a.id}
                           type="button"
-                          onClick={() => setUserPickerAgencyFilter(a.id)}
+                          onClick={() => setUserPickerAgencyFilter('')}
                           className={`flex flex-col items-center gap-1 w-16 px-1.5 py-2 rounded-xl border text-[10px] font-semibold transition-colors ${
-                            userPickerAgencyFilter === a.id ? 'border-[#F7BC5F] bg-[#F7BC5F]/10 text-[#F9C977] ring-2 ring-[#F7BC5F]/40' : 'border-[#1c4448] text-slate-400 hover:border-white/20'
+                            !userPickerAgencyFilter ? 'border-[#F7BC5F] bg-[#F7BC5F]/10 text-[#F9C977] ring-2 ring-[#F7BC5F]/40' : 'border-[#1c4448] text-slate-400 hover:border-white/20'
                           }`}
                         >
-                          <img src={getAgencyLogo(a.name)} alt="" className="w-6 h-6 object-contain" />
-                          <span className="truncate max-w-full">{a.name}</span>
+                          <Users className="w-6 h-6" />
+                          Toutes
                         </button>
-                      ))}
-                    </div>
+                        {sortByAgencyOrder(AGENCIES.filter((a) => a.id !== 'all')).map((a) => (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onClick={() => setUserPickerAgencyFilter(a.id)}
+                            className={`flex flex-col items-center gap-1 w-16 px-1.5 py-2 rounded-xl border text-[10px] font-semibold transition-colors ${
+                              userPickerAgencyFilter === a.id ? 'border-[#F7BC5F] bg-[#F7BC5F]/10 text-[#F9C977] ring-2 ring-[#F7BC5F]/40' : 'border-[#1c4448] text-slate-400 hover:border-white/20'
+                            }`}
+                          >
+                            <img src={getAgencyLogo(a.name)} alt="" className="w-6 h-6 object-contain" />
+                            <span className="truncate max-w-full">{a.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-0.5">
                     {filtered.length === 0 ? (
