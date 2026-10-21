@@ -19,6 +19,18 @@ import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 // qu'ici : un autre composant (NovaSearchBar.tsx) avait exactement le même
 // bug avec ce même shim.
 import { useAuth } from '@/contexts/AuthContext';
+// Récidive du dossier Immosphera dans Conseils Finances (21 octobre) : le
+// shim ci-dessus substitue SILENCIEUSEMENT `activeAgency` par
+// AGENCIES[0] (= Conseils Finances) dès que la sélection réelle est
+// "Toutes les agences" (voir @/contexts/AuthContext, `resolvedAgency`) —
+// un super admin sur "Toutes les agences" qui verrouille/modifie un
+// dossier d'une AUTRE agence (ex. Immosphera) voit alors ce composant
+// écrire sans le savoir dans le registre de Conseils Finances. Ce second
+// hook, sur le contexte natif (jamais substitué), ne sert qu'à connaître
+// la VRAIE sélection globale pour bloquer ce cas précis avant écriture
+// (voir enregistrerVerrous) — le reste du composant continue d'utiliser
+// `useAuth()` (le shim) comme avant, pour ne rien changer d'autre.
+import { useAuth as useAgenceReelle } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { assemblerDictee } from '@/lib/dictee';
 import {
@@ -1283,6 +1295,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // l'initialisation de `tiles` pour cloisonner le stockage par agence
   // (voir HOME_TILES_KEY juste en dessous).
   const { agencies, activeAgency, isSuperAdmin, currentUser } = useAuth() as any;
+  // Vraie sélection globale, jamais substituée — voir le commentaire sur
+  // l'import plus haut. Ne sert qu'au garde-fou dans enregistrerVerrous.
+  const { activeAgency: agenceActiveReelle } = useAgenceReelle();
   const isLight = useIsLightMode();
   // Signalé (17/09/2026) : "chaque utilisateur organise le placement comme
   // il veut, sauf que les tuiles changent de place quand on se reconnecte"
@@ -2256,6 +2271,21 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // bon et d'avertir.
   const enregistrerVerrous = async (next: Record<string, Verrou>, precedent: Record<string, Verrou>) => {
     if (!activeAgency?.id) return;
+    // Audit stabilité (21 octobre, récidive — dossier Immosphera retrouvé
+    // verrouillé jusque dans Conseils Finances) : `activeAgency` ici vient
+    // du shim de compatibilité ImmoSphera (voir l'import plus haut), qui
+    // substitue silencieusement Conseils Finances dès que la sélection
+    // réelle est "Toutes les agences". Verrouiller/modifier un dossier
+    // pendant ce temps-là écrivait alors, à l'insu de tous, dans le
+    // registre de Conseils Finances — quelle que soit l'agence à qui ce
+    // dossier appartient vraiment. On bloque ce cas précis ici, au point
+    // d'écriture unique par lequel passent déjà toggleTileLock,
+    // synchroniserVerrous et retirerVerrous.
+    if (agenceActiveReelle?.id === 'all') {
+      setLockedTiles(precedent);
+      toast.error('Sélectionnez une agence précise (pas « Toutes les agences ») avant de verrouiller ou modifier un dossier.');
+      return;
+    }
     const agencyId = activeAgency.id;
     setLockedTiles(next);
     let echec: string | null = null;
