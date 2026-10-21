@@ -4159,8 +4159,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               92 % sur téléphone, la valeur d'avant à partir du
                               format tablette : sur ordinateur, rien ne bouge. */}
                           <div className={`flex items-end gap-1.5 ${isEditing ? 'w-full max-w-full' : 'max-w-[92%] sm:max-w-[80%]'} ${mine ? 'flex-row-reverse' : ''}`} {...gestesMessage(m.id)}>
-                            <div className={`px-3.5 py-2 rounded-2xl text-sm ${isEditing ? 'w-full' : ''} ${
-                              mine ? 'bg-[#F7BC5F] text-slate-950 font-medium' : 'bg-[#0b1c1e] border border-[#153c3f] text-white'
+                            {/* L'aplat doré plein transformait un long message
+                                en bloc jaune. Le doré reste le liseré ; la
+                                largeur ne change pas. */}
+                            <div className={`px-4 py-2.5 rounded-2xl text-sm ${isEditing ? 'w-full' : ''} ${
+                              mine ? 'bg-[#F7BC5F]/30 border border-[#F7BC5F]/60 text-white rounded-br-md' : 'bg-[#0b1c1e] border border-[#153c3f] text-white rounded-bl-md'
                             }`}>
                               {!mine && <p className="text-[10px] font-bold text-[#F7BC5F] mb-0.5">{author?.displayName || 'Utilisateur'}</p>}
 
@@ -4173,7 +4176,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                   <textarea
                                     value={editingConvMsgText}
                                     onChange={(e) => setEditingConvMsgText(e.target.value)}
-                                    className="bg-transparent rounded-lg p-2.5 text-sm text-inherit border border-black/20 focus:outline-none resize-none w-full"
+                                    className="bg-transparent rounded-lg p-2.5 text-sm text-inherit border border-[#F7BC5F]/40 focus:outline-none resize-none w-full"
                                     rows={4}
                                     autoFocus
                                   />
@@ -4190,7 +4193,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                       de libellés/boutons au doigt), ce qui désactivait aussi la
                                       sélection du texte des messages, jamais réactivée localement.
                                       `select-text` la restaure ici, sans toucher au reste de l'appli. */}
-                                  {m.kind === 'text' && <p className="whitespace-pre-line select-text">{linkifyText(m.body || '', mine)}</p>}
+                                  {m.kind === 'text' && <p className="whitespace-pre-line select-text leading-relaxed">{linkifyText(m.body || '')}</p>}
                                   {/* Signalé (30/08/2026, capture à l'appui) : "comme ils sont gros...
                                       divise par exemple par cinq" — une mascotte Nova envoyée comme
                                       message (insertConvMessage('image', ...)) était traitée
@@ -4908,10 +4911,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           directes (voir le commentaire là-haut) — les canaux
                           étaient encore plus étroits : 70 %. */}
                       <div className={`flex items-end gap-1.5 ${isEditing ? 'w-full max-w-full' : 'max-w-[92%] sm:max-w-[70%]'} ${mine ? 'flex-row-reverse' : ''}`} {...gestesMessage(m.id)}>
-                      <div className={`px-3.5 py-2 rounded-2xl text-sm ${isEditing ? 'w-full' : ''} ${
+                      {/* Même bulle que les conversations directes : liseré
+                          doré, plus d'aplat jaune sur les longs messages. */}
+                      <div className={`px-4 py-2.5 rounded-2xl text-sm ${isEditing ? 'w-full' : ''} ${
                         mine
-                          ? 'bg-[#F7BC5F] text-slate-950 font-medium'
-                          : 'bg-[#0b1c1e] border border-[#153c3f] text-white'
+                          ? 'bg-[#F7BC5F]/30 border border-[#F7BC5F]/60 text-white rounded-br-md'
+                          : 'bg-[#0b1c1e] border border-[#153c3f] text-white rounded-bl-md'
                       }`}>
                         {!mine && (
                           <p className="text-[10px] font-bold text-[#F7BC5F] mb-0.5">{m.data?.sender_name || 'Collaborateur'}</p>
@@ -4929,7 +4934,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             <textarea
                               value={editingChannelMsgText}
                               onChange={(e) => setEditingChannelMsgText(e.target.value)}
-                              className="bg-transparent rounded-lg p-2.5 text-sm text-inherit border border-black/20 focus:outline-none resize-none w-full"
+                              className="bg-transparent rounded-lg p-2.5 text-sm text-inherit border border-[#F7BC5F]/40 focus:outline-none resize-none w-full"
                               rows={4}
                               autoFocus
                             />
@@ -4968,7 +4973,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         ) : (
                           // select-text : voir le commentaire équivalent côté conversations
                           // directes plus haut (même correctif, même cause : select-none racine).
-                          <p className="whitespace-pre-line select-text">{linkifyText(m.data?.body || '', mine)}</p>
+                          <p className="whitespace-pre-line select-text leading-relaxed">{linkifyText(m.data?.body || '')}</p>
                         )}
                       </div>
                       {/* Demande explicite (30/08/2026) : "chaque utilisateur qui
