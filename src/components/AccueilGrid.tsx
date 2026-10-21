@@ -32,6 +32,7 @@ import { useAuth } from '@/contexts/AuthContext';
 // `useAuth()` (le shim) comme avant, pour ne rien changer d'autre.
 import { useAuth as useAgenceReelle } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
 import { assemblerDictee } from '@/lib/dictee';
 import {
   lireDispositionAgence, ecrireDispositionAgence, lireHorodatageLocal, ecrireHorodatageLocal,
@@ -2105,10 +2106,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // exception de rôle.
   // Conseils Finances — agence active uniquement, comme les deux autres.
   const canSeeConseilsFinances = useMemo(
-    () => /conseil/i.test(activeAgency?.name ?? '') || /finance/i.test(activeAgency?.name ?? ''),
+    () => estAgenceConseilsFinances(activeAgency),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAgency?.id],
   );
+
+  // Dossiers « Banques » / « Assurances » : testés sur la VRAIE agence active
+  // (contexte natif), pas sur le shim qui retombe sur Conseils Finances dès que
+  // « Toutes les agences » est sélectionné.
+  const canSeeBanquesAssurances = estAgenceConseilsFinances(agenceActiveReelle);
 
   // Même correctif que canSeeImmosphera juste au-dessus : agence active
   // uniquement, jamais la liste complète des agences.
@@ -3288,8 +3294,11 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // 3 septembre : « la tuile Réserver caméra pour Conseils Finances ne doit
   // jamais apparaître, cela ne sert à rien ». Masquée pour cette agence,
   // partout (racine, dossiers, aperçus), quel que soit le rôle.
+  // Dossiers « Banques » et « Assurances » : Conseils Finances uniquement
+  // (agence active, tous rôles confondus).
   const tuileVisible = (t: TileItemNode) =>
-    (t.id !== 'reserver-camera' || !canSeeConseilsFinances)
+    (!estDossierReserveConseilsFinances(t.title) || canSeeBanquesAssurances)
+    && (t.id !== 'reserver-camera' || !canSeeConseilsFinances)
     && (t.id !== 'immosphera360' || canSeeImmosphera)
     && (!IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
     && (!NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
@@ -3356,6 +3365,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // Seuls les verrous qui décrivent un dossier (même vide : verrouillé
     // avant d'être rempli) sont reposés.
     if (!Array.isArray(enfants)) return;
+    // Jamais reposé hors Conseils Finances (même si un verrou d'une autre
+    // agence en porte encore un).
+    if (estDossierReserveConseilsFinances(verrou.title) && !canSeeBanquesAssurances) return;
 
     // Présent dans la grille mais masqué par les droits : on n'y touche pas.
     // Le reposer contournerait un filtre de visibilité voulu.
