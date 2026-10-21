@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import {
-  Camera, X, ChevronLeft, ChevronRight, ChevronDown, Clock, MapPin, Calendar,
-  Hash, Briefcase, CheckCircle2, XCircle, Video, Film, Package, Clapperboard, Send,
-  FileText, Check,
+  Camera, X, Clock, ClipboardList, Calendar, Hash, Briefcase,
+  CheckCircle2, XCircle, Video, Film, Package, Clapperboard,
 } from 'lucide-react';
 import { CameraReservation } from '@/types';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
@@ -15,6 +15,14 @@ import {
   formatReservationDateFr,
 } from '@/hooks/useCameraReservations';
 import { equipementsReservation, partagentUnEquipement } from '@/lib/equipementsReservation';
+import {
+  ajouterMinutes,
+  creneauConflit,
+  creneauxAffiches,
+  disponibiliteJour,
+  DUREE_CRENEAU_MIN,
+} from '@/lib/creneauxReservationCamera';
+import { FormulaireReservationMateriel } from '@/components/reservation/FormulaireReservationMateriel';
 
 interface CameraReservationModalProps {
   isOpen: boolean;
@@ -78,6 +86,16 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   const [showRefusePanel, setShowRefusePanel] = useState(false);
   const [refuseReason, setRefuseReason] = useState('');
   const [altSlots, setAltSlots] = useState<string[]>(['', '', '']);
+  const [voirReservations, setVoirReservations] = useState(false);
+  const [etapeMobile, setEtapeMobile] = useState(1);
+  const [sensMois, setSensMois] = useState<1 | -1>(1);
+  const [ecranEtroit, setEcranEtroit] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const appliquer = () => setEcranEtroit(media.matches);
+    media.addEventListener('change', appliquer);
+    return () => media.removeEventListener('change', appliquer);
+  }, []);
 
   const loadDayEvents = async (dateStr: string, tokenOverride?: string) => {
     setLoadingDayEvents(true);
@@ -120,6 +138,12 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   // y compris la date, pour que le calendrier s'ouvre directement sur le
   // bon jour au lieu de rester sur celui parcouru la dernière fois.
   useEffect(() => {
+    if (!isOpen) return;
+    setVoirReservations(false);
+    setEtapeMobile(1);
+  }, [isOpen]);
+
+  useEffect(() => {
     if (!isOpen || !editReservation) return;
     const [datePart, timePart] = editReservation.startDate.split(' ');
     const [y, m, d] = datePart.split('-').map(Number);
@@ -139,14 +163,11 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Demande explicite (10 octobre) : « comme une appli, avec des boutons
-  // comme des pads plus gros, et plus facile à utiliser » — icônes vectorielles
-  // (déjà présentes ici, juste jamais affichées) à la place des emoji.
-  const EQUIPMENT_OPTIONS = [
-    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', icon: Video },
-    { id: 'Caméra DJI', label: 'Caméra DJI', icon: Camera },
-    { id: 'Caméra X4', label: 'Caméra X4', icon: Package },
-    { id: 'Community Manager', label: 'Community Manager', icon: Clapperboard },
+  const MATERIELS = [
+    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', detail: 'Visites immersives', tint: 'from-violet-100 to-fuchsia-50', Icon: Video },
+    { id: 'Caméra DJI', label: 'Caméra DJI', detail: 'Visites immersives', tint: 'from-slate-100 to-violet-50', Icon: Camera },
+    { id: 'Caméra X4', label: 'Caméra X4', detail: 'Photos 360', tint: 'from-zinc-100 to-slate-50', Icon: Package },
+    { id: 'Community Manager', label: 'Community Manager', detail: 'Photos pro', tint: 'from-amber-50 to-orange-50', Icon: Clapperboard },
   ];
 
   // Calendar calculations
@@ -156,13 +177,37 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
-  const dayNames = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
-
   const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Navigate month
-  const handlePrevMonth = () => setViewDate(new Date(year, month - 1, 1));
-  const handleNextMonth = () => setViewDate(new Date(year, month + 1, 1));
+  const changerMois = (delta: 1 | -1) => {
+    setSensMois(delta);
+    const next = new Date(year, month + delta, 1);
+    setViewDate(next);
+    const max = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    setSelectedDayNum((jour) => Math.min(jour, max));
+  };
+  const allerAujourdhui = () => {
+    const maintenant = new Date();
+    setSensMois(maintenant >= viewDate ? 1 : -1);
+    setViewDate(new Date(maintenant.getFullYear(), maintenant.getMonth(), 1));
+    setSelectedDayNum(maintenant.getDate());
+    if (ecranEtroit) setEtapeMobile(2);
+  };
+  const choisirJour = (jour: number) => {
+    setSelectedDayNum(jour);
+    if (ecranEtroit) setEtapeMobile(2);
+  };
+  const choisirCreneau = (debut: string) => {
+    const occupe = creneauConflit(debut, selectedDayReservations, selectedEquipment, editReservation?.id);
+    if (occupe) {
+      setSubmitError('Ce créneau est déjà pris pour le matériel choisi.');
+      return;
+    }
+    setSubmitError(null);
+    setStartTime(debut);
+    setEndTime(ajouterMinutes(debut, DUREE_CRENEAU_MIN));
+    if (ecranEtroit) setEtapeMobile(3);
+  };
 
   // Equipment toggle
   const toggleEquipment = (id: string) => {
@@ -353,56 +398,117 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     }
   };
 
-  const hasExistingReservation = selectedDayReservations.length > 0;
+  const aujourdhui = new Date();
+  const aujourdhuiIso = `${aujourdhui.getFullYear()}-${String(aujourdhui.getMonth() + 1).padStart(2, '0')}-${String(aujourdhui.getDate()).padStart(2, '0')}`;
+  const premierJour = new Date(year, month, 1).getDay();
+  const decalage = (premierJour + 6) % 7;
+  const jours = [
+    ...Array.from({ length: decalage }, (_, index) => ({
+      cle: `vide-${month}-${index}`,
+      jour: null as number | null,
+      selectionne: false,
+      passe: false,
+      niveau: null,
+    })),
+    ...Array.from({ length: totalDaysInMonth }, (_, index) => {
+      const jour = index + 1;
+      const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+      return {
+        cle: iso,
+        jour,
+        selectionne: jour === selectedDayNum,
+        passe: iso < aujourdhuiIso,
+        niveau: disponibiliteJour(iso, aujourdhuiIso, reservations, selectedEquipment),
+      };
+    }),
+  ];
+  const dateChoisie = new Date(year, month, selectedDayNum).toLocaleDateString('fr-FR', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+  const creneaux = creneauxAffiches(startTime).map((debut) => ({
+    debut,
+    occupe: creneauConflit(debut, selectedDayReservations, selectedEquipment, editReservation?.id),
+    actif: debut === startTime,
+  }));
+  const plage = `${startTime} – ${endTime}`;
+  const reservationsDuJour = selectedDayReservations
+    .filter((reservation) => reservation.status !== 'Refusée')
+    .map((reservation) => ({
+      id: reservation.id,
+      label: reservation.equipmentName,
+      horaire: `${reservation.startTime || reservation.startDate.slice(-5)}–${reservation.endTime || reservation.endDate.slice(-5)}`,
+      statut: reservation.status,
+    }));
+  const resumes: [string, string, string, string] = [
+    dateChoisie,
+    plage,
+    selectedEquipment.join(', ') || 'Aucun matériel',
+    location.trim() || 'Lieu, projet, note',
+  ];
+  const reservationsVisibles = (isCameraAdmin
+    ? reservations
+    : reservations.filter((reservation) => reservation.createdByUserId === currentUser?.uid)
+  ).slice().sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fade-in">
-      <div className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full max-w-4xl p-5 sm:p-7 text-white shadow-2xl relative space-y-6 my-auto">
-        
-        {/* Top Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer border border-white/10"
-          title="Fermer"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* Modal Header */}
-        <div className="flex items-start gap-3.5 pr-10">
-          <div className="w-11 h-11 rounded-2xl bg-[#2a133d] border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0 shadow-lg shadow-purple-950/40">
-            <Camera className="w-6 h-6 text-purple-300" />
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/45 backdrop-blur-sm p-0 sm:p-6 overflow-y-auto">
+      <motion.div
+        initial={{ opacity: 0, y: 18, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        className="bg-white text-slate-900 w-full sm:max-w-6xl rounded-t-[28px] sm:rounded-[28px] shadow-2xl max-h-[100dvh] sm:max-h-[92vh] overflow-y-auto"
+      >
+        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-start gap-3 border-b border-slate-100">
+          <div className="w-11 h-11 rounded-2xl bg-violet-600 text-white flex items-center justify-center shrink-0">
+            <Camera className="w-5 h-5" />
           </div>
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
               {editReservation ? 'Modifier la réservation' : 'Réservation de matériel'}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {editReservation
-                ? 'Ajustez le créneau ou le matériel, puis enregistrez.'
-                : <>Remplissez le formulaire. La demande sera validée par <span className="text-slate-200 font-semibold">Sylvain ou Mélanie Grazia</span>.</>}
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Réservez facilement une caméra pour vos prises de vue immersives.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setVoirReservations((ouvert) => !ouvert)}
+            className="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            <ClipboardList className="w-4 h-4" />
+            {voirReservations ? 'Nouvelle demande' : 'Vos réservations'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fermer"
+            className="w-9 h-9 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 flex items-center justify-center"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Panneau admin : demandes en attente (Sylvain / Mélanie uniquement) */}
-        {isCameraAdmin && pendingReservations.length > 0 && !isSuccess && (
-          <div className="bg-purple-950/20 border border-purple-500/30 rounded-2xl p-4 space-y-3">
-            <p className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5" />
-              {pendingReservations.length} demande(s) en attente de validation
-            </p>
-            <div className="space-y-2">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 space-y-4">
+          <button
+            type="button"
+            onClick={() => setVoirReservations((ouvert) => !ouvert)}
+            className="sm:hidden inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-600"
+          >
+            <ClipboardList className="w-4 h-4" />
+            {voirReservations ? 'Nouvelle demande' : 'Vos réservations'}
+          </button>
+
+          {isCameraAdmin && pendingReservations.length > 0 && !isSuccess && (
+            <div className="rounded-2xl border border-violet-200 bg-violet-50 p-3 space-y-2">
+              <p className="text-xs font-semibold text-violet-700 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                {pendingReservations.length} demande{pendingReservations.length > 1 ? 's' : ''} en attente
+              </p>
               {pendingReservations.map((res) => (
                 <button
                   key={res.id}
                   type="button"
                   onClick={() => {
-                    // Demande explicite : on perdait le fil de la date
-                    // demandée en parcourant le calendrier soi-même — on
-                    // recale systématiquement le calendrier sur le jour de
-                    // la demande ouverte, pour qu'il ne reste jamais sur un
-                    // mois parcouru entre-temps.
                     const [datePart] = res.startDate.split(' ');
                     const [y, m, d] = datePart.split('-').map(Number);
                     if (y && m && d) {
@@ -411,336 +517,123 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                     }
                     setDetailReservation(res);
                   }}
-                  className="w-full flex items-center justify-between gap-3 bg-[#050f14] border border-[#182e38] rounded-xl p-3 text-left hover:border-[#F7BC5F]/40 transition-colors"
+                  className="w-full flex items-center justify-between gap-3 bg-white border border-violet-100 rounded-xl px-3 py-2 text-left"
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-white truncate">{res.equipmentName}</p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {res.agentName} • {formatReservationDateFr(res)}
-                      {res.projectName ? ` • ${res.projectName}` : ''}
-                    </p>
-                  </div>
-                  <span className="text-[11px] font-semibold text-[#F9C977] shrink-0">Contrôler →</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-900 truncate">{res.equipmentName}</span>
+                    <span className="block text-[11px] text-slate-500 truncate">{res.agentName} · {formatReservationDateFr(res)}</span>
+                  </span>
+                  <span className="text-xs font-semibold text-violet-700 shrink-0">Contrôler</span>
                 </button>
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Success Feedback Overlay */}
-        {isSuccess ? (
-          <div className="p-12 text-center space-y-3 bg-[#051319] border border-emerald-500/30 rounded-2xl animate-scale-up">
-            <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-            <h3 className="text-lg font-bold text-white">
-              {editReservation ? 'Réservation mise à jour !' : 'Demande enregistrée avec succès !'}
-            </h3>
-            <p className="text-xs text-slate-400">
-              {editReservation
-                ? 'Les modifications ont été enregistrées.'
-                : 'Sylvain et Mélanie Grazia ont été notifiés et valideront votre demande.'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {(submitError || loadError) && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs">
-                {submitError || loadError}
-              </div>
-            )}
+          {(submitError || loadError) && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm">
+              {submitError || loadError}
+            </div>
+          )}
 
-            {loadingReservations && (
-              <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-200 text-xs">
-                Chargement du planning en cours...
-              </div>
-            )}
-
-          {/* Demande explicite (10 octobre) : « comme une appli, avec des
-              boutons comme des pads plus gros, et plus facile à utiliser » —
-              étapes numérotées et grandes cartes tactiles à la place de la
-              grille de calendrier et des petits champs texte, sur le modèle
-              validé par Sylvain (capture d'écran fournie). */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-
-              {/* Colonne gauche : date, horaire, matériel */}
-              <div className="lg:col-span-7 space-y-5">
-
-                {/* 1. Date */}
-                <div>
-                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">1</span>
-                      <label className="text-sm font-extrabold text-white">Sélectionner une date *</label>
+          <AnimatePresence mode="wait" initial={false}>
+            {isSuccess ? (
+              <motion.div
+                key="succes"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="py-16 text-center"
+              >
+                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
+                <h3 className="text-lg font-semibold text-slate-900 mt-3">
+                  {editReservation ? 'Réservation mise à jour' : 'Demande enregistrée'}
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  {editReservation
+                    ? 'Les modifications ont été enregistrées.'
+                    : 'Sylvain et Mélanie Grazia ont été notifiés.'}
+                </p>
+              </motion.div>
+            ) : voirReservations ? (
+              <motion.div
+                key="liste"
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -16 }}
+                transition={{ duration: 0.25 }}
+                className="space-y-2"
+              >
+                {reservationsVisibles.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-8 text-center">Aucune réservation pour le moment.</p>
+                ) : reservationsVisibles.map((reservation) => (
+                  <div key={reservation.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 px-3 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{reservation.equipmentName}</p>
+                      <p className="text-xs text-slate-500 truncate">{formatReservationDateFr(reservation)}</p>
                     </div>
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={handlePrevMonth}
-                        className="w-7 h-7 rounded-full bg-[#051319] border border-[#132c37] hover:border-purple-500/50 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
-                      >
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="text-xs font-bold text-slate-300 min-w-[90px] text-center">
-                        {monthNames[month]} {year}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleNextMonth}
-                        className="w-7 h-7 rounded-full bg-[#051319] border border-[#132c37] hover:border-purple-500/50 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
-                      >
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2.5 overflow-x-auto pb-1 custom-scrollbar">
-                    {Array.from({ length: totalDaysInMonth }).map((_, idx) => {
-                      const dayNum = idx + 1;
-                      const isSelected = selectedDayNum === dayNum;
-                      const dayDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                      const hasBookings = reservations.some((reservation) =>
-                        reservation.startDate.startsWith(dayDate)
-                      );
-                      const dow = dayNames[new Date(year, month, dayNum).getDay()].slice(0, 3).toUpperCase();
-
-                      return (
-                        <button
-                          key={`day-${dayNum}`}
-                          type="button"
-                          onClick={() => setSelectedDayNum(dayNum)}
-                          className={`shrink-0 w-[68px] h-[92px] rounded-2xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-600 text-white shadow-lg shadow-purple-900/40'
-                              : 'bg-[#051319] border border-[#132c37] text-slate-300 hover:border-purple-500/40'
-                          }`}
-                        >
-                          <span className="text-[10px] font-extrabold tracking-wide opacity-80">{dow}</span>
-                          <span className="text-xl font-black">{dayNum}</span>
-                          {hasBookings && (
-                            <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-[#c084fc]'}`} />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 2. Horaire */}
-                <div>
-                  <div className="flex items-center gap-2.5 mb-3">
-                    <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span>
-                    <label className="text-sm font-extrabold text-white">Choisir l'horaire *</label>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="flex items-center gap-3 bg-[#051319] border border-[#132c37] rounded-2xl px-4 py-3 cursor-pointer focus-within:border-purple-500 transition-colors">
-                      <span className="w-9 h-9 rounded-full bg-purple-950/50 text-purple-300 flex items-center justify-center shrink-0">
-                        <Clock className="w-4 h-4" />
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[11px] text-slate-400 font-semibold">Heure de début</span>
-                        <input
-                          type="time"
-                          required
-                          value={startTime}
-                          onChange={(e) => setStartTime(e.target.value)}
-                          className="w-full bg-transparent border-none p-0 text-lg font-extrabold text-white focus:outline-none [color-scheme:dark]"
-                        />
-                      </span>
-                      <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
-                    </label>
-
-                    <label className="flex items-center gap-3 bg-[#051319] border border-[#132c37] rounded-2xl px-4 py-3 cursor-pointer focus-within:border-purple-500 transition-colors">
-                      <span className="w-9 h-9 rounded-full bg-purple-950/50 text-purple-300 flex items-center justify-center shrink-0">
-                        <Clock className="w-4 h-4" />
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[11px] text-slate-400 font-semibold">Heure de fin</span>
-                        <input
-                          type="time"
-                          required
-                          value={endTime}
-                          onChange={(e) => setEndTime(e.target.value)}
-                          className="w-full bg-transparent border-none p-0 text-lg font-extrabold text-white focus:outline-none [color-scheme:dark]"
-                        />
-                      </span>
-                      <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
-                    </label>
-                  </div>
-                </div>
-
-                {/* 3. Matériel */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">3</span>
-                      <label className="text-sm font-extrabold text-white">Matériel requis *</label>
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-medium">
-                      {selectedEquipment.length} sélectionné
+                    <span className={`text-[11px] font-semibold px-2 py-1 rounded-full shrink-0 ${
+                      reservation.status === 'Confirmée'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : reservation.status === 'Refusée'
+                          ? 'bg-rose-50 text-rose-600'
+                          : 'bg-amber-50 text-amber-700'
+                    }`}>
+                      {reservation.status}
                     </span>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {EQUIPMENT_OPTIONS.map((item) => {
-                      const isSelected = selectedEquipment.includes(item.id);
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => toggleEquipment(item.id)}
-                          aria-pressed={isSelected}
-                          className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all select-none text-left ${
-                            isSelected
-                              ? 'bg-[#28133b] border-purple-500 text-white shadow-sm shadow-purple-900/20'
-                              : 'bg-[#051319] border-[#132c37] text-slate-300 hover:border-purple-500/40'
-                          }`}
-                        >
-                          <span className="w-11 h-11 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
-                            <item.icon className="w-5 h-5" />
-                          </span>
-                          <span className="flex-1 min-w-0 text-sm font-extrabold truncate">{item.label}</span>
-                          <span className={`w-6 h-6 rounded-full flex items-center justify-center border shrink-0 transition-colors ${
-                            isSelected ? 'bg-purple-500 border-purple-400 text-white' : 'border-slate-600'
-                          }`}>
-                            {isSelected && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Réservations existantes ce jour */}
-                  <div className="mt-3 bg-purple-950/15 border border-purple-500/25 rounded-2xl p-3.5 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-2 text-xs font-bold text-slate-200">
-                        <Calendar className="w-3.5 h-3.5 text-purple-400" />
-                        Réservations existantes ce jour
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-200 bg-white/10 px-2.5 py-0.5 rounded-full shrink-0">
-                        {selectedDayReservations.length} réservation{selectedDayReservations.length > 1 ? 's' : ''}
-                      </span>
-                    </div>
-                    {!hasExistingReservation ? (
-                      <p className="text-xs text-emerald-400 font-semibold">Aucune réservation ce jour — créneau libre.</p>
-                    ) : (
-                      selectedDayReservations.map((reservation) => (
-                        <div key={reservation.id} className="flex items-center justify-between gap-3 bg-white/5 rounded-xl px-3 py-2">
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-white truncate">{reservation.equipmentName}</p>
-                            <p className="text-[11px] text-slate-400 truncate">Agent : {reservation.agentName} • {reservation.status}</p>
-                          </div>
-                          <span className="text-[11px] font-bold text-slate-200 shrink-0">
-                            {reservation.startTime || reservation.startDate.slice(-5)} - {reservation.endTime || reservation.endDate.slice(-5)}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Colonne droite : informations complémentaires */}
-              <div className="lg:col-span-5 space-y-3">
-                <div className="flex items-center gap-2.5 mb-1">
-                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">4</span>
-                  <label className="text-sm font-extrabold text-white">Informations complémentaires</label>
-                </div>
-
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
-                    <MapPin className="w-3.5 h-3.5 text-purple-400" />
-                    Lieu
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Adresse, ville..."
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
-                    <Hash className="w-3.5 h-3.5 text-purple-400" />
-                    N° mandat (optionnel)
-                  </label>
-                  {/* Signalé (8 septembre, Mélanie, ImmoSphera/NovaVisio) :
-                      « la réservation ne fonctionne pas » — en réalité, ce
-                      champ obligatoire bloquait silencieusement l'envoi du
-                      formulaire (validation HTML native, sans message
-                      clair) dès qu'une réservation n'était pas rattachée à
-                      un mandat précis (tournage interne, contenu NovaVisio,
-                      etc.). Toutes les autres infos restent facultatives
-                      sauf le matériel et les horaires — pas de raison
-                      d'exiger un mandat pour réserver la caméra. */}
-                  <input
-                    type="text"
-                    placeholder="Ex : 2024-001"
-                    value={mandateNumber}
-                    onChange={(e) => setMandateNumber(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
-                    <Briefcase className="w-3.5 h-3.5 text-purple-400" />
-                    Projet
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Nom du projet..."
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
-                    <FileText className="w-3.5 h-3.5 text-purple-400" />
-                    Note (optionnel)
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="Informations supplémentaires..."
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none resize-none transition-colors"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Action Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#142832]">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-5 py-3 rounded-full border border-[#132c37] bg-[#051319] text-slate-300 hover:text-white hover:border-purple-500/40 text-xs font-bold transition-colors cursor-pointer"
+                ))}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="formulaire"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 12 }}
+                transition={{ duration: 0.25 }}
               >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                disabled={submitting || loadingReservations}
-                className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:opacity-95 text-white font-black text-xs shadow-lg shadow-purple-900/40 flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-              >
-                <Send className="w-4 h-4" />
-                <span>
-                  {submitting
-                    ? 'Enregistrement...'
-                    : editReservation
-                    ? 'Enregistrer les modifications'
-                    : 'Envoyer la demande'}
-                </span>
-              </button>
-            </div>
-          </form>
-          </>
-        )}
-      </div>
+                {loadingReservations && (
+                  <p className="text-xs text-violet-600 mb-3">Chargement du planning...</p>
+                )}
+                <FormulaireReservationMateriel
+                  mobile={ecranEtroit}
+                  etape={etapeMobile}
+                  onEtape={setEtapeMobile}
+                  resumes={resumes}
+                  moisLabel={`${monthNames[month]} ${year}`}
+                  moisCle={`${year}-${month}`}
+                  sensMois={sensMois}
+                  onMoisPrecedent={() => changerMois(-1)}
+                  onMoisSuivant={() => changerMois(1)}
+                  onAujourdhui={allerAujourdhui}
+                  jours={jours}
+                  onChoisirJour={choisirJour}
+                  dateChoisie={dateChoisie}
+                  creneaux={creneaux}
+                  plage={plage}
+                  onChoisirCreneau={choisirCreneau}
+                  reservationsDuJour={reservationsDuJour}
+                  materiels={MATERIELS.map((materiel) => ({
+                    ...materiel,
+                    selectionne: selectedEquipment.includes(materiel.id),
+                  }))}
+                  onBasculerMateriel={toggleEquipment}
+                  lieu={location}
+                  onLieu={setLocation}
+                  projet={projectName}
+                  onProjet={setProjectName}
+                  mandat={mandateNumber}
+                  onMandat={setMandateNumber}
+                  note={note}
+                  onNote={setNote}
+                  onAnnuler={onClose}
+                  onConfirmer={() => { void handleSubmit({ preventDefault() {} } as React.FormEvent); }}
+                  confirmationLabel={submitting ? 'Enregistrement...' : editReservation ? 'Enregistrer les modifications' : 'Confirmer la réservation'}
+                  confirmationDesactivee={submitting || loadingReservations}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </motion.div>
 
       {/* Fenêtre de contrôle détaillée d'une réservation (ticket #19) */}
       {detailReservation && (
