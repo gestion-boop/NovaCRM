@@ -18,6 +18,7 @@ import { agencesDisponibles } from '@/lib/agency-logos';
 import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { NOVA_QUICK_REACTIONS, renderEmojiOrNova, isNovaReaction } from '@/lib/novaReactions';
 import { conversationASignaler, memoriserFilOuvert } from '@/lib/alerteChat';
+import { fermerNotificationsSysteme } from '@/lib/notificationsLues';
 
 interface ChatProject {
   id: string;
@@ -1003,7 +1004,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             .update({ is_read: true })
             .eq('user_id', currentUser.uid)
             .eq('is_read', false)
-            .in('entity_id', toMarkRead.map((r) => r.id)),
+            .in('entity_id', toMarkRead.map((r) => r.id))
+            .select('id, type, link, entity_id, entity_type')
+            .then(({ data }) => {
+              if (data) fermerNotificationsSysteme(data);
+            }),
         ]);
       }
     }
@@ -2941,7 +2946,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             .update({ is_read: true })
             .eq('user_id', currentUser.uid)
             .eq('is_read', false)
-            .in('entity_id', toMarkRead.map((r) => r.id)),
+            .in('entity_id', toMarkRead.map((r) => r.id))
+            .select('id, type, link, entity_id, entity_type')
+            .then(({ data }) => {
+              if (data) fermerNotificationsSysteme(data);
+            }),
         ]);
       }
     }

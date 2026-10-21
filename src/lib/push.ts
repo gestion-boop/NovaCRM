@@ -228,6 +228,7 @@ export async function subscribePushSafely(
  */
 export function clearMatchingPushNotifications(criteria: {
   tag?: string;
+  tags?: string[];
   conversationId?: string;
   leadId?: string;
   urlIncludes?: string;

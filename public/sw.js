@@ -315,7 +315,8 @@ self.addEventListener("message", (event) => {
   // Ferme les notifications correspondant à un contexte donné
   // (ex: l'utilisateur a ouvert la conversation / le dossier client).
   if (event.data && event.data.type === "CLEAR_NOTIFICATIONS") {
-    const { tag, conversationId, leadId, urlIncludes } = event.data;
+    const { tag, tags, conversationId, leadId, urlIncludes } = event.data;
+    const etiquettes = new Set([...(Array.isArray(tags) ? tags : []), tag].filter(Boolean));
     event.waitUntil(
       (async () => {
         const notifs = await self.registration.getNotifications();
@@ -323,7 +324,7 @@ self.addEventListener("message", (event) => {
         for (const n of notifs) {
           const d = n.data || {};
           const match =
-            (tag && (n.tag === tag || d.tag === tag)) ||
+            (etiquettes.size > 0 && (etiquettes.has(n.tag) || etiquettes.has(d.tag))) ||
             (conversationId && d.conversation_id === conversationId) ||
             (leadId && d.lead_id === leadId) ||
             (urlIncludes && typeof d.url === "string" && d.url.includes(urlIncludes));

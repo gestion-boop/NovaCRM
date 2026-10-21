@@ -31,6 +31,7 @@ import {
 } from '@/lib/supabase';
 import { cibleDepuisLien } from '@/lib/lienNotification';
 import { filOuvert, notifsChatAAnnoncer, regardeDejaLeFil, texteAnnonce } from '@/lib/alerteChat';
+import { fermerNotificationsSysteme, notificationsDisparues } from '@/lib/notificationsLues';
 import { toast } from 'sonner';
 
 import {
@@ -350,6 +351,7 @@ export const NotificationsView: React.FC<
   const [pushCardExpanded, setPushCardExpanded] = useState(false);
 
   const dejaAnnoncees = useRef<Set<string> | null>(null);
+  const nonLuesPrecedentes = useRef<RealNotificationRow[] | null>(null);
   const onOpenMessageRef = useRef(onOpenMessage);
   onOpenMessageRef.current = onOpenMessage;
   const chargementListe = useRef(false);
@@ -391,6 +393,10 @@ export const NotificationsView: React.FC<
           (n) => !regardeDejaLeFil(fil.chatVisible, fil.onglet, fil.conversationId, n.link),
         );
         dejaAnnoncees.current = new Set(rows.map((n) => n.id));
+        // Une ligne qui n'est plus non lue a été lue sur cet appareil ou un
+        // autre : on retire aussi la bannière système d'ici.
+        fermerNotificationsSysteme(notificationsDisparues(nonLuesPrecedentes.current, rows));
+        nonLuesPrecedentes.current = rows;
         const annonce = texteAnnonce(fraiches);
         if (annonce) {
           toast(annonce.titre, {
@@ -460,7 +466,29 @@ export const NotificationsView: React.FC<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ouverte]);
 
+  // Au retour sur cet appareil, ferme les bannières déjà lues ailleurs
+  // pendant que l'application était fermée.
+  useEffect(() => {
+    if (!currentUser) return;
+    let annule = false;
+    const depuis = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    void supabase
+      .from('notifications')
+      .select('id, type, link, entity_id, entity_type')
+      .eq('user_id', currentUser.uid)
+      .or('is_read.eq.true,dismissed_at.not.is.null')
+      .gte('created_at', depuis)
+      .order('created_at', { ascending: false })
+      .limit(80)
+      .then(({ data }) => {
+        if (!annule && data) fermerNotificationsSysteme(data);
+      });
+    return () => { annule = true; };
+  }, [currentUser?.uid]);
+
   const markNotificationRead = async (id: string) => {
+    const row = realNotifications.find((n) => n.id === id);
+    if (row) fermerNotificationsSysteme([row]);
     setRealNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
     await supabase.from('notifications').update({ is_read: true }).eq('id', id);
   };
@@ -470,6 +498,8 @@ export const NotificationsView: React.FC<
   // notification via `dismissed_at` plutôt qu'un DELETE, ce qui l'exclut
   // immédiatement de `loadNotifications()` (filtre `.is('dismissed_at', null)`).
   const dismissNotification = async (id: string) => {
+    const row = realNotifications.find((n) => n.id === id);
+    if (row) fermerNotificationsSysteme([row]);
     setRealNotifications((prev) => prev.filter((n) => n.id !== id));
     await supabase.from('notifications').update({ dismissed_at: new Date().toISOString() }).eq('id', id);
   };
