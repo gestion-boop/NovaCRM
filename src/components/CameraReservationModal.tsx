@@ -184,10 +184,10 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   // comme des pads plus gros, et plus facile à utiliser » — icônes vectorielles
   // (déjà présentes ici, juste jamais affichées) à la place des emoji.
   const EQUIPMENT_OPTIONS = [
-    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', sub: 'Visites immersives', icon: Video },
-    { id: 'Caméra DJI', label: 'Caméra DJI', sub: 'Visites immersives', icon: Camera },
-    { id: 'Caméra X4', label: 'Caméra X4', sub: 'Visites immersives', icon: Package },
-    { id: 'Community Manager', label: 'Community Manager', sub: 'Photos & réseaux', icon: Clapperboard },
+    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', sub: 'Visites immersives', icon: Video, tileClass: 'bg-gradient-to-br from-teal-700 to-teal-400' },
+    { id: 'Caméra DJI', label: 'Caméra DJI', sub: 'Visites immersives', icon: Camera, tileClass: 'bg-gradient-to-br from-blue-700 to-blue-400' },
+    { id: 'Caméra X4', label: 'Caméra X4', sub: 'Visites immersives', icon: Package, tileClass: 'bg-gradient-to-br from-zinc-600 to-zinc-400' },
+    { id: 'Community Manager', label: 'Community Manager', sub: 'Photos & réseaux', icon: Clapperboard, tileClass: 'bg-gradient-to-br from-amber-700 to-amber-400' },
   ];
 
   // Calendar calculations
@@ -465,7 +465,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fade-in">
-      <div className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full max-w-6xl p-5 sm:p-7 text-white shadow-2xl relative space-y-6 my-auto">
+      <div className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full max-w-[1420px] p-6 sm:p-9 text-white shadow-2xl relative space-y-7 my-auto">
         
         {/* Top Close Button */}
         <button
@@ -590,45 +590,45 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
               </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
 
               {/* 1. Date */}
               <div>
-                <div className="flex items-center gap-2.5 mb-3">
-                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">1</span>
-                  <label className="text-sm font-extrabold text-white">Choisir une date *</label>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-sm font-black flex items-center justify-center shrink-0">1</span>
+                  <label className="text-base font-extrabold text-white">Choisir une date *</label>
                 </div>
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-3">
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-5">
+                  <div className="flex items-center justify-between mb-4">
                     <button
                       type="button"
                       onClick={handlePrevMonth}
-                      className="w-7 h-7 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                      className="w-8 h-8 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
                     >
-                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <ChevronLeft className="w-4 h-4" />
                     </button>
-                    <span className="text-xs font-bold text-slate-200">{monthNames[month]} {year}</span>
+                    <span className="text-sm font-bold text-slate-200">{monthNames[month]} {year}</span>
                     <button
                       type="button"
                       onClick={handleNextMonth}
-                      className="w-7 h-7 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                      className="w-8 h-8 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
                     >
-                      <ChevronRight className="w-3.5 h-3.5" />
+                      <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="grid grid-cols-7 gap-1 mb-1">
+                  <div className="grid grid-cols-7 gap-1.5 mb-1.5">
                     {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((wd, i) => (
-                      <span key={i} className="text-center text-[9px] font-extrabold text-slate-500">{wd}</span>
+                      <span key={i} className="text-center text-[10px] font-extrabold text-slate-500">{wd}</span>
                     ))}
                   </div>
-                  <div className="grid grid-cols-7 gap-1">
+                  <div className="grid grid-cols-7 gap-1.5">
                     {calendarCells.map((cell, idx) => (
                       <button
                         key={idx}
                         type="button"
                         disabled={!cell.inMonth}
                         onClick={() => cell.inMonth && cell.dayNum && setSelectedDayNum(cell.dayNum)}
-                        className={`relative h-9 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
+                        className={`relative h-11 rounded-lg flex items-center justify-center text-sm font-bold transition-colors ${
                           !cell.inMonth
                             ? 'text-slate-700 cursor-default'
                             : cell.isSelected
@@ -639,32 +639,32 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                         {cell.label}
                         {cell.inMonth && cell.density && !cell.isSelected && (
                           <span
-                            className="absolute bottom-1 w-1.5 h-1.5 rounded-full"
+                            className="absolute bottom-1.5 w-1.5 h-1.5 rounded-full"
                             style={{ backgroundColor: cell.density === 'full' ? '#fb7185' : cell.density === 'busy' ? '#fbbf24' : '#a78bfa' }}
                           />
                         )}
                       </button>
                     ))}
                   </div>
-                  <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[#132c37] flex-wrap">
-                    <span className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#a78bfa]" />Disponible</span>
-                    <span className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24]" />Peu de créneaux</span>
-                    <span className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#fb7185]" />Complet</span>
+                  <div className="flex items-center gap-3.5 mt-4 pt-4 border-t border-[#132c37] flex-wrap">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#a78bfa]" />Disponible</span>
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24]" />Peu de créneaux</span>
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#fb7185]" />Complet</span>
                   </div>
                 </div>
               </div>
 
               {/* 2. Créneau */}
               <div>
-                <div className="flex items-center gap-2.5 mb-3">
-                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span>
-                  <label className="text-sm font-extrabold text-white">Choisir un créneau *</label>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-sm font-black flex items-center justify-center shrink-0">2</span>
+                  <label className="text-base font-extrabold text-white">Choisir un créneau *</label>
                 </div>
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-4">
-                  <p className="text-[11px] font-bold text-slate-400 mb-3 capitalize">
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-5">
+                  <p className="text-xs font-bold text-slate-400 mb-4 capitalize">
                     {dayNames[new Date(year, month, selectedDayNum).getDay()]} {selectedDayNum} {monthNames[month].toLowerCase()} {year}
                   </p>
-                  <div className="grid grid-cols-3 gap-2 max-h-[260px] overflow-y-auto custom-scrollbar pr-1">
+                  <div className="grid grid-cols-3 gap-2.5 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
                     {SLOT_TIMES.map((time) => {
                       const conflict = findSlotConflict(time);
                       const taken = !!conflict;
@@ -675,7 +675,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                           type="button"
                           disabled={taken}
                           onClick={() => handleSlotClick(time)}
-                          className={`h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 border transition-colors ${
+                          className={`h-14 rounded-xl flex flex-col items-center justify-center gap-1 border transition-colors ${
                             taken
                               ? 'bg-[#0a1319] border-[#1c2b32] cursor-default'
                               : inRange
@@ -683,26 +683,26 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                               : 'bg-[#09151c] border-[#16303b] hover:border-purple-500/40 cursor-pointer'
                           }`}
                         >
-                          <span className={`text-[11px] font-extrabold ${taken ? 'text-slate-600 line-through' : inRange ? 'text-white' : 'text-slate-200'}`}>
+                          <span className={`text-xs font-extrabold ${taken ? 'text-slate-600 line-through' : inRange ? 'text-white' : 'text-slate-200'}`}>
                             {time}
                           </span>
                           {conflict && (
                             <span className="flex items-center gap-1">
                               <span
                                 style={{ backgroundColor: getAgentColor(conflict.agentName) }}
-                                className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-extrabold text-[#04090c] shrink-0"
+                                className="w-4 h-4 rounded-full flex items-center justify-center text-[6.5px] font-extrabold text-[#04090c] shrink-0"
                               >
                                 {getAgentInitials(conflict.agentName)}
                               </span>
-                              <span className="text-[8px] font-bold text-slate-500 truncate max-w-[42px]">{conflict.agentName.split(' ')[0]}</span>
+                              <span className="text-[8.5px] font-bold text-slate-500 truncate max-w-[46px]">{conflict.agentName.split(' ')[0]}</span>
                             </span>
                           )}
                         </button>
                       );
                     })}
                   </div>
-                  <p className="mt-3 pt-3 border-t border-[#132c37] text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-purple-400" />
+                  <p className="mt-4 pt-4 border-t border-[#132c37] text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-purple-400" />
                     {startTime} – {endTime}
                   </p>
                 </div>
@@ -710,17 +710,17 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 
               {/* 3. Matériel */}
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">3</span>
-                    <label className="text-sm font-extrabold text-white">Matériel requis *</label>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-sm font-black flex items-center justify-center shrink-0">3</span>
+                    <label className="text-base font-extrabold text-white">Matériel requis *</label>
                   </div>
-                  <span className="text-[11px] text-slate-400 font-medium">
+                  <span className="text-xs text-slate-400 font-medium">
                     {selectedEquipment.length} sélectionné
                   </span>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {EQUIPMENT_OPTIONS.map((item) => {
                     const isSelected = selectedEquipment.includes(item.id);
                     const conflict = findConflictingReservation(item.id, startTime, endTime, editReservation?.id);
@@ -730,18 +730,18 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                         type="button"
                         onClick={() => toggleEquipment(item.id)}
                         aria-pressed={isSelected}
-                        className={`w-full p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all select-none text-left ${
+                        className={`w-full p-4 rounded-2xl border flex items-center gap-3.5 cursor-pointer transition-all select-none text-left ${
                           isSelected
                             ? 'bg-[#28133b] border-purple-500 text-white shadow-sm shadow-purple-900/20'
                             : 'bg-[#051319] border-[#132c37] text-slate-300 hover:border-purple-500/40'
                         }`}
                       >
-                        <span className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
-                          <item.icon className="w-5 h-5" />
+                        <span className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 text-white ${item.tileClass}`}>
+                          <item.icon className="w-6 h-6" strokeWidth={1.8} />
                         </span>
                         <span className="flex-1 min-w-0">
-                          <span className="block text-xs font-extrabold truncate">{item.label}</span>
-                          <span className="block text-[10px] text-slate-500 truncate">{item.sub}</span>
+                          <span className="block text-sm font-extrabold truncate">{item.label}</span>
+                          <span className="block text-[11px] text-slate-500 truncate mt-0.5">{item.sub}</span>
                         </span>
                         {conflict ? (
                           <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 shrink-0">
@@ -756,6 +756,14 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                         ) : (
                           <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-[9px] font-extrabold text-emerald-400 shrink-0">Libre</span>
                         )}
+                        <span
+                          aria-hidden="true"
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                            isSelected ? 'border-transparent bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-600' : 'border-slate-600'
+                          }`}
+                        >
+                          {isSelected && <span className="w-2.5 h-2.5 rounded-full bg-white" />}
+                        </span>
                       </button>
                     );
                   })}
