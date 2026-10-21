@@ -28,6 +28,7 @@ import {
 import {
   supabase,
 } from '@/lib/supabase';
+import { cibleDepuisLien } from '@/lib/lienNotification';
 
 import {
   useAuth,
@@ -60,7 +61,7 @@ interface NotificationsViewProps {
   // Ouvre directement la conversation/canal du message ciblé — sans ça, un
   // clic sur une notif "message" ne faisait que naviguer vers l'onglet Chat
   // générique (liste des projets), sans jamais ouvrir la bonne conversation.
-  onOpenMessage?: (messageId: string) => void;
+  onOpenMessage?: (cible: { messageId?: string; conversationId?: string; channelId?: string }) => void;
   // Signalé (8 septembre) : « cliquer sur la notif d'un message dans un
   // projet ne m'amène pas directement au projet ». Même principe
   // qu'onOpenMessage, mais pour une carte de projet interne : ouvre
@@ -136,6 +137,8 @@ type NotificationItem = {
   // défaut de la fiche client.
   contactTab?: 'espace-client';
   messageId?: string;
+  conversationId?: string;
+  channelId?: string;
   taskId?: string;
   // Id du message précis à l'intérieur de la carte de projet interne — voir
   // useTaskMessages.ts (message_id dans les métadonnées). Distinct de
@@ -510,10 +513,17 @@ export const NotificationsView: React.FC<
         navTarget: navTargetFor(n),
         contactId: n.link?.match(/\/clients\/([0-9a-f-]{36})/)?.[1],
         contactTab: n.type === 'client_message' ? 'espace-client' : undefined,
-        // Récupéré depuis le lien stocké par le trigger de message
-        // (`?highlight=<id>` ou `&highlight_message=<id>`) — c'est ce qui
-        // permet d'ouvrir directement la bonne conversation au clic.
-        messageId: n.link?.match(/[?&]highlight(?:_message)?=([0-9a-f-]{36})/)?.[1],
+        // Le lien réel est tantôt `?highlight=`, tantôt `?conversation=&message=`,
+        // tantôt `?channel=&message=`. Sans les trois, le clic ouvrait le chat
+        // sur la liste, jamais sur le message.
+        ...(() => {
+          const cible = cibleDepuisLien(n.link);
+          return {
+            messageId: cible.messageId,
+            conversationId: cible.conversationId,
+            channelId: cible.channelId,
+          };
+        })(),
         // Id de la CARTE de projet interne — encodé dans `link` (voir
         // useTaskMessages.ts, `?task=<id>`) et non dans les métadonnées : la
         // table `notifications` n'a PAS de colonne `metadata`, un premier
@@ -790,8 +800,16 @@ export const NotificationsView: React.FC<
             }
             if (notification.contactId && onOpenContact) {
               onOpenContact(notification.contactId, notification.contactTab);
-            } else if (notification.navTarget === 'chat' && notification.messageId && onOpenMessage) {
-              onOpenMessage(notification.messageId);
+            } else if (
+              notification.navTarget === 'chat'
+              && (notification.messageId || notification.conversationId || notification.channelId)
+              && onOpenMessage
+            ) {
+              onOpenMessage({
+                messageId: notification.messageId,
+                conversationId: notification.conversationId,
+                channelId: notification.channelId,
+              });
             } else if (notification.navTarget === 'projets-internes' && notification.taskId && onOpenInternalTask) {
               onOpenInternalTask(notification.taskId, notification.taskMessageId);
             } else {

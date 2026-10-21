@@ -131,6 +131,12 @@ const TABS = [
 // le commentaire perf sur convHasMoreOlder plus bas pour le contexte.
 const RECENT_MESSAGES_PAGE = 60;
 
+function signatureMessages(rows: { id: string; created_at: string; edited_at?: string | null; body?: string | null; data?: { body?: string } }[]): string {
+  let s = String(rows.length);
+  for (const m of rows) s += `\n${m.id}|${m.created_at}|${m.edited_at ?? ''}|${m.body ?? m.data?.body ?? ''}`;
+  return s;
+}
+
 interface ChatViewSupabaseProps {
   // Message ciblé par un clic sur une notification push/in-app — ouvre
   // automatiquement la bonne conversation et fait "rebondir" ce message
@@ -148,6 +154,9 @@ interface ChatViewSupabaseProps {
    */
   initialConversationId?: string | null;
   onConversationTargetConsumed?: () => void;
+  /** Canal d'équipe déjà connu par le lien (`?channel=`), pour l'ouvrir sans recherche. */
+  initialChannelId?: string | null;
+  onChannelTargetConsumed?: () => void;
   // Sur mobile, quitte le chat plein écran (revient à l'accueil, ce qui
   // fait réapparaître la barre de navigation du bas et les autres panneaux).
   onExitMobile?: () => void;
@@ -164,7 +173,7 @@ interface ChatViewSupabaseProps {
   isActive?: boolean;
 }
 
-export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, initialConversationId, onConversationTargetConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
+export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, initialConversationId, onConversationTargetConsumed, initialChannelId, onChannelTargetConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const isSuperAdmin = userProfile?.role === 'super_admin';
   // Les invitations / gestion des membres sont réservées aux admins (et super admin)
@@ -173,6 +182,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('projets');
   const [projects, setProjects] = useState<ChatProject[]>([]);
   const [channelsByProject, setChannelsByProject] = useState<Record<string, ChatChannel[]>>({});
+  const canauxRef = useRef(channelsByProject);
+  canauxRef.current = channelsByProject;
   // Nombre de participants invités par canal — la restriction est
   // désormais automatique (voir plus bas) : dès qu'un canal a au moins un
   // participant, il est restreint. Sert à afficher le cadenas sans avoir à
@@ -193,6 +204,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     activeChannelIdRef.current = activeChannel?.id || null;
   }, [activeChannel?.id]);
   const channelMessagesCacheRef = useRef<Record<string, ChatMessageRow[]>>({});
+  const signatureCanalRef = useRef<Record<string, string>>({});
   const [draft, setDraft] = useState('');
   const [showChannelEmoji, setShowChannelEmoji] = useState(false);
   // Signalé : "les Novadji dans les messages ne se mettent pas" — le
@@ -337,6 +349,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // principe que `silent=true` dans loadConversations, appliqué ici par
   // conversation plutôt qu'à la liste entière.
   const convMessagesCacheRef = useRef<Record<string, DirectMessageRow[]>>({});
+  const signatureConvRef = useRef<Record<string, string>>({});
   // Verrous d'envoi — un message à la fois par composeur. Un `useRef` et non
   // un `useState` : la valeur doit être lue et écrite dans le même tic, avant
   // tout nouveau rendu, sinon la garde arrive trop tard.
@@ -1071,7 +1084,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // Toujours mis à jour, scopé par `conversationId` : au retour sur cette
     // conversation plus tard, elle doit refléter ce lot frais.
     convMessagesCacheRef.current[conversationId] = fusion;
-    if (activeConversationIdRef.current === conversationId) {
+    const signature = signatureMessages(fusion);
+    const inchangée = signatureConvRef.current[conversationId] === signature;
+    signatureConvRef.current[conversationId] = signature;
+    // Le sondage toutes les 4 s ramenait la même liste et redessinait tout
+    // le fil. On ne touche à l'écran que si un message a vraiment changé.
+    if (!inchangée && activeConversationIdRef.current === conversationId) {
       setConvMessages(fusion);
     }
     if (rows.length > 0) {
@@ -1153,7 +1171,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     //     que `activeConversationId` change — l'appeler aussi ici doublait
     //     systématiquement chaque ouverture (2x messages + 2x
     //     réactions/accusés de lecture, jusqu'à 6 requêtes au lieu de 3).
-    setConvMessages(convMessagesCacheRef.current[id] || []);
+    const connus = convMessagesCacheRef.current[id] || [];
+    signatureConvRef.current[id] = signatureMessages(connus);
+    setConvMessages(connus);
     setConvHasMoreOlder(true);
   };
 
@@ -1177,76 +1197,172 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   // ── Rebond de 5s sur le message ciblé par une notification ──────────────
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
-  // Ouverture directe d'une conversation depuis une notification, quand
-  // celle-ci ne désigne pas un message précis (voir initialConversationId).
+  const chargementCibleRef = useRef<string | null>(null);
+  // Ouverture directe depuis une notification. Si le lien porte déjà la
+  // conversation ou le canal, on l'ouvre tout de suite : l'ancienne recherche
+  // du message dans les deux tables retardait l'arrivée sur le fil.
   useEffect(() => {
-    if (!initialConversationId) return;
-    setTab('conversations');
-    openConversation(initialConversationId);
-    onConversationTargetConsumed?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialConversationId]);
-
-  useEffect(() => {
-    if (!initialHighlightMessageId) return;
+    if (!initialHighlightMessageId && !initialConversationId && !initialChannelId) return;
     let cancelled = false;
-    (async () => {
-      // Perf (30/08/2026, signalé "18 secondes pour ouvrir la conversation
-      // depuis une notification") : on ne sait pas d'avance si le message
-      // visé est un message direct (`messages`) ou un message de canal
-      // d'équipe (`chat_messages`) — les deux tables étaient interrogées
-      // L'UNE APRÈS L'AUTRE (round-trip perdu à chaque notification de
-      // canal, la moitié des cas). Indépendantes : interrogées en parallèle.
+    const fin = () => {
+      onHighlightConsumed?.();
+      onConversationTargetConsumed?.();
+      onChannelTargetConsumed?.();
+    };
+    const montrer = (messageId?: string | null) => {
+      if (!messageId) return;
+      setHighlightedMessageId(messageId);
+      window.setTimeout(() => {
+        setHighlightedMessageId((cur) => (cur === messageId ? null : cur));
+      }, 5000);
+    };
+    const ouvrirConversation = (conversationId: string, messageId?: string | null) => {
+      setTab('conversations');
+      openConversation(conversationId);
+      montrer(messageId);
+    };
+    const ouvrirCanal = (canal: ChatChannel, messageId?: string | null) => {
+      setTab('projets');
+      setActiveChannel(canal);
+      montrer(messageId);
+    };
+    const canalConnu = (id: string) =>
+      Object.values(canauxRef.current).flat().find((c) => c.id === id) || null;
+
+    if (initialConversationId) {
+      ouvrirConversation(initialConversationId, initialHighlightMessageId);
+      fin();
+      return;
+    }
+
+    const resoudre = async () => {
+      if (initialChannelId) {
+        const connu = canalConnu(initialChannelId);
+        const { data } = connu
+          ? { data: connu }
+          : await supabase.from('chat_channels').select('*').eq('id', initialChannelId).maybeSingle();
+        if (cancelled) return;
+        if (data) ouvrirCanal(data as ChatChannel, initialHighlightMessageId);
+        fin();
+        return;
+      }
+      if (!initialHighlightMessageId) {
+        fin();
+        return;
+      }
       const [{ data }, { data: channelMsg }] = await Promise.all([
         supabase.from('messages').select('conversation_id').eq('id', initialHighlightMessageId).maybeSingle(),
         supabase.from('chat_messages').select('channel').eq('id', initialHighlightMessageId).maybeSingle(),
       ]);
       if (cancelled) return;
-      const convId = (data as any)?.conversation_id;
+      const convId = (data as { conversation_id?: string } | null)?.conversation_id;
       if (convId) {
-        setTab('conversations');
-        openConversation(convId);
-        setHighlightedMessageId(initialHighlightMessageId);
-        onHighlightConsumed?.();
-        setTimeout(() => setHighlightedMessageId((cur) => (cur === initialHighlightMessageId ? null : cur)), 5000);
+        ouvrirConversation(convId, initialHighlightMessageId);
+        fin();
         return;
       }
-
-      const channelId = (channelMsg as any)?.channel;
+      const channelId = (channelMsg as { channel?: string } | null)?.channel;
       if (!channelId) {
-        onHighlightConsumed?.();
+        fin();
         return;
       }
-      const { data: channelRow } = await supabase
-        .from('chat_channels')
-        .select('*')
-        .eq('id', channelId)
-        .maybeSingle();
+      const connu = canalConnu(channelId);
+      const { data: channelRow } = connu
+        ? { data: connu }
+        : await supabase.from('chat_channels').select('*').eq('id', channelId).maybeSingle();
       if (cancelled) return;
-      if (channelRow) {
-        setTab('projets');
-        setActiveChannel(channelRow as ChatChannel);
-        // Signalé (15 octobre) : « le message ne se présente pas, il faut
-        // aller à la cible » — pour un canal d'équipe uniquement. La branche
-        // conversation juste au-dessus pose déjà highlightedMessageId ;
-        // cette branche-ci ouvrait le bon canal mais ne le faisait jamais,
-        // donc rien ne distinguait le message visé des autres (et voir plus
-        // bas, le défilement auto vers le bas du canal l'emportait).
-        setHighlightedMessageId(initialHighlightMessageId);
-        setTimeout(() => setHighlightedMessageId((cur) => (cur === initialHighlightMessageId ? null : cur)), 5000);
-      }
-      onHighlightConsumed?.();
-    })();
+      if (channelRow) ouvrirCanal(channelRow as ChatChannel, initialHighlightMessageId);
+      fin();
+    };
+    void resoudre();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialHighlightMessageId]);
+  }, [initialHighlightMessageId, initialConversationId, initialChannelId]);
 
   useEffect(() => {
     if (!highlightedMessageId) return;
-    const el = document.getElementById(`msg-${highlightedMessageId}`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightedMessageId, convMessages.length, messages.length]);
+    const id = highlightedMessageId;
+    const allerAuMessage = () => {
+      const el = document.getElementById(`msg-${id}`);
+      if (!el) return false;
+      el.scrollIntoView({ behavior: 'auto', block: 'center' });
+      return true;
+    };
+    if (allerAuMessage()) {
+      // Les images du fil décalent la position juste après le premier saut.
+      const settle = window.setTimeout(() => { allerAuMessage(); }, 120);
+      return () => window.clearTimeout(settle);
+    }
+
+    const dansLaListe = convMessages.some((m) => m.id === id) || messages.some((m) => m.id === id);
+    if (dansLaListe) {
+      const frame = window.requestAnimationFrame(() => { allerAuMessage(); });
+      return () => window.cancelAnimationFrame(frame);
+    }
+    // Le lot récent n'est pas encore arrivé : on attend ce rendu-là avant
+    // d'aller chercher un message plus ancien.
+    if (tab === 'conversations' && activeConversationId && convMessages.length === 0) return;
+    if (tab === 'projets' && activeChannel && messages.length === 0) return;
+    if (chargementCibleRef.current === id) return;
+    chargementCibleRef.current = id;
+
+    let cancelled = false;
+    let termine = false;
+    const ramener = async () => {
+      try {
+      if (tab === 'conversations' && activeConversationId) {
+        const { data: cible } = await supabase.from('messages').select('*').eq('id', id).maybeSingle();
+        if (cancelled || !cible) return;
+        const row = cible as DirectMessageRow;
+        if (row.conversation_id !== activeConversationId) return;
+        const { data } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', activeConversationId)
+          .gte('created_at', row.created_at)
+          .order('created_at', { ascending: true })
+          .limit(200);
+        if (cancelled || !data) return;
+        const base = convMessagesCacheRef.current[activeConversationId] || [];
+        const parId = new Map(base.map((m) => [m.id, m]));
+        (data as DirectMessageRow[]).forEach((m) => parId.set(m.id, m));
+        const fusion = Array.from(parId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
+        convMessagesCacheRef.current[activeConversationId] = fusion;
+        signatureConvRef.current[activeConversationId] = signatureMessages(fusion);
+        if (activeConversationIdRef.current === activeConversationId) setConvMessages(fusion);
+        return;
+      }
+      if (tab === 'projets' && activeChannel) {
+        const { data: cible } = await supabase.from('chat_messages').select('*').eq('id', id).maybeSingle();
+        if (cancelled || !cible) return;
+        const row = cible as ChatMessageRow;
+        if (row.channel !== activeChannel.id) return;
+        const { data } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('channel', activeChannel.id)
+          .gte('created_at', row.created_at)
+          .order('created_at', { ascending: true })
+          .limit(200);
+        if (cancelled || !data) return;
+        const base = channelMessagesCacheRef.current[activeChannel.id] || [];
+        const parId = new Map(base.map((m) => [m.id, m]));
+        (data as ChatMessageRow[]).forEach((m) => parId.set(m.id, m));
+        const fusion = Array.from(parId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
+        channelMessagesCacheRef.current[activeChannel.id] = fusion;
+        signatureCanalRef.current[activeChannel.id] = signatureMessages(fusion);
+        if (activeChannelIdRef.current === activeChannel.id) setMessages(fusion);
+      }
+      } finally {
+        termine = true;
+      }
+    };
+    void ramener();
+    return () => {
+      cancelled = true;
+      if (!termine) chargementCibleRef.current = null;
+    };
+  }, [highlightedMessageId, convMessages, messages, activeConversationId, activeChannel, tab]);
 
   // Rechargement ciblé des réactions seules (sans retoucher aux messages ni
   // aux accusés de lecture) — voir convMessageIdsRef plus haut.
@@ -2772,9 +2888,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // maintenant le temps réel ci-dessous) resté en vol pendant un
     // changement de canal remplaçait sans condition l'affichage, faisant
     // apparaître les messages d'un AUTRE canal sous le nom du canal actif.
-    channelMessagesCacheRef.current[channelId] = rows;
-    if (activeChannelIdRef.current === channelId) {
-      setMessages(rows);
+    // Fusion avec le cache : un message plus ancien ouvert depuis une
+    // notification ne doit pas disparaître au sondage suivant.
+    const baseCanal = channelMessagesCacheRef.current[channelId] || [];
+    const parIdCanal = new Map(baseCanal.map((m) => [m.id, m]));
+    rows.forEach((m) => parIdCanal.set(m.id, m));
+    const fusionCanal = Array.from(parIdCanal.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    channelMessagesCacheRef.current[channelId] = fusionCanal;
+    const signatureCanal = signatureMessages(fusionCanal);
+    const canalInchangé = signatureCanalRef.current[channelId] === signatureCanal;
+    signatureCanalRef.current[channelId] = signatureCanal;
+    if (!canalInchangé && activeChannelIdRef.current === channelId) {
+      setMessages(fusionCanal);
     }
 
     // Bug remonté : lire les messages d'un canal ne marquait jamais rien —
