@@ -92,6 +92,28 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
 
   const todayAndOverdueCount = countTodayAndOverdueTasks(localTasks);
 
+  const stylePriorite = (priority?: string) => {
+    switch ((priority || '').toLowerCase()) {
+      case 'urgent':
+        return 'bg-rose-500/15 text-rose-300 border-rose-400/40';
+      case 'haute':
+        return 'bg-orange-500/15 text-orange-300 border-orange-400/40';
+      case 'moyenne':
+        return 'bg-[#F7BC5F]/20 text-[#F9C977] border-[#F7BC5F]/40';
+      case 'basse':
+        return 'bg-emerald-500/15 text-emerald-300 border-emerald-400/35';
+      default:
+        return 'bg-white/10 text-slate-300 border-white/15';
+    }
+  };
+
+  const resumeFiltres = [
+    dueFilter === 'RetardEtJourJ' ? 'Retard et jour J' : 'Toutes les échéances',
+    statusFilter === 'Toutes' ? 'Tous les statuts' : statusFilter,
+    urgencyFilter !== 'Toutes' ? urgencyFilter : null,
+    search.trim() ? `« ${search.trim()} »` : null,
+  ].filter(Boolean).join(' · ');
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8 animate-fade-in relative">
       {/* Signalé sur mobile : le titre + le badge + "Nouvelle tâche" tenus
@@ -123,7 +145,7 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
                 {todayAndOverdueCount} {todayAndOverdueCount > 1 ? 'alertes (Jour J & Retards)' : 'alerte (Jour J & Retard)'}
               </span>
             </div>
-            <p className="text-sm text-slate-400">Compteur calculé sur le Jour J et les retards uniquement</p>
+            <p className="text-sm text-slate-400">Seulement les tâches du jour et celles en retard</p>
           </div>
         </div>
 
@@ -145,8 +167,9 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
               n'avait aucun fond propre et se retrouvait écrit à même la photo
               de fond de la page. Même pastille que les titres de section du
               Coffre Documents, pour rester cohérent d'un écran à l'autre. */}
-          <div className="flex items-center px-3 py-1.5 rounded-xl nv-panel border border-white/10 w-fit">
-            <h2 className="text-lg font-bold text-white leading-none">Filtres</h2>
+          <div className="flex items-center gap-3 min-w-0 flex-1 px-3 py-1.5 rounded-xl nv-panel border border-white/10">
+            <h2 className="text-lg font-bold text-white leading-none shrink-0">Filtres</h2>
+            <p className="text-xs text-slate-400 truncate">{resumeFiltres}</p>
           </div>
           <button
             type="button"
@@ -244,6 +267,16 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
                 filteredTasks.map((task, index) => {
                   const dateStatus = getTaskDateStatus(task.dueDate);
                   const dateStr = task.dueDate ? task.dueDate.split('T')[0] : '';
+                  const dateCourte = dateStr
+                    ? new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : 'Sans date';
+                  const retardPrincipal = dateStatus.diffDays < 0
+                    ? `${Math.abs(dateStatus.diffDays)} j`
+                    : dateStatus.diffDays === 0
+                      ? 'Jour J'
+                      : dateStatus.diffDays === 1
+                        ? 'Demain'
+                        : dateStatus.label;
                   
                   // Left border color based on date status (Red for J / J-, Orange for J+1, Green for J+2+)
                   const borderLeftClass = 
@@ -316,24 +349,19 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
                             
                             <div className="space-y-1.5 min-w-0 flex-1">
                               <div className="flex flex-col gap-0.5">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <h3 className={`text-base font-bold ${task.completed ? 'text-slate-500 line-through' : 'text-white'}`}>
-                                    {task.type === 'Appel' ? 'Appel' : task.type === 'Rendez-vous' ? 'Rendez-vous' : task.title}
-                                  </h3>
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${dateStatus.badgeClass}`}>
-                                    {dateStatus.label}
-                                  </span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                                <h3 className={`text-base font-bold ${task.completed ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                  {task.type === 'Appel' ? 'Appel' : task.type === 'Rendez-vous' ? 'Rendez-vous' : task.title}
+                                </h3>
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
                                   {task.contactId && (
                                     <span className="flex items-center gap-1.5 font-medium text-slate-300">
                                       <User className="w-3.5 h-3.5 text-[#F9C977]" />
                                       {getContactName(task.contactId)}
                                     </span>
                                   )}
-                                  <span className="flex items-center gap-1.5 font-mono">
+                                  <span className="flex items-center gap-1.5">
                                     <Calendar className="w-3.5 h-3.5" />
-                                    {dateStr ? new Date(dateStr).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : 'Sourdine'}
+                                    {dateCourte}
                                   </span>
                                 </div>
                               </div>
@@ -368,7 +396,15 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
                           </div>
 
                           <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 w-full sm:w-auto">
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${dateStatus.badgeClass}`}>
+                            <div className="sm:text-right min-w-[4.25rem]">
+                              <p className={`text-base sm:text-lg font-black tabular-nums leading-none ${dateStatus.textClass}`}>
+                                {retardPrincipal}
+                              </p>
+                              {dateStatus.diffDays < 0 && (
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-red-300/80 mt-1">de retard</p>
+                              )}
+                            </div>
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${stylePriorite(task.priority)}`}>
                               {task.priority || 'Normal'}
                             </span>
 
