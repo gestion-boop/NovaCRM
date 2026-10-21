@@ -7,12 +7,14 @@ import {
   GripVertical, Save, Plus, Trash2, ArrowUp, ArrowDown, RotateCcw, Camera,
   Image as ImageIcon, Code2, Volume2, Smartphone, CalendarClock, LogOut, CheckCircle2,
   Loader2, Building2, RefreshCw, X, Eye, EyeOff, Copy, ExternalLink, Link, Check,
-  Sliders, Upload, Layers, Send, Power, PowerOff, Clock, Ban, UserPlus, MailCheck, Zap, Mic, Search,
+  Sliders, Upload, Layers, Send, Power, PowerOff, Clock, Ban, UserPlus, MailCheck, Zap, Search,
   Menu as MenuIcon
 } from 'lucide-react';
 import { AGENCIES, Agency } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { getAgencyLogo, sortByAgencyOrder } from '@/lib/agency-logos';
+import { agencesCibleAnnonce, agenceUniqueAnnonce } from '@/lib/agencesAnnonce';
+import { AgencesAnnonce, NiveauxAnnonce, type NiveauAnnonce } from '@/components/annonces/ChoixAnnonce';
 import { reafficherTuile } from '@/lib/tuilesMasquees';
 import { matchesAgency } from '@/hooks/useContacts';
 import { toast } from 'sonner';
@@ -590,13 +592,16 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
   const [dailyReminder, setDailyReminder] = useState(true);
 
   const [announcement, setAnnouncement] = useState('');
-  const [announcementAgencyIds, setAnnouncementAgencyIds] = useState<string[]>(() => AGENCIES.filter(a => a.id !== 'all').map(a => a.id));
+  const [announcementAgencyIds, setAnnouncementAgencyIds] = useState<string[]>(() => agencesCibleAnnonce(selectedAgency.id));
   // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (16/16) : niveau (3
   // couleurs), lien vers un élément du CRM, expiration automatique, et
   // ciblage étendu à une seule personne (en plus des sociétés ci-dessus).
   // Ticket #241 : 5 niveaux (l'ancien "urgent" est retiré, remappé sur
   // "important" côté base — cf. supabase/migrations/20260827140000_announcements_5_levels.sql).
-  const [announcementLevel, setAnnouncementLevel] = useState<'info' | 'a_verifier' | 'important' | 'succes' | 'veille' | 'reponse_demandee' | 'signature_acte'>('info');
+  const [announcementLevel, setAnnouncementLevel] = useState<NiveauAnnonce>('info');
+  useEffect(() => {
+    setAnnouncementAgencyIds(agencesCibleAnnonce(selectedAgency.id));
+  }, [selectedAgency.id]);
   const [announcementLink, setAnnouncementLink] = useState('');
   const [announcementExpiresAt, setAnnouncementExpiresAt] = useState('');
   const [announcementTargetUserId, setAnnouncementTargetUserId] = useState('');
@@ -1128,13 +1133,23 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
 
   async function publishAnnouncement() {
     if (!announcement.trim()) return;
+    const agenceOuverte = agenceUniqueAnnonce(selectedAgency.id);
+    const agencyIds = announcementTargetUserId
+      ? []
+      : agenceOuverte
+        ? [agenceOuverte.id]
+        : announcementAgencyIds;
+    if (!announcementTargetUserId && agencyIds.length === 0) {
+      notify('Choisissez au moins une société.');
+      return;
+    }
     setBusy('announcement');
     try {
       await api('/api/admin/announcements', {
         method: 'POST',
         body: JSON.stringify({
           message: announcement.trim(),
-          agencyIds: announcementTargetUserId ? [] : announcementAgencyIds,
+          agencyIds,
           level: announcementLevel,
           link: announcementLink.trim() || null,
           expiresAt: announcementExpiresAt || null,
@@ -1147,6 +1162,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
       setAnnouncementExpiresAt('');
       setAnnouncementTargetUserId('');
       setAnnouncementLevel('info');
+      setAnnouncementAgencyIds(agencesCibleAnnonce(selectedAgency.id));
       setPollEnabled(false);
       setPollOptions([]);
       setNewPollOption('');
@@ -1458,70 +1474,30 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
               ça ne sert à rien d'avoir ce gros espace" — reréduite (avait été
               montée à 6 lors du passage à deux colonnes) pour remonter tout
               le bloc et gagner de la hauteur sur écran fixe (voir plus bas). */}
-          <textarea rows={3} value={announcement} onChange={(e) => setAnnouncement(e.target.value)} placeholder="Votre annonce..." className={`${inputClass} resize-y`} />
-          {/* Demandé (30/08/2026) : un rappel qu'on peut dicter l'annonce
-              plutôt que la taper, pour aller plus vite — le micro du
-              clavier (mobile) ou la dictée du système (Mac/Windows)
-              fonctionnent nativement dans ce champ, rien à coder de plus. */}
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-500 -mt-2">
-            <Mic className="w-3 h-3 shrink-0" />
-            Astuce : dictez votre annonce (micro du clavier ou dictée du système) plutôt que de la taper — plus rapide.
-          </p>
+          <textarea rows={3} value={announcement} onChange={(e) => setAnnouncement(e.target.value)} placeholder="Votre annonce… La dictée du clavier fonctionne dans ce champ." className={`${inputClass} resize-y`} />
 
-          <div className="space-y-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Niveau</span>
-            <div className="flex flex-wrap gap-2">
-              {([
-                ['info', 'Information', 'border-[#F7BC5F]/50 text-[#F9C977]'],
-                ['a_verifier', 'À vérifier', 'border-amber-500/40 text-amber-300'],
-                ['important', 'Important', 'border-rose-500/50 text-rose-300'],
-                ['succes', 'Succès', 'border-emerald-500/40 text-emerald-300'],
-                ['veille', 'Veille', 'border-sky-500/40 text-sky-300'],
-                ['reponse_demandee', 'Réponse demandée SVP', 'border-rose-500/50 text-rose-300'],
-                ['signature_acte', "Signature d'un acte", 'border-[#F7BC5F]/50 text-[#F9C977]'],
-              ] as const).map(([value, label, cls]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setAnnouncementLevel(value)}
-                  className={`flex-1 min-w-[30%] sm:min-w-0 py-2 rounded-xl border text-xs font-bold transition-colors ${cls} ${announcementLevel === value ? 'bg-white/10' : 'bg-transparent opacity-60 hover:opacity-100'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <NiveauxAnnonce value={announcementLevel} onChange={setAnnouncementLevel} />
 
           {/* Demandé (30/08/2026) : "enlève l'expiration... cette ligne ne
               sert à rien" — champ retiré. announcementExpiresAt reste déclaré
               (toujours vide désormais → expiresAt: null à la publication,
               voir publishAnnouncement) plutôt que de toucher au reste du
               circuit pour un simple retrait de champ. */}
-          <label className="space-y-1.5 block">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Lien (facultatif)</span>
-            <input value={announcementLink} onChange={(e) => setAnnouncementLink(e.target.value)} placeholder="https://... ou un chemin interne" className={inputClass} />
-          </label>
+          <input value={announcementLink} onChange={(e) => setAnnouncementLink(e.target.value)} placeholder="Lien facultatif — https://… ou un chemin interne" className={inputClass} />
 
-          {/* Demandé (30/08/2026) : "ouvrir une fenêtre avec les icônes/
-              profils des utilisateurs pour les sélectionner... filtrer par
-              société... petite barre de recherche" — le <select> à plat
-              (un <option> par utilisateur, ingérable si beaucoup
-              d'utilisateurs) est remplacé par un choix à deux vitesses :
-              "Toutes les sociétés" reste un bouton simple, "Une seule
-              personne" ouvre la fenêtre de sélection (showUserPicker) avec
-              avatars, filtre par société et recherche. */}
+          {/* L'agence ouverte est le destinataire. « Une personne » ouvre
+              le sélecteur (avatars, filtre, recherche) et la liste démarre
+              sur cette agence. */}
           <div className="space-y-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Destinataires</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Pour</span>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setAnnouncementTargetUserId('')}
-                className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-colors ${
-                  !announcementTargetUserId ? 'border-[#F7BC5F] bg-[#F7BC5F]/10 text-[#F9C977] ring-2 ring-[#F7BC5F]/40' : 'border-[#1c4448] bg-[#071f21] text-slate-300 hover:border-white/20'
-                }`}
-              >
-                Toutes les sociétés cochées ci-dessous
-              </button>
+              {!announcementTargetUserId && (
+                <AgencesAnnonce
+                  agencyId={selectedAgency.id}
+                  selectedIds={announcementAgencyIds}
+                  onToggle={(id) => setAnnouncementAgencyIds((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])}
+                />
+              )}
               {(() => {
                 const picked = announcementTargetUserId ? users.find((u) => u.id === announcementTargetUserId) : null;
                 if (picked) {
@@ -1531,7 +1507,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                         {picked.avatar_url ? <img src={picked.avatar_url} alt="" className="w-full h-full object-cover" /> : (picked.full_name || picked.email || '?').slice(0, 2).toUpperCase()}
                       </div>
                       <span className="text-xs font-semibold text-white">{picked.full_name || picked.email}</span>
-                      <button type="button" onClick={() => setShowUserPicker(true)} className="text-[10px] text-slate-400 hover:text-[#F7BC5F] underline underline-offset-2">changer</button>
+                      <button type="button" onClick={() => { setUserPickerAgencyFilter(selectedAgency.id !== 'all' ? selectedAgency.id : ''); setShowUserPicker(true); }} className="text-[10px] text-slate-400 hover:text-[#F7BC5F] underline underline-offset-2">changer</button>
                       <button type="button" onClick={() => setAnnouncementTargetUserId('')} className="text-slate-400 hover:text-rose-300">
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -1541,10 +1517,13 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                 return (
                   <button
                     type="button"
-                    onClick={() => setShowUserPicker(true)}
-                    className="px-3 py-2 rounded-xl border border-[#1c4448] bg-[#071f21] text-xs font-semibold text-slate-300 hover:border-white/20 flex items-center gap-1.5"
+                    onClick={() => {
+                      setUserPickerAgencyFilter(selectedAgency.id !== 'all' ? selectedAgency.id : '');
+                      setShowUserPicker(true);
+                    }}
+                    className="px-3 py-1.5 rounded-full border border-[#1c4448] bg-[#071f21] text-xs font-semibold text-slate-300 hover:border-white/20 flex items-center gap-1.5"
                   >
-                    <UserPlus className="w-3.5 h-3.5" /> Une seule personne…
+                    <UserPlus className="w-3.5 h-3.5" /> Une personne
                   </button>
                 );
               })()}
@@ -1635,42 +1614,11 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
             );
           })()}
 
-          {/* Demandé (30/08/2026) : "mettre les logos avec la petite case à
-              côté... quand on les sélectionnera, un effet carré jaune" —
-              logo (getAgencyLogo, déjà utilisé plus haut dans ce fichier
-              pour Google Drive) + case à cocher visuelle, toute la carte
-              cliquable ; sélectionné = même liseré/fond doré que les autres
-              sélecteurs de l'appli (thème, couleur...). */}
-          {!announcementTargetUserId && (
-            <div className="flex flex-wrap gap-2">
-              {AGENCIES.filter((a) => a.id !== 'all').map((a) => {
-                const checked = announcementAgencyIds.includes(a.id);
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => setAnnouncementAgencyIds((cur) => cur.includes(a.id) ? cur.filter((x) => x !== a.id) : [...cur, a.id])}
-                    className={`flex items-center gap-2.5 rounded-xl border pl-2 pr-3 py-2 transition-colors ${
-                      checked ? 'border-[#F7BC5F] bg-[#F7BC5F]/10 ring-2 ring-[#F7BC5F]/40' : 'border-[#1c4448] bg-[#071f21] hover:border-white/20'
-                    }`}
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0 overflow-hidden p-1">
-                      <img src={getAgencyLogo(a.name)} alt="" className="w-full h-full object-contain" />
-                    </div>
-                    <span className="text-xs font-semibold text-white">{a.name}</span>
-                    <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${checked ? 'bg-[#F7BC5F] border-[#F7BC5F]' : 'border-white/25'}`}>
-                      {checked && <Check className="w-3 h-3 text-slate-950" />}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
           <div className="space-y-2 pt-1">
-            <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400 cursor-pointer">
-              <input type="checkbox" checked={pollEnabled} onChange={(e) => setPollEnabled(e.target.checked)} />
-              Transformer en sondage (les destinataires votent au lieu de simplement fermer l'annonce)
+            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+              <input type="checkbox" checked={pollEnabled} onChange={(e) => setPollEnabled(e.target.checked)} className="accent-[#F7BC5F]" />
+              <span className="font-semibold text-white">Sondage</span>
+              <span className="text-xs text-slate-500">les destinataires votent</span>
             </label>
             {pollEnabled && (
               <div className="space-y-2 rounded-xl border border-[#1c4448] bg-[#071f21] p-3">
@@ -1719,7 +1667,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
           </div>
 
           <div className="flex justify-end">
-            <button onClick={publishAnnouncement} disabled={!announcement.trim() || busy === 'announcement'} className={goldButton}>
+            <button onClick={publishAnnouncement} disabled={!announcement.trim() || busy === 'announcement' || (!announcementTargetUserId && announcementAgencyIds.length === 0)} className={goldButton}>
               <Megaphone className="w-4 h-4" />Publier
             </button>
           </div>
