@@ -33,6 +33,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAuth as useAgenceReelle } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
+import { estAgenceImmosphera, estDossierImmosphera, retirerDoublonsNotes } from '@/lib/tuilesAccueilVisibles';
 import { assemblerDictee } from '@/lib/dictee';
 import {
   lireDispositionAgence, ecrireDispositionAgence, lireHorodatageLocal, ecrireHorodatageLocal,
@@ -830,7 +831,15 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
       // colorée (couleur de la tuile elle-même, via accentColor déjà
       // calculé plus haut) au clic/appui, en plus du léger rétrécissement
       // déjà présent (active:scale-[0.97]).
-      style={{ transform: CSS.Transform.toString(transform), transition, ['--tile-glow' as string]: accentColor }}
+      style={{
+        // La tuile saisie reste dans sa case (fantôme) : seule la copie qui
+        // suit le pointeur bouge. Les voisines glissent avec une courbe douce.
+        transform: isDragging ? undefined : CSS.Transform.toString(transform),
+        // Courbe seulement pendant le geste. Au repos, la transition du
+        // survol (ombre) reste celle de la classe.
+        transition: isDragging ? 'none' : transform ? (transition || 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)') : undefined,
+        ['--tile-glow' as string]: accentColor,
+      }}
       // Signalé : effet "verre 3D" (reflet + biseau + bordures multicolores)
       // retiré, au profit d'icônes plates façon écran d'accueil iPhone —
       // même taille/forme de tuile qu'avant (h-28/h-36, rectangle), juste
@@ -1069,7 +1078,10 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
       {...(canDrag ? attributes : {})}
       {...(canDrag ? listeners : {})}
       onClick={onActivate}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{
+        transform: isDragging ? undefined : CSS.Transform.toString(transform),
+        transition: isDragging ? 'none' : transform ? (transition || 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)') : undefined,
+      }}
       className={`relative group h-36 rounded-2xl bg-gradient-to-br ${subItem.gradient} p-4 flex flex-col items-center justify-center text-center cursor-pointer shadow-md transition-shadow duration-200 border border-white/10 overflow-hidden active:scale-[0.97] ${
         isDragging ? 'opacity-30 z-50 border-dashed border-white/40 shadow-none' :
         dragEnCours ? 'z-10 pointer-events-none' :
@@ -2115,6 +2127,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // (contexte natif), pas sur le shim qui retombe sur Conseils Finances dès que
   // « Toutes les agences » est sélectionné.
   const canSeeBanquesAssurances = estAgenceConseilsFinances(agenceActiveReelle);
+  // Le dossier « Immosphera » a été recopié dans les autres sociétés. On le
+  // juge sur la vraie agence active, comme Banques / Assurances.
+  const peutVoirDossierImmosphera = estAgenceImmosphera(agenceActiveReelle);
 
   // Même correctif que canSeeImmosphera juste au-dessus : agence active
   // uniquement, jamais la liste complète des agences.
@@ -3298,6 +3313,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // (agence active, tous rôles confondus).
   const tuileVisible = (t: TileItemNode) =>
     (!estDossierReserveConseilsFinances(t.title) || canSeeBanquesAssurances)
+    && (!estDossierImmosphera(t.title) || peutVoirDossierImmosphera)
     && (t.id !== 'reserver-camera' || !canSeeConseilsFinances)
     && (t.id !== 'immosphera360' || canSeeImmosphera)
     && (!IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
@@ -3368,6 +3384,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // Jamais reposé hors Conseils Finances (même si un verrou d'une autre
     // agence en porte encore un).
     if (estDossierReserveConseilsFinances(verrou.title) && !canSeeBanquesAssurances) return;
+    if (estDossierImmosphera(verrou.title) && !peutVoirDossierImmosphera) return;
 
     // Présent dans la grille mais masqué par les droits : on n'y touche pas.
     // Le reposer contournerait un filtre de visibilité voulu.
@@ -3474,9 +3491,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   const idsMasques = new Set<string>(lireMasquees().map((t) => t.id));
 
   const dejaReposes = new Set(dossiersVerrouillesAReposer.map((d) => d.id));
-  const nouveautesAPoser = activeFolder
-    ? []
-    : filtrerEnProfondeur(
+  const nouveautesAPoser = filtrerEnProfondeur(
         INITIAL_TILES.filter(
           (t) =>
             !existsRecursive(tiles, t.id) &&
@@ -3496,13 +3511,18 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         )
       );
 
-  const currentDisplayTiles = [
-    ...applyLocks(
-      activeFolder ? filtrerEnProfondeur(activeFolder.children || []) : racineFiltree
-    ).filter((tuile) => activeFolder || !idsImposesParUnDossier.has(tuile.id)),
-    ...(activeFolder ? [] : dossiersVerrouillesAReposer),
+  // Grille de la société, calculée même quand un dossier est ouvert. La
+  // remplacer par le contenu du dossier faisait surgir une tuile sur
+  // l'accueil le temps que le voile apparaisse.
+  const tuilesRacine = retirerDoublonsNotes([
+    ...applyLocks(racineFiltree).filter((tuile) => !idsImposesParUnDossier.has(tuile.id)),
+    ...dossiersVerrouillesAReposer,
     ...applyLocks(nouveautesAPoser),
-  ];
+  ]);
+  const enfantsDossierOuvert = activeFolder
+    ? retirerDoublonsNotes(applyLocks(filtrerEnProfondeur(activeFolder.children || [])))
+    : null;
+  const currentDisplayTiles = enfantsDossierOuvert ?? tuilesRacine;
 
   // 3 septembre (Conseils Finances : « je ne peux pas gérer la tuile
   // Communication, ni déplacer Banques et Assurances où je veux ») : une
@@ -3533,7 +3553,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       }
       return [...base, sansVerrou({ ...activeFolder, children: enfants })];
     }
-    const affichee = currentDisplayTiles.find((t) => t.id === tileId) || findInitialTile(tileId);
+    const affichee = tuilesRacine.find((t) => t.id === tileId)
+      || enfantsDossierOuvert?.find((t) => t.id === tileId)
+      || findInitialTile(tileId);
     return affichee ? [...base, sansVerrou(affichee)] : base;
   };
 
@@ -3547,66 +3569,56 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Racine uniquement (ticket #256) : `rootSlots` détermine l'affichage
   // avec cases vides possibles — `null` = case vide, gardant sa place dans
   // la grille au lieu d'être comblée automatiquement par la tuile suivante.
-  // Les dossiers ouverts gardent leur liste dense classique (`visibleTiles`
-  // ci-dessous), système inchangé.
-  // Favoris : parcours récursif, pour remonter aussi ceux rangés dans un
-  // dossier. On part de `currentDisplayTiles`, déjà filtré par les droits et
-  // les verrous — un favori ne peut donc jamais faire apparaître une tuile
-  // que l'utilisateur n'a pas le droit de voir.
+  // Favoris : parcours récursif de la grille de la société, déjà filtrée
+  // par les droits et les verrous — un favori ne peut donc jamais faire
+  // apparaître une tuile que l'utilisateur n'a pas le droit de voir.
   const collecterFavoris = (items: TileItemNode[]): TileItemNode[] =>
     items.flatMap((item) => [
       ...(item.favorite ? [item] : []),
       ...(item.children ? collecterFavoris(item.children) : []),
     ]);
-  const favoris = collecterFavoris(currentDisplayTiles);
+  const favoris = collecterFavoris(tuilesRacine);
 
   const rootDisplaySlots: (TileItemNode | null)[] = [];
-  let visibleTiles: TileItemNode[] = currentDisplayTiles;
-  if (!activeFolder) {
-    const displayById = new Map(currentDisplayTiles.map((t) => [t.id, t]));
-    const usedIds = new Set<string>();
-    let realCount = 0;
-    for (const slotId of rootSlots) {
-      if (slotId === ADD_TILE_ID) continue; // bouton "Ajouter" retiré de la grille (voir plus bas, remonté dans le bandeau du haut)
-      if (realCount >= MAX_VISIBLE_TILES) break;
-      if (slotId && displayById.has(slotId)) {
-        rootDisplaySlots.push(displayById.get(slotId)!);
-        usedIds.add(slotId);
-        realCount++;
-      } else {
-        rootDisplaySlots.push(null);
-      }
-    }
-    // Défense en profondeur : une tuile réelle présente mais absente de
-    // rootSlots (désync jamais censée arriver grâce au useEffect de
-    // comblement) n'est jamais perdue silencieusement — insérée dans la
-    // première case vide restante, ou en overflow si le cap est atteint.
-    for (const t of currentDisplayTiles) {
-      if (usedIds.has(t.id)) continue;
-      if (realCount >= MAX_VISIBLE_TILES) { overflowTiles.push(t); continue; }
-      const emptyIdx = rootDisplaySlots.findIndex((s) => s === null);
-      if (emptyIdx >= 0) rootDisplaySlots[emptyIdx] = t;
-      else rootDisplaySlots.push(t);
+  const displayById = new Map(tuilesRacine.map((t) => [t.id, t]));
+  const usedIds = new Set<string>();
+  let realCount = 0;
+  for (const slotId of rootSlots) {
+    if (slotId === ADD_TILE_ID) continue; // bouton "Ajouter" retiré de la grille (voir plus bas, remonté dans le bandeau du haut)
+    if (realCount >= MAX_VISIBLE_TILES) break;
+    if (slotId && displayById.has(slotId)) {
+      rootDisplaySlots.push(displayById.get(slotId)!);
+      usedIds.add(slotId);
       realCount++;
+    } else {
+      rootDisplaySlots.push(null);
     }
-    // Ne jamais rendre les 36 slots en entier (ça repousserait le bouton
-    // "Ajouter" très loin en bas, même avec seulement quelques tuiles) —
-    // uniquement jusqu'à la dernière tuile réelle, arrondi à la ligne
-    // complète, +1 ligne de marge pour pouvoir glisser une tuile plus loin.
-    const lastFilled = rootDisplaySlots.reduce((last, t, i) => (t ? i : last), -1);
-    const rowsNeeded = Math.ceil((lastFilled + 1) / ROOT_COLUMNS) + 1;
-    const visibleSlotCount = Math.min(ROOT_GRID_SLOTS, Math.max(ROOT_COLUMNS, rowsNeeded * ROOT_COLUMNS));
-    // `.slice` + complément explicite en `null` plutôt que de modifier
-    // `.length` directement : agrandir un array via `.length = N` crée un
-    // "sparse array" (trous, pas de vraies valeurs `null`) que `.map()`
-    // saute silencieusement — cassant l'alignement des clés `__empty-i__`.
-    while (rootDisplaySlots.length < visibleSlotCount) rootDisplaySlots.push(null);
-    if (rootDisplaySlots.length > visibleSlotCount) rootDisplaySlots.splice(visibleSlotCount);
-    visibleTiles = [];
-  } else if (currentDisplayTiles.length > MAX_VISIBLE_TILES) {
-    overflowTiles = currentDisplayTiles.slice(MAX_VISIBLE_TILES);
-    visibleTiles = currentDisplayTiles.slice(0, MAX_VISIBLE_TILES);
   }
+  // Défense en profondeur : une tuile réelle présente mais absente de
+  // rootSlots (désync jamais censée arriver grâce au useEffect de
+  // comblement) n'est jamais perdue silencieusement — insérée dans la
+  // première case vide restante, ou en overflow si le cap est atteint.
+  for (const t of tuilesRacine) {
+    if (usedIds.has(t.id)) continue;
+    if (realCount >= MAX_VISIBLE_TILES) { overflowTiles.push(t); continue; }
+    const emptyIdx = rootDisplaySlots.findIndex((s) => s === null);
+    if (emptyIdx >= 0) rootDisplaySlots[emptyIdx] = t;
+    else rootDisplaySlots.push(t);
+    realCount++;
+  }
+  // Ne jamais rendre les 36 slots en entier (ça repousserait le bouton
+  // "Ajouter" très loin en bas, même avec seulement quelques tuiles) —
+  // uniquement jusqu'à la dernière tuile réelle, arrondi à la ligne
+  // complète, +1 ligne de marge pour pouvoir glisser une tuile plus loin.
+  const lastFilled = rootDisplaySlots.reduce((last, t, i) => (t ? i : last), -1);
+  const rowsNeeded = Math.ceil((lastFilled + 1) / ROOT_COLUMNS) + 1;
+  const visibleSlotCount = Math.min(ROOT_GRID_SLOTS, Math.max(ROOT_COLUMNS, rowsNeeded * ROOT_COLUMNS));
+  // `.slice` + complément explicite en `null` plutôt que de modifier
+  // `.length` directement : agrandir un array via `.length = N` crée un
+  // "sparse array" (trous, pas de vraies valeurs `null`) que `.map()`
+  // saute silencieusement — cassant l'alignement des clés `__empty-i__`.
+  while (rootDisplaySlots.length < visibleSlotCount) rootDisplaySlots.push(null);
+  if (rootDisplaySlots.length > visibleSlotCount) rootDisplaySlots.splice(visibleSlotCount);
 
   // 9 octobre : une tuile affichée à la racine sans case dans `rootSlots`
   // (nouveauté posée à l'affichage, dossier verrouillé reposé sans case
@@ -3661,8 +3673,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     <DragOverlay
       zIndex={1000}
       dropAnimation={{
-        duration: 220,
-        easing: 'cubic-bezier(0.2, 0, 0, 1)',
+        duration: 180,
+        easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
         sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.3' } } }),
       }}
     >
@@ -3939,10 +3951,13 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
 
       {/* Main Grid View */}
       {/* Ticket #256 : racine en positions libres (grille fixe 6 colonnes,
-          cases vides possibles via rootDisplaySlots), dossier ouvert en
-          liste dense classique (visibleTiles, inchangé). */}
+          cases vides possibles via rootDisplaySlots). Le dossier ouvert
+          a son propre voile : cette grille ne change pas. */}
       {(() => {
-        const gridItems: (TileItemNode | null)[] = activeFolder ? visibleTiles : rootDisplaySlots;
+        // Le dossier ouvert a son propre voile. La grille de l'accueil reste
+        // celle de la société : la remplacer ici faisait surgir une tuile
+        // le temps que le voile apparaisse.
+        const gridItems: (TileItemNode | null)[] = rootDisplaySlots;
         const sortableIds = gridItems
           .map((t, i) => (t ? t.id : `__empty-${i}__`))
           .filter((_id, i) => gridItems[i]?.id !== 'nova-lock-spacer');
@@ -3954,8 +3969,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
             stratégie de tri, toutes les tuiles intermédiaires glissaient d'un
             cran pendant le geste, puis sautaient à leur vraie place au lâcher.
             Dans un dossier, la liste reste dense : stratégie de tri. */}
-        <SortableContext items={sortableIds} strategy={activeFolder ? rectSortingStrategy : rectSwappingStrategy}>
-          <div className={`grid ${activeFolder ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7' : 'grid-cols-6'} gap-3 sm:gap-3 max-w-7xl mx-auto w-full z-10 pb-1`}>
+        <SortableContext items={sortableIds} strategy={rectSwappingStrategy}>
+          <div className="grid grid-cols-6 gap-3 sm:gap-3 max-w-7xl mx-auto w-full z-10 pb-1">
             {gridItems.map((tile, gridIndex) => (
               !tile ? (
                 <EmptyRootCell key={`__empty-${gridIndex}__`} id={`__empty-${gridIndex}__`} />
@@ -3995,27 +4010,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               />
               )
             ))}
-
-            {/* Bouton "Ajouter" : retiré de la grille racine (demande
-                explicite — remonté en "+" dans le bandeau du haut, voir plus
-                bas), mais conservé à l'intérieur d'un dossier ouvert (pas
-                d'équivalent dans le bandeau à ce niveau-là). */}
-            {activeFolder && (
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleOpenAddModal}
-                style={{ gridColumnEnd: -1 }}
-                className="h-28 sm:h-36 rounded-2xl sm:rounded-3xl border-2 border-dashed border-gray-700/80 bg-gray-900/30 hover:bg-gray-800/40 text-gray-400 hover:text-white flex flex-col items-center justify-center p-3 sm:p-6 cursor-pointer transition-all duration-200 group hover:border-[#F7BC5F]"
-              >
-                <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-1.5 sm:mb-3 group-hover:bg-[#F7BC5F] group-hover:text-black transition-colors shadow-lg">
-                  <Plus className="w-4 h-4 sm:w-6 sm:h-6 stroke-[2.5]" />
-                </div>
-                <span className="text-[10px] sm:text-xs font-semibold text-gray-300 group-hover:text-white text-center">
-                  Ajouter dans ce dossier
-                </span>
-              </motion.div>
-            )}
 
             {/* Tuile "Voir plus" — regroupe tout ce qui dépasse les 24
                 premières tuiles, s'ouvre comme un dossier classique. */}
@@ -4183,9 +4177,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               {/* Sub-Items Grid Inside iPhone Folder */}
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleTileDragStart} onDragOver={handleTileDragOver} onDragEnd={handleTileDragEnd} onDragCancel={handleTileDragCancel}>
                 {calqueDeplacement}
-                <SortableContext items={(activeFolder.children || []).map((t) => t.id)} strategy={rectSortingStrategy}>
+                <SortableContext items={(enfantsDossierOuvert || []).map((t) => t.id)} strategy={rectSortingStrategy}>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 max-h-[60vh] overflow-y-auto custom-scrollbar p-1">
-                {applyLocks(activeFolder.children || []).map((subItem) => (
+                {(enfantsDossierOuvert || []).map((subItem) => (
                   <SortableSubTile
                     key={subItem.id}
                     subItem={subItem}
@@ -4721,7 +4715,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         // n'apparaissait — d'où l'impossibilité d'agir dessus.
         const menuTile =
           findTileById(tiles, actionsMenuTileId) ||
-          findTileById(currentDisplayTiles, actionsMenuTileId) ||
+          findTileById(tuilesRacine, actionsMenuTileId) ||
+          (enfantsDossierOuvert ? findTileById(enfantsDossierOuvert, actionsMenuTileId) : null) ||
           findInitialTile(actionsMenuTileId);
         if (!menuTile) return null;
         const folders = tiles.filter((t) => t.isFolder && t.id !== menuTile.id);

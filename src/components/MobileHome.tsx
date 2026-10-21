@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
+import { estAgenceImmosphera, estBlocNotes, estDossierImmosphera } from '@/lib/tuilesAccueilVisibles';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
 import { supabase } from '@/lib/supabase';
@@ -296,6 +297,8 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     Object.entries(lockedTiles).forEach(([lockId, lock]) => {
       // Dossiers « Banques » / « Assurances » : Conseils Finances uniquement.
       if (estDossierReserveConseilsFinances(lock.title) && !estAgenceConseilsFinances(activeAgency)) return;
+      // Dossier « Immosphera » recopié dans les autres sociétés.
+      if (estDossierImmosphera(lock.title) && !estAgenceImmosphera(activeAgency)) return;
       // `isFolder` n'est en pratique jamais renseigné par AccueilGrid sur un
       // verrou (vérifié en base) : on détecte un dossier verrouillé à la
       // seule présence de `children`, pas à ce champ.
@@ -319,7 +322,13 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
         if (space) out.push(space);
       }
     });
-    return out;
+    const notes = out.filter((s) => estBlocNotes({ id: s.id, title: s.label, navTarget: s.nav }));
+    if (notes.length <= 1) return out;
+    const score = (s: SpaceDef) =>
+      (s.isFolder && (s.children?.length || 0) > 0 ? 100 + (s.children?.length || 0) : s.id === 'notes' ? 10 : 1)
+      + (s.locked ? 50 : 0);
+    const garde = [...notes].sort((a, b) => score(b) - score(a))[0];
+    return out.filter((s) => !estBlocNotes({ id: s.id, title: s.label, navTarget: s.nav }) || s.id === garde.id);
   }, [lockedTiles, activeAgency]);
   const lockedSpaceIds = useMemo(() => new Set(lockedMobileSpaces.map((s) => s.id)), [lockedMobileSpaces]);
   // Dossier verrouillé actuellement ouvert en plein écran (façon dossier
@@ -337,7 +346,11 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     { id: 'tableau-de-bord', label: 'Tableau de bord', icon: BarChart2, nav: 'tableau-de-bord', gradient: 'from-[#0d9488] to-[#065f46]' },
     { id: 'support', label: 'Support', icon: Headphones, nav: 'support', gradient: 'from-[#4338ca] to-[#312e81]' },
     { id: 'agenda', label: 'Agenda', icon: Calendar, nav: 'agenda', gradient: 'from-[#0f766e] to-[#134e4a]' },
-    { id: 'notes', label: 'Notes', icon: FileEdit, nav: 'notes', gradient: 'from-[#7c3aed] to-[#4c1d95]' },
+    // Le dossier « Blocs - Notes » verrouillé remplace le raccourci, sinon
+    // les deux s'affichent côte à côte.
+    ...(lockedMobileSpaces.some((s) => estBlocNotes({ id: s.id, title: s.label, navTarget: s.nav }))
+      ? []
+      : [{ id: 'notes', label: 'Notes', icon: FileEdit, nav: 'notes', gradient: 'from-[#7c3aed] to-[#4c1d95]' }]),
     { id: 'equipe', label: 'Équipe', icon: UserPlus, nav: 'equipe', gradient: 'from-[#334155] to-[#1e293b]' },
     { id: 'projets-internes', label: 'Projets internes', icon: Folder, nav: 'projets-internes', gradient: 'from-[#92400e] to-[#451a03]' },
     { id: 'chat', label: 'Chat', icon: MessageSquare, nav: 'chat', gradient: 'from-[#0891b2] to-[#155e75]', badge: unreadMessagesCount },
