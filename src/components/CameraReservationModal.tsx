@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import {
-  Camera, X, ChevronLeft, ChevronRight, ChevronDown, Clock, MapPin, Calendar,
+  Camera, X, ChevronLeft, ChevronRight, Clock, MapPin, Calendar,
   Hash, Briefcase, CheckCircle2, XCircle, Video, Film, Package, Clapperboard, Send,
-  FileText, Check,
+  FileText,
 } from 'lucide-react';
 import { CameraReservation } from '@/types';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
@@ -23,6 +23,44 @@ interface CameraReservationModalProps {
   // (depuis ReserverCameraView) pour la modifier au lieu d'en recréer une —
   // ouvre ce même formulaire pré-rempli, en UPDATE plutôt qu'en INSERT.
   editReservation?: StoredCameraReservation | null;
+}
+
+// Refonte (21 octobre, demande explicite : « les personnes se mélangent »,
+// maquette validée par Sylvain) : qui a déjà réservé quoi devait avant se
+// deviner en recoupant une liste séparée. Chaque agent reçoit maintenant un
+// avatar (initiales + couleur stable, dérivée de son nom) affiché directement
+// sur le créneau ou le matériel qu'il occupe — plus besoin de recouper.
+const AVATAR_PALETTE = ['#2dd4bf', '#38bdf8', '#fbbf24', '#f472b6', '#a78bfa', '#fb923c', '#4ade80', '#60a5fa'];
+const getAgentInitials = (name: string): string => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+};
+const getAgentColor = (name: string): string => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+};
+
+// Grille de créneaux fixes de 30 min (remplace les deux champs horaires
+// libres) — bornes vérifiées en base le 21 octobre pour couvrir toutes les
+// réservations réelles existantes (09:00-19:00).
+const SLOT_STEP_MINUTES = 30;
+const SLOT_GRID_START_MIN = 8 * 60;
+const SLOT_GRID_END_MIN = 19 * 60 + 30;
+const minutesToTime = (mins: number): string => {
+  const h = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+const timeToMinutes = (time: string): number => {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + m;
+};
+const SLOT_TIMES: string[] = [];
+for (let m = SLOT_GRID_START_MIN; m < SLOT_GRID_END_MIN; m += SLOT_STEP_MINUTES) {
+  SLOT_TIMES.push(minutesToTime(m));
 }
 
 export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
@@ -146,10 +184,10 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   // comme des pads plus gros, et plus facile à utiliser » — icônes vectorielles
   // (déjà présentes ici, juste jamais affichées) à la place des emoji.
   const EQUIPMENT_OPTIONS = [
-    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', icon: Video },
-    { id: 'Caméra DJI', label: 'Caméra DJI', icon: Camera },
-    { id: 'Caméra X4', label: 'Caméra X4', icon: Package },
-    { id: 'Community Manager', label: 'Community Manager', icon: Clapperboard },
+    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', sub: 'Visites immersives', icon: Video },
+    { id: 'Caméra DJI', label: 'Caméra DJI', sub: 'Visites immersives', icon: Camera },
+    { id: 'Caméra X4', label: 'Caméra X4', sub: 'Visites immersives', icon: Package },
+    { id: 'Community Manager', label: 'Community Manager', sub: 'Photos & réseaux', icon: Clapperboard },
   ];
 
   // Calendar calculations
@@ -176,6 +214,19 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     }
   };
 
+  // Refonte (21 octobre) : clic sur un créneau — premier clic (ou clic sur un
+  // créneau antérieur au début actuel) repart d'une réservation de 30 min à
+  // cet horaire ; un clic sur un créneau plus tardif étend la fin jusqu'à
+  // couvrir ce créneau, comme un sélecteur de plage de dates classique.
+  const handleSlotClick = (time: string) => {
+    if (time <= startTime) {
+      setStartTime(time);
+      setEndTime(minutesToTime(timeToMinutes(time) + SLOT_STEP_MINUTES));
+    } else {
+      setEndTime(minutesToTime(timeToMinutes(time) + SLOT_STEP_MINUTES));
+    }
+  };
+
   // Réservations du jour sélectionné
   const formattedDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(selectedDayNum).padStart(2, '0')}`;
 
@@ -183,24 +234,74 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     .filter((reservation) => reservation.startDate.startsWith(formattedDateStr))
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  const hasTimeConflict = (equipment: string, start: string, end: string, excludeId?: string) => {
-    return selectedDayReservations.some((reservation) => {
-      if (excludeId && reservation.id === excludeId) return false;
+  // Refonte (21 octobre) : renvoie désormais la réservation en conflit (pas
+  // juste un booléen) pour pouvoir afficher QUI bloque le créneau/matériel —
+  // c'est le cœur du correctif « les personnes se mélangent ».
+  const findConflictingReservation = (
+    equipment: string,
+    start: string,
+    end: string,
+    excludeId?: string
+  ): StoredCameraReservation | null => {
+    return (
+      selectedDayReservations.find((reservation) => {
+        if (excludeId && reservation.id === excludeId) return false;
 
-      const bookedEquipment = reservation.equipmentList?.length
-        ? reservation.equipmentList
-        : reservation.equipmentName.split(',').map((item) => item.trim());
+        const bookedEquipment = reservation.equipmentList?.length
+          ? reservation.equipmentList
+          : reservation.equipmentName.split(',').map((item) => item.trim());
 
-      if (!bookedEquipment.includes(equipment)) {
-        return false;
-      }
+        if (!bookedEquipment.includes(equipment)) {
+          return false;
+        }
 
-      const bookedStart = reservation.startTime || reservation.startDate.slice(-5);
-      const bookedEnd = reservation.endTime || reservation.endDate.slice(-5);
+        const bookedStart = reservation.startTime || reservation.startDate.slice(-5);
+        const bookedEnd = reservation.endTime || reservation.endDate.slice(-5);
 
-      return start < bookedEnd && end > bookedStart;
-    });
+        return start < bookedEnd && end > bookedStart;
+      }) || null
+    );
   };
+
+  const hasTimeConflict = (equipment: string, start: string, end: string, excludeId?: string) =>
+    !!findConflictingReservation(equipment, start, end, excludeId);
+
+  // Un créneau de la grille (étape 2) est pris dès qu'il chevauche une
+  // réservation sur L'UN des matériels actuellement sélectionnés.
+  const findSlotConflict = (slotStart: string): StoredCameraReservation | null => {
+    const slotEnd = minutesToTime(timeToMinutes(slotStart) + SLOT_STEP_MINUTES);
+    for (const equipment of selectedEquipment) {
+      const conflict = findConflictingReservation(equipment, slotStart, slotEnd, editReservation?.id);
+      if (conflict) return conflict;
+    }
+    return null;
+  };
+
+  // Trombinoscope du jour (bandeau en haut du formulaire) : un agent par
+  // personne, même s'il a plusieurs réservations ce jour-là.
+  const todaysAgents = Array.from(
+    new Map(selectedDayReservations.map((reservation) => [reservation.agentName, reservation])).values()
+  );
+
+  // Grille du calendrier mensuel (remplace le défilement horizontal) — cases
+  // des mois voisins non cliquables, pastille de densité par jour.
+  const firstDayWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // 0 = lundi
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+  const totalCalendarCells = Math.ceil((firstDayWeekday + totalDaysInMonth) / 7) * 7;
+  const calendarCells = Array.from({ length: totalCalendarCells }, (_, idx) => {
+    const dayOffset = idx - firstDayWeekday;
+    if (dayOffset < 0) {
+      return { label: daysInPrevMonth + dayOffset + 1, inMonth: false as const, dayNum: null, isSelected: false, density: null };
+    }
+    if (dayOffset >= totalDaysInMonth) {
+      return { label: dayOffset - totalDaysInMonth + 1, inMonth: false as const, dayNum: null, isSelected: false, density: null };
+    }
+    const dayNum = dayOffset + 1;
+    const dayDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    const dayCount = reservations.filter((r) => r.startDate.startsWith(dayDate)).length;
+    const density = dayCount === 0 ? null : dayCount >= 4 ? 'full' : dayCount >= 2 ? 'busy' : 'light';
+    return { label: dayNum, inMonth: true as const, dayNum, isSelected: dayNum === selectedDayNum, density };
+  });
 
   // Conflits avec les autres réservations (mêmes équipements, créneau qui se
   // chevauche) — utilisé pour l'indicateur de disponibilité vu par l'admin
@@ -364,7 +465,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fade-in">
-      <div className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full max-w-4xl p-5 sm:p-7 text-white shadow-2xl relative space-y-6 my-auto">
+      <div className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full max-w-6xl p-5 sm:p-7 text-white shadow-2xl relative space-y-6 my-auto">
         
         {/* Top Close Button */}
         <button
@@ -461,198 +562,214 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
               </div>
             )}
 
-          {/* Demande explicite (10 octobre) : « comme une appli, avec des
-              boutons comme des pads plus gros, et plus facile à utiliser » —
-              étapes numérotées et grandes cartes tactiles à la place de la
-              grille de calendrier et des petits champs texte, sur le modèle
-              validé par Sylvain (capture d'écran fournie). */}
+          {/* Refonte (21 octobre, demande explicite : « les personnes se
+              mélangent ») — maquette validée par Sylvain. Calendrier mensuel
+              + grille de créneaux + liste de matériel, tous les trois avec
+              un avatar nominatif dès qu'ils sont déjà pris, plus un bandeau
+              listant qui a déjà réservé ce jour-là : qui a quoi est visible
+              d'un coup d'œil, sans recouper une liste séparée. */}
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-              {/* Colonne gauche : date, horaire, matériel */}
-              <div className="lg:col-span-7 space-y-5">
+            {hasExistingReservation && (
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-purple-950/20 border border-purple-500/25 rounded-2xl">
+                <div className="flex shrink-0">
+                  {todaysAgents.map((agent, idx) => (
+                    <span
+                      key={agent.id}
+                      title={agent.agentName}
+                      style={{ backgroundColor: getAgentColor(agent.agentName), marginLeft: idx === 0 ? 0 : -8 }}
+                      className="w-7 h-7 rounded-full border-2 border-[#09151c] flex items-center justify-center text-[10px] font-extrabold text-[#04090c]"
+                    >
+                      {getAgentInitials(agent.agentName)}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs font-bold text-purple-200 flex-1">
+                  {selectedDayReservations.length} réservation{selectedDayReservations.length > 1 ? 's' : ''} ce jour — vérifiez avant de choisir, pour éviter les doublons.
+                </p>
+              </div>
+            )}
 
-                {/* 1. Date */}
-                <div>
-                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">1</span>
-                      <label className="text-sm font-extrabold text-white">Sélectionner une date *</label>
-                    </div>
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={handlePrevMonth}
-                        className="w-7 h-7 rounded-full bg-[#051319] border border-[#132c37] hover:border-purple-500/50 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
-                      >
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="text-xs font-bold text-slate-300 min-w-[90px] text-center">
-                        {monthNames[month]} {year}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleNextMonth}
-                        className="w-7 h-7 rounded-full bg-[#051319] border border-[#132c37] hover:border-purple-500/50 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
-                      >
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+
+              {/* 1. Date */}
+              <div>
+                <div className="flex items-center gap-2.5 mb-3">
+                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">1</span>
+                  <label className="text-sm font-extrabold text-white">Choisir une date *</label>
+                </div>
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <button
+                      type="button"
+                      onClick={handlePrevMonth}
+                      className="w-7 h-7 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-xs font-bold text-slate-200">{monthNames[month]} {year}</span>
+                    <button
+                      type="button"
+                      onClick={handleNextMonth}
+                      className="w-7 h-7 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
+                  <div className="grid grid-cols-7 gap-1 mb-1">
+                    {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((wd, i) => (
+                      <span key={i} className="text-center text-[9px] font-extrabold text-slate-500">{wd}</span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {calendarCells.map((cell, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        disabled={!cell.inMonth}
+                        onClick={() => cell.inMonth && cell.dayNum && setSelectedDayNum(cell.dayNum)}
+                        className={`relative h-9 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
+                          !cell.inMonth
+                            ? 'text-slate-700 cursor-default'
+                            : cell.isSelected
+                            ? 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-600 text-white shadow-md shadow-purple-900/40 cursor-pointer'
+                            : 'text-slate-300 hover:bg-white/5 cursor-pointer'
+                        }`}
+                      >
+                        {cell.label}
+                        {cell.inMonth && cell.density && !cell.isSelected && (
+                          <span
+                            className="absolute bottom-1 w-1.5 h-1.5 rounded-full"
+                            style={{ backgroundColor: cell.density === 'full' ? '#fb7185' : cell.density === 'busy' ? '#fbbf24' : '#a78bfa' }}
+                          />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[#132c37] flex-wrap">
+                    <span className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#a78bfa]" />Disponible</span>
+                    <span className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24]" />Peu de créneaux</span>
+                    <span className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#fb7185]" />Complet</span>
+                  </div>
+                </div>
+              </div>
 
-                  <div className="flex gap-2.5 overflow-x-auto pb-1 custom-scrollbar">
-                    {Array.from({ length: totalDaysInMonth }).map((_, idx) => {
-                      const dayNum = idx + 1;
-                      const isSelected = selectedDayNum === dayNum;
-                      const dayDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                      const hasBookings = reservations.some((reservation) =>
-                        reservation.startDate.startsWith(dayDate)
-                      );
-                      const dow = dayNames[new Date(year, month, dayNum).getDay()].slice(0, 3).toUpperCase();
-
+              {/* 2. Créneau */}
+              <div>
+                <div className="flex items-center gap-2.5 mb-3">
+                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span>
+                  <label className="text-sm font-extrabold text-white">Choisir un créneau *</label>
+                </div>
+                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-4">
+                  <p className="text-[11px] font-bold text-slate-400 mb-3 capitalize">
+                    {dayNames[new Date(year, month, selectedDayNum).getDay()]} {selectedDayNum} {monthNames[month].toLowerCase()} {year}
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 max-h-[260px] overflow-y-auto custom-scrollbar pr-1">
+                    {SLOT_TIMES.map((time) => {
+                      const conflict = findSlotConflict(time);
+                      const taken = !!conflict;
+                      const inRange = !taken && timeToMinutes(time) >= timeToMinutes(startTime) && timeToMinutes(time) < timeToMinutes(endTime);
                       return (
                         <button
-                          key={`day-${dayNum}`}
+                          key={time}
                           type="button"
-                          onClick={() => setSelectedDayNum(dayNum)}
-                          className={`shrink-0 w-[68px] h-[92px] rounded-2xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-600 text-white shadow-lg shadow-purple-900/40'
-                              : 'bg-[#051319] border border-[#132c37] text-slate-300 hover:border-purple-500/40'
+                          disabled={taken}
+                          onClick={() => handleSlotClick(time)}
+                          className={`h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 border transition-colors ${
+                            taken
+                              ? 'bg-[#0a1319] border-[#1c2b32] cursor-default'
+                              : inRange
+                              ? 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-600 border-transparent shadow-md shadow-purple-900/40 cursor-pointer'
+                              : 'bg-[#09151c] border-[#16303b] hover:border-purple-500/40 cursor-pointer'
                           }`}
                         >
-                          <span className="text-[10px] font-extrabold tracking-wide opacity-80">{dow}</span>
-                          <span className="text-xl font-black">{dayNum}</span>
-                          {hasBookings && (
-                            <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-[#c084fc]'}`} />
+                          <span className={`text-[11px] font-extrabold ${taken ? 'text-slate-600 line-through' : inRange ? 'text-white' : 'text-slate-200'}`}>
+                            {time}
+                          </span>
+                          {conflict && (
+                            <span className="flex items-center gap-1">
+                              <span
+                                style={{ backgroundColor: getAgentColor(conflict.agentName) }}
+                                className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-extrabold text-[#04090c] shrink-0"
+                              >
+                                {getAgentInitials(conflict.agentName)}
+                              </span>
+                              <span className="text-[8px] font-bold text-slate-500 truncate max-w-[42px]">{conflict.agentName.split(' ')[0]}</span>
+                            </span>
                           )}
                         </button>
                       );
                     })}
                   </div>
-                </div>
-
-                {/* 2. Horaire */}
-                <div>
-                  <div className="flex items-center gap-2.5 mb-3">
-                    <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span>
-                    <label className="text-sm font-extrabold text-white">Choisir l'horaire *</label>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="flex items-center gap-3 bg-[#051319] border border-[#132c37] rounded-2xl px-4 py-3 cursor-pointer focus-within:border-purple-500 transition-colors">
-                      <span className="w-9 h-9 rounded-full bg-purple-950/50 text-purple-300 flex items-center justify-center shrink-0">
-                        <Clock className="w-4 h-4" />
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[11px] text-slate-400 font-semibold">Heure de début</span>
-                        <input
-                          type="time"
-                          required
-                          value={startTime}
-                          onChange={(e) => setStartTime(e.target.value)}
-                          className="w-full bg-transparent border-none p-0 text-lg font-extrabold text-white focus:outline-none [color-scheme:dark]"
-                        />
-                      </span>
-                      <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
-                    </label>
-
-                    <label className="flex items-center gap-3 bg-[#051319] border border-[#132c37] rounded-2xl px-4 py-3 cursor-pointer focus-within:border-purple-500 transition-colors">
-                      <span className="w-9 h-9 rounded-full bg-purple-950/50 text-purple-300 flex items-center justify-center shrink-0">
-                        <Clock className="w-4 h-4" />
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[11px] text-slate-400 font-semibold">Heure de fin</span>
-                        <input
-                          type="time"
-                          required
-                          value={endTime}
-                          onChange={(e) => setEndTime(e.target.value)}
-                          className="w-full bg-transparent border-none p-0 text-lg font-extrabold text-white focus:outline-none [color-scheme:dark]"
-                        />
-                      </span>
-                      <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
-                    </label>
-                  </div>
-                </div>
-
-                {/* 3. Matériel */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">3</span>
-                      <label className="text-sm font-extrabold text-white">Matériel requis *</label>
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-medium">
-                      {selectedEquipment.length} sélectionné
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {EQUIPMENT_OPTIONS.map((item) => {
-                      const isSelected = selectedEquipment.includes(item.id);
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => toggleEquipment(item.id)}
-                          aria-pressed={isSelected}
-                          className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all select-none text-left ${
-                            isSelected
-                              ? 'bg-[#28133b] border-purple-500 text-white shadow-sm shadow-purple-900/20'
-                              : 'bg-[#051319] border-[#132c37] text-slate-300 hover:border-purple-500/40'
-                          }`}
-                        >
-                          <span className="w-11 h-11 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
-                            <item.icon className="w-5 h-5" />
-                          </span>
-                          <span className="flex-1 min-w-0 text-sm font-extrabold truncate">{item.label}</span>
-                          <span className={`w-6 h-6 rounded-full flex items-center justify-center border shrink-0 transition-colors ${
-                            isSelected ? 'bg-purple-500 border-purple-400 text-white' : 'border-slate-600'
-                          }`}>
-                            {isSelected && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Réservations existantes ce jour */}
-                  <div className="mt-3 bg-purple-950/15 border border-purple-500/25 rounded-2xl p-3.5 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-2 text-xs font-bold text-slate-200">
-                        <Calendar className="w-3.5 h-3.5 text-purple-400" />
-                        Réservations existantes ce jour
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-200 bg-white/10 px-2.5 py-0.5 rounded-full shrink-0">
-                        {selectedDayReservations.length} réservation{selectedDayReservations.length > 1 ? 's' : ''}
-                      </span>
-                    </div>
-                    {!hasExistingReservation ? (
-                      <p className="text-xs text-emerald-400 font-semibold">Aucune réservation ce jour — créneau libre.</p>
-                    ) : (
-                      selectedDayReservations.map((reservation) => (
-                        <div key={reservation.id} className="flex items-center justify-between gap-3 bg-white/5 rounded-xl px-3 py-2">
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-white truncate">{reservation.equipmentName}</p>
-                            <p className="text-[11px] text-slate-400 truncate">Agent : {reservation.agentName} • {reservation.status}</p>
-                          </div>
-                          <span className="text-[11px] font-bold text-slate-200 shrink-0">
-                            {reservation.startTime || reservation.startDate.slice(-5)} - {reservation.endTime || reservation.endDate.slice(-5)}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  <p className="mt-3 pt-3 border-t border-[#132c37] text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-purple-400" />
+                    {startTime} – {endTime}
+                  </p>
                 </div>
               </div>
 
-              {/* Colonne droite : informations complémentaires */}
-              <div className="lg:col-span-5 space-y-3">
-                <div className="flex items-center gap-2.5 mb-1">
-                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">4</span>
-                  <label className="text-sm font-extrabold text-white">Informations complémentaires</label>
+              {/* 3. Matériel */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">3</span>
+                    <label className="text-sm font-extrabold text-white">Matériel requis *</label>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    {selectedEquipment.length} sélectionné
+                  </span>
                 </div>
 
+                <div className="space-y-2">
+                  {EQUIPMENT_OPTIONS.map((item) => {
+                    const isSelected = selectedEquipment.includes(item.id);
+                    const conflict = findConflictingReservation(item.id, startTime, endTime, editReservation?.id);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => toggleEquipment(item.id)}
+                        aria-pressed={isSelected}
+                        className={`w-full p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all select-none text-left ${
+                          isSelected
+                            ? 'bg-[#28133b] border-purple-500 text-white shadow-sm shadow-purple-900/20'
+                            : 'bg-[#051319] border-[#132c37] text-slate-300 hover:border-purple-500/40'
+                        }`}
+                      >
+                        <span className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
+                          <item.icon className="w-5 h-5" />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-xs font-extrabold truncate">{item.label}</span>
+                          <span className="block text-[10px] text-slate-500 truncate">{item.sub}</span>
+                        </span>
+                        {conflict ? (
+                          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 shrink-0">
+                            <span
+                              style={{ backgroundColor: getAgentColor(conflict.agentName) }}
+                              className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-extrabold text-[#04090c] shrink-0"
+                            >
+                              {getAgentInitials(conflict.agentName)}
+                            </span>
+                            <span className="text-[9px] font-extrabold text-amber-300 truncate max-w-[70px]">Pris par {conflict.agentName.split(' ')[0]}</span>
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-[9px] font-extrabold text-emerald-400 shrink-0">Libre</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Informations complémentaires */}
+            <div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">4</span>
+                <label className="text-sm font-extrabold text-white">Informations complémentaires</label>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
                   <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-2">
                     <MapPin className="w-3.5 h-3.5 text-purple-400" />
@@ -710,7 +827,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                     Note (optionnel)
                   </label>
                   <textarea
-                    rows={3}
+                    rows={2}
                     placeholder="Informations supplémentaires..."
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
