@@ -13,6 +13,7 @@ import {
   ExternalLink, Bookmark, Target, Shield, Award, Sparkles, CheckSquare, Image as ImageIcon, MapPin, Settings,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
 import { supabase } from '@/lib/supabase';
@@ -293,6 +294,8 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const lockedMobileSpaces: SpaceDef[] = useMemo(() => {
     const out: SpaceDef[] = [];
     Object.entries(lockedTiles).forEach(([lockId, lock]) => {
+      // Dossiers « Banques » / « Assurances » : Conseils Finances uniquement.
+      if (estDossierReserveConseilsFinances(lock.title) && !estAgenceConseilsFinances(activeAgency)) return;
       // `isFolder` n'est en pratique jamais renseigné par AccueilGrid sur un
       // verrou (vérifié en base) : on détecte un dossier verrouillé à la
       // seule présence de `children`, pas à ce champ.
@@ -317,7 +320,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
       }
     });
     return out;
-  }, [lockedTiles]);
+  }, [lockedTiles, activeAgency]);
   const lockedSpaceIds = useMemo(() => new Set(lockedMobileSpaces.map((s) => s.id)), [lockedMobileSpaces]);
   // Dossier verrouillé actuellement ouvert en plein écran (façon dossier
   // iPhone) — null quand aucun n'est ouvert.

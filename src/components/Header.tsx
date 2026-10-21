@@ -151,7 +151,7 @@ export const Header: React.FC<
   const resultatsLocaux = useMemo<Resultat[]>(() => {
     const q = searchQuery.trim();
     if (!q) return [];
-    return [...chercherClients(contacts as any, q), ...chercherAccueil(activeAgency?.id, q)];
+    return [...chercherClients(contacts as any, q), ...chercherAccueil(activeAgency?.id, q, activeAgency)];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, contacts, activeAgency?.id]);
   const [resultatsDistants, setResultatsDistants] = useState<Resultat[]>([]);

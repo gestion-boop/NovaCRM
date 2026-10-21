@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
 import { getCachedAccessToken } from '@/lib/workspace';
 import { NAV_ITEMS } from '@/components/Sidebar';
 import type { Contact } from '@/types';
@@ -112,7 +113,8 @@ export function chercherClients(contacts: Contact[], q: string, max = 8): Result
 interface TuileBrute { id: string; title?: string; navTarget?: string; isFolder?: boolean; externalUrl?: string; children?: TuileBrute[] }
 
 /** Tuiles et dossiers de la grille d'accueil enregistrée pour cette agence. */
-export function chercherAccueil(agencyId: string | undefined, q: string): Resultat[] {
+export function chercherAccueil(agencyId: string | undefined, q: string, agency?: { name?: string | null; slug?: string | null } | null): Resultat[] {
+  const cfSeulement = estAgenceConseilsFinances(agency);
   const mots = motsDe(q);
   if (!mots.length) return [];
   const resultats: Resultat[] = [];
@@ -122,6 +124,8 @@ export function chercherAccueil(agencyId: string | undefined, q: string): Result
     const grille: TuileBrute[] = brut ? JSON.parse(brut) : [];
     const parcourir = (items: TuileBrute[], dossierParent?: TuileBrute) => {
       for (const t of items) {
+        // « Banques » / « Assurances » : Conseils Finances uniquement.
+        if (estDossierReserveConseilsFinances(t.title) && !cfSeulement) continue;
         if (t.title && correspond(t.title, mots) && !vus.has(t.id)) {
           vus.add(t.id);
           if (t.isFolder) {
