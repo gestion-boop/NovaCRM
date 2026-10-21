@@ -464,8 +464,14 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   const hasExistingReservation = selectedDayReservations.length > 0;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fade-in">
-      <div className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full max-w-[1420px] p-6 sm:p-9 text-white shadow-2xl relative space-y-7 my-auto">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+      {/* Demande explicite (21 octobre) : « plein écran sur PC pour ne pas
+          scrolled » — hauteur désormais fixée à (quasi) toute la fenêtre au
+          lieu de s'ajuster au contenu (qui dépassait sur les écrans moins
+          hauts) ; le défilement, s'il en reste besoin sur un tout petit
+          écran, se fait maintenant DANS la fenêtre plutôt que sur tout le
+          fond derrière elle. */}
+      <div className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full sm:max-w-[1760px] sm:h-[calc(100vh-32px)] p-6 sm:p-9 text-white shadow-2xl relative space-y-7 overflow-y-auto custom-scrollbar">
         
         {/* Top Close Button */}
         <button
