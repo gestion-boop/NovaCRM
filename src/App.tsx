@@ -55,6 +55,7 @@ import PublicQuestionnaire from './components/PublicQuestionnaire';
 import PublicConsentement from './components/PublicConsentement';
 import PublicVisiteImmosphera from './immosphera/pages/TourView';
 import { EVENEMENT_COMPOSER_MAIL } from './lib/composerMail';
+import { EcranErrorBoundary } from './components/EcranErrorBoundary';
 import UpdateBanner from './components/UpdateBanner';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
@@ -1075,6 +1076,7 @@ function App() {
               les navigateurs mobiles, une hauteur fixe combinée au défilement
               du parent se comporte mal et fige le contenu. On retire donc la
               contrainte là où elle ne sert à rien. */}
+          <EcranErrorBoundary resetKey={selectedClientProfileId ? `fiche:${selectedClientProfileId}` : currentNav}>
           <div
             key={selectedClientProfileId ? 'client-profile' : currentNav}
             className={`relative z-10 animate-page-in ${selectedClientProfileId ? '' : 'h-full'}`}
@@ -1373,6 +1375,7 @@ function App() {
               />
             </div>
           )}
+          </EcranErrorBoundary>
 
           {/* Demande explicite : "en dehors de l'interface principale...
               clique sur le logo de Nova... une fenêtre avec derrière le
@@ -1430,6 +1433,7 @@ function App() {
                   >
                     <X className="w-4 h-4" />
                   </button>
+                  <EcranErrorBoundary resetKey="nova-popup" plein>
                   <AssistantIAView
                     currentClientId={selectedClientProfileId}
                     prefillPrompt={novaPrefillPrompt}
@@ -1439,6 +1443,7 @@ function App() {
                       setNovaPopupOpen(false);
                     }}
                   />
+                  </EcranErrorBoundary>
                 </motion.div>
               </motion.div>
             )}
@@ -1491,6 +1496,7 @@ function App() {
                     Retour
                   </button>
                 )}
+                <EcranErrorBoundary resetKey="nova" plein>
                 <AssistantIAView
                   initialPrompt={novaAIPrompt}
                   onInitialPromptConsumed={() => setNovaAIPrompt(null)}
@@ -1517,6 +1523,7 @@ function App() {
                     setNovaExpandedFromPopup(false);
                   }}
                 />
+                </EcranErrorBoundary>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1574,6 +1581,7 @@ function App() {
                       bouton sans effet, sur mobile uniquement.
 
                       Sa propre frontière, donc. */}
+                  <EcranErrorBoundary resetKey="nova-mobile" plein>
                   <Suspense fallback={<ChargementEcran />}>
                   <AssistantIAView
                     initialPrompt={novaAIPrompt}
@@ -1605,6 +1613,7 @@ function App() {
                     }}
                   />
                   </Suspense>
+                  </EcranErrorBoundary>
                 </div>
               </motion.div>
             )}

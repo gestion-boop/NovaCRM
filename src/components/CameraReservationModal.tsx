@@ -14,6 +14,7 @@ import {
   EQUIPMENT_LABEL_TO_KEY,
   formatReservationDateFr,
 } from '@/hooks/useCameraReservations';
+import { equipementsReservation, partagentUnEquipement } from '@/lib/equipementsReservation';
 
 interface CameraReservationModalProps {
   isOpen: boolean;
@@ -128,11 +129,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     }
     setStartTime(editReservation.startTime || timePart || '09:00');
     setEndTime(editReservation.endTime || '10:00');
-    setSelectedEquipment(
-      editReservation.equipmentList?.length
-        ? editReservation.equipmentList
-        : editReservation.equipmentName.split(',').map((item) => item.trim())
-    );
+    setSelectedEquipment(equipementsReservation(editReservation));
     setLocation(editReservation.location || editReservation.propertyAddress || '');
     setMandateNumber(editReservation.mandateNumber || '');
     setProjectName(editReservation.projectName || '');
@@ -187,9 +184,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     return selectedDayReservations.some((reservation) => {
       if (excludeId && reservation.id === excludeId) return false;
 
-      const bookedEquipment = reservation.equipmentList?.length
-        ? reservation.equipmentList
-        : reservation.equipmentName.split(',').map((item) => item.trim());
+      const bookedEquipment = equipementsReservation(reservation);
 
       if (!bookedEquipment.includes(equipment)) {
         return false;
@@ -213,9 +208,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
       const sameDay = reservation.startDate.slice(0, 10) === target.startDate.slice(0, 10);
       if (!sameDay) return false;
 
-      const sharesEquipment = reservation.equipmentList.some((equipment) =>
-        target.equipmentList.includes(equipment)
-      );
+      const sharesEquipment = partagentUnEquipement(reservation, target);
       if (!sharesEquipment) return false;
 
       const rStart = reservation.startTime || reservation.startDate.slice(-5);
