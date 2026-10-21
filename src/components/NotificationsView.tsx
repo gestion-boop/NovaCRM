@@ -1,6 +1,7 @@
 import React, {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -29,6 +30,8 @@ import {
   supabase,
 } from '@/lib/supabase';
 import { cibleDepuisLien } from '@/lib/lienNotification';
+import { filOuvert, notifsChatAAnnoncer, regardeDejaLeFil, texteAnnonce } from '@/lib/alerteChat';
+import { toast } from 'sonner';
 
 import {
   useAuth,
@@ -62,6 +65,8 @@ interface NotificationsViewProps {
   // clic sur une notif "message" ne faisait que naviguer vers l'onglet Chat
   // générique (liste des projets), sans jamais ouvrir la bonne conversation.
   onOpenMessage?: (cible: { messageId?: string; conversationId?: string; channelId?: string }) => void;
+  /** Vrai quand le tiroir est ouvert : on recharge la liste tout de suite. */
+  ouverte?: boolean;
   // Signalé (8 septembre) : « cliquer sur la notif d'un message dans un
   // projet ne m'amène pas directement au projet ». Même principe
   // qu'onOpenMessage, mais pour une carte de projet interne : ouvre
@@ -225,6 +230,7 @@ export const NotificationsView: React.FC<
   onOpenContact,
   onOpenMessage,
   onOpenInternalTask,
+  ouverte = false,
 }) => {
   const {
     currentUser,
@@ -343,29 +349,64 @@ export const NotificationsView: React.FC<
   // tant que les notifications ne sont pas encore actives sur l'appareil).
   const [pushCardExpanded, setPushCardExpanded] = useState(false);
 
+  const dejaAnnoncees = useRef<Set<string> | null>(null);
+  const onOpenMessageRef = useRef(onOpenMessage);
+  onOpenMessageRef.current = onOpenMessage;
+  const chargementListe = useRef(false);
+  const relancerListe = useRef(false);
+
   const loadNotifications = async () => {
     if (!currentUser) {
       setRealNotifications([]);
       setLoading(false);
       return;
     }
-    // Filtre is_read=false directement côté serveur (au lieu de charger les
-    // 100 dernières notifications toutes confondues puis filtrer côté
-    // client) : avec .limit(100), un utilisateur ayant plus de 100
-    // notifications lues+non lues cumulées voyait des non-lues ANCIENNES
-    // disparaître de cette liste alors qu'elles comptaient toujours dans le
-    // badge de la cloche (qui, lui, compte côté serveur sans limite) — la
-    // cloche et ce panneau affichaient donc deux chiffres différents.
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', currentUser.uid)
-      .eq('is_read', false)
-      .is('dismissed_at', null)
-      .order('created_at', { ascending: false })
-      .limit(300);
-    if (!error) setRealNotifications((data as RealNotificationRow[]) || []);
-    setLoading(false);
+    if (chargementListe.current) {
+      relancerListe.current = true;
+      return;
+    }
+    chargementListe.current = true;
+    try {
+      do {
+        relancerListe.current = false;
+        // Filtre is_read=false directement côté serveur (au lieu de charger les
+        // 100 dernières notifications toutes confondues puis filtrer côté
+        // client) : avec .limit(100), un utilisateur ayant plus de 100
+        // notifications lues+non lues cumulées voyait des non-lues ANCIENNES
+        // disparaître de cette liste alors qu'elles comptaient toujours dans le
+        // badge de la cloche (qui, lui, compte côté serveur sans limite) — la
+        // cloche et ce panneau affichaient donc deux chiffres différents.
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', currentUser.uid)
+          .eq('is_read', false)
+          .is('dismissed_at', null)
+          .order('created_at', { ascending: false })
+          .limit(300);
+        if (error) continue;
+        const rows = (data as RealNotificationRow[]) || [];
+        const fil = filOuvert();
+        const fraiches = notifsChatAAnnoncer(dejaAnnoncees.current, rows, Date.now()).filter(
+          (n) => !regardeDejaLeFil(fil.chatVisible, fil.onglet, fil.conversationId, n.link),
+        );
+        dejaAnnoncees.current = new Set(rows.map((n) => n.id));
+        const annonce = texteAnnonce(fraiches);
+        if (annonce) {
+          toast(annonce.titre, {
+            description: annonce.description,
+            action: {
+              label: 'Ouvrir',
+              onClick: () => onOpenMessageRef.current?.(cibleDepuisLien(annonce.lien)),
+            },
+          });
+        }
+        setRealNotifications(rows);
+      } while (relancerListe.current);
+    } finally {
+      chargementListe.current = false;
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -384,11 +425,40 @@ export const NotificationsView: React.FC<
       )
       .subscribe();
 
+    // Le temps réel peut arriver en retard. Tant que l'onglet est visible,
+    // un sondage court rattrape un chat reçu sans attendre une demi-minute.
+    let poll: number | null = null;
+    const demarrer = () => {
+      if (poll) return;
+      poll = window.setInterval(() => { void loadNotifications(); }, 8000);
+    };
+    const arreter = () => {
+      if (poll) window.clearInterval(poll);
+      poll = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void loadNotifications();
+        demarrer();
+      } else {
+        arreter();
+      }
+    };
+    if (document.visibilityState === 'visible') demarrer();
+    document.addEventListener('visibilitychange', onVisibility);
+
     return () => {
       supabase.removeChannel(channel);
+      arreter();
+      document.removeEventListener('visibilitychange', onVisibility);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
+
+  useEffect(() => {
+    if (ouverte) void loadNotifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ouverte]);
 
   const markNotificationRead = async (id: string) => {
     setRealNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));

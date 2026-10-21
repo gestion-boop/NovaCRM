@@ -274,18 +274,36 @@ export function useDashboardStats() {
       )
       .subscribe();
 
-    // Filet de sécurité : le temps réel Supabase peut ponctuellement ne pas
-    // délivrer un événement (déconnexion silencieuse du channel...), ce qui
-    // laissait la pastille de la cloche bloquée sur une ancienne valeur alors
-    // que le panneau, lui, recharge toujours les données fraîches à
-    // l'ouverture. Un sondage périodique garantit que la pastille finit
-    // toujours par se resynchroniser, même si un événement temps réel est
-    // manqué.
-    const pollInterval = setInterval(refreshUnreadNotifications, 30000);
+    // Filet de sécurité : le temps réel peut rater un événement. Le sondage
+    // était à 30s, donc un chat reçu sans événement restait invisible trop
+    // longtemps. Tant que l'onglet est ouvert, on rattrape en quelques
+    // secondes ; en arrière-plan le sondage s'arrête, et le retour au
+    // premier plan recharge tout de suite.
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    const demarrer = () => {
+      if (pollInterval) return;
+      pollInterval = setInterval(refreshUnreadNotifications, 8000);
+    };
+    const arreter = () => {
+      if (!pollInterval) return;
+      clearInterval(pollInterval);
+      pollInterval = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshUnreadNotifications();
+        demarrer();
+      } else {
+        arreter();
+      }
+    };
+    if (document.visibilityState === 'visible') demarrer();
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(pollInterval);
+      arreter();
+      document.removeEventListener('visibilitychange', onVisibility);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);

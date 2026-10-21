@@ -17,6 +17,7 @@ import { AGENCIES } from '@/types';
 import { agencesDisponibles } from '@/lib/agency-logos';
 import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { NOVA_QUICK_REACTIONS, renderEmojiOrNova, isNovaReaction } from '@/lib/novaReactions';
+import { conversationASignaler, memoriserFilOuvert } from '@/lib/alerteChat';
 
 interface ChatProject {
   id: string;
@@ -1188,12 +1189,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // sortant), pour qu'il ne supprime la bannière QUE quand c'est vraiment
   // celle du nouveau message.
   useEffect(() => {
-    const target = tab === 'conversations' ? activeConversationId : null;
+    // Le chat reste monté hors de l'écran. Ne signaler la conversation que
+    // lorsqu'elle est vraiment affichée, sinon la bannière d'un nouveau
+    // message est avalée alors qu'on est sur l'accueil.
+    const target = conversationASignaler(isActive, tab, activeConversationId);
+    memoriserFilOuvert({ chatVisible: isActive, onglet: tab, conversationId: activeConversationId });
     navigator.serviceWorker?.controller?.postMessage({ type: 'ACTIVE_CONVERSATION', conversationId: target });
     return () => {
+      memoriserFilOuvert({ chatVisible: false, onglet: tab, conversationId: null });
       navigator.serviceWorker?.controller?.postMessage({ type: 'ACTIVE_CONVERSATION', conversationId: null });
     };
-  }, [activeConversationId, tab]);
+  }, [activeConversationId, tab, isActive]);
 
   // ── Rebond de 5s sur le message ciblé par une notification ──────────────
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
