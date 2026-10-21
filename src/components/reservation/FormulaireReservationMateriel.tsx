@@ -18,6 +18,7 @@ export interface CreneauAffiche {
   debut: string;
   occupe: boolean;
   actif: boolean;
+  dansPlage?: boolean;
 }
 
 export interface MaterielAffiche {
@@ -111,7 +112,7 @@ function Etape({
       <section id={ancreId} className="min-w-0">
         <div className="flex items-center gap-2.5 mb-3">
           {badge}
-          <h3 className="text-[15px] font-semibold text-slate-900">{titre}</h3>
+          <h3 className="text-[15px] font-semibold text-[var(--ink-1)]">{titre}</h3>
         </div>
         {children}
       </section>
@@ -119,7 +120,7 @@ function Etape({
   }
 
   return (
-    <section id={ancreId} className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+    <section id={ancreId} className="rounded-2xl border border-[var(--nv-border-1)] bg-[var(--nv-surface-1)] overflow-hidden">
       <button
         type="button"
         onClick={onOuvrir}
@@ -128,12 +129,12 @@ function Etape({
       >
         {badge}
         <span className="flex-1 min-w-0">
-          <span className="block text-sm font-semibold text-slate-900">{titre}</span>
+          <span className="block text-sm font-semibold text-[var(--ink-1)]">{titre}</span>
           {!ouvert && resume && (
-            <span className="block text-xs text-slate-500 truncate">{resume}</span>
+            <span className="block text-xs text-[var(--ink-2)] truncate">{resume}</span>
           )}
         </span>
-        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${ouvert ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-[var(--ink-3)] transition-transform duration-300 ${ouvert ? 'rotate-180' : ''}`} />
       </button>
       <AnimatePresence initial={false}>
         {ouvert && (
@@ -201,7 +202,7 @@ export function FormulaireReservationMateriel({
     <div>
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-1 min-w-0">
-          <button type="button" onClick={onMoisPrecedent} aria-label="Mois précédent" className="w-8 h-8 rounded-full text-slate-500 hover:bg-slate-100 flex items-center justify-center shrink-0">
+          <button type="button" onClick={onMoisPrecedent} aria-label="Mois précédent" className="w-8 h-8 rounded-full text-[var(--ink-2)] hover:bg-[var(--nv-wash)] flex items-center justify-center shrink-0">
             <ChevronLeft className="w-4 h-4" />
           </button>
           <AnimatePresence mode="wait" initial={false}>
@@ -211,23 +212,23 @@ export function FormulaireReservationMateriel({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: sensMois * -12 }}
               transition={{ duration: 0.2 }}
-              className="text-sm font-semibold text-slate-800 truncate"
+              className="text-sm font-semibold text-[var(--ink-1)] truncate"
             >
               {moisLabel}
             </motion.span>
           </AnimatePresence>
-          <button type="button" onClick={onMoisSuivant} aria-label="Mois suivant" className="w-8 h-8 rounded-full text-slate-500 hover:bg-slate-100 flex items-center justify-center shrink-0">
+          <button type="button" onClick={onMoisSuivant} aria-label="Mois suivant" className="w-8 h-8 rounded-full text-[var(--ink-2)] hover:bg-[var(--nv-wash)] flex items-center justify-center shrink-0">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
-        <button type="button" onClick={onAujourdhui} className="h-8 px-2.5 rounded-full border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 inline-flex items-center gap-1 shrink-0">
+        <button type="button" onClick={onAujourdhui} className="h-8 px-2.5 rounded-full border border-[var(--nv-border-1)] text-xs font-medium text-[var(--ink-2)] hover:bg-[var(--nv-wash)] inline-flex items-center gap-1 shrink-0">
           <Calendar className="w-3.5 h-3.5" />
           Aujourd'hui
         </button>
       </div>
       <div className="grid grid-cols-7 gap-y-1 text-center mb-1">
         {JOURS_COURTS.map((jour, index) => (
-          <span key={`${jour}-${index}`} className="text-[11px] font-medium text-slate-400 py-1">{jour}</span>
+          <span key={`${jour}-${index}`} className="text-[11px] font-medium text-[var(--ink-3)] py-1">{jour}</span>
         ))}
       </div>
       <AnimatePresence mode="wait" initial={false}>
@@ -250,10 +251,10 @@ export function FormulaireReservationMateriel({
                 onClick={() => onChoisirJour(jour.jour as number)}
                 className={`relative mx-auto w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-colors duration-200 ${
                   jour.selectionne
-                    ? 'bg-violet-600 text-white shadow-md shadow-violet-200'
+                    ? 'bg-violet-600 text-white shadow-md shadow-violet-950/40'
                     : jour.passe
                       ? 'text-rose-300 cursor-not-allowed'
-                      : 'text-slate-800 hover:bg-violet-50'
+                      : 'text-[var(--ink-1)] hover:bg-violet-500/15'
                 }`}
               >
                 {jour.jour}
@@ -265,7 +266,7 @@ export function FormulaireReservationMateriel({
           ))}
         </motion.div>
       </AnimatePresence>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[11px] text-slate-500">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[11px] text-[var(--ink-2)]">
         <span className="inline-flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-violet-500" /> Disponible</span>
         <span className="inline-flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-slate-300" /> Peu de créneaux</span>
         <span className="inline-flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-rose-400" /> Indisponible</span>
@@ -275,7 +276,7 @@ export function FormulaireReservationMateriel({
 
   const grilleCreneaux = (
     <div>
-      <p className="text-xs text-slate-500 mb-2 capitalize">{dateChoisie}</p>
+      <p className="text-xs text-[var(--ink-2)] mb-2 capitalize">{dateChoisie}</p>
       <div className="grid grid-cols-3 gap-2">
         {creneaux.map((creneau) => (
           <button
@@ -285,21 +286,23 @@ export function FormulaireReservationMateriel({
             aria-pressed={creneau.actif}
             className={`h-10 rounded-xl text-sm font-semibold transition-all duration-200 ${
               creneau.actif
-                ? 'bg-violet-600 text-white shadow-md shadow-violet-200 scale-[1.02]'
-                : creneau.occupe
-                  ? 'bg-rose-50 text-rose-400 border border-rose-100'
-                  : 'bg-white text-slate-700 border border-slate-200 hover:border-violet-300 hover:bg-violet-50'
+                ? 'bg-violet-600 text-white'
+                : creneau.dansPlage
+                  ? 'bg-violet-600/40 text-white border border-violet-400'
+                  : creneau.occupe
+                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                    : 'bg-[var(--nv-field)] text-[var(--ink-1)] border border-[var(--nv-field-border)] hover:border-violet-400'
             }`}
           >
             {creneau.debut}
           </button>
         ))}
       </div>
-      <p className="text-xs text-slate-500 mt-2">{plage}</p>
+      <p className="text-sm font-medium text-[var(--ink-1)] mt-2">{plage}</p>
       {reservationsDuJour.length > 0 && (
         <ul className="mt-2 space-y-1">
           {reservationsDuJour.slice(0, 3).map((reservation) => (
-            <li key={reservation.id} className="text-[11px] text-slate-500 truncate">
+            <li key={reservation.id} className="text-[11px] text-[var(--ink-2)] truncate">
               {reservation.horaire} · {reservation.label} · {reservation.statut}
             </li>
           ))}
@@ -318,19 +321,19 @@ export function FormulaireReservationMateriel({
           aria-pressed={materiel.selectionne}
           className={`w-full flex items-center gap-3 p-2 rounded-2xl border text-left transition-all duration-200 ${
             materiel.selectionne
-              ? 'border-violet-500 bg-violet-50/60 shadow-sm'
-              : 'border-slate-200 bg-white hover:border-violet-200'
+              ? 'border-violet-400 bg-violet-500/15'
+              : 'border-[var(--nv-border-1)] bg-[var(--nv-field)] hover:border-violet-400'
           }`}
         >
           <span className={`w-12 h-12 rounded-xl bg-gradient-to-br ${materiel.tint} flex items-center justify-center shrink-0`}>
-            <materiel.Icon className="w-5 h-5 text-slate-700" />
+            <materiel.Icon className="w-5 h-5 text-white" />
           </span>
           <span className="flex-1 min-w-0">
-            <span className="block text-sm font-semibold text-slate-900 truncate">{materiel.label}</span>
-            <span className="block text-xs text-slate-500 truncate">{materiel.detail}</span>
+            <span className="block text-sm font-semibold text-[var(--ink-1)] truncate">{materiel.label}</span>
+            <span className="block text-xs text-[var(--ink-2)] truncate">{materiel.detail}</span>
           </span>
           <span className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
-            materiel.selectionne ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-300'
+            materiel.selectionne ? 'bg-violet-600 border-violet-600 text-white' : 'border-[var(--ink-3)]'
           }`}>
             {materiel.selectionne && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
           </span>
@@ -339,33 +342,33 @@ export function FormulaireReservationMateriel({
     </div>
   );
 
-  const champ = 'w-full bg-white border border-slate-200 focus:border-violet-400 rounded-xl px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none transition-colors';
+  const champ = 'w-full bg-[var(--nv-field)] border border-[var(--nv-field-border)] focus:border-violet-400 rounded-xl px-3 py-2.5 text-sm text-[var(--ink-1)] placeholder:text-[var(--ink-3)] focus:outline-none transition-colors';
 
   const infos = (
     <div className="space-y-3">
       <label className="block">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600 mb-1.5">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--ink-2)] mb-1.5">
           <MapPin className="w-3.5 h-3.5 text-violet-500" />
           Lieu de la prise de vue
         </span>
         <input className={champ} placeholder="Adresse, ville, lieu..." value={lieu} onChange={(e) => onLieu(e.target.value)} />
       </label>
       <label className="block">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600 mb-1.5">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--ink-2)] mb-1.5">
           <Briefcase className="w-3.5 h-3.5 text-violet-500" />
           Projet
         </span>
         <input className={champ} placeholder="Nom du projet..." value={projet} onChange={(e) => onProjet(e.target.value)} />
       </label>
       <label className="block">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600 mb-1.5">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--ink-2)] mb-1.5">
           <Hash className="w-3.5 h-3.5 text-violet-500" />
           N° mandat (optionnel)
         </span>
         <input className={champ} placeholder="Ex : 2024-001" value={mandat} onChange={(e) => onMandat(e.target.value)} />
       </label>
       <label className="block">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600 mb-1.5">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--ink-2)] mb-1.5">
           <FileText className="w-3.5 h-3.5 text-violet-500" />
           Note (optionnel)
         </span>
@@ -398,7 +401,7 @@ export function FormulaireReservationMateriel({
       </div>
 
       <div className="flex items-center justify-end gap-3 pt-2">
-        <button type="button" onClick={onAnnuler} className="px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-800">
+        <button type="button" onClick={onAnnuler} className="px-4 py-2.5 text-sm font-medium text-[var(--ink-2)] hover:text-[var(--ink-1)]">
           Annuler
         </button>
         <button

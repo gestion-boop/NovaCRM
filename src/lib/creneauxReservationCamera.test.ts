@@ -4,6 +4,8 @@ import {
   creneauConflit,
   creneauxAffiches,
   disponibiliteJour,
+  libelleDuree,
+  plageConflit,
 } from './creneauxReservationCamera';
 
 const djiMatin = {
@@ -27,10 +29,20 @@ describe('créneaux de réservation caméra', () => {
     expect(creneauxAffiches('10:00')).toEqual(creneauxAffiches());
   });
 
-  it('marque le créneau occupé seulement pour le matériel concerné', () => {
+  it('marque seulement la demi-heure réellement occupée', () => {
     expect(creneauConflit('10:00', [djiMatin], ['Caméra DJI'])).toBe(true);
-    expect(creneauConflit('10:00', [djiMatin], ['Caméra X4'])).toBe(false);
+    expect(creneauConflit('10:30', [djiMatin], ['Caméra DJI'])).toBe(true);
+    expect(creneauConflit('09:30', [djiMatin], ['Caméra DJI'])).toBe(false);
     expect(creneauConflit('11:00', [djiMatin], ['Caméra DJI'])).toBe(false);
+    expect(creneauConflit('10:00', [djiMatin], ['Caméra X4'])).toBe(false);
+  });
+
+  it('une après-midi libre reste réservable à côté d’un créneau pris', () => {
+    expect(plageConflit('13:30', '16:00', [djiMatin], ['Caméra DJI'])).toBe(false);
+    expect(plageConflit('09:00', '10:00', [djiMatin], ['Caméra DJI'])).toBe(false);
+    expect(plageConflit('09:30', '11:30', [djiMatin], ['Caméra DJI'])).toBe(true);
+    expect(libelleDuree('13:30', '17:00')).toBe('3 h 30');
+    expect(libelleDuree('14:00', '15:00')).toBe('1 h');
   });
 
   it('ignore la réservation en cours de modification', () => {

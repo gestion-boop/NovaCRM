@@ -20,7 +20,9 @@ import {
   creneauConflit,
   creneauxAffiches,
   disponibiliteJour,
-  DUREE_CRENEAU_MIN,
+  PAS_CRENEAU_MIN,
+  libelleDuree,
+  plageConflit,
 } from '@/lib/creneauxReservationCamera';
 import { FormulaireReservationMateriel } from '@/components/reservation/FormulaireReservationMateriel';
 
@@ -90,6 +92,8 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   const [etapeMobile, setEtapeMobile] = useState(1);
   const [sensMois, setSensMois] = useState<1 | -1>(1);
   const [ecranEtroit, setEcranEtroit] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  const [attenteFin, setAttenteFin] = useState(false);
+  const [plageValidee, setPlageValidee] = useState(false);
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)');
     const appliquer = () => setEcranEtroit(media.matches);
@@ -141,6 +145,8 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     if (!isOpen) return;
     setVoirReservations(false);
     setEtapeMobile(1);
+    setAttenteFin(false);
+    setPlageValidee(false);
   }, [isOpen]);
 
   useEffect(() => {
@@ -159,15 +165,17 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     setProjectName(editReservation.projectName || '');
     setNote(editReservation.note || '');
     setSubmitError(null);
+    setAttenteFin(false);
+    setPlageValidee(true);
   }, [isOpen, editReservation]);
 
   if (!isOpen) return null;
 
   const MATERIELS = [
-    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', detail: 'Visites immersives', tint: 'from-violet-100 to-fuchsia-50', Icon: Video },
-    { id: 'Caméra DJI', label: 'Caméra DJI', detail: 'Visites immersives', tint: 'from-slate-100 to-violet-50', Icon: Camera },
-    { id: 'Caméra X4', label: 'Caméra X4', detail: 'Photos 360', tint: 'from-zinc-100 to-slate-50', Icon: Package },
-    { id: 'Community Manager', label: 'Community Manager', detail: 'Photos pro', tint: 'from-amber-50 to-orange-50', Icon: Clapperboard },
+    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', detail: 'Visites immersives', tint: 'from-violet-950 to-fuchsia-900', Icon: Video },
+    { id: 'Caméra DJI', label: 'Caméra DJI', detail: 'Visites immersives', tint: 'from-slate-800 to-violet-950', Icon: Camera },
+    { id: 'Caméra X4', label: 'Caméra X4', detail: 'Photos 360', tint: 'from-zinc-800 to-slate-900', Icon: Package },
+    { id: 'Community Manager', label: 'Community Manager', detail: 'Photos pro', tint: 'from-amber-950 to-orange-950', Icon: Clapperboard },
   ];
 
   // Calendar calculations
@@ -197,16 +205,31 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     setSelectedDayNum(jour);
     if (ecranEtroit) setEtapeMobile(2);
   };
-  const choisirCreneau = (debut: string) => {
-    const occupe = creneauConflit(debut, selectedDayReservations, selectedEquipment, editReservation?.id);
-    if (occupe) {
+  const choisirCreneau = (heure: string) => {
+    const reservationsDuCreneau = selectedDayReservations;
+    const equipement = selectedEquipment;
+    const ignore = editReservation?.id;
+    if (attenteFin && heure > startTime) {
+      if (plageConflit(startTime, heure, reservationsDuCreneau, equipement, ignore)) {
+        setSubmitError('Cette plage chevauche une réservation déjà posée pour ce matériel.');
+        return;
+      }
+      setEndTime(heure);
+      setAttenteFin(false);
+      setPlageValidee(true);
+      setSubmitError(null);
+      if (ecranEtroit) setEtapeMobile(3);
+      return;
+    }
+    if (creneauConflit(heure, reservationsDuCreneau, equipement, ignore)) {
       setSubmitError('Ce créneau est déjà pris pour le matériel choisi.');
       return;
     }
+    setStartTime(heure);
+    setEndTime(ajouterMinutes(heure, PAS_CRENEAU_MIN));
+    setAttenteFin(true);
+    setPlageValidee(false);
     setSubmitError(null);
-    setStartTime(debut);
-    setEndTime(ajouterMinutes(debut, DUREE_CRENEAU_MIN));
-    if (ecranEtroit) setEtapeMobile(3);
   };
 
   // Equipment toggle
@@ -279,8 +302,8 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
       return;
     }
 
-    if (endTime <= startTime) {
-      setSubmitError("L'heure de fin doit être postérieure à l'heure de début.");
+    if (!plageValidee || attenteFin || endTime <= startTime) {
+      setSubmitError('Choisissez l’heure de début, puis l’heure de fin. La durée est libre.');
       return;
     }
 
@@ -425,12 +448,21 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   const dateChoisie = new Date(year, month, selectedDayNum).toLocaleDateString('fr-FR', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
-  const creneaux = creneauxAffiches(startTime).map((debut) => ({
+  const finAffichee = plageValidee && !attenteFin ? endTime : '';
+  const heuresGrille = creneauxAffiches(attenteFin || plageValidee ? startTime : undefined);
+  if (finAffichee && !heuresGrille.includes(finAffichee)) heuresGrille.push(finAffichee);
+  heuresGrille.sort();
+  const creneaux = heuresGrille.map((debut) => ({
     debut,
     occupe: creneauConflit(debut, selectedDayReservations, selectedEquipment, editReservation?.id),
-    actif: debut === startTime,
+    dansPlage: Boolean(finAffichee) && debut > startTime && debut < finAffichee,
+    actif: ((attenteFin || plageValidee) && debut === startTime) || (Boolean(finAffichee) && debut === finAffichee),
   }));
-  const plage = `${startTime} – ${endTime}`;
+  const plage = attenteFin
+    ? `Début ${startTime} — touchez l'heure de fin`
+    : plageValidee
+      ? `${startTime} – ${endTime} · ${libelleDuree(startTime, endTime)}`
+      : 'Touchez l’heure de début, puis l’heure de fin. La durée est libre.';
   const reservationsDuJour = selectedDayReservations
     .filter((reservation) => reservation.status !== 'Refusée')
     .map((reservation) => ({
@@ -456,24 +488,24 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
         initial={{ opacity: 0, y: 18, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-        className="bg-white text-slate-900 w-full sm:max-w-6xl rounded-t-[28px] sm:rounded-[28px] shadow-2xl max-h-[100dvh] sm:max-h-[92vh] overflow-y-auto"
+        className="bg-[var(--nv-surface-1)] text-[var(--ink-1)] border border-[var(--nv-border-1)] w-full sm:max-w-6xl rounded-t-[28px] sm:rounded-[28px] shadow-2xl max-h-[100dvh] sm:max-h-[92vh] overflow-y-auto"
       >
-        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-start gap-3 border-b border-slate-100">
+        <div className="sticky top-0 z-10 bg-[var(--nv-surface-1)] px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-start gap-3 border-b border-[var(--nv-border-1)]">
           <div className="w-11 h-11 rounded-2xl bg-violet-600 text-white flex items-center justify-center shrink-0">
             <Camera className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-lg sm:text-xl font-bold text-[var(--ink-1)] tracking-tight">
               {editReservation ? 'Modifier la réservation' : 'Réservation de matériel'}
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-[var(--ink-2)] mt-0.5">
               Réservez facilement une caméra pour vos prises de vue immersives.
             </p>
           </div>
           <button
             type="button"
             onClick={() => setVoirReservations((ouvert) => !ouvert)}
-            className="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            className="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-[var(--nv-border-1)] text-sm font-medium text-[var(--ink-2)] hover:bg-[var(--nv-wash)]"
           >
             <ClipboardList className="w-4 h-4" />
             {voirReservations ? 'Nouvelle demande' : 'Vos réservations'}
@@ -482,7 +514,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Fermer"
-            className="w-9 h-9 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 flex items-center justify-center"
+            className="w-9 h-9 rounded-full text-[var(--ink-2)] hover:bg-[var(--nv-wash)] hover:text-[var(--ink-1)] flex items-center justify-center"
           >
             <X className="w-5 h-5" />
           </button>
@@ -492,15 +524,15 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
           <button
             type="button"
             onClick={() => setVoirReservations((ouvert) => !ouvert)}
-            className="sm:hidden inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-600"
+            className="sm:hidden inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-[var(--nv-border-1)] text-sm font-medium text-[var(--ink-2)]"
           >
             <ClipboardList className="w-4 h-4" />
             {voirReservations ? 'Nouvelle demande' : 'Vos réservations'}
           </button>
 
           {isCameraAdmin && pendingReservations.length > 0 && !isSuccess && (
-            <div className="rounded-2xl border border-violet-200 bg-violet-50 p-3 space-y-2">
-              <p className="text-xs font-semibold text-violet-700 flex items-center gap-1.5">
+            <div className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-3 space-y-2">
+              <p className="text-xs font-semibold text-violet-300 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5" />
                 {pendingReservations.length} demande{pendingReservations.length > 1 ? 's' : ''} en attente
               </p>
@@ -517,20 +549,20 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                     }
                     setDetailReservation(res);
                   }}
-                  className="w-full flex items-center justify-between gap-3 bg-white border border-violet-100 rounded-xl px-3 py-2 text-left"
+                  className="w-full flex items-center justify-between gap-3 bg-[var(--nv-field)] border border-[var(--nv-border-1)] rounded-xl px-3 py-2 text-left"
                 >
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-slate-900 truncate">{res.equipmentName}</span>
-                    <span className="block text-[11px] text-slate-500 truncate">{res.agentName} · {formatReservationDateFr(res)}</span>
+                    <span className="block text-sm font-semibold text-[var(--ink-1)] truncate">{res.equipmentName}</span>
+                    <span className="block text-[11px] text-[var(--ink-2)] truncate">{res.agentName} · {formatReservationDateFr(res)}</span>
                   </span>
-                  <span className="text-xs font-semibold text-violet-700 shrink-0">Contrôler</span>
+                  <span className="text-xs font-semibold text-[var(--ink-violet)] shrink-0">Contrôler</span>
                 </button>
               ))}
             </div>
           )}
 
           {(submitError || loadError) && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm">
+            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-[var(--ink-rose)] text-sm">
               {submitError || loadError}
             </div>
           )}
@@ -544,10 +576,10 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                 className="py-16 text-center"
               >
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-                <h3 className="text-lg font-semibold text-slate-900 mt-3">
+                <h3 className="text-lg font-semibold text-[var(--ink-1)] mt-3">
                   {editReservation ? 'Réservation mise à jour' : 'Demande enregistrée'}
                 </h3>
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="text-sm text-[var(--ink-2)] mt-1">
                   {editReservation
                     ? 'Les modifications ont été enregistrées.'
                     : 'Sylvain et Mélanie Grazia ont été notifiés.'}
@@ -563,19 +595,19 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                 className="space-y-2"
               >
                 {reservationsVisibles.length === 0 ? (
-                  <p className="text-sm text-slate-500 py-8 text-center">Aucune réservation pour le moment.</p>
+                  <p className="text-sm text-[var(--ink-2)] py-8 text-center">Aucune réservation pour le moment.</p>
                 ) : reservationsVisibles.map((reservation) => (
-                  <div key={reservation.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 px-3 py-3">
+                  <div key={reservation.id} className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--nv-border-1)] bg-[var(--nv-field)] px-3 py-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 truncate">{reservation.equipmentName}</p>
-                      <p className="text-xs text-slate-500 truncate">{formatReservationDateFr(reservation)}</p>
+                      <p className="text-sm font-semibold text-[var(--ink-1)] truncate">{reservation.equipmentName}</p>
+                      <p className="text-xs text-[var(--ink-2)] truncate">{formatReservationDateFr(reservation)}</p>
                     </div>
                     <span className={`text-[11px] font-semibold px-2 py-1 rounded-full shrink-0 ${
                       reservation.status === 'Confirmée'
-                        ? 'bg-emerald-50 text-emerald-700'
+                        ? 'bg-emerald-500/15 text-[var(--ink-emerald)]'
                         : reservation.status === 'Refusée'
-                          ? 'bg-rose-50 text-rose-600'
-                          : 'bg-amber-50 text-amber-700'
+                          ? 'bg-rose-500/15 text-[var(--ink-rose)]'
+                          : 'bg-amber-500/15 text-[var(--ink-amber)]'
                     }`}>
                       {reservation.status}
                     </span>
@@ -591,7 +623,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                 transition={{ duration: 0.25 }}
               >
                 {loadingReservations && (
-                  <p className="text-xs text-violet-600 mb-3">Chargement du planning...</p>
+                  <p className="text-xs text-[var(--ink-violet)] mb-3">Chargement du planning...</p>
                 )}
                 <FormulaireReservationMateriel
                   mobile={ecranEtroit}
@@ -627,7 +659,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                   onAnnuler={onClose}
                   onConfirmer={() => { void handleSubmit({ preventDefault() {} } as React.FormEvent); }}
                   confirmationLabel={submitting ? 'Enregistrement...' : editReservation ? 'Enregistrer les modifications' : 'Confirmer la réservation'}
-                  confirmationDesactivee={submitting || loadingReservations}
+                  confirmationDesactivee={submitting || loadingReservations || !plageValidee || attenteFin}
                 />
               </motion.div>
             )}
