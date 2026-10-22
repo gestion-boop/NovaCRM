@@ -201,7 +201,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         const [{ data: profiles }, { data: members }, { data: pipelines }] = await Promise.all([
           supabase.from('profiles').select('id, full_name, email, job_title'),
           supabase.from('agency_members').select('user_id, agency_id'),
-          supabase.from('pipelines').select('id, name, agency_id, owner_id').order('name'),
+          supabase.from('pipelines').select('id, name, agency_id, owner_id, is_default').order('name'),
         ]);
         if (cancelled) return;
 
@@ -210,9 +210,15 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
           (pl: { agency_id: string }) => agencyId === 'all' || pl.agency_id === agencyId
         );
         const scopedPipelines = deLAgence
-          .filter((pl: { id: string; name: string; agency_id: string; owner_id?: string | null }) =>
+          .filter((pl: { id: string; name: string; agency_id: string; owner_id?: string | null; is_default?: boolean }) =>
             pipelineVisiblePour(
-              { id: pl.id, name: pl.name, agencyId: pl.agency_id, ownerId: pl.owner_id ?? null },
+              {
+                id: pl.id,
+                name: pl.name,
+                agencyId: pl.agency_id,
+                ownerId: pl.owner_id ?? null,
+                officiel: Boolean(pl.is_default),
+              },
               utilisateur
             )
           )

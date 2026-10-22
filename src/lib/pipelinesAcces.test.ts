@@ -64,8 +64,14 @@ describe('accès aux pipelines', () => {
     expect(pipelineVisiblePour(homonyme, { uid: CHRISTOPHE })).toBe(true);
     expect(pipelineVisiblePour(homonyme, { uid: MELANIE_UID })).toBe(false);
     expect(pipelineVisiblePour({ id: 'partage', name: 'Principal', agencyId: CF, ownerId: null }, { uid: CHRISTOPHE })).toBe(
-      false
+      true
     );
+    expect(
+      pipelineVisiblePour(
+        { id: 'officiel', name: 'Pipeline Conseils Finances', agencyId: CF, ownerId: 'quelquun', officiel: true },
+        { uid: SYLVAIN_UID }
+      )
+    ).toBe(true);
   });
 
   it('réserve la structure de Transactions à Mélanie et Sylvain, et interdit sa suppression', () => {

@@ -490,7 +490,7 @@ export default function ClientProfileView({
   const utilisateurPipeline = { uid: currentUser?.uid ?? null, email: currentUser?.email ?? null };
   const pipelinesVisibles = pipelines.filter((p: any) =>
     pipelineVisiblePour(
-      { id: p.id, name: p.name, agencyId: p.agency_id, ownerId: p.owner_id ?? null },
+      { id: p.id, name: p.name, agencyId: p.agency_id, ownerId: p.owner_id ?? null, officiel: Boolean(p.is_default) },
       utilisateurPipeline
     )
   );

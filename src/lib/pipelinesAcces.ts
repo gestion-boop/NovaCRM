@@ -1,8 +1,8 @@
 // Accès aux pipelines (demande du 22 octobre) :
-// chacun ne voit que les pipelines qu'il a créés, sauf « Pipelines
-// Transactions » d'Immosphera, visible de toute l'agence sauf Sarah
-// (community manager). Titres, colonnes et leur ordre : Mélanie et Sylvain
-// seulement. Personne ne peut supprimer ce pipeline.
+// les pipelines de la société restent visibles. Un pipeline personnel n'est
+// visible que par son créateur. « Pipelines Transactions » d'Immosphera est
+// visible de toute l'agence sauf Sarah. Titres, colonnes et leur ordre :
+// Mélanie et Sylvain seulement. Personne ne peut supprimer ce pipeline.
 
 export const IMMOSPHERA_AGENCY_ID = '15157da9-71ea-4760-ae1c-3bc99d9caa20';
 export const TRANSACTIONS_PIPELINE_ID = '8f79d05c-d191-43bb-8323-bedbd722f9f2';
@@ -54,11 +54,18 @@ export function estMelanieOuSylvain(user: UtilisateurPipeline): boolean {
   return user.uid === SYLVAIN_UID || user.uid === MELANIE_UID || email === SYLVAIN_EMAIL || email === MELANIE_EMAIL;
 }
 
-/** Menu des pipelines : le sien, ou Transactions pour Immosphera hors Sarah. */
+/**
+ * Menu des pipelines.
+ * Les pipelines de la société (sans propriétaire, ou marqués officiels) restent
+ * visibles pour tout le monde : les cacher vidait Conseils Finances et Novavisio.
+ * Un pipeline créé par quelqu'un n'est visible que par son créateur.
+ * Transactions (Immosphera) est visible de l'agence, sauf Sarah.
+ */
 export function pipelineVisiblePour(pipeline: PipelinePourAcces, user: UtilisateurPipeline): boolean {
   if (!user.uid && !emailDe(user)) return false;
   if (estPipelineTransactions(pipeline)) return !estCommunitySarah(user);
-  if (!user.uid || !pipeline.ownerId) return false;
+  if (!user.uid) return false;
+  if (!pipeline.ownerId || pipeline.officiel) return true;
   return pipeline.ownerId === user.uid;
 }
 

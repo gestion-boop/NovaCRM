@@ -954,16 +954,17 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           .eq('user_id', currentUser.uid);
         const hiddenPipelineIds = new Set((hiddenRows || []).map((r: any) => r.pipeline_id));
         const utilisateur = { uid: currentUser.uid, email: currentUser.email };
-        // Chacun son pipeline. Exception : Pipelines Transactions, visible
-        // de toute l'agence Immosphera sauf Sarah. Un masque personnel ne
-        // peut pas le cacher. Les pipelines sans propriétaire (hors
-        // Transactions) ne s'affichent plus, y compris pour un super admin.
+        // Pipelines de la société (sans propriétaire, ou officiels) : tout
+        // le monde. Pipeline personnel : seulement son créateur. Transactions
+        // reste visible chez Immosphera sauf Sarah, et un masque personnel
+        // ne peut pas le cacher.
         pipeList = pipeList.filter((p: any) => {
           const fiche = {
             id: p.id as string,
             name: p.name as string,
             agencyId: p.agency_id as string,
             ownerId: (p.owner_id as string | null) ?? null,
+            officiel: Boolean(p.is_default),
           };
           if (!estPipelineTransactions(fiche) && hiddenPipelineIds.has(p.id)) return false;
           return pipelineVisiblePour(fiche, utilisateur);
