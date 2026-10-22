@@ -590,9 +590,11 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   ];
 
   // pt-4 simple : le safe-area-inset-top est déjà appliqué une fois par
-  // <main> dans App.tsx. La place de la barre du bas est aussi réservée
-  // là-bas ; ici un petit pb-6 suffit maintenant que le bouton flottant
-  // « Créer un lead » a rejoint le « + » de cette barre.
+  // <main> dans App.tsx. La place courante de la barre du bas est aussi
+  // réservée là-bas ; le pb-6 suffit pour le contenu habituel, depuis que
+  // le bouton flottant « Créer un lead » a rejoint le « + » de cette barre.
+  // La dernière tuile (Réduire, Ajouter) dépasse encore cette réserve :
+  // une marge supplémentaire est ajoutée plus bas, seulement dans ce cas.
   return (
     <div className="min-h-full p-4 sm:p-6 pb-6 pt-4 flex flex-col gap-4">
       {/* En-tête */}
@@ -850,11 +852,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             Glissez une tuile pour la déplacer, ou touchez le − pour la masquer.
           </p>
         )}
-        {/* Ticket #48 : en édition, la tuile "Ajouter" tout en bas de la
-            grille doit toujours rester atteignable par un simple scroll —
-            une marge généreuse ici garantit qu'elle ne finit jamais collée
-            (ou masquée) contre la barre de navigation fixe du bas. */}
-        {editMode && <div className="h-24" aria-hidden="true" />}
+        {/* La barre du bas est fixe. Sans cette marge, la dernière tuile
+            (Ajouter en édition, Réduire quand tout est déplié) reste sous
+            la barre et le toucher part sur Accueil, Lead ou Menu. */}
+        {(editMode || showAllSpaces) && <div className="h-28" aria-hidden="true" />}
       </div>
 
       {showAddSheet && (
