@@ -1112,7 +1112,6 @@ function App() {
                         setCurrentNav(nav);
                       }
                     }}
-                    onOpenNouveauLead={() => setShowNouveauLead(true)}
                     unreadRemindersCount={unreadRemindersCount}
                     unreadMessagesCount={unreadMessagesCount}
                     unreadMailCount={unreadMailCount}
@@ -1754,16 +1753,17 @@ function App() {
           // ensuite : "mode Commercial/Bureau" — openNovaMobile respecte le
           // dernier mode choisi (voir plus haut).
           onOpenNova={() => openNovaMobile()}
-          // Le « + » n'apparaît que sur l'écran Mail — ailleurs, la barre
-          // garde ses trois boutons (Accueil / Nova / Menu).
+          // Le « + » crée un lead, sauf sur le mail (« Écrire ») et l'agenda
+          // (« Ajouter »). Il disparaît pendant la lecture d'un message.
           onCompose={
-            currentNav === 'mail' && !mailReading
-              ? () => setMailComposeSignal((n) => n + 1)
+            currentNav === 'mail'
+              ? (mailReading ? undefined : () => setMailComposeSignal((n) => n + 1))
               : currentNav === 'agenda'
                 ? () => setAgendaCreateSignal((n) => n + 1)
-                : undefined
+                : () => setShowNouveauLead(true)
           }
-          composeLabel={currentNav === 'agenda' ? 'Ajouter' : 'Écrire'}
+          composeLabel={currentNav === 'agenda' ? 'Ajouter' : currentNav === 'mail' ? 'Écrire' : 'Lead'}
+          composeTitle={currentNav === 'agenda' ? 'Ajouter un rendez-vous' : currentNav === 'mail' ? 'Écrire un message' : 'Créer un lead'}
           unreadMessagesCount={unreadMessagesCount}
           unreadNotificationsCount={unreadMobileNotificationsCount}
           unreadRemindersCount={unreadRemindersCount}

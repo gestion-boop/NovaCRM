@@ -7,8 +7,8 @@ import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@d
 import { CSS } from '@dnd-kit/utilities';
 import {
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, CloudSun,
-  ChevronRight, Bell, MessageSquare, Users, GitFork, FileText, Mail, BarChart2,
-  Headphones, Calendar, FileEdit, UserPlus, Folder, Plus, X, UserPlus2,
+  Bell, MessageSquare, Users, GitFork, FileText, Mail, BarChart2,
+  Headphones, Calendar, FileEdit, UserPlus, Folder, Plus, X,
   ChevronDown, ChevronUp, Megaphone, Camera, Lock, Zap, Home as HomeIcon, Globe,
   ExternalLink, Bookmark, Target, Shield, Award, Sparkles, CheckSquare, Image as ImageIcon, MapPin, Settings,
 } from 'lucide-react';
@@ -32,7 +32,6 @@ const LOCKED_ICON_MAP: Record<string, React.ElementType> = {
 
 interface MobileHomeProps {
   onNavigate: (nav: string) => void;
-  onOpenNouveauLead: () => void;
   unreadRemindersCount: number;
   unreadMessagesCount: number;
   unreadMailCount: number;
@@ -138,7 +137,6 @@ const SPACE_TILE_CLASS =
 
 export const MobileHome: React.FC<MobileHomeProps> = ({
   onNavigate,
-  onOpenNouveauLead,
   unreadRemindersCount,
   unreadMessagesCount,
   unreadMailCount,
@@ -592,20 +590,11 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   ];
 
   // pt-4 simple : le safe-area-inset-top est déjà appliqué une fois par
-  // <main> dans App.tsx — l'ajouter une deuxième fois ici cumulait les deux
-  // et poussait tout le contenu (jusqu'au bouton "Créer un lead") largement
-  // hors de l'écran sur les appareils à encoche / îlot dynamique.
-  // Signalé (9 septembre, capture à l'appui) : un « trou » en bas de l'écran
-  // — en réalité la dernière ligne de tuiles ("Blocs - Notes", etc.) coincée
-  // entre le bouton flottant "Créer un lead" et la barre de navigation en
-  // dessous, tous les deux `fixed`. Le padding bas du contenu (`pb-4`,
-  // 1rem) ne réservait de la place pour AUCUN des deux — bien trop court
-  // face au bouton (positionné à 6.5rem du bas + sa propre hauteur) et à la
-  // barre de nav flottante en dessous. Porté à une valeur qui dégage
-  // franchement les deux, sans toucher au `pt-4` volontairement laissé tel
-  // quel juste au-dessus (voir commentaire).
+  // <main> dans App.tsx. La place de la barre du bas est aussi réservée
+  // là-bas ; ici un petit pb-6 suffit maintenant que le bouton flottant
+  // « Créer un lead » a rejoint le « + » de cette barre.
   return (
-    <div className="min-h-full p-4 sm:p-6 pb-[calc(11rem+env(safe-area-inset-bottom,0px))] pt-4 flex flex-col gap-4">
+    <div className="min-h-full p-4 sm:p-6 pb-6 pt-4 flex flex-col gap-4">
       {/* En-tête */}
       <div className="flex items-center justify-between pt-1">
         <div className="min-w-0">
@@ -867,35 +856,6 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             (ou masquée) contre la barre de navigation fixe du bas. */}
         {editMode && <div className="h-24" aria-hidden="true" />}
       </div>
-
-      {/* Réserve la place du bouton "Créer un lead", désormais fixé tout en
-          bas de l'écran (voir plus bas) — sinon le contenu défilant passerait
-          en dessous. Signalé : une fois les tuiles dépliées, la tuile
-          "Réduire" tout en bas de la grille se retrouvait cachée derrière le
-          bouton "Créer un lead" — cette réserve (4.75rem) était plus courte
-          que l'empreinte réelle du bouton (décalé de 6.5rem + sa propre
-          hauteur), donc la fin du contenu défilant passait quand même
-          dessous. Portée à la même hauteur que cette empreinte. */}
-      <div className="h-[10.5rem]" aria-hidden="true" />
-
-      {/* Sélecteur d'espace à ré-ajouter — tiroir qui part du bas et remonte
-          jusqu'au centre de l'écran (au lieu de rester collé en bas, où les
-          icônes du bas pouvaient se retrouver masquées par la barre système
-          du téléphone). */}
-      {/* Créer un lead — fixé tout en bas de l'écran, juste au-dessus de la
-          barre de navigation (même style "panneau gris" que le dock du
-          haut, écriture jaune, comme demandé). */}
-      <button
-        onClick={onOpenNouveauLead}
-        className="fixed left-4 right-4 z-30 px-5 py-4 rounded-2xl bg-white/[0.06] backdrop-blur-xl border border-white/10 text-[#F7BC5F] font-black flex items-center justify-between gap-3 active:scale-[0.98] transition-all"
-        style={{ bottom: 'calc(6.5rem + env(safe-area-inset-bottom, 0px))' }}
-      >
-        <span className="flex items-center gap-2.5">
-          <UserPlus2 className="w-5 h-5" />
-          Créer un lead
-        </span>
-        <ChevronRight className="w-5 h-5" />
-      </button>
 
       {showAddSheet && (
         <div
