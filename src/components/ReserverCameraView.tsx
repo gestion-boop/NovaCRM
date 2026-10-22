@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Camera, Plus, Clock, MapPin, Hash, Briefcase, CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import CameraReservationModal from './CameraReservationModal';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { useCameraReservations, StoredCameraReservation, formatReservationDateFr } from '@/hooks/useCameraReservations';
 
 // Correctif (7 septembre, signalé « on ne voit pas trop bien la date qui
@@ -19,6 +21,42 @@ import { useCameraReservations, StoredCameraReservation, formatReservationDateFr
 export interface ReserverCameraViewProps {
   onOpenModal?: () => void;
 }
+
+function initialesDe(nom: string): string {
+  const lettres = nom
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((mot) => mot[0]?.toUpperCase())
+    .join('');
+  return lettres || '?';
+}
+
+// Photo du demandeur, à la place de l'icône appareil photo. Le portrait
+// enregistré sur le compte prime ; sinon la photo d'équipe ; sinon les initiales.
+const LogoAgent: React.FC<{ nom: string; src: string; secours?: string }> = ({ nom, src, secours = '' }) => {
+  const [essai, setEssai] = useState(0);
+  useEffect(() => {
+    setEssai(0);
+  }, [src, secours]);
+  const choisi = essai === 0 ? src || secours : essai === 1 && secours && secours !== src ? secours : '';
+  return (
+    <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 mt-0.5 border border-white/15 bg-purple-950/50 flex items-center justify-center">
+      {choisi ? (
+        <img
+          key={choisi}
+          src={choisi}
+          alt={nom}
+          className="w-full h-full object-cover"
+          referrerPolicy="no-referrer"
+          onError={() => setEssai((n) => n + 1)}
+        />
+      ) : (
+        <span className="text-xs font-black text-purple-100">{initialesDe(nom)}</span>
+      )}
+    </div>
+  );
+};
 
 // Reçoit isCameraAdmin/reviewingId/reviewReservation en props plutôt que de
 // rappeler useCameraReservations() ici : une carte par réservation aurait
@@ -158,6 +196,36 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
   // En attente d'abord (ce qui a besoin d'une action), puis le reste par
   // date décroissante — pour ne pas noyer une demande urgente au milieu
   // de réservations déjà traitées.
+  const [photosProfil, setPhotosProfil] = useState<Record<string, string>>({});
+  const idsAgents = [...new Set(reservations.map((r) => r.createdByUserId).filter(Boolean))].sort().join(',');
+  useEffect(() => {
+    const ids = idsAgents ? idsAgents.split(',') : [];
+    if (ids.length === 0) return;
+    let ignore = false;
+    void supabase
+      .from('profiles')
+      .select('id, avatar_url')
+      .in('id', ids)
+      .then(({ data }) => {
+        if (ignore || !data) return;
+        const suivant: Record<string, string> = {};
+        for (const ligne of data as { id: string; avatar_url: string | null }[]) {
+          if (ligne.avatar_url) suivant[ligne.id] = ligne.avatar_url;
+        }
+        setPhotosProfil(suivant);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [idsAgents]);
+
+  const logoAgent = (r: StoredCameraReservation) => {
+    const membre = TEAM_MEMBERS.find((m) => m.id === r.createdByUserId);
+    const profil = photosProfil[r.createdByUserId] || '';
+    const equipe = membre?.avatarUrl || '';
+    return { src: profil || equipe, secours: profil && equipe && profil !== equipe ? equipe : '' };
+  };
+
   const sorted = [...reservations].sort((a, b) => {
     if (a.status === 'En attente' && b.status !== 'En attente') return -1;
     if (b.status === 'En attente' && a.status !== 'En attente') return 1;
@@ -220,9 +288,7 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-start gap-3.5">
-                  <div className="p-3 rounded-xl bg-purple-950/40 text-purple-300 border border-purple-500/30 shrink-0 mt-0.5">
-                    <Camera className="w-5 h-5" />
-                  </div>
+                  <LogoAgent nom={r.agentName} src={logoAgent(r).src} secours={logoAgent(r).secours} />
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[10px] font-black uppercase tracking-wider text-purple-400 bg-purple-950/60 border border-purple-500/30 px-2.5 py-0.5 rounded-full">
