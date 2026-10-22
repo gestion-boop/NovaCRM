@@ -726,6 +726,46 @@ const IMMOSPHERA_EXTRA_TILE_IDS = [
 // Tuile de la grille principale, rendue déplaçable via @dnd-kit/sortable
 // (hook useSortable — doit être un composant à part pour respecter les
 // règles des Hooks puisqu'on en instancie un par tuile dans une liste).
+/** Glyphe d'une tuile. Sur ordinateur, l'icône est dans un médaillon clair,
+ *  trait plus net, pour se lire comme une icône d'application. Le téléphone
+ *  garde le dessin compact. Un logo personnalisé occupe le même cadre. */
+const MarqueTuile: React.FC<{
+  icon: React.ElementType;
+  imageUrl?: string | null;
+  alt?: string;
+  compact?: boolean;
+  className?: string;
+}> = ({ icon: Icon, imageUrl, alt, compact, className = '' }) => {
+  const cadre = compact
+    ? 'w-12 h-12 rounded-2xl mb-2'
+    : 'w-9 h-9 sm:w-12 sm:h-12 mb-1 sm:mb-2 sm:rounded-[1.05rem]';
+  if (imageUrl) {
+    return (
+      <div className={`flex items-center justify-center ${cadre} ${className}`}>
+        <img src={imageUrl} alt={alt || ''} className="w-full h-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.45)]" />
+      </div>
+    );
+  }
+  return (
+    <div className={`relative flex items-center justify-center text-white ${cadre} ${
+      compact
+        ? 'bg-white/15 border border-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_8px_16px_rgba(0,0,0,0.25)]'
+        : 'sm:bg-white/15 sm:border sm:border-white/30 sm:shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_10px_18px_rgba(0,0,0,0.28)]'
+    } ${className}`}>
+      <Icon className={`drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)] ${
+        compact ? 'w-7 h-7 stroke-[2]' : 'w-7 h-7 sm:w-9 sm:h-9 stroke-[1.75] sm:stroke-[2]'
+      }`} />
+    </div>
+  );
+};
+
+const RefletTuile = () => (
+  <div
+    aria-hidden
+    className="pointer-events-none absolute inset-0 hidden sm:block bg-[linear-gradient(165deg,rgba(255,255,255,0.20)_0%,rgba(255,255,255,0.05)_28%,transparent_52%)]"
+  />
+);
+
 interface SortableTileProps {
   tile: TileItemNode;
   count: number;
@@ -861,6 +901,7 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
         isDragTarget ? 'border-[#F7BC5F] ring-4 ring-[#F7BC5F]/30 scale-105 z-40' : 'hover:scale-[1.03] hover:-translate-y-1 hover:border-[#F7BC5F]/40 hover:shadow-[0_0_18px_6px_var(--tile-glow)] z-10'
       }`}
     >
+      <RefletTuile />
 
       {/* Drag Handle top-left — masqué sur mobile (pas de réorganisation tactile).
           Visible même verrouillée (ticket #113) : le déplacement reste permis. */}
@@ -920,15 +961,15 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
       {tile.isFolder ? (
         <div className="flex flex-col items-center w-full px-1">
           {/* Mini 2x2 Grid Preview of contained icons */}
-          <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-black/30 backdrop-blur-md border border-white/10 p-1 sm:p-2 grid grid-cols-2 gap-1 sm:gap-1.5 items-center justify-center mb-1.5 sm:mb-2 shadow-inner group-hover:scale-105 transition-transform overflow-hidden">
+          <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-xl sm:rounded-[1.15rem] bg-black/25 backdrop-blur-md border border-white/15 sm:border-white/25 p-1 sm:p-2 grid grid-cols-2 gap-1 sm:gap-1.5 items-center justify-center mb-1.5 sm:mb-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] group-hover:scale-105 transition-transform overflow-hidden">
             {(tile.children || []).slice(0, 4).map((subItem, i) => {
               const SubIcon = ICON_MAP[subItem.iconName] || LayoutGrid;
               return (
-                <div key={i} className="w-3.5 h-3.5 sm:w-5 sm:h-5 rounded bg-white/10 flex items-center justify-center text-white p-0.5 overflow-hidden">
+                <div key={i} className="w-3.5 h-3.5 sm:w-5 sm:h-5 rounded sm:rounded-md bg-white/10 sm:bg-white/20 sm:border sm:border-white/25 flex items-center justify-center text-white p-0.5 overflow-hidden">
                   {subItem.imageUrl ? (
                     <img src={subItem.imageUrl} alt="" className="w-full h-full object-contain" />
                   ) : (
-                    <SubIcon className="w-2 h-2 sm:w-3 sm:h-3" />
+                    <SubIcon className="w-2 h-2 sm:w-3 sm:h-3 sm:stroke-[2.25]" />
                   )}
                 </div>
               );
@@ -969,17 +1010,12 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
               un logo déjà validé), au lieu d'une icône visiblement plus
               petite que le logo de la tuile voisine — l'image garde
               `object-contain` (jamais déformée). */}
-          <div className="w-9 h-9 sm:w-12 sm:h-12 flex items-center justify-center mb-1 sm:mb-2 text-white transition-transform duration-300 group-hover:scale-110">
-            {tile.imageUrl ? (
-              <img
-                src={tile.imageUrl}
-                alt={tile.title}
-                className="w-full h-full object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.65)] z-10"
-              />
-            ) : (
-              <Icon className="w-7 h-7 sm:w-11 sm:h-11 stroke-[1.5] z-10" />
-            )}
-          </div>
+          <MarqueTuile
+            icon={Icon}
+            imageUrl={tile.imageUrl}
+            alt={tile.title}
+            className="z-10 transition-transform duration-300 group-hover:scale-110"
+          />
 
           <h3 className="text-white font-bold text-xs sm:text-base tracking-tight mb-1 sm:mb-1.5 drop-shadow-sm line-clamp-1 max-w-full z-10">
             {tile.title}
@@ -1012,16 +1048,17 @@ const TuileFantome: React.FC<{ tile: TileItemNode; sousTuile?: boolean }> = ({ t
   const Icon = ICON_MAP[tile.iconName] || LayoutGrid;
   return (
     <div
-      className={`${sousTuile ? 'h-36 rounded-2xl p-4' : 'h-28 sm:h-36 rounded-2xl sm:rounded-3xl p-2.5 sm:p-4'} bg-gradient-to-br ${tile.gradient} flex flex-col items-center justify-center text-center border border-[#F7BC5F]/70 shadow-[0_18px_40px_rgba(0,0,0,0.55)] scale-105 cursor-grabbing overflow-hidden`}
+      className={`${sousTuile ? 'h-36 rounded-2xl p-4' : 'h-28 sm:h-36 rounded-2xl sm:rounded-3xl p-2.5 sm:p-4'} relative bg-gradient-to-br ${tile.gradient} flex flex-col items-center justify-center text-center border border-[#F7BC5F]/70 shadow-[0_18px_40px_rgba(0,0,0,0.55)] scale-105 cursor-grabbing overflow-hidden`}
     >
+      <RefletTuile />
       {tile.isFolder ? (
         <div className="flex flex-col items-center w-full px-1">
-          <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-black/30 border border-white/10 p-1 sm:p-2 grid grid-cols-2 gap-1 sm:gap-1.5 items-center justify-center mb-1.5 sm:mb-2 overflow-hidden">
+          <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-xl sm:rounded-[1.15rem] bg-black/25 border border-white/20 p-1 sm:p-2 grid grid-cols-2 gap-1 sm:gap-1.5 items-center justify-center mb-1.5 sm:mb-2 overflow-hidden">
             {(tile.children || []).slice(0, 4).map((subItem, i) => {
               const SubIcon = ICON_MAP[subItem.iconName] || LayoutGrid;
               return (
-                <div key={i} className="w-3.5 h-3.5 sm:w-5 sm:h-5 rounded bg-white/10 flex items-center justify-center text-white p-0.5 overflow-hidden">
-                  {subItem.imageUrl ? <img src={subItem.imageUrl} alt="" className="w-full h-full object-contain" /> : <SubIcon className="w-2 h-2 sm:w-3 sm:h-3" />}
+                <div key={i} className="w-3.5 h-3.5 sm:w-5 sm:h-5 rounded sm:rounded-md bg-white/15 sm:bg-white/20 sm:border sm:border-white/25 flex items-center justify-center text-white p-0.5 overflow-hidden">
+                  {subItem.imageUrl ? <img src={subItem.imageUrl} alt="" className="w-full h-full object-contain" /> : <SubIcon className="w-2 h-2 sm:w-3 sm:h-3 sm:stroke-[2.25]" />}
                 </div>
               );
             })}
@@ -1033,13 +1070,7 @@ const TuileFantome: React.FC<{ tile: TileItemNode; sousTuile?: boolean }> = ({ t
         </div>
       ) : (
         <div className="flex flex-col items-center w-full px-1">
-          <div className="w-9 h-9 sm:w-12 sm:h-12 flex items-center justify-center mb-1 sm:mb-2 text-white">
-            {tile.imageUrl ? (
-              <img src={tile.imageUrl} alt={tile.title} className="w-full h-full object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.65)]" />
-            ) : (
-              <Icon className="w-7 h-7 sm:w-11 sm:h-11 stroke-[1.5]" />
-            )}
-          </div>
+          <MarqueTuile icon={Icon} imageUrl={tile.imageUrl} alt={tile.title} />
           <h3 className="text-white font-bold text-xs sm:text-base tracking-tight line-clamp-1 max-w-full">{tile.title}</h3>
         </div>
       )}
@@ -1088,6 +1119,7 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
         isDragTarget ? 'border-[#F7BC5F] ring-4 ring-[#F7BC5F]/30 scale-105 z-40' : 'hover:scale-[1.03] hover:border-[#F7BC5F]/40 z-10'
       }`}
     >
+      <RefletTuile />
       {subItem.locked && (
         <div
           className="absolute top-2 left-2 flex items-center justify-center p-1 rounded-lg bg-black/60 text-[#F7BC5F] border border-[#F7BC5F]/30 shadow-md z-20"
@@ -1119,16 +1151,14 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
 
       {subItem.isFolder ? (
         <div className="flex flex-col items-center">
-          <Folder className="w-8 h-8 text-[#F7BC5F] mb-2" />
+          <div className="w-12 h-12 rounded-2xl mb-2 bg-white/15 border border-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_8px_16px_rgba(0,0,0,0.25)] flex items-center justify-center">
+            <Folder className="w-7 h-7 text-[#F7BC5F] stroke-[2] drop-shadow-[0_2px_3px_rgba(0,0,0,0.45)]" />
+          </div>
           <span className="text-white font-semibold text-xs">{subItem.title}</span>
         </div>
       ) : (
         <div className="flex flex-col items-center">
-          {subItem.imageUrl ? (
-            <img src={subItem.imageUrl} alt={subItem.title} className="w-8 h-8 object-contain mb-2 drop-shadow-md z-10" />
-          ) : (
-            <SubIcon className="w-8 h-8 text-white mb-2 z-10" />
-          )}
+          <MarqueTuile icon={SubIcon} imageUrl={subItem.imageUrl} alt={subItem.title} compact className="z-10" />
           <span className="text-white font-semibold text-xs z-10">{subItem.title}</span>
           {subItem.externalUrl ? (
             <span className="inline-flex items-center gap-0.5 text-[9px] text-[#FAD592] font-medium mt-1 z-10 bg-black/40 px-2 py-0.5 rounded-full border border-white/10">
@@ -3795,14 +3825,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                     style={{ ['--tile-glow' as string]: optAccent }}
                     className="flex flex-col items-center gap-1.5 transition-transform hover:scale-[1.02] active:scale-[0.98]"
                   >
-                    <div className={`relative w-16 h-16 rounded-2xl bg-gradient-to-br ${opt.gradient || 'from-slate-600 to-slate-800'} flex items-center justify-center shadow-md transition-shadow hover:shadow-[0_0_14px_4px_var(--tile-glow)] active:shadow-[0_0_0_3px_var(--tile-glow),0_0_18px_6px_var(--tile-glow)]`}>
+                    <div className={`relative w-16 h-16 rounded-2xl bg-gradient-to-br ${opt.gradient || 'from-slate-600 to-slate-800'} flex items-center justify-center shadow-md overflow-hidden border border-white/15 transition-shadow hover:shadow-[0_0_14px_4px_var(--tile-glow)] active:shadow-[0_0_0_3px_var(--tile-glow),0_0_18px_6px_var(--tile-glow)]`}>
+                      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(165deg,rgba(255,255,255,0.28)_0%,rgba(255,255,255,0.06)_34%,transparent_58%)]" />
                       {/* 30/08/2026, "on ne voit plus les textes des priorités" :
                           certains dégradés (ex. Mail, très sombre en bas) rendaient
                           l'icône blanche peu contrastée selon la zone de la photo de
                           fond qui transparaît derrière le panneau (80% d'opacité,
                           volontaire — voir plus haut). Ombre portée fixe sur l'icône,
                           garantit un minimum de contraste quel que soit le dégradé. */}
-                      <OptIcon className="w-7 h-7 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
+                      <OptIcon className="relative w-7 h-7 text-white stroke-[2] drop-shadow-[0_2px_3px_rgba(0,0,0,0.55)]" />
                       {opt.value !== null && opt.value > 0 ? (
                         <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs font-black min-w-6 h-6 px-1 rounded-full flex items-center justify-center ring-2 ring-[#0b1c1e]">
                           {opt.value > 9 ? '9+' : opt.value}
