@@ -5,6 +5,7 @@ import { Contact, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { matchesAgency } from '@/hooks/useContacts';
 import { useAuth } from '@/context/AuthContext';
+import { pipelineVisiblePour } from '@/lib/pipelinesAcces';
 import { useApporteurs } from '@/hooks/useApporteurs';
 import { formatVille, ttcDepuisHt } from '@/lib/utils';
 import {
@@ -168,7 +169,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   // Apporteur d'affaires (agent immobilier référent, Conciergerie ImmoSphera,
   // 6 septembre) : uniquement pertinent quand clientType === 'Conciergerie'.
   // Liste GÉRÉE (real_estate_referrers) — pas de texte libre.
-  const { activeAgency } = useAuth();
+  const { activeAgency, currentUser } = useAuth();
   const { apporteurs, creerApporteur } = useApporteurs(activeAgency?.id || agencyId);
   const [referrerId, setReferrerId] = useState('');
   const [showNouvelApporteur, setShowNouvelApporteur] = useState(false);
@@ -200,13 +201,28 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         const [{ data: profiles }, { data: members }, { data: pipelines }] = await Promise.all([
           supabase.from('profiles').select('id, full_name, email, job_title'),
           supabase.from('agency_members').select('user_id, agency_id'),
-          supabase.from('pipelines').select('id, name, agency_id').order('name'),
+          supabase.from('pipelines').select('id, name, agency_id, owner_id').order('name'),
         ]);
         if (cancelled) return;
 
-        const scopedPipelines = (pipelines || [])
-          .filter((pl: { agency_id: string }) => agencyId === 'all' || pl.agency_id === agencyId)
+        const utilisateur = { uid: currentUser?.uid, email: currentUser?.email };
+        const deLAgence = (pipelines || []).filter(
+          (pl: { agency_id: string }) => agencyId === 'all' || pl.agency_id === agencyId
+        );
+        const scopedPipelines = deLAgence
+          .filter((pl: { id: string; name: string; agency_id: string; owner_id?: string | null }) =>
+            pipelineVisiblePour(
+              { id: pl.id, name: pl.name, agencyId: pl.agency_id, ownerId: pl.owner_id ?? null },
+              utilisateur
+            )
+          )
           .map((pl: { id: string; name: string }) => ({ id: pl.id, name: pl.name }));
+        // Une fiche déjà rangée dans un pipeline qu'on ne voit plus garde
+        // cette valeur, pour ne pas l'effacer en enregistrant.
+        const deja = deLAgence.find((pl: { id: string }) => pl.id === (initial?.pipeline || ''));
+        if (deja && !scopedPipelines.some((pl) => pl.id === deja.id)) {
+          scopedPipelines.unshift({ id: deja.id, name: deja.name });
+        }
         setAgencyPipelines(scopedPipelines);
         setPipeline((current) => (current && !scopedPipelines.some((pl) => pl.id === current) ? '' : current));
         const idsForAgency = new Set(
@@ -234,7 +250,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
       }
     })();
     return () => { cancelled = true; };
-  }, [isOpen, agencyId]);
+  }, [isOpen, agencyId, currentUser?.uid, currentUser?.email, initial?.pipeline]);
 
   // Collapsible sections
   const [showCoContact, setShowCoContact] = useState(false);
