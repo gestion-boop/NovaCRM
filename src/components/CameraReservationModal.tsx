@@ -482,14 +482,14 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   ).slice().sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/45 backdrop-blur-sm p-0 sm:p-6 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/45 backdrop-blur-sm p-0 sm:p-6 overflow-hidden">
       <motion.div
         initial={{ opacity: 0, y: 18, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-        className="bg-[var(--nv-surface-1)] text-[var(--ink-1)] border border-[var(--nv-border-1)] w-full sm:max-w-6xl rounded-t-[28px] sm:rounded-[28px] shadow-2xl max-h-[100dvh] sm:max-h-[92vh] overflow-y-auto"
+        className="bg-[var(--nv-surface-1)] text-[var(--ink-1)] border border-[var(--nv-border-1)] w-full sm:max-w-6xl rounded-t-[28px] sm:rounded-[28px] shadow-2xl h-[100dvh] sm:h-[min(92vh,920px)] max-h-[100dvh] flex flex-col overflow-hidden"
       >
-        <div className="sticky top-0 z-10 bg-[var(--nv-surface-1)] px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-start gap-3 border-b border-[var(--nv-border-1)]">
+        <div className="shrink-0 bg-[var(--nv-surface-1)] px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-start gap-3 border-b border-[var(--nv-border-1)]">
           <div className="w-11 h-11 rounded-2xl bg-violet-600 text-white flex items-center justify-center shrink-0">
             <Camera className="w-5 h-5" />
           </div>
@@ -519,7 +519,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
           </button>
         </div>
 
-        <div className="px-4 sm:px-6 py-4 sm:py-5 space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth px-4 sm:px-6 py-4 sm:py-5 space-y-4">
           <button
             type="button"
             onClick={() => setVoirReservations((ouvert) => !ouvert)}

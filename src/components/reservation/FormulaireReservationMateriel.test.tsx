@@ -126,4 +126,16 @@ describe('formulaire de réservation matériel', () => {
     expect(onChoisirFin).toHaveBeenCalledWith('11:30');
     expect(screen.queryByRole('button', { name: '10:00' })).toBeNull();
   });
+
+  it('ouvre les informations depuis la barre d’étapes', () => {
+    const onEtape = vi.fn();
+    const { rerender } = render(
+      <FormulaireReservationMateriel {...base} mobile etape={2} onEtape={onEtape} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Étape 4 : Infos' }));
+    expect(onEtape).toHaveBeenCalledWith(4);
+    rerender(<FormulaireReservationMateriel {...base} mobile etape={4} onEtape={onEtape} />);
+    expect(screen.getByPlaceholderText('Adresse, ville, lieu...')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Étape 4 : Infos' }).getAttribute('aria-current')).toBe('step');
+  });
 });

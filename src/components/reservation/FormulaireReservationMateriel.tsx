@@ -115,7 +115,7 @@ function Etape({
 
   if (!mobile) {
     return (
-      <section id={ancreId} className="min-w-0">
+      <section id={ancreId} className="min-w-0 scroll-mt-14">
         <div className="flex items-center gap-2.5 mb-3">
           {badge}
           <h3 className="text-[15px] font-semibold text-[var(--ink-1)]">{titre}</h3>
@@ -126,7 +126,7 @@ function Etape({
   }
 
   return (
-    <section id={ancreId} className="rounded-2xl border border-[var(--nv-border-1)] bg-[var(--nv-surface-1)] overflow-hidden">
+    <section id={ancreId} className="scroll-mt-14 rounded-2xl border border-[var(--nv-border-1)] bg-[var(--nv-surface-1)] overflow-hidden">
       <button
         type="button"
         onClick={onOuvrir}
@@ -202,12 +202,15 @@ export function FormulaireReservationMateriel({
   const etapePrecedente = useRef(etape);
 
   useEffect(() => {
-    if (!mobile || etape === etapePrecedente.current) {
+    if (etape === etapePrecedente.current) {
       etapePrecedente.current = etape;
       return;
     }
     etapePrecedente.current = etape;
-    document.getElementById(`etape-reservation-${etape}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    const delai = window.setTimeout(() => {
+      document.getElementById(`etape-reservation-${etape}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }, mobile ? 340 : 0);
+    return () => window.clearTimeout(delai);
   }, [etape, mobile]);
 
   const calendrier = (
@@ -319,6 +322,7 @@ export function FormulaireReservationMateriel({
       <p className="text-xs text-[var(--ink-2)] mb-2">
         {ongletHoraire === 'debut' ? 'Choisissez l’heure de début' : 'Choisissez l’heure de fin'}
       </p>
+      <div className="max-h-56 overflow-y-auto overscroll-contain scroll-smooth rounded-xl">
       <div className="grid grid-cols-3 gap-2">
         {creneauxVisibles.map((creneau) => (
           <button
@@ -339,6 +343,7 @@ export function FormulaireReservationMateriel({
             {creneau.debut}
           </button>
         ))}
+      </div>
       </div>
       <p className="text-sm font-medium text-[var(--ink-1)] mt-2">{plage}</p>
       {reservationsDuJour.length > 0 && (
@@ -427,8 +432,34 @@ export function FormulaireReservationMateriel({
       }}
       className="space-y-4"
     >
+      <nav aria-label="Étapes de la réservation" className="sticky top-0 z-10 -mx-1 flex gap-1.5 overflow-x-auto bg-[var(--nv-surface-1)] py-1">
+        {([
+          [1, 'Date'],
+          [2, 'Horaires'],
+          [3, 'Matériel'],
+          [4, 'Infos'],
+        ] as const).map(([numero, libelle]) => {
+          const actif = etape === numero;
+          return (
+            <button
+              key={numero}
+              type="button"
+              aria-current={actif ? 'step' : undefined}
+              aria-label={`Étape ${numero} : ${libelle}`}
+              onClick={() => onEtape(numero)}
+              className={`shrink-0 h-9 px-3 rounded-full text-sm font-semibold transition-colors ${
+                actif
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-[var(--nv-field)] text-[var(--ink-1)] border border-[var(--nv-field-border)]'
+              }`}
+            >
+              {numero}. {libelle}
+            </button>
+          );
+        })}
+      </nav>
       <div className={mobile ? 'space-y-3' : 'grid grid-cols-2 xl:grid-cols-4 gap-6 items-start'}>
-        <Etape mobile={mobile} numero={1} titre="Choisir une date" ouvert={etape === 1} resume={resumes[0]} onOuvrir={() => onEtape(1)}>
+        <Etape mobile={mobile} numero={1} titre="Choisir une date" ouvert={etape === 1} resume={resumes[0]} onOuvrir={() => onEtape(1)} ancreId="etape-reservation-1">
           {calendrier}
         </Etape>
         <Etape mobile={mobile} numero={2} titre="Choisir un créneau" ouvert={etape === 2} resume={resumes[1]} onOuvrir={() => onEtape(2)} ancreId="etape-reservation-2">
@@ -442,7 +473,7 @@ export function FormulaireReservationMateriel({
         </Etape>
       </div>
 
-      <div className="flex items-center justify-end gap-3 pt-2">
+      <div className="sticky bottom-0 z-10 flex items-center justify-end gap-3 border-t border-[var(--nv-border-1)] bg-[var(--nv-surface-1)] py-3">
         <button type="button" onClick={onAnnuler} className="px-4 py-2.5 text-sm font-medium text-[var(--ink-2)] hover:text-[var(--ink-1)]">
           Annuler
         </button>
