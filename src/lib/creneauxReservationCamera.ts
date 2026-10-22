@@ -70,6 +70,12 @@ export function creneauxAffiches(debutActuel?: string): string[] {
   return liste.sort();
 }
 
+export function heuresFinAffichees(debut: string, finActuelle?: string): string[] {
+  const liste = creneauxAffiches(finActuelle);
+  if (!liste.includes('20:00')) liste.push('20:00');
+  return liste.filter((heure) => heure > debut).sort();
+}
+
 export function plageConflit(
   debut: string,
   fin: string,

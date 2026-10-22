@@ -51,9 +51,15 @@ interface Props {
   jours: JourCalendrier[];
   onChoisirJour: (jour: number) => void;
   dateChoisie: string;
-  creneaux: CreneauAffiche[];
+  ongletHoraire: 'debut' | 'fin';
+  onOngletHoraire: (onglet: 'debut' | 'fin') => void;
+  debut: string;
+  fin: string;
+  creneauxDebut: CreneauAffiche[];
+  creneauxFin: CreneauAffiche[];
   plage: string;
-  onChoisirCreneau: (debut: string) => void;
+  onChoisirDebut: (heure: string) => void;
+  onChoisirFin: (heure: string) => void;
   reservationsDuJour: ReservationDuJour[];
   materiels: MaterielAffiche[];
   onBasculerMateriel: (id: string) => void;
@@ -168,9 +174,15 @@ export function FormulaireReservationMateriel({
   jours,
   onChoisirJour,
   dateChoisie,
-  creneaux,
+  ongletHoraire,
+  onOngletHoraire,
+  debut,
+  fin,
+  creneauxDebut,
+  creneauxFin,
   plage,
-  onChoisirCreneau,
+  onChoisirDebut,
+  onChoisirFin,
   reservationsDuJour,
   materiels,
   onBasculerMateriel,
@@ -274,23 +286,53 @@ export function FormulaireReservationMateriel({
     </div>
   );
 
+  const creneauxVisibles = ongletHoraire === 'debut' ? creneauxDebut : creneauxFin;
   const grilleCreneaux = (
     <div>
       <p className="text-xs text-[var(--ink-2)] mb-2 capitalize">{dateChoisie}</p>
+      <div role="tablist" aria-label="Horaires" className="grid grid-cols-2 gap-2 mb-3">
+        {([
+          ['debut', 'Début', debut],
+          ['fin', 'Fin', fin],
+        ] as const).map(([onglet, libelle, heure]) => {
+          const actif = ongletHoraire === onglet;
+          return (
+            <button
+              key={onglet}
+              type="button"
+              role="tab"
+              aria-label={libelle}
+              aria-selected={actif}
+              onClick={() => onOngletHoraire(onglet)}
+              className={`rounded-xl px-2 py-2 text-center transition-colors ${
+                actif
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-[var(--nv-field)] text-[var(--ink-1)] border border-[var(--nv-field-border)]'
+              }`}
+            >
+              <span className={`block text-[10px] font-semibold uppercase tracking-wide ${actif ? 'text-white/80' : 'text-[var(--ink-3)]'}`}>{libelle}</span>
+              <span className="block text-lg font-bold tabular-nums leading-tight">{heure}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-xs text-[var(--ink-2)] mb-2">
+        {ongletHoraire === 'debut' ? 'Choisissez l’heure de début' : 'Choisissez l’heure de fin'}
+      </p>
       <div className="grid grid-cols-3 gap-2">
-        {creneaux.map((creneau) => (
+        {creneauxVisibles.map((creneau) => (
           <button
             key={creneau.debut}
             type="button"
-            onClick={() => onChoisirCreneau(creneau.debut)}
+            onClick={() => (ongletHoraire === 'debut' ? onChoisirDebut(creneau.debut) : onChoisirFin(creneau.debut))}
             aria-pressed={creneau.actif}
             className={`h-10 rounded-xl text-sm font-semibold transition-all duration-200 ${
-              creneau.actif
-                ? 'bg-violet-600 text-white'
-                : creneau.dansPlage
-                  ? 'bg-violet-600/40 text-white border border-violet-400'
-                  : creneau.occupe
-                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+              creneau.occupe
+                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                : creneau.actif
+                  ? 'bg-violet-600 text-white'
+                  : creneau.dansPlage
+                    ? 'bg-violet-600/40 text-white border border-violet-400'
                     : 'bg-[var(--nv-field)] text-[var(--ink-1)] border border-[var(--nv-field-border)] hover:border-violet-400'
             }`}
           >

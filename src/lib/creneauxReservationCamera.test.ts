@@ -4,6 +4,7 @@ import {
   creneauConflit,
   creneauxAffiches,
   disponibiliteJour,
+  heuresFinAffichees,
   libelleDuree,
   plageConflit,
 } from './creneauxReservationCamera';
@@ -27,6 +28,14 @@ describe('créneaux de réservation caméra', () => {
   it('garde un horaire déjà enregistré hors de la grille', () => {
     expect(creneauxAffiches('07:15')).toContain('07:15');
     expect(creneauxAffiches('10:00')).toEqual(creneauxAffiches());
+  });
+
+  it('propose pour la fin seulement les heures après le début', () => {
+    const fins = heuresFinAffichees('14:00', '16:00');
+    expect(fins[0]).toBe('14:30');
+    expect(fins).toContain('16:00');
+    expect(fins).toContain('20:00');
+    expect(fins.every((heure) => heure > '14:00')).toBe(true);
   });
 
   it('marque seulement la demi-heure réellement occupée', () => {

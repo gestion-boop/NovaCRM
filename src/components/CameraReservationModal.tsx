@@ -20,7 +20,7 @@ import {
   creneauConflit,
   creneauxAffiches,
   disponibiliteJour,
-  PAS_CRENEAU_MIN,
+  heuresFinAffichees,
   libelleDuree,
   plageConflit,
 } from '@/lib/creneauxReservationCamera';
@@ -92,8 +92,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   const [etapeMobile, setEtapeMobile] = useState(1);
   const [sensMois, setSensMois] = useState<1 | -1>(1);
   const [ecranEtroit, setEcranEtroit] = useState(() => window.matchMedia('(max-width: 767px)').matches);
-  const [attenteFin, setAttenteFin] = useState(false);
-  const [plageValidee, setPlageValidee] = useState(false);
+  const [ongletHoraire, setOngletHoraire] = useState<'debut' | 'fin'>('debut');
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)');
     const appliquer = () => setEcranEtroit(media.matches);
@@ -145,8 +144,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     if (!isOpen) return;
     setVoirReservations(false);
     setEtapeMobile(1);
-    setAttenteFin(false);
-    setPlageValidee(false);
+    setOngletHoraire('debut');
   }, [isOpen]);
 
   useEffect(() => {
@@ -165,8 +163,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     setProjectName(editReservation.projectName || '');
     setNote(editReservation.note || '');
     setSubmitError(null);
-    setAttenteFin(false);
-    setPlageValidee(true);
+    setOngletHoraire('debut');
   }, [isOpen, editReservation]);
 
   if (!isOpen) return null;
@@ -205,31 +202,34 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     setSelectedDayNum(jour);
     if (ecranEtroit) setEtapeMobile(2);
   };
-  const choisirCreneau = (heure: string) => {
+  const choisirDebut = (heure: string) => {
     const reservationsDuCreneau = selectedDayReservations;
     const equipement = selectedEquipment;
     const ignore = editReservation?.id;
-    if (attenteFin && heure > startTime) {
-      if (plageConflit(startTime, heure, reservationsDuCreneau, equipement, ignore)) {
-        setSubmitError('Cette plage chevauche une réservation déjà posée pour ce matériel.');
-        return;
-      }
-      setEndTime(heure);
-      setAttenteFin(false);
-      setPlageValidee(true);
-      setSubmitError(null);
-      if (ecranEtroit) setEtapeMobile(3);
-      return;
-    }
     if (creneauConflit(heure, reservationsDuCreneau, equipement, ignore)) {
-      setSubmitError('Ce créneau est déjà pris pour le matériel choisi.');
+      setSubmitError('Cette heure de début est déjà prise pour le matériel choisi.');
       return;
     }
     setStartTime(heure);
-    setEndTime(ajouterMinutes(heure, PAS_CRENEAU_MIN));
-    setAttenteFin(true);
-    setPlageValidee(false);
+    setEndTime((fin) => (fin > heure ? fin : ajouterMinutes(heure, 60)));
+    setOngletHoraire('fin');
     setSubmitError(null);
+  };
+  const choisirFin = (heure: string) => {
+    const reservationsDuCreneau = selectedDayReservations;
+    const equipement = selectedEquipment;
+    const ignore = editReservation?.id;
+    if (heure <= startTime) {
+      setSubmitError('L’heure de fin doit être après le début.');
+      return;
+    }
+    if (plageConflit(startTime, heure, reservationsDuCreneau, equipement, ignore)) {
+      setSubmitError('Cette plage chevauche une réservation déjà posée pour ce matériel.');
+      return;
+    }
+    setEndTime(heure);
+    setSubmitError(null);
+    if (ecranEtroit) setEtapeMobile(3);
   };
 
   // Equipment toggle
@@ -302,8 +302,8 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
       return;
     }
 
-    if (!plageValidee || attenteFin || endTime <= startTime) {
-      setSubmitError('Choisissez l’heure de début, puis l’heure de fin. La durée est libre.');
+    if (endTime <= startTime) {
+      setSubmitError('Choisissez l’heure de début, puis l’heure de fin.');
       return;
     }
 
@@ -448,21 +448,20 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   const dateChoisie = new Date(year, month, selectedDayNum).toLocaleDateString('fr-FR', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
-  const finAffichee = plageValidee && !attenteFin ? endTime : '';
-  const heuresGrille = creneauxAffiches(attenteFin || plageValidee ? startTime : undefined);
-  if (finAffichee && !heuresGrille.includes(finAffichee)) heuresGrille.push(finAffichee);
-  heuresGrille.sort();
-  const creneaux = heuresGrille.map((debut) => ({
-    debut,
-    occupe: creneauConflit(debut, selectedDayReservations, selectedEquipment, editReservation?.id),
-    dansPlage: Boolean(finAffichee) && debut > startTime && debut < finAffichee,
-    actif: ((attenteFin || plageValidee) && debut === startTime) || (Boolean(finAffichee) && debut === finAffichee),
+  const creneauxDebut = creneauxAffiches(startTime).map((heure) => ({
+    debut: heure,
+    occupe: creneauConflit(heure, selectedDayReservations, selectedEquipment, editReservation?.id),
+    actif: heure === startTime,
   }));
-  const plage = attenteFin
-    ? `Début ${startTime} — touchez l'heure de fin`
-    : plageValidee
-      ? `${startTime} – ${endTime} · ${libelleDuree(startTime, endTime)}`
-      : 'Touchez l’heure de début, puis l’heure de fin. La durée est libre.';
+  const creneauxFin = heuresFinAffichees(startTime, endTime).map((heure) => ({
+    debut: heure,
+    occupe: plageConflit(startTime, heure, selectedDayReservations, selectedEquipment, editReservation?.id),
+    dansPlage: heure > startTime && heure < endTime,
+    actif: heure === endTime,
+  }));
+  const plage = endTime > startTime
+    ? `${startTime} – ${endTime} · ${libelleDuree(startTime, endTime)}`
+    : 'Choisissez l’heure de début, puis l’heure de fin.';
   const reservationsDuJour = selectedDayReservations
     .filter((reservation) => reservation.status !== 'Refusée')
     .map((reservation) => ({
@@ -639,9 +638,15 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                   jours={jours}
                   onChoisirJour={choisirJour}
                   dateChoisie={dateChoisie}
-                  creneaux={creneaux}
+                  ongletHoraire={ongletHoraire}
+                  onOngletHoraire={setOngletHoraire}
+                  debut={startTime}
+                  fin={endTime}
+                  creneauxDebut={creneauxDebut}
+                  creneauxFin={creneauxFin}
                   plage={plage}
-                  onChoisirCreneau={choisirCreneau}
+                  onChoisirDebut={choisirDebut}
+                  onChoisirFin={choisirFin}
                   reservationsDuJour={reservationsDuJour}
                   materiels={MATERIELS.map((materiel) => ({
                     ...materiel,
@@ -659,7 +664,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                   onAnnuler={onClose}
                   onConfirmer={() => { void handleSubmit({ preventDefault() {} } as React.FormEvent); }}
                   confirmationLabel={submitting ? 'Enregistrement...' : editReservation ? 'Enregistrer les modifications' : 'Confirmer la réservation'}
-                  confirmationDesactivee={submitting || loadingReservations || !plageValidee || attenteFin}
+                  confirmationDesactivee={submitting || loadingReservations || endTime <= startTime}
                 />
               </motion.div>
             )}
