@@ -36,6 +36,7 @@ import { toast } from 'sonner';
 import TaskModal from './TaskModal';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { useContacts, matchesAgency } from '@/hooks/useContacts';
+import { pipelineVisiblePour } from '@/lib/pipelinesAcces';
 import { useDeals } from '@/hooks/useDeals';
 import { useTasks } from '@/hooks/useTasks';
 import { useLeadChat } from '@/hooks/useLeadChat';
@@ -486,13 +487,22 @@ export default function ClientProfileView({
     },
   });
 
-  const currentPipelineId =
-    leadStage?.pipeline_id ??
-    activePipelineId ??
-    pipelines.find((p: any) => p.owner_id === null && p.is_default)?.id ??
-    pipelines.find((p: any) => p.owner_id === null)?.id ??
-    pipelines[0]?.id ??
-    null;
+  const utilisateurPipeline = { uid: currentUser?.uid ?? null, email: currentUser?.email ?? null };
+  const pipelinesVisibles = pipelines.filter((p: any) =>
+    pipelineVisiblePour(
+      { id: p.id, name: p.name, agencyId: p.agency_id, ownerId: p.owner_id ?? null },
+      utilisateurPipeline
+    )
+  );
+  // Une fiche déjà posée sur un pipeline reste affichée telle quelle, même
+  // si ce pipeline n'est pas dans le menu de la personne. Sans pipeline
+  // (fiche neuve, ou contacts d'un pipeline supprimé), on n'en invente pas
+  // un : la fiche reste une fiche.
+  const currentPipelineId = leadStage?.pipeline_id ?? activePipelineId ?? null;
+  const pipelinesChoix =
+    currentPipelineId && !pipelinesVisibles.some((p: any) => p.id === currentPipelineId)
+      ? [pipelines.find((p: any) => p.id === currentPipelineId), ...pipelinesVisibles].filter(Boolean)
+      : pipelinesVisibles;
 
   const { data: stages = [] } = useQuery({
     queryKey: ['stages', agencyId, currentPipelineId],
@@ -509,7 +519,7 @@ export default function ClientProfileView({
   });
 
   const currentPipelineName =
-    pipelines.find((p: any) => p.id === currentPipelineId)?.name ?? 'Sélectionner un pipeline';
+    pipelines.find((p: any) => p.id === currentPipelineId)?.name ?? (currentPipelineId ? 'Pipeline' : 'Aucun pipeline');
   const currentStageIndex = leadStage?.stage_id
     ? stages.findIndex((s: any) => s.id === leadStage.stage_id)
     : -1;
@@ -2387,7 +2397,7 @@ export default function ClientProfileView({
                 <ChevronDown className="w-3.5 h-3.5" />
               </DropdownMenuTrigger>
               <DropdownMenuContent className="min-w-[220px]">
-                {pipelines.map((p: any) => {
+                {pipelinesChoix.map((p: any) => {
                   const active = p.id === currentPipelineId;
                   return (
                     <DropdownMenuItem
@@ -2400,7 +2410,7 @@ export default function ClientProfileView({
                     </DropdownMenuItem>
                   );
                 })}
-                {pipelines.length === 0 && (
+                {pipelinesChoix.length === 0 && (
                   <div className="px-3 py-2 text-sm text-muted-foreground">Aucun pipeline</div>
                 )}
               </DropdownMenuContent>
