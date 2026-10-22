@@ -98,7 +98,7 @@ const LEVEL_META: Record<AnnouncementLevel, {
     mascotte: '/nova/expressions/nova-novadji-danger.webp',
   },
   succes: {
-    label: 'Succès',
+    label: "Offre d'achat validée",
     border: 'border-emerald-500/50',
     headerBg: 'bg-emerald-500/10',
     iconBg: 'bg-emerald-500/20',
@@ -136,7 +136,7 @@ const LEVEL_META: Record<AnnouncementLevel, {
     mascotte: '/nova/expressions/nova-reponse-demandee.png',
   },
   signature_acte: {
-    label: "Signature d'un acte",
+    label: "Signature d'un acte authentique",
     border: 'border-[#F7BC5F]/50',
     headerBg: 'bg-[#F7BC5F]/10',
     iconBg: 'bg-[#F7BC5F]/20',
@@ -315,7 +315,7 @@ const AnnouncementBanner = () => {
             <span className={`w-7 h-7 rounded-full border-2 ${meta.border} flex items-center justify-center shrink-0`}>
               <Icon className={`w-3.5 h-3.5 ${meta.iconColor}`} />
             </span>
-            <h2 className={`text-lg font-extrabold uppercase tracking-wide ${meta.iconColor}`}>
+            <h2 className={`text-lg font-extrabold uppercase tracking-wide text-center leading-tight ${meta.iconColor}`}>
               {meta.label.split(' — ')[0]}
             </h2>
           </div>

@@ -375,7 +375,7 @@ const TOOLS = [
         intent: {
           type: 'string',
           enum: ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_acte', 'sondage'],
-          description: "Style/thème demandé : info = information courante (or), a_verifier = à vérifier (ambre), important = urgent (rouge), succes = bonne nouvelle/validation (vert), veille = suivi calme (bleu), reponse_demandee = réponse attendue (rouge), signature_acte = signature d'un acte authentique (or, mascotte dédiée), sondage = question à l'équipe (or).",
+          description: "Style/thème demandé : info = information courante (or), a_verifier = à vérifier (ambre), important = urgent (rouge), succes = offre d'achat validée (vert), veille = suivi calme (bleu), reponse_demandee = réponse attendue (rouge), signature_acte = signature d'un acte authentique (or, mascotte dédiée), sondage = question à l'équipe (or).",
         },
         details: { type: 'string', description: "Précisions libres de l'utilisateur à refléter dans l'image (ex: nom du dossier, occasion précise), si mentionnées. Ne jamais inventer de détail non dit." },
       },
@@ -494,7 +494,7 @@ const NOVA_ADMIN_TOOLS = [
       type: 'object',
       properties: {
         message: { type: 'string', description: "Contenu de l'annonce." },
-        level: { type: 'string', enum: ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_acte'], description: "info = or (information courante), a_verifier = ambre (à vérifier/attention), important = rouge (lecture obligatoire, aucun moyen de fermer sans confirmer), succes = vert (bonne nouvelle/validation), veille = bleu (suivi calme, rien d'urgent), reponse_demandee = rouge (une réponse du destinataire est explicitement attendue), signature_acte = or (signature d'un acte à finaliser/vérifier)." },
+        level: { type: 'string', enum: ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_acte'], description: "info = or (information courante), a_verifier = ambre (à vérifier/attention), important = rouge (lecture obligatoire, aucun moyen de fermer sans confirmer), succes = vert (offre d'achat validée), veille = bleu (suivi calme, rien d'urgent), reponse_demandee = rouge (une réponse du destinataire est explicitement attendue), signature_acte = or (signature d'un acte authentique)." },
         agencyIds: { type: 'array', items: { type: 'string' }, description: "Sociétés ciblées ; vide ou absent = toutes les agences." },
         // Demande explicite (28/08/2026) : "ça pourra aussi travailler sur
         // un sondage — qui vient à la plage samedi prochain, présent/absent
@@ -624,10 +624,10 @@ const IMAGE_INTENT_META: Record<string, { label: string; mascotte: string; color
   info: { label: 'Information', mascotte: 'nova-neutre.png', colorHint: 'doré/or NovaSphere, sobre et professionnel' },
   a_verifier: { label: 'À vérifier', mascotte: 'nova-attention.png', colorHint: 'ambre/orange, incite à la prudence' },
   important: { label: 'Important', mascotte: 'nova-erreur.png', colorHint: 'rouge, urgence, lecture obligatoire' },
-  succes: { label: 'Succès', mascotte: 'nova-succes.png', colorHint: 'vert émeraude, bonne nouvelle, célébration' },
+  succes: { label: "Offre d'achat validée", mascotte: 'nova-succes.png', colorHint: 'vert émeraude, bonne nouvelle, célébration' },
   veille: { label: 'Veille', mascotte: 'nova-veille.png', colorHint: 'bleu calme, suivi tranquille' },
   reponse_demandee: { label: 'Réponse demandée SVP', mascotte: 'nova-erreur.png', colorHint: 'rose/rouge vif, une réponse est attendue' },
-  signature_acte: { label: "Signature d'un acte", mascotte: 'nova-signature.png', colorHint: 'doré/or chaleureux, signature officielle finalisée' },
+  signature_acte: { label: "Signature d'un acte authentique", mascotte: 'nova-signature.png', colorHint: 'doré/or chaleureux, signature officielle finalisée' },
   sondage: { label: 'Sondage', mascotte: 'nova-neutre.png', colorHint: 'doré/or NovaSphere, ton posé, question ouverte à l\'équipe' },
 };
 
