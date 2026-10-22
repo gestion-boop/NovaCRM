@@ -22,6 +22,27 @@ export interface ReserverCameraViewProps {
   onOpenModal?: () => void;
 }
 
+export function texteLisible(valeur: string): string {
+  const lettres = valeur.replace(/[^\p{L}]/gu, '');
+  if (lettres.length < 4) return valeur;
+  let majuscules = 0;
+  for (const lettre of lettres) {
+    if (lettre !== lettre.toLocaleLowerCase('fr-FR')) majuscules += 1;
+  }
+  if (majuscules / lettres.length < 0.6) return valeur;
+  return valeur
+    .toLocaleLowerCase('fr-FR')
+    .split(/(\s+)/)
+    .map((mot) => (mot.trim().length <= 2 ? mot : mot.charAt(0).toLocaleUpperCase('fr-FR') + mot.slice(1)))
+    .join('');
+}
+
+export function mandatLisible(valeur?: string | null): string {
+  const texte = (valeur || '').trim();
+  if (!/[\p{L}\p{N}]/u.test(texte)) return '';
+  return texte;
+}
+
 function initialesDe(nom: string): string {
   const lettres = nom
     .split(/\s+/)
@@ -41,7 +62,7 @@ const LogoAgent: React.FC<{ nom: string; src: string; secours?: string }> = ({ n
   }, [src, secours]);
   const choisi = essai === 0 ? src || secours : essai === 1 && secours && secours !== src ? secours : '';
   return (
-    <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 mt-0.5 border border-white/15 bg-purple-950/50 flex items-center justify-center">
+    <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 border border-[var(--nv-border-1)] bg-purple-950/50 flex items-center justify-center">
       {choisi ? (
         <img
           key={choisi}
@@ -90,7 +111,7 @@ const ReviewRow: React.FC<{
             placeholder="Motif du refus (optionnel)..."
             value={refuseReason}
             onChange={(e) => setRefuseReason(e.target.value)}
-            className="w-full bg-[#050f14] border border-[#182e38] rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500/40 resize-none"
+            className="w-full bg-[var(--nv-field)] border border-[var(--nv-field-border)] rounded-lg p-2.5 text-xs text-[var(--ink-1)] placeholder:text-[var(--ink-3)] focus:outline-none focus:border-rose-500/40 resize-none"
           />
           <p className="text-[10px] text-slate-400">Proposer d'autres créneaux (facultatif) :</p>
           {altSlots.map((slot, i) => (
@@ -100,7 +121,7 @@ const ReviewRow: React.FC<{
               placeholder={`Proposition ${i + 1} (ex. mardi 9 sept. 14h-15h)`}
               value={slot}
               onChange={(e) => setAltSlots((prev) => prev.map((s, j) => (j === i ? e.target.value : s)))}
-              className="w-full bg-[#050f14] border border-[#182e38] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500/40"
+              className="w-full bg-[var(--nv-field)] border border-[var(--nv-field-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--ink-1)] placeholder:text-[var(--ink-3)] focus:outline-none focus:border-rose-500/40"
             />
           ))}
         </div>
@@ -233,21 +254,21 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
   });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 text-white animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0a1e20]/95 p-6 rounded-3xl border border-white/10">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0 shadow-lg shadow-purple-950/40">
-            <Camera className="w-6 h-6 text-purple-300" />
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5 text-[var(--ink-1)] animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--nv-surface-1)] p-4 sm:p-5 rounded-3xl border border-[var(--nv-hairline)]">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-2xl bg-purple-950/60 border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0">
+            <Camera className="w-5 h-5 text-purple-300" />
           </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-white">Réservation de matériel & Caméra 360</h1>
-            <p className="text-xs text-slate-400">Planning et suivi des réservations pour visites virtuelles et shooting</p>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-semibold leading-tight text-[var(--ink-1)]">Matériel et caméra</h1>
+            <p className="text-sm text-[var(--ink-2)] mt-0.5">Planning des visites et des shootings</p>
           </div>
         </div>
 
         <button
           onClick={handleTriggerOpen}
-          className="bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:opacity-95 text-white font-black text-xs px-5 py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-purple-900/30 transition-all cursor-pointer active:scale-95 shrink-0"
+          className="w-full sm:w-auto justify-center bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:opacity-95 text-white font-semibold text-sm px-5 py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-purple-900/30 transition-all cursor-pointer active:scale-95 shrink-0"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
           <span>Nouvelle réservation</span>
@@ -259,16 +280,16 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
       )}
 
       <div className="space-y-3">
-        <h2 className="text-sm font-extrabold text-slate-300 uppercase tracking-wider px-1">
-          Réservations enregistrées ({sorted.length})
+        <h2 className="text-sm font-semibold text-[var(--ink-2)] px-1">
+          {sorted.length} réservation{sorted.length > 1 ? 's' : ''}
         </h2>
 
         {loading ? (
-          <div className="p-12 text-center text-slate-400 bg-[#0a1e20]/95 rounded-3xl border border-white/10">
+          <div className="p-12 text-center text-[var(--ink-2)] bg-[var(--nv-surface-1)] rounded-3xl border border-[var(--nv-hairline)]">
             <p className="text-sm font-semibold">Chargement...</p>
           </div>
         ) : sorted.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 bg-[#0a1e20]/95 rounded-3xl border border-white/10 space-y-3">
+          <div className="p-12 text-center text-[var(--ink-2)] bg-[var(--nv-surface-1)] rounded-3xl border border-[var(--nv-hairline)] space-y-3">
             <Camera className="w-10 h-10 text-slate-500 mx-auto" />
             <p className="text-sm font-semibold">Aucune réservation de caméra enregistrée.</p>
             <button
@@ -279,83 +300,95 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
             </button>
           </div>
         ) : (
-          sorted.map((r) => (
-            <div
+          sorted.map((r) => {
+            const lieu = r.propertyAddress ? texteLisible(r.propertyAddress) : '';
+            const projet = r.projectName ? texteLisible(r.projectName) : '';
+            const mandat = mandatLisible(r.mandateNumber);
+            const materiels = r.equipmentName.split(',').map((item) => item.trim()).filter(Boolean);
+            const photo = logoAgent(r);
+            return (
+            <article
               key={r.id}
-              className={`p-5 bg-[#09151c] border rounded-2xl transition-all shadow-md group ${
-                r.status === 'En attente' ? 'border-[#F7BC5F]/40' : 'border-[#182e38] hover:border-purple-500/40'
+              className={`p-4 bg-[var(--nv-surface-1)] border rounded-2xl ${
+                r.status === 'En attente' ? 'border-[#F7BC5F]/40' : 'border-[var(--nv-hairline)]'
               }`}
             >
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-start gap-3.5">
-                  <LogoAgent nom={r.agentName} src={logoAgent(r).src} secours={logoAgent(r).secours} />
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-purple-400 bg-purple-950/60 border border-purple-500/30 px-2.5 py-0.5 rounded-full">
-                        {r.equipmentName}
-                      </span>
-                      {r.mandateNumber && (
-                        <span className="text-[10px] font-bold text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <Hash className="w-2.5 h-2.5" /> Mandat: {r.mandateNumber}
-                        </span>
-                      )}
-                    </div>
-
-                    {r.propertyAddress && (
-                      <h3 className="font-bold text-white text-base flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                        {r.propertyAddress}
-                      </h3>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-0.5">
-                      {/* Demande explicite (7 septembre) : « on ne voit pas
-                          trop bien la date qui est demandée » — date en
-                          toutes lettres au lieu du format brut AAAA-MM-JJ. */}
-                      <span className="flex items-center gap-1.5 text-slate-200 font-semibold">
-                        <Clock className="w-3.5 h-3.5 text-purple-400" />
-                        {formatReservationDateFr(r)}
-                      </span>
-                      <span>Agent : <strong className="text-white">{r.agentName}</strong></span>
-                      {r.projectName && (
-                        <span className="flex items-center gap-1 text-slate-400">
-                          <Briefcase className="w-3.5 h-3.5 text-slate-500" />
-                          Projet : {r.projectName}
-                        </span>
-                      )}
-                    </div>
-
-                    {r.note && (
-                      <p className="text-xs text-slate-400 italic bg-white/5 p-2 rounded-lg border border-white/5 mt-2">
-                        "{r.note}"
-                      </p>
-                    )}
-                    {r.status === 'Refusée' && r.refusalReason && (
-                      <p className="text-xs text-rose-300 bg-rose-500/5 p-2 rounded-lg border border-rose-500/20 mt-2">
-                        {r.refusalReason}
-                      </p>
-                    )}
+              <div className="flex items-start gap-3">
+                <LogoAgent nom={r.agentName} src={photo.src} secours={photo.secours} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-[var(--ink-1)] truncate">{r.agentName}</p>
+                    <span className={`shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
+                      r.status === 'Confirmée'
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : r.status === 'Refusée'
+                        ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                        : 'bg-[#F7BC5F]/15 text-[#F9C977] border-[#F7BC5F]/30'
+                    }`}>
+                      {r.status}
+                    </span>
                   </div>
+                  <p className="mt-0.5 text-sm text-[var(--ink-2)] flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 shrink-0 text-purple-300" />
+                    <span>{formatReservationDateFr(r)}</span>
+                  </p>
                 </div>
+              </div>
 
-                <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
-                  <span className={`text-xs font-bold px-3 py-1 rounded-full border ${
-                    r.status === 'Confirmée'
-                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                      : r.status === 'Refusée'
-                      ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                      : 'bg-[#F7BC5F]/15 text-[#F9C977] border-[#F7BC5F]/30'
-                  }`}>
-                    {r.status}
-                  </span>
+              {lieu && (
+                <h3 className="mt-3 text-[15px] font-semibold leading-snug text-[var(--ink-1)] flex items-start gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[var(--ink-3)]" />
+                  <span>{lieu}</span>
+                </h3>
+              )}
+
+              {materiels.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {materiels.map((materiel) => (
+                    <span key={materiel} className="text-xs font-medium px-2 py-0.5 rounded-full bg-violet-500/15 text-[var(--ink-violet)] border border-violet-400/25">
+                      {materiel}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {(projet || mandat) && (
+                <p className="mt-2 text-xs text-[var(--ink-2)] flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {projet && (
+                    <span className="inline-flex items-center gap-1">
+                      <Briefcase className="w-3.5 h-3.5 shrink-0" />
+                      {projet}
+                    </span>
+                  )}
+                  {mandat && (
+                    <span className="inline-flex items-center gap-1">
+                      <Hash className="w-3.5 h-3.5 shrink-0" />
+                      Mandat {mandat}
+                    </span>
+                  )}
+                </p>
+              )}
+
+              {r.note && (
+                <p className="mt-2 text-xs leading-relaxed text-[var(--ink-2)] line-clamp-3">{r.note}</p>
+              )}
+              {r.status === 'Refusée' && r.refusalReason && (
+                <p className="mt-2 text-xs text-rose-300 bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+                  {r.refusalReason}
+                </p>
+              )}
+
+              {(canEdit(r) || isCameraAdmin) && (
+                <div className="mt-3 flex items-center justify-end gap-2">
                   {canEdit(r) && (
                     <button
                       type="button"
                       onClick={() => handleEdit(r)}
-                      title="Modifier cette réservation"
-                      className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:border-purple-500/40 transition-colors"
+                      aria-label="Modifier cette réservation"
+                      className="h-9 px-3 rounded-xl border border-[var(--nv-border-1)] text-[var(--ink-2)] hover:text-[var(--ink-1)] inline-flex items-center gap-1.5 text-xs font-semibold"
                     >
                       <Pencil className="w-3.5 h-3.5" />
+                      Modifier
                     </button>
                   )}
                   {isCameraAdmin && (
@@ -363,18 +396,19 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
                       type="button"
                       disabled={reviewingId === r.id}
                       onClick={() => void handleDelete(r)}
-                      title="Supprimer définitivement cette réservation"
-                      className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-rose-300 hover:border-rose-500/40 transition-colors disabled:opacity-40"
+                      aria-label="Supprimer définitivement cette réservation"
+                      className="h-9 w-9 rounded-xl border border-[var(--nv-border-1)] text-[var(--ink-2)] hover:text-rose-300 inline-flex items-center justify-center disabled:opacity-40"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
-              </div>
+              )}
 
               <ReviewRow res={r} isCameraAdmin={isCameraAdmin} reviewingId={reviewingId} reviewReservation={reviewReservation} />
-            </div>
-          ))
+            </article>
+            );
+          })
         )}
       </div>
 
