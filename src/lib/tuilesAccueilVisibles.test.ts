@@ -25,6 +25,7 @@ describe('tuiles d’accueil selon l’agence', () => {
     ]);
     expect(grille.map((t) => t.id)).toEqual(['custom-blocs', 'annonce']);
     expect(estBlocNotes({ id: 'autre', title: 'Blocs - Notes' })).toBe(true);
+    expect(estBlocNotes({ id: 'autre', title: 'Blocs — Notes' })).toBe(true);
     expect(estBlocNotes({ id: 'autre', title: 'Annonce' })).toBe(false);
   });
 

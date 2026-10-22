@@ -47,7 +47,7 @@ import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarE
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import {
-  DndContext, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay, defaultDropAnimationSideEffects,
+  DndContext, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay,
   PointerSensor, TouchSensor, useSensor, useSensors, closestCenter,
 } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, rectSwappingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
@@ -89,6 +89,19 @@ const homeSyncLoadedAgencies = new Set<string>();
 // fois : les dossiers créés sur l'ordinateur étaient effacés, pas seulement
 // absents.
 const homeSyncReadyAgencies = new Set<string>();
+// Tuiles masquées réunies avec le compte (voir chargerMasqueesDepuisServeur).
+// Tant que ce drapeau est absent, on n'injecte aucune tuile « manquante » :
+// la liste locale est souvent vide au premier rendu, et Annonce / Bloc-notes
+// — déjà retirées de la grille — se peignaient une frame avant d'être
+// retirées. Le temps du fondu (menu, retour accueil, ouverture d'un dossier)
+// ça faisait exactement le flash signalé.
+const masquesPretsAgences = new Set<string>();
+const masquesAuditeurs = new Set<() => void>();
+const marquerMasquesPrets = (clef: string) => {
+  if (masquesPretsAgences.has(clef)) return;
+  masquesPretsAgences.add(clef);
+  masquesAuditeurs.forEach((fn) => fn());
+};
 
 interface AccueilGridProps {
   onNavigate: (navId: string) => void;
@@ -832,12 +845,14 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
       // calculé plus haut) au clic/appui, en plus du léger rétrécissement
       // déjà présent (active:scale-[0.97]).
       style={{
-        // La tuile saisie reste dans sa case (fantôme) : seule la copie qui
-        // suit le pointeur bouge. Les voisines glissent avec une courbe douce.
+        // La tuile saisie reste dans sa case, invisible : seule la copie qui
+        // suit le pointeur bouge, et elle a exactement le même aspect.
+        // L'ancienne version la passait en pointillé à 30 % — le fond de
+        // plage transparaissait, la tuile changeait de couleur et se
+        // retrouvait coupée au bord pendant l'échange.
         transform: isDragging ? undefined : CSS.Transform.toString(transform),
-        // Courbe seulement pendant le geste. Au repos, la transition du
-        // survol (ombre) reste celle de la classe.
         transition: isDragging ? 'none' : transform ? (transition || 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)') : undefined,
+        opacity: isDragging ? 0 : undefined,
         ['--tile-glow' as string]: accentColor,
       }}
       // Signalé : effet "verre 3D" (reflet + biseau + bordures multicolores)
@@ -855,10 +870,12 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
       // maintenant AUSSI au survol (hover:shadow-[...] remplace l'ancien
       // hover:shadow-lg générique, qui n'utilisait pas la couleur propre
       // à la tuile).
-      className={`relative group h-28 sm:h-36 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${tile.gradient} p-2.5 sm:p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-shadow duration-200 shadow-md border border-white/10 overflow-hidden active:scale-[0.97] active:shadow-[0_0_0_3px_var(--tile-glow),0_0_22px_8px_var(--tile-glow)] ${
-        isDragging ? 'opacity-30 z-50 border-dashed border-white/40 shadow-none' :
-        dragEnCours ? 'z-10 pointer-events-none' :
-        isDragTarget ? 'border-[#F7BC5F] ring-4 ring-[#F7BC5F]/30 scale-105 z-40' : 'hover:scale-[1.03] hover:-translate-y-1 hover:border-[#F7BC5F]/40 hover:shadow-[0_0_18px_6px_var(--tile-glow)] z-10'
+      className={`relative group h-28 sm:h-36 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${tile.gradient} p-2.5 sm:p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-shadow duration-200 shadow-md border border-white/10 overflow-hidden ${
+        isDragging || dragEnCours
+          ? 'z-10 pointer-events-none'
+          : isDragTarget
+            ? 'border-[#F7BC5F] ring-4 ring-[#F7BC5F]/30 scale-105 z-40'
+            : 'active:scale-[0.97] active:shadow-[0_0_0_3px_var(--tile-glow),0_0_22px_8px_var(--tile-glow)] hover:scale-[1.03] hover:-translate-y-1 hover:border-[#F7BC5F]/40 hover:shadow-[0_0_18px_6px_var(--tile-glow)] z-10'
       }`}
     >
 
@@ -1003,16 +1020,14 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
 
 // Variante de SortableTile pour la grille des sous-tuiles (contenu d'un
 // dossier ouvert) — mêmes mécanismes @dnd-kit, gabarit plus compact.
-// Calque de déplacement (dnd-kit DragOverlay) : la copie de la tuile qui
-// suit le pointeur, pleine et nette, pendant que l'originale reste en place
-// en pointillé. Sans calque, c'était l'originale — rendue à 40 % — qui se
-// déplaçait, clignotant sous les tuiles voisines : l'impression de geste
-// « pas fluide » signalée le 2 septembre.
+// Calque de déplacement (dnd-kit DragOverlay) : copie identique à la tuile
+// au repos (même dégradé, même bord, même ombre). Un liseré doré ou un
+// agrandissement la faisait changer d'aspect pendant le passage.
 const TuileFantome: React.FC<{ tile: TileItemNode; sousTuile?: boolean }> = ({ tile, sousTuile }) => {
   const Icon = ICON_MAP[tile.iconName] || LayoutGrid;
   return (
     <div
-      className={`${sousTuile ? 'h-36 rounded-2xl p-4' : 'h-28 sm:h-36 rounded-2xl sm:rounded-3xl p-2.5 sm:p-4'} bg-gradient-to-br ${tile.gradient} flex flex-col items-center justify-center text-center border border-[#F7BC5F]/70 shadow-[0_18px_40px_rgba(0,0,0,0.55)] scale-105 cursor-grabbing overflow-hidden`}
+      className={`${sousTuile ? 'rounded-2xl p-4' : 'rounded-2xl sm:rounded-3xl p-2.5 sm:p-4'} w-full h-full bg-gradient-to-br ${tile.gradient} flex flex-col items-center justify-center text-center border border-white/10 shadow-md cursor-grabbing overflow-hidden`}
     >
       {tile.isFolder ? (
         <div className="flex flex-col items-center w-full px-1">
@@ -1081,11 +1096,14 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
       style={{
         transform: isDragging ? undefined : CSS.Transform.toString(transform),
         transition: isDragging ? 'none' : transform ? (transition || 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)') : undefined,
+        opacity: isDragging ? 0 : undefined,
       }}
-      className={`relative group h-36 rounded-2xl bg-gradient-to-br ${subItem.gradient} p-4 flex flex-col items-center justify-center text-center cursor-pointer shadow-md transition-shadow duration-200 border border-white/10 overflow-hidden active:scale-[0.97] ${
-        isDragging ? 'opacity-30 z-50 border-dashed border-white/40 shadow-none' :
-        dragEnCours ? 'z-10 pointer-events-none' :
-        isDragTarget ? 'border-[#F7BC5F] ring-4 ring-[#F7BC5F]/30 scale-105 z-40' : 'hover:scale-[1.03] hover:border-[#F7BC5F]/40 z-10'
+      className={`relative group h-36 rounded-2xl bg-gradient-to-br ${subItem.gradient} p-4 flex flex-col items-center justify-center text-center cursor-pointer shadow-md transition-shadow duration-200 border border-white/10 overflow-hidden ${
+        isDragging || dragEnCours
+          ? 'z-10 pointer-events-none'
+          : isDragTarget
+            ? 'border-[#F7BC5F] ring-4 ring-[#F7BC5F]/30 scale-105 z-40'
+            : 'active:scale-[0.97] hover:scale-[1.03] hover:border-[#F7BC5F]/40 z-10'
       }`}
     >
       {subItem.locked && (
@@ -1529,7 +1547,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     return supportTile ? [...sansDossier, supportTile] : sansDossier;
   };
 
-  const reconcilierGrille = (grille: TileItemNode[]): TileItemNode[] => {
+  const reconcilierGrille = (grille: TileItemNode[], ajouterManquantes = true): TileItemNode[] => {
     let base = grille;
     // Signalé (9 septembre, Sylvain) : « le dossier Communication se
     // recrée chez des utilisateurs alors qu'on a le chat tout en haut »
@@ -1559,7 +1577,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // personnalisées/enregistrées qui ne l'ont pas encore, sinon changer
     // seulement INITIAL_TILES n'a aucun effet (cf. commentaire normalizeTile
     // plus haut sur ce même principe).
-    if (estAbsent('immosphera360')) {
+    if (ajouterManquantes && estAbsent('immosphera360')) {
       const immoTile = INITIAL_TILES.find((t) => t.id === 'immosphera360');
       if (immoTile) base = [...base, immoTile];
     }
@@ -1568,7 +1586,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // filtrée plus loin par canSeeImmospheraExtras, ici on s'assure juste
     // qu'elles existent QUELQUE PART dans la grille sauvegardée (racine ou
     // dans un dossier).
-    const missingExtras = IMMOSPHERA_EXTRA_TILE_IDS.filter((id) => estAbsent(id));
+    const missingExtras = ajouterManquantes ? IMMOSPHERA_EXTRA_TILE_IDS.filter((id) => estAbsent(id)) : [];
     if (missingExtras.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingExtras.includes(t.id));
       base = [...base, ...extraTiles];
@@ -1577,21 +1595,21 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // canSeeConseilsFinances ; ici on garantit seulement sa présence dans
     // les grilles déjà personnalisées, sans quoi ajouter la tuile à
     // INITIAL_TILES n'aurait aucun effet pour les comptes existants.
-    const missingConseils = CONSEILS_EXTRA_TILE_IDS.filter((id) => estAbsent(id));
+    const missingConseils = ajouterManquantes ? CONSEILS_EXTRA_TILE_IDS.filter((id) => estAbsent(id)) : [];
     if (missingConseils.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingConseils.includes(t.id));
       base = [...base, ...extraTiles];
     }
     // Même principe pour la tuile "Carte" (Novavisio) — visibilité réelle
     // filtrée plus loin par canSeeNovavisio.
-    const missingNovavisio = NOVAVISIO_EXTRA_TILE_IDS.filter((id) => estAbsent(id));
+    const missingNovavisio = ajouterManquantes ? NOVAVISIO_EXTRA_TILE_IDS.filter((id) => estAbsent(id)) : [];
     if (missingNovavisio.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingNovavisio.includes(t.id));
       base = [...base, ...extraTiles];
     }
     // Nouvelle tuile "Pipeline interne" (raccourci vers Projets internes) —
     // même principe, pour les grilles déjà personnalisées/enregistrées.
-    if (estAbsent('projets-internes')) {
+    if (ajouterManquantes && estAbsent('projets-internes')) {
       const pipelineInterneTile = INITIAL_TILES.find((t) => t.id === 'projets-internes');
       if (pipelineInterneTile) base = [...base, pipelineInterneTile];
     }
@@ -1602,7 +1620,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // elle est automatiquement ajoutée aux grilles déjà personnalisées qui
     // ne l'ont pas encore. Plus besoin d'écrire un bloc dédié à chaque
     // nouveau module : juste une entrée dans INITIAL_TILES suffit.
-    const missingNavTiles = NAV_ITEMS.filter((item) => item.id !== 'accueil' && estAbsent(item.id))
+    const missingNavTiles = (ajouterManquantes ? NAV_ITEMS : []).filter((item) => item.id !== 'accueil' && estAbsent(item.id))
       .map((item) => findInitialTile(item.id))
       .filter((t): t is TileItemNode => Boolean(t));
     if (missingNavTiles.length > 0) {
@@ -1641,7 +1659,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // `removeQuickBarDuplicates`, hissée au niveau module — même retrait
     // forcé appliqué aussi à une grille reçue du serveur, voir plus bas).
     base = removeQuickBarDuplicates(base);
-    if (estAbsent('annonce')) {
+    if (ajouterManquantes && estAbsent('annonce')) {
       const annonceTile = INITIAL_TILES.find((t) => t.id === 'annonce');
       if (annonceTile) base = [...base, annonceTile];
     }
@@ -1653,7 +1671,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // _TILE_IDS ci-dessus qui ne cherche qu'au premier niveau) — sa
     // visibilité réelle, elle, est bien filtrée via ce même
     // IMMOSPHERA_EXTRA_TILE_IDS plus loin (canSeeImmospheraExtras).
-    if (estAbsent('statistiques-etiquettes')) {
+    if (ajouterManquantes && estAbsent('statistiques-etiquettes')) {
       const statsTile = findInitialTile('statistiques-etiquettes');
       if (statsTile) base = [...base, statsTile];
     }
@@ -1756,7 +1774,13 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         console.error('Failed to parse saved tiles:', e);
       }
     }
-    return reconcilierGrille(base);
+    return reconcilierGrille(
+      base,
+      // Pas d'injection tant que la liste des tuiles masquées du compte
+      // n'est pas là : sinon Annonce et Bloc-notes, absentes de la grille
+      // enregistrée, revenaient le temps d'un rendu.
+      Boolean(activeAgency?.id && masquesPretsAgences.has(clefSyncTuiles(activeAgency.id))),
+    );
   };
   const [tiles, setTiles] = useState<TileItemNode[]>(() => loadTilesForKey(HOME_TILES_KEY, HOME_TILES_KEY_ANON));
 
@@ -1819,6 +1843,14 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // composant (synchronisation serveur, Paramètres) : `idsMasques` la relit à
   // chaque rendu, il suffit donc d'en provoquer un.
   const [versionMasquees, setVersionMasquees] = useState(0);
+  // Un accueil démonté pendant la lecture des tuiles masquées (menu, fiche,
+  // dossier) doit repeindre dès que la liste arrive — sinon il resterait
+  // sur le rendu d'attente, ou pire sur une tuile déjà retirée.
+  useEffect(() => {
+    const ping = () => setVersionMasquees((v) => v + 1);
+    masquesAuditeurs.add(ping);
+    return () => { masquesAuditeurs.delete(ping); };
+  }, []);
   // Incrémenté quand la grille serveur de l'agence est chargée : les effets
   // qui ne doivent écrire qu'après (voir plus bas) s'y accrochent.
   const [syncPrete, setSyncPrete] = useState(0);
@@ -1948,7 +1980,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         // celle du compte AVANT de poser la grille, puis on force un rendu
         // pour que les tuiles posées à l'affichage la respectent.
         await chargerMasqueesDepuisServeur(currentUser.uid);
-        setVersionMasquees((v) => v + 1);
 
         const { data } = await supabase
           .from('user_ui_settings')
@@ -2041,7 +2072,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         /* best-effort — le navigateur reste la source si le serveur échoue */
       } finally {
         homeSyncReadyAgencies.add(clefSync);
+        marquerMasquesPrets(clefSync);
         setSyncPrete((v) => v + 1);
+        setVersionMasquees((v) => v + 1);
       }
     })();
   }, [currentUser?.uid, activeAgency?.id]);
@@ -2163,7 +2196,31 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // synchronisation en direct (même mécanisme que l'ordre des onglets dans
   // Paramètres) pour qu'un verrouillage posé par le super admin s'applique
   // immédiatement, sans recharger, chez tous les membres déjà connectés.
-  const [lockedTiles, setLockedTiles] = useState<Record<string, Verrou>>({});
+  const [lockedTiles, setLockedTiles] = useState<Record<string, Verrou>>(() => {
+    try {
+      const brut = localStorage.getItem(`novasphere_locked_tiles_v1_${activeAgency?.id || 'default'}`);
+      const valeur = brut ? JSON.parse(brut) : null;
+      return valeur && typeof valeur === 'object' ? valeur : {};
+    } catch {
+      return {};
+    }
+  });
+  // Même principe que le rechargement des tuiles pendant le rendu : au
+  // changement de société, ne pas peindre un instant les verrous de
+  // l'agence précédente (ni un objet vide, qui laissait sortir les cartes
+  // d'un dossier le temps du chargement).
+  const lockedAgencyRef = useRef(activeAgency?.id);
+  if (lockedAgencyRef.current !== activeAgency?.id) {
+    lockedAgencyRef.current = activeAgency?.id;
+    let suivants: Record<string, Verrou> = {};
+    try {
+      const brut = localStorage.getItem(`novasphere_locked_tiles_v1_${activeAgency?.id || 'default'}`);
+      const valeur = brut ? JSON.parse(brut) : null;
+      if (valeur && typeof valeur === 'object') suivants = valeur;
+    } catch { /* ignore */ }
+    lockedTilesRef.current = suivants;
+    setLockedTiles(suivants);
+  }
   useEffect(() => { lockedTilesRef.current = lockedTiles; }, [lockedTiles]);
   useEffect(() => {
     if (!activeAgency?.id) return;
@@ -3311,6 +3368,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // partout (racine, dossiers, aperçus), quel que soit le rôle.
   // Dossiers « Banques » et « Assurances » : Conseils Finances uniquement
   // (agence active, tous rôles confondus).
+  //
+  // `versionMasquees` force la relecture de la liste masquée. Une tuile
+  // retirée (Annonce, ancien Bloc-notes) ne doit pas être peinte, même si
+  // la réconciliation l'a remise dans `tiles` avant d'avoir cette liste.
+  void versionMasquees;
+  const idsMasques = new Set<string>(lireMasquees().map((t) => t.id));
   const tuileVisible = (t: TileItemNode) =>
     (!estDossierReserveConseilsFinances(t.title) || canSeeBanquesAssurances)
     && (!estDossierImmosphera(t.title) || peutVoirDossierImmosphera)
@@ -3319,7 +3382,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     && (!IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
     && (!NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
     && (!CONSEILS_EXTRA_TILE_IDS.includes(t.id) || canSeeConseilsFinances)
-    && ((t.id !== 'annonce' && t.id !== 'nova-lock-spacer') || canSeeAnnonceTile);
+    && ((t.id !== 'annonce' && t.id !== 'nova-lock-spacer') || canSeeAnnonceTile)
+    && (!idsMasques.has(t.id) || findInitialTile(t.id)?.locked === true);
 
   const filtrerEnProfondeur = (items: TileItemNode[]): TileItemNode[] =>
     items
@@ -3485,13 +3549,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   //   - elle passe les filtres de visibilité comme n'importe quelle autre.
   // Rien n'est écrit dans la grille enregistrée : l'ordre de chacun est
   // intact, et la tuile prend simplement la première case libre.
-  // `versionMasquees` n'est pas lu ici, mais sa mise à jour provoque le rendu
-  // qui relit la liste — c'est tout son rôle.
-  void versionMasquees;
-  const idsMasques = new Set<string>(lireMasquees().map((t) => t.id));
-
   const dejaReposes = new Set(dossiersVerrouillesAReposer.map((d) => d.id));
-  const nouveautesAPoser = filtrerEnProfondeur(
+  // Tant que la liste masquée du compte n'est pas réunie, on n'affiche
+  // aucune « nouveauté » : c'est ce passage qui faisait surgir Annonce et
+  // l'ancien Bloc-notes dans la première case libre, le temps d'un fondu.
+  const masquesPrets = Boolean(activeAgency?.id && masquesPretsAgences.has(clefSyncTuiles(activeAgency.id)));
+  const nouveautesAPoser = masquesPrets ? filtrerEnProfondeur(
         INITIAL_TILES.filter(
           (t) =>
             !existsRecursive(tiles, t.id) &&
@@ -3509,7 +3572,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
             // au même titre qu'un dossier verrouillé déjà reposé.
             !QUICK_BAR_DUPLICATE_IDS.has(t.id)
         )
-      );
+      ) : [];
 
   // Grille de la société, calculée même quand un dossier est ouvert. La
   // remplacer par le contenu du dossier faisait surgir une tuile sur
@@ -3520,7 +3583,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     ...applyLocks(nouveautesAPoser),
   ]);
   const enfantsDossierOuvert = activeFolder
-    ? retirerDoublonsNotes(applyLocks(filtrerEnProfondeur(activeFolder.children || [])))
+    ? retirerDoublonsNotes(applyLocks(filtrerEnProfondeur(
+        // La pile du dossier ouvert est un instantané. On relit les cartes
+        // vivantes : une tuile retirée entre-temps ne réapparaît pas le
+        // temps que le voile s'ouvre.
+        (findTileRecursive(tiles, activeFolder.id)?.children || activeFolder.children || [])
+      )))
     : null;
   const currentDisplayTiles = enfantsDossierOuvert ?? tuilesRacine;
 
@@ -3670,14 +3738,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // le positionnement fixe du calque s'il restait dedans. Il reste dans
   // l'arbre React du DndContext qui l'inclut, donc dans son contexte.
   const calqueDeplacement = createPortal(
-    <DragOverlay
-      zIndex={1000}
-      dropAnimation={{
-        duration: 180,
-        easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-        sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.3' } } }),
-      }}
-    >
+    <DragOverlay zIndex={1000} dropAnimation={null}>
       {tuileEnDeplacement ? <TuileFantome tile={tuileEnDeplacement} sousTuile={Boolean(activeFolder)} /> : null}
     </DragOverlay>,
     document.body
@@ -3963,7 +4024,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           .filter((_id, i) => gridItems[i]?.id !== 'nova-lock-spacer');
         return (
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleTileDragStart} onDragOver={handleTileDragOver} onDragEnd={handleTileDragEnd} onDragCancel={handleTileDragCancel}>
-        {calqueDeplacement}
+        {!activeFolder && calqueDeplacement}
         {/* À la racine, lâcher une tuile ÉCHANGE deux cases (handleTileDragEnd).
             L'aperçu pendant le geste doit montrer la même chose : avec la
             stratégie de tri, toutes les tuiles intermédiaires glissaient d'un
