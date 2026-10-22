@@ -18,7 +18,7 @@ import ConfettiOverlay from './ConfettiOverlay';
  * historique de lecture (announcement_reads, déjà en place), expiration
  * automatique.
  */
-type AnnouncementLevel = 'info' | 'a_verifier' | 'important' | 'succes' | 'veille' | 'reponse_demandee' | 'signature_acte';
+type AnnouncementLevel = 'info' | 'a_verifier' | 'important' | 'succes' | 'veille' | 'reponse_demandee' | 'signature_compromis' | 'signature_acte';
 
 interface ActiveAnnouncement {
   id: string;
@@ -135,8 +135,19 @@ const LEVEL_META: Record<AnnouncementLevel, {
     icon: AlertCircle,
     mascotte: '/nova/expressions/nova-reponse-demandee.png',
   },
+  signature_compromis: {
+    label: 'Signature compromis',
+    border: 'border-[#F7BC5F]/50',
+    headerBg: 'bg-[#F7BC5F]/10',
+    iconBg: 'bg-[#F7BC5F]/20',
+    iconColor: 'text-[#F9C977]',
+    buttonBg: 'bg-[#F7BC5F] hover:bg-[#d9ab38]',
+    buttonText: 'text-[#061719]',
+    icon: PenTool,
+    mascotte: '/nova/expressions/nova-signature.png',
+  },
   signature_acte: {
-    label: "Signature d'un acte authentique",
+    label: 'Signature acte authentique',
     border: 'border-[#F7BC5F]/50',
     headerBg: 'bg-[#F7BC5F]/10',
     iconBg: 'bg-[#F7BC5F]/20',
@@ -219,7 +230,7 @@ const AnnouncementBanner = () => {
         // remappé en mémoire sur "important" au cas où une ligne n'aurait
         // pas été migrée en base.
         const rawLevel = next.level === 'urgent' ? 'important' : next.level;
-        const safeLevel: AnnouncementLevel = (['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_acte'] as const).includes(rawLevel) ? rawLevel : 'info';
+        const safeLevel: AnnouncementLevel = (['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_compromis', 'signature_acte'] as const).includes(rawLevel) ? rawLevel : 'info';
         setAnnouncement({ id: next.id, message: next.message, level: safeLevel, link: next.link || null, isPoll: !!next.is_poll });
         if (next.is_poll) {
           const { data: options } = await supabase
@@ -279,7 +290,7 @@ const AnnouncementBanner = () => {
   // désormais utilisé pour TOUS les niveaux — seules la largeur de la carte
   // et la taille du médaillon restent un peu plus généreuses pour
   // "Signature d'un acte" (pancarte quasi plein écran, cf. ticket #242).
-  const isSignatureLayout = announcement.level === 'signature_acte';
+  const isSignatureLayout = announcement.level === 'signature_compromis' || announcement.level === 'signature_acte';
 
   return (
     <div className="fixed inset-0 z-[200] bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
@@ -287,7 +298,7 @@ const AnnouncementBanner = () => {
           feu d'artifice" — inversé par rapport à l'association initiale
           (tickets #254/#263), corrigé ici. */}
       {announcement.level === 'succes' && <ConfettiOverlay />}
-      {announcement.level === 'signature_acte' && <FireworksOverlay />}
+      {isSignatureLayout && <FireworksOverlay />}
       {/* Ticket #241 : reprend le style des pancartes Nova fournies
           (mascotte détourée à gauche, cadre lumineux coloré à droite avec
           icône en médaillon + titre + séparateur) plutôt que de réutiliser

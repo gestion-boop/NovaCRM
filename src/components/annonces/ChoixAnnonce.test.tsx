@@ -33,4 +33,13 @@ describe('choix d’annonce', () => {
     expect(onChange).toHaveBeenCalledWith('important');
     expect(screen.getByRole('button', { name: 'Réponse' }).getAttribute('title')).toBe('Réponse demandée SVP');
   });
+
+  it('propose la signature du compromis avant celle de l’acte authentique', () => {
+    render(<NiveauxAnnonce value="info" onChange={() => {}} />);
+    const libelles = screen.getAllByRole('button').map((bouton) => bouton.textContent);
+    const compromis = libelles.indexOf('Signature compromis');
+    const acte = libelles.indexOf('Signature acte authentique');
+    expect(compromis).toBeGreaterThanOrEqual(0);
+    expect(acte).toBeGreaterThan(compromis);
+  });
 });

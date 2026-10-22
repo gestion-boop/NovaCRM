@@ -3240,7 +3240,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                               )}
                               {action.toolName === 'create_announcement' && (
                                 <div className="text-sky-900/90 space-y-1">
-                                  <p>Niveau : <span className="font-semibold">{{ info: 'Information', a_verifier: 'À vérifier', important: 'Important', succes: "Offre d'achat validée", veille: 'Veille', reponse_demandee: 'Réponse demandée SVP', signature_acte: "Signature d'un acte authentique" }[typeof action.args.level === 'string' ? action.args.level : 'info'] || 'Information'}</span></p>
+                                  <p>Niveau : <span className="font-semibold">{{ info: 'Information', a_verifier: 'À vérifier', important: 'Important', succes: "Offre d'achat validée", veille: 'Veille', reponse_demandee: 'Réponse demandée SVP', signature_compromis: 'Signature compromis', signature_acte: 'Signature acte authentique' }[typeof action.args.level === 'string' ? action.args.level : 'info'] || 'Information'}</span></p>
                                   <p>Destinataires : <span className="font-semibold">
                                     {Array.isArray(action.args.agencyIds) && action.args.agencyIds.length > 0
                                       ? action.args.agencyIds.map((id: string) => AGENCIES.find((a) => a.id === id)?.name || id).join(', ')

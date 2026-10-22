@@ -157,7 +157,7 @@ export default async function handler(req: any, res: any) {
     // Ticket #241 : 5 niveaux (info/a_verifier/important/succes/veille) —
     // l'ancien "urgent" a été retiré et remappé sur "important" par la
     // migration SQL du même ticket.
-    const level = ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_acte'].includes(req.body?.level) ? req.body.level : 'info';
+    const level = ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_compromis', 'signature_acte'].includes(req.body?.level) ? req.body.level : 'info';
     const link = req.body?.link ? String(req.body.link).trim() : null;
     const expiresAt = req.body?.expiresAt ? new Date(req.body.expiresAt).toISOString() : null;
     const targetUserId = req.body?.targetUserId ? String(req.body.targetUserId) : null;

@@ -368,14 +368,14 @@ const TOOLS = [
   // exposée au client.
   {
     name: 'generate_image',
-    description: "Génère une image dans le style visuel NovaSphere (mascotte Nova + pancarte), intégrant automatiquement le logo de l'agence active. Utilise cet outil dès qu'on te demande de créer/générer une image ou un visuel (ex: \"j'ai signé un acte, crée une image\", \"crée une image de succès\", \"fais un visuel réponse demandée\"). Si la demande est trop vague pour choisir un style (aucun des 8 ci-dessous ne correspond clairement), repose une question au lieu d'appeler cet outil au hasard.",
+    description: "Génère une image dans le style visuel NovaSphere (mascotte Nova + pancarte), intégrant automatiquement le logo de l'agence active. Utilise cet outil dès qu'on te demande de créer/générer une image ou un visuel (ex: \"j'ai signé un acte, crée une image\", \"crée une image de succès\", \"fais un visuel réponse demandée\"). Si la demande est trop vague pour choisir un style (aucun des 9 ci-dessous ne correspond clairement), repose une question au lieu d'appeler cet outil au hasard.",
     input_schema: {
       type: 'object',
       properties: {
         intent: {
           type: 'string',
-          enum: ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_acte', 'sondage'],
-          description: "Style/thème demandé : info = information courante (or), a_verifier = à vérifier (ambre), important = urgent (rouge), succes = offre d'achat validée (vert), veille = suivi calme (bleu), reponse_demandee = réponse attendue (rouge), signature_acte = signature d'un acte authentique (or, mascotte dédiée), sondage = question à l'équipe (or).",
+          enum: ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_compromis', 'signature_acte', 'sondage'],
+          description: "Style/thème demandé : info = information courante (or), a_verifier = à vérifier (ambre), important = urgent (rouge), succes = offre d'achat validée (vert), veille = suivi calme (bleu), reponse_demandee = réponse attendue (rouge), signature_compromis = signature d'un compromis (or, mascotte dédiée), signature_acte = signature d'un acte authentique (or, mascotte dédiée), sondage = question à l'équipe (or).",
         },
         details: { type: 'string', description: "Précisions libres de l'utilisateur à refléter dans l'image (ex: nom du dossier, occasion précise), si mentionnées. Ne jamais inventer de détail non dit." },
       },
@@ -494,7 +494,7 @@ const NOVA_ADMIN_TOOLS = [
       type: 'object',
       properties: {
         message: { type: 'string', description: "Contenu de l'annonce." },
-        level: { type: 'string', enum: ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_acte'], description: "info = or (information courante), a_verifier = ambre (à vérifier/attention), important = rouge (lecture obligatoire, aucun moyen de fermer sans confirmer), succes = vert (offre d'achat validée), veille = bleu (suivi calme, rien d'urgent), reponse_demandee = rouge (une réponse du destinataire est explicitement attendue), signature_acte = or (signature d'un acte authentique)." },
+        level: { type: 'string', enum: ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_compromis', 'signature_acte'], description: "info = or (information courante), a_verifier = ambre (à vérifier/attention), important = rouge (lecture obligatoire, aucun moyen de fermer sans confirmer), succes = vert (offre d'achat validée), veille = bleu (suivi calme, rien d'urgent), reponse_demandee = rouge (une réponse du destinataire est explicitement attendue), signature_compromis = or (signature d'un compromis, feu d'artifice), signature_acte = or (signature d'un acte authentique, feu d'artifice)." },
         agencyIds: { type: 'array', items: { type: 'string' }, description: "Sociétés ciblées ; vide ou absent = toutes les agences." },
         // Demande explicite (28/08/2026) : "ça pourra aussi travailler sur
         // un sondage — qui vient à la plage samedi prochain, présent/absent
@@ -627,7 +627,8 @@ const IMAGE_INTENT_META: Record<string, { label: string; mascotte: string; color
   succes: { label: "Offre d'achat validée", mascotte: 'nova-succes.png', colorHint: 'vert émeraude, bonne nouvelle, célébration' },
   veille: { label: 'Veille', mascotte: 'nova-veille.png', colorHint: 'bleu calme, suivi tranquille' },
   reponse_demandee: { label: 'Réponse demandée SVP', mascotte: 'nova-erreur.png', colorHint: 'rose/rouge vif, une réponse est attendue' },
-  signature_acte: { label: "Signature d'un acte authentique", mascotte: 'nova-signature.png', colorHint: 'doré/or chaleureux, signature officielle finalisée' },
+  signature_compromis: { label: 'Signature compromis', mascotte: 'nova-signature.png', colorHint: 'doré/or chaleureux, signature du compromis' },
+  signature_acte: { label: 'Signature acte authentique', mascotte: 'nova-signature.png', colorHint: 'doré/or chaleureux, signature officielle finalisée' },
   sondage: { label: 'Sondage', mascotte: 'nova-neutre.png', colorHint: 'doré/or NovaSphere, ton posé, question ouverte à l\'équipe' },
 };
 
@@ -1109,7 +1110,7 @@ RÈGLE IMPÉRATIVE — ne jamais confondre "envoyer un e-mail" avec "créer un r
 
 Espace client (invite_client_guest, request_client_document, set_client_guest_access_status), create_appointment, create_support_ticket, send_client_email${isNovaSuperAssistant ? ', ainsi que invite_collaborator, set_collaborator_active_status, create_pipeline_automation et create_announcement' : ''} : contrairement aux autres actions, celles-ci ne s'exécutent JAMAIS immédiatement — l'utilisateur doit toujours confirmer manuellement dans une carte dédiée avant que quoi que ce soit ne se passe réellement. Ne dis donc jamais "c'est fait" pour ces outils-là : dis plutôt que tu prépares la demande et que la confirmation apparaît ci-dessous. Vérifie toujours mentalement que l'action est cohérente avant de l'appeler (ex: ne désactive jamais un collaborateur sur un simple sous-entendu, demande confirmation explicite du nom si le moindre doute existe).
 
-Annonce en félicitations (create_announcement, niveau signature_acte) : dès qu'on te demande d'annoncer/féliciter quelqu'un pour la signature d'un acte authentique (ex. "annonce la signature de l'acte de X en félicitant Y"), utilise TOUJOURS le niveau "signature_acte" (jamais "succes" ni "important" pour ce cas précis) — ce niveau déclenche une mise en avant spéciale (feu d'artifice, mascotte Nova en pleine page) déjà prévue pour ça. Rédige un message chaleureux et bref citant la personne félicitée par son prénom.
+Annonce en félicitations (create_announcement) : une signature de compromis utilise TOUJOURS le niveau "signature_compromis", une signature d'acte authentique utilise TOUJOURS le niveau "signature_acte" (jamais "succes" ni "important", et jamais l'un à la place de l'autre). Les deux déclenchent la même mise en avant (feu d'artifice, mascotte Nova en pleine page). Exemples : "annonce la signature du compromis de X" → signature_compromis ; "annonce la signature de l'acte de X en félicitant Y" → signature_acte. Rédige un message chaleureux et bref citant la personne félicitée par son prénom.
 
 Sondage (create_announcement, pollOptions) : dès que l'utilisateur demande un sondage ou une question à choix ("qui vient... présent/absent ?", "qui est pour/contre ?"...), renseigne pollOptions avec les options de réponse évidentes de la question (le système affiche ensuite un vrai sondage avec boutons de vote et compteur en direct) — ne mets JAMAIS pollOptions pour une annonce qui n'est pas explicitement une question à choix.
 

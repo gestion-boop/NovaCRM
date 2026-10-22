@@ -9,7 +9,8 @@ export const NIVEAUX_ANNONCE = [
   ['succes', "Offre d'achat validée", "Offre d'achat validée", 'border-emerald-500/40 text-emerald-300'],
   ['veille', 'Veille', 'Veille', 'border-sky-500/40 text-sky-300'],
   ['reponse_demandee', 'Réponse', 'Réponse demandée SVP', 'border-rose-500/50 text-rose-300'],
-  ['signature_acte', "Signature d'un acte authentique", "Signature d'un acte authentique", 'border-[#F7BC5F]/50 text-[#F9C977]'],
+  ['signature_compromis', 'Signature compromis', 'Signature compromis', 'border-[#F7BC5F]/50 text-[#F9C977]'],
+  ['signature_acte', 'Signature acte authentique', 'Signature acte authentique', 'border-[#F7BC5F]/50 text-[#F9C977]'],
 ] as const;
 
 export type NiveauAnnonce = (typeof NIVEAUX_ANNONCE)[number][0];
