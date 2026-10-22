@@ -21,7 +21,11 @@ export interface TuileNotes {
 /** Le raccourci Bloc-notes et les dossiers renommés « Blocs - Notes ». */
 export const estBlocNotes = (tuile: { id?: string; title?: string | null; navTarget?: string | null }) => {
   if (tuile.id === 'notes' || tuile.navTarget === 'notes') return true;
-  return /^blocs?\s*[-–]?\s*notes?$/.test(sansCasse(tuile.title ?? ''));
+  const titre = sansCasse(tuile.title ?? '').replace(/[—–−]/g, '-');
+  if (/^blocs?\s*-?\s*notes?$/.test(titre)) return true;
+  // « Blocs — Notes », « Bloc de notes » : le tiret exact change selon
+  // qui a renommé le dossier, et les deux tuiles se voyaient ensemble.
+  return /\bblocs?\b/.test(titre) && /\bnotes?\b/.test(titre);
 };
 
 function scoreNotes(tuile: TuileNotes): number {
