@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { AGENCIES } from '@/types';
 import { formatCurrency, formatCurrencyPrecis } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -1668,11 +1668,63 @@ export default function Dashboard({
           Une case par personne, même règle que le CA de l'agence (archivés +
           à partir de Montage dossier), la plus grosse en premier. */}
       {estDirectionCF && estVueDirectionCF && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <h3 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">CA par courtier</h3>
           {caCourtiersVises.length === 0 ? (
             <p className="text-xs text-slate-500 px-1">Aucun collaborateur rattaché à cette agence.</p>
           ) : (
+            <>
+            {/* Une seule comparaison : les cartes disent le détail, la barre
+                dit qui est devant. Même total, même clic vers le détail. */}
+            {caCourtiersVises.some((c) => c.total > 0) && (
+              <div className="dash-card rounded-2xl border border-white/10 px-3 pt-3 pb-1">
+                <div style={{ height: Math.max(148, caCourtiersVises.length * 40) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={caCourtiersVises.map((c) => ({ id: c.id, prenom: c.prenom, total: c.total }))}
+                      layout="vertical"
+                      margin={{ top: 4, right: 72, left: 0, bottom: 4 }}
+                    >
+                      <XAxis type="number" hide />
+                      <YAxis
+                        type="category"
+                        dataKey="prenom"
+                        width={76}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fill: 'var(--nv-chart-axis)', fontSize: 12 }}
+                      />
+                      <Tooltip
+                        formatter={(value: unknown) => [formatCurrency(Number(value) || 0), 'CA']}
+                        contentStyle={{ ...CHART_TOOLTIP_STYLE, fontSize: '11px' }}
+                        cursor={{ fill: 'var(--nv-wash)' }}
+                      />
+                      <Bar
+                        dataKey="total"
+                        fill="var(--accent-color, #F7BC5F)"
+                        radius={[0, 6, 6, 0]}
+                        barSize={12}
+                        cursor="pointer"
+                        isAnimationActive={false}
+                        onClick={(barre) => {
+                          const id = barre?.payload?.id as string | undefined;
+                          if (!id) return;
+                          setRechercheCourtier('');
+                          setDetailCourtierId(id);
+                        }}
+                      >
+                        <LabelList
+                          dataKey="total"
+                          position="right"
+                          formatter={(value) => formatCurrency(Number(value) || 0)}
+                          style={{ fill: 'var(--ink-2)', fontSize: 11 }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {caCourtiersVises.map((c) => (
                 <div
@@ -1724,6 +1776,7 @@ export default function Dashboard({
                 </div>
               ))}
             </div>
+            </>
           )}
         </div>
       )}
