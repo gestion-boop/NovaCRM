@@ -2850,7 +2850,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   const [tuileEnDeplacement, setTuileEnDeplacement] = useState<TileItemNode | null>(null);
   const handleTileDragStart = (event: DragStartEvent) => {
     const id = String(event.active.id);
-    const source = activeFolder ? applyLocks(activeFolder.children || []) : currentDisplayTiles;
+    const source = activeFolder ? (enfantsDossierOuvert || []) : currentDisplayTiles;
     setTuileEnDeplacement(source.find((t) => t.id === id) || findTileRecursive(tiles, id) || null);
   };
   const handleTileDragCancel = () => setTuileEnDeplacement(null);
@@ -3583,12 +3583,16 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     ...applyLocks(nouveautesAPoser),
   ]);
   const enfantsDossierOuvert = activeFolder
-    ? retirerDoublonsNotes(applyLocks(filtrerEnProfondeur(
-        // La pile du dossier ouvert est un instantané. On relit les cartes
-        // vivantes : une tuile retirée entre-temps ne réapparaît pas le
-        // temps que le voile s'ouvre.
-        (findTileRecursive(tiles, activeFolder.id)?.children || activeFolder.children || [])
-      )))
+    ? (
+        // Même contenu que l'aperçu de la tuile. Lire les cartes enregistrées
+        // seules vidait le dossier : une liste vide est « vraie » en
+        // JavaScript, donc elle masquait les cartes que le verrou ajoute
+        // seulement à l'affichage. L'aperçu montrait deux icônes, l'intérieur
+        // restait vide.
+        findTileRecursive(tuilesRacine, activeFolder.id)?.children
+        ?? activeFolder.children
+        ?? []
+      )
     : null;
   const currentDisplayTiles = enfantsDossierOuvert ?? tuilesRacine;
 
