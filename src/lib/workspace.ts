@@ -668,6 +668,14 @@ export interface DriveVideoUploadResult {
   folderName: string;
 }
 
+// Un lien Drive (voir uploadVideoToDriveFolder) est une page de visionneuse,
+// pas un flux vidéo : il se lit dans un <iframe>, jamais dans un <video>. Le
+// repli local (URL.createObjectURL, pas de compte Workspace connecté) est un
+// vrai fichier et reste lisible en <video>. Partagé par les deux chats
+// (messagerie interne et fiche client) pour que les deux rendus restent
+// cohérents si ce mécanisme change encore.
+export const isDriveEmbedUrl = (url: string): boolean => /drive\.google\.com/.test(url);
+
 // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (13/16) : "Recherche de
 // documents Google Drive via Nova... en respectant strictement les
 // permissions Google déjà existantes du compte connecté". Exécutée côté
@@ -873,9 +881,35 @@ export const uploadVideoToDriveFolder = async (
   }
 
   const uploadData = await uploadRes.json();
+
+  // Signalé (23 octobre) : « la vidéo ne peut pas se lire... Natacha par
+  // exemple ne peut pas la lire » — le fichier venait d'être déposé sur le
+  // Drive personnel de l'expéditeur, privé par défaut : seul lui pouvait
+  // l'ouvrir, quel que soit le lien utilisé. On l'ouvre explicitement à
+  // quiconque dispose du lien (lecture seule) ; sans ça, aucun autre
+  // destinataire du message ne peut jamais la voir.
+  try {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${uploadData.id}/permissions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+    });
+  } catch (_) {
+    // Si le partage échoue (policy d'organisation interdisant le partage
+    // public, par ex.), on continue quand même : le fichier reste au moins
+    // visible par l'expéditeur, mieux que de bloquer tout l'envoi.
+  }
+
   return {
     fileId: uploadData.id,
-    fileUrl: uploadData.webViewLink || `https://drive.google.com/file/d/${uploadData.id}/preview`,
+    // webViewLink est la page HTML de visionneuse Drive, pas un flux vidéo :
+    // ni un <video>, ni un <iframe> ne peut la lire. /preview est le lecteur
+    // embarquable que Drive expose pour ça (ce qu'il génère lui-même via
+    // « Partager » → « Intégrer »).
+    fileUrl: `https://drive.google.com/file/d/${uploadData.id}/preview`,
     folderName: entityFolderName,
   };
 };

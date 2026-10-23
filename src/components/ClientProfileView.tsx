@@ -49,7 +49,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-import { getCachedAccessToken, requestWorkspaceAccessToken, hydrateAccessTokenFromSession, reconnectGoogleWorkspace, deleteDriveFile, uploadVideoToDriveFolder, sendGmailMessage, fetchGmailMessages, GmailMessageSummary, fetchGoogleCalendarEvents, createGoogleCalendarEvent, GoogleCalendarEvent } from '@/lib/workspace';
+import { getCachedAccessToken, requestWorkspaceAccessToken, hydrateAccessTokenFromSession, reconnectGoogleWorkspace, deleteDriveFile, uploadVideoToDriveFolder, isDriveEmbedUrl, sendGmailMessage, fetchGmailMessages, GmailMessageSummary, fetchGoogleCalendarEvents, createGoogleCalendarEvent, GoogleCalendarEvent } from '@/lib/workspace';
 import { uploadDocumentToDrive } from '@/lib/documentDrive';
 import { getTaskDateStatus } from '@/lib/taskUtils';
 import { TEAM_MEMBERS, getAssignedUser } from '@/data/teamMembers';
@@ -3877,9 +3877,17 @@ export default function ClientProfileView({
                                   )}
                                   {/* controlsList="nofullscreen" : le plein écran natif du lecteur
                                       sortait de notre modale et faisait disparaître sa croix de
-                                      fermeture — on le désactive pour ne garder que la nôtre. */}
+                                      fermeture — on le désactive pour ne garder que la nôtre.
+                                      Signalé (23 octobre, même bug côté messagerie interne) : un lien
+                                      Drive (voir uploadVideoToDriveFolder) est une page de visionneuse,
+                                      illisible par un <video>, d'où l'iframe. Le repli local (pas de
+                                      Workspace connecté) reste un vrai fichier, lisible en <video>. */}
                                   {m.videoUrl && (
-                                    <video src={m.videoUrl} controls controlsList="nofullscreen" className="max-w-[240px] rounded-xl mt-1 bg-black" />
+                                    isDriveEmbedUrl(m.videoUrl) ? (
+                                      <iframe src={m.videoUrl} allow="autoplay" className="max-w-[240px] w-[240px] h-[170px] rounded-xl mt-1 bg-black border-0" />
+                                    ) : (
+                                      <video src={m.videoUrl} controls controlsList="nofullscreen" className="max-w-[240px] rounded-xl mt-1 bg-black" />
+                                    )
                                   )}
                                   {m.audioUrl && (
                                     <div className="mt-1 flex items-center gap-2">

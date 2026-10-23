@@ -16,7 +16,7 @@ import { pickVoiceMimeType } from '@/lib/audioRecording';
 // vite les quelques Mo que ça tolère). Même parade déjà en place côté fiche
 // client (ClientProfileView.tsx, handleChatVideoSelected) : on dépose le
 // fichier sur le Drive Google de l'utilisateur et on ne stocke que le lien.
-import { getCachedAccessToken, requestWorkspaceAccessToken, uploadVideoToDriveFolder } from '@/lib/workspace';
+import { getCachedAccessToken, requestWorkspaceAccessToken, uploadVideoToDriveFolder, isDriveEmbedUrl } from '@/lib/workspace';
 import { assemblerDictee } from '@/lib/dictee';
 import { ouvrirPieceJointe } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -4492,8 +4492,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                   )}
                                   {/* controlsList="nofullscreen" : voir ClientProfileView.tsx — le
                                       plein écran natif fait perdre notre croix de fermeture. */}
+                                  {/* Signalé (23 octobre) : « la vidéo ne peut pas se lire... Natacha
+                                      par exemple ne peut pas la lire » — un lien Drive (voir
+                                      uploadVideoToDriveFolder) est une page de visionneuse, illisible
+                                      par un <video>, d'où l'iframe. Le repli local (pas de Workspace
+                                      connecté) reste un vrai fichier, lisible en <video>. */}
                                   {m.kind === 'video' && m.attachment_url && (
-                                    <video src={m.attachment_url} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
+                                    isDriveEmbedUrl(m.attachment_url) ? (
+                                      <iframe src={m.attachment_url} allow="autoplay" className="max-w-[220px] w-[220px] h-[160px] rounded-xl bg-black border-0" />
+                                    ) : (
+                                      <video src={m.attachment_url} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
+                                    )
                                   )}
                                   {m.kind === 'voice' && m.attachment_url && (
                                     <div className="flex items-center gap-2">
@@ -5250,7 +5259,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             <img src={m.data.attachmentUrl} alt="Pièce jointe" className="max-w-[220px] max-h-[220px] rounded-xl object-cover" />
                           </button>
                         ) : m.data?.kind === 'video' && m.data?.attachmentUrl ? (
-                          <video src={m.data.attachmentUrl} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
+                          isDriveEmbedUrl(m.data.attachmentUrl) ? (
+                            <iframe src={m.data.attachmentUrl} allow="autoplay" className="max-w-[220px] w-[220px] h-[160px] rounded-xl bg-black border-0" />
+                          ) : (
+                            <video src={m.data.attachmentUrl} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
+                          )
                         ) : m.data?.kind === 'voice' && m.data?.attachmentUrl ? (
                           <div className="flex items-center gap-2">
                             <audio controls preload="none" src={m.data.attachmentUrl} className="h-9 max-w-[220px]" />
