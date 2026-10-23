@@ -18,6 +18,23 @@ import { estAgenceImmosphera, estBlocNotes, estDossierImmosphera } from '@/lib/t
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
 import { prochainRendezVous, texteProchainGeste, type RendezVousProchain } from '@/lib/prochainGeste';
+import { lireDispositionAgence, lireHorodatageLocal } from '@/lib/dispositionAccueil';
+import {
+  choisirVersion,
+  cleCasesBureau,
+  cleCasesBureauAnonyme,
+  cleTuilesBureau,
+  cleTuilesBureauAnonyme,
+  lireCases,
+  lireCasesValeur,
+  lireTuiles,
+  lireTuilesValeur,
+  ordonnerCommeLeBureau,
+  tuilesPourTelephone,
+  type TuilePartagee,
+  type VisibiliteTuiles,
+} from '@/lib/tuilesPartagees';
+import { lireMasquees } from '@/lib/tuilesMasquees';
 import { supabase } from '@/lib/supabase';
 
 // Même table de correspondance nom → icône que AccueilGrid.tsx (ICON_MAP) —
@@ -85,6 +102,25 @@ interface SpaceDef {
   // ses cartes au lieu de naviguer directement — voir lockedMobileSpaces.
   isFolder?: boolean;
   children?: SpaceDef[];
+}
+
+function versEspacePartage(tuile: TuilePartagee): SpaceDef | null {
+  const enfants = (tuile.children || [])
+    .map(versEspacePartage)
+    .filter((espace): espace is SpaceDef => !!espace);
+  const dossier = !!(tuile.isFolder || enfants.length > 0);
+  if (!dossier && !tuile.navTarget && !tuile.externalUrl) return null;
+  return {
+    id: tuile.id,
+    label: tuile.title || tuile.id,
+    icon: (tuile.iconName && LOCKED_ICON_MAP[tuile.iconName]) || Folder,
+    nav: tuile.navTarget || '',
+    externalUrl: tuile.externalUrl || undefined,
+    gradient: tuile.gradient || 'from-[#334155] to-[#1e293b]',
+    locked: !!tuile.locked,
+    isFolder: dossier || undefined,
+    children: dossier ? enfants : undefined,
+  };
 }
 
 // Forme minimale d'un verrou tel qu'enregistré par AccueilGrid.tsx (type
@@ -273,6 +309,74 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     return () => { active = false; void supabase.removeChannel(channel); };
   }, [activeAgency?.id]);
 
+  // Grille de l'ordinateur, lue seulement. Le téléphone ne l'enregistre pas.
+  const [grilleBureau, setGrilleBureau] = useState<TuilePartagee[] | null>(null);
+  const [casesBureau, setCasesBureau] = useState<(string | null)[] | null>(null);
+  const [idsMasques, setIdsMasques] = useState<Set<string>>(() => new Set(lireMasquees().map((tuile) => tuile.id)));
+  useEffect(() => {
+    const uid = currentUser?.uid;
+    const agencyId = activeAgency?.id;
+    let actif = true;
+    const cleTuiles = cleTuilesBureau(uid, agencyId);
+    const cleCases = cleCasesBureau(uid, agencyId);
+    const locale = lireTuiles(localStorage.getItem(cleTuiles))
+      || lireTuiles(localStorage.getItem(cleTuilesBureauAnonyme(agencyId)));
+    const casesLocales = lireCases(localStorage.getItem(cleCases))
+      || lireCases(localStorage.getItem(cleCasesBureauAnonyme(agencyId)));
+    setGrilleBureau(locale);
+    setCasesBureau(casesLocales);
+    setIdsMasques(new Set(lireMasquees().map((tuile) => tuile.id)));
+    if (!uid || !agencyId) return () => { actif = false; };
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_ui_settings')
+          .select('home_tiles, home_root_slots, hidden_tiles')
+          .eq('user_id', uid)
+          .maybeSingle();
+        if (!actif || error || !data) return;
+        const lectureTuiles = lireDispositionAgence((data as { home_tiles?: unknown }).home_tiles, agencyId);
+        const lectureCases = lireDispositionAgence((data as { home_root_slots?: unknown }).home_root_slots, agencyId);
+        const localeFraiche = lireTuiles(localStorage.getItem(cleTuiles))
+          || lireTuiles(localStorage.getItem(cleTuilesBureauAnonyme(agencyId)));
+        const casesFraiches = lireCases(localStorage.getItem(cleCases))
+          || lireCases(localStorage.getItem(cleCasesBureauAnonyme(agencyId)));
+        setGrilleBureau(choisirVersion(
+          { items: localeFraiche, maj: lireHorodatageLocal(cleTuiles) },
+          { items: lireTuilesValeur(lectureTuiles.items), maj: lectureTuiles.maj },
+        ));
+        setCasesBureau(choisirVersion(
+          { items: casesFraiches, maj: lireHorodatageLocal(cleCases) },
+          { items: lireCasesValeur(lectureCases.items), maj: lectureCases.maj },
+        ));
+        const serveur = (data as { hidden_tiles?: { id?: string }[] }).hidden_tiles;
+        const ids = new Set(lireMasquees().map((tuile) => tuile.id));
+        if (Array.isArray(serveur)) {
+          for (const tuile of serveur) if (tuile?.id) ids.add(tuile.id);
+        }
+        setIdsMasques(ids);
+      } catch {
+        // Le navigateur reste la source si le compte ne répond pas.
+      }
+    })();
+    const relire = () => {
+      if (!actif) return;
+      const prochaine = lireTuiles(localStorage.getItem(cleTuiles))
+        || lireTuiles(localStorage.getItem(cleTuilesBureauAnonyme(agencyId)));
+      const prochainesCases = lireCases(localStorage.getItem(cleCases))
+        || lireCases(localStorage.getItem(cleCasesBureauAnonyme(agencyId)));
+      if (prochaine) setGrilleBureau(prochaine);
+      if (prochainesCases) setCasesBureau(prochainesCases);
+    };
+    window.addEventListener('novasphere:home-tiles-changed', relire);
+    window.addEventListener('storage', relire);
+    return () => {
+      actif = false;
+      window.removeEventListener('novasphere:home-tiles-changed', relire);
+      window.removeEventListener('storage', relire);
+    };
+  }, [currentUser?.uid, activeAgency?.id]);
+
   // Convertit les verrous du super admin en raccourcis mobiles — VRAIS
   // dossiers (façon dossier iPhone), pas des tuiles éclatées à plat : « je
   // veux que ça soit la même chose comme les produits iPhone ». Un dossier
@@ -337,6 +441,31 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     return out.filter((s) => !estBlocNotes({ id: s.id, title: s.label, navTarget: s.nav }) || s.id === garde.id);
   }, [lockedTiles, activeAgency]);
   const lockedSpaceIds = useMemo(() => new Set(lockedMobileSpaces.map((s) => s.id)), [lockedMobileSpaces]);
+  const visibiliteBureau: VisibiliteTuiles = useMemo(() => ({
+    immosphera: estAgenceImmosphera(activeAgency),
+    novavisio: /novavisio/i.test(activeAgency?.name ?? '') || /novavisio/i.test((activeAgency as { slug?: string } | null)?.slug ?? ''),
+    conseilsFinances: estAgenceConseilsFinances(activeAgency),
+    banquesAssurances: estAgenceConseilsFinances(activeAgency),
+    dossierImmosphera: estAgenceImmosphera(activeAgency),
+    annonce: userProfile?.role === 'super_admin' || currentUser?.uid === '3c6797de-456a-4988-8358-7e3d813e9474',
+    masquees: idsMasques,
+  }), [activeAgency, userProfile?.role, currentUser?.uid, idsMasques]);
+  const espacesPartages = useMemo(() => {
+    if (!grilleBureau) return null;
+    const prepares = ordonnerCommeLeBureau(tuilesPourTelephone(grilleBureau, visibiliteBureau), casesBureau);
+    const convertis = prepares
+      .map(versEspacePartage)
+      .filter((espace): espace is SpaceDef => !!espace);
+    const dejaLa = new Set(convertis.map((espace) => espace.id));
+    const notesVerrouille = lockedMobileSpaces.find((espace) =>
+      estBlocNotes({ id: espace.id, title: espace.label, navTarget: espace.nav }));
+    const remplaces = convertis
+      .filter((espace) => !notesVerrouille || !estBlocNotes({ id: espace.id, title: espace.label, navTarget: espace.nav }) || espace.id === notesVerrouille.id)
+      .map((espace) => lockedMobileSpaces.find((verrou) => verrou.id === espace.id) || espace);
+    const manquants = lockedMobileSpaces.filter((verrou) => !dejaLa.has(verrou.id));
+    return [...remplaces, ...manquants];
+  }, [grilleBureau, casesBureau, visibiliteBureau, lockedMobileSpaces]);
+  const grillePartagee = !!espacesPartages && espacesPartages.length > 0;
   // Dossier verrouillé actuellement ouvert en plein écran (façon dossier
   // iPhone) — null quand aucun n'est ouvert.
   const [openLockedFolder, setOpenLockedFolder] = useState<SpaceDef | null>(null);
@@ -497,9 +626,17 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
 
   // Ids "slots" utilisés par le contexte triable de dnd-kit : un id réel
   // pour une case occupée, un id synthétique stable pour une case vide.
-  const cellSlotIds = cellIds.map((id, i) => id || `empty-${i}`);
+  const cellulesAffichees = espacesPartages && espacesPartages.length > 0
+    ? espacesPartages.map((espace) => espace.id)
+    : cellIds;
+  const espaceAffiche = (id: string) =>
+    espacesPartages?.find((espace) => espace.id === id) || ALL_SPACES.find((espace) => espace.id === id);
+  const cellSlotIds = cellulesAffichees.map((id, i) => id || `empty-${i}`);
 
   const [editMode, setEditMode] = useState(false);
+  useEffect(() => {
+    if (grillePartagee) setEditMode(false);
+  }, [grillePartagee]);
   // Ticket #43 (nouvelle base) : au-delà d'un certain nombre de raccourcis
   // ajoutés, la grille s'étalait sur plusieurs pages sans jamais donner
   // accès au bouton "Ajouter" (poussé hors champ). On limite l'affichage
@@ -510,6 +647,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startLongPress = () => {
+    if (grillePartagee) return;
     longPressTimer.current = setTimeout(() => setEditMode(true), 480);
   };
   const cancelLongPress = () => {
@@ -555,6 +693,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const handleDragStart = (event: DragStartEvent) => setActiveDragId(String(event.active.id));
 
   const handleDragOver = (event: DragOverEvent) => {
+    if (grillePartagee) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     setCellIds((cur) => {
@@ -734,7 +873,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
         </div>
 
         <div className="rounded-3xl bg-[#0b1c1e] border border-[#143c3f]/80 overflow-hidden">
-          {visibleSpaces.length === 0 && !editMode ? (
+          {(espacesPartages && espacesPartages.length > 0 ? espacesPartages.length : visibleSpaces.length) === 0 && !editMode ? (
             // Filet de sécurité : si tous les espaces ont été masqués, il n'y
             // a plus aucune tuile sur laquelle faire un appui long pour
             // revenir en édition — ce bouton reste toujours accessible.
@@ -762,7 +901,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   // complète), +1 ligne vide en mode édition pour avoir de
                   // la place où glisser une tuile — jamais moins de 2
                   // lignes (6 cases) pour garder une grille stable.
-                  const lastFilled = cellIds.reduce((last, id, i) => (id ? i : last), -1);
+                  const lastFilled = cellulesAffichees.reduce((last, id, i) => (id ? i : last), -1);
                   const filledCount = lastFilled + 1;
                   const rowsNeeded = Math.ceil(filledCount / 3) + (editMode ? 1 : 0);
                   const slotCount = Math.min(GRID_SLOTS, Math.max(6, rowsNeeded * 3));
@@ -782,14 +921,14 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   // rester visible comme sur desktop, pas optionnel. On
                   // étend donc le repli jusqu'à couvrir la dernière case
                   // verrouillée occupée, jamais moins que 5.
-                  const lastLockedIndex = cellIds.reduce(
-                    (last, id, i) => (id && lockedSpaceIds.has(id) ? i : last),
+                  const lastLockedIndex = cellulesAffichees.reduce(
+                    (last, id, i) => (id && (lockedSpaceIds.has(id) || espacesPartages?.some((espace) => espace.id === id && espace.locked)) ? i : last),
                     -1
                   );
                   const visibleCount = collapsed ? Math.max(5, lastLockedIndex + 1) : slotCount;
 
-                  const tiles = cellIds.slice(0, visibleCount).map((id, i) => {
-                    const space = id ? ALL_SPACES.find((s) => s.id === id) : undefined;
+                  const tiles = cellulesAffichees.slice(0, visibleCount).map((id, i) => {
+                    const space = id ? espaceAffiche(id) : undefined;
                     if (space) {
                       return (
                         <SpaceTile
@@ -945,7 +1084,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           >
             <div className="flex items-center justify-between mb-4 shrink-0">
               <h3 className="text-white font-bold text-lg flex items-center gap-2">
-                <Lock className="w-4 h-4 text-slate-400" />
+                {openLockedFolder.locked && <Lock className="w-4 h-4 text-slate-400" />}
                 {openLockedFolder.label}
               </h3>
               <button onClick={() => setOpenLockedFolder(null)} className="p-2 rounded-xl bg-white/5 text-slate-300">
@@ -958,6 +1097,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   <button
                     key={c.id}
                     onClick={() => {
+                      if (c.isFolder) {
+                        setOpenLockedFolder(c);
+                        return;
+                      }
                       setOpenLockedFolder(null);
                       if (c.externalUrl) {
                         window.open(c.externalUrl, '_blank', 'noopener,noreferrer');
