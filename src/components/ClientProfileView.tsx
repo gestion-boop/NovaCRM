@@ -523,9 +523,10 @@ export default function ClientProfileView({
   const currentStageIndex = leadStage?.stage_id
     ? stages.findIndex((s: any) => s.id === leadStage.stage_id)
     : -1;
+  const etapeCourante = currentStageIndex >= 0 ? stages[currentStageIndex]?.name : null;
   // Couleur d'une étape sur la fiche : code de Natacha pour Novavisio, sinon aucune (doré par défaut).
   const couleurEtapeFiche = (nom: string | undefined): string | null =>
-    estAgenceNovavisio(client.agencyId) ? couleurEtapeNovavisio(nom) : null;
+    estAgenceNovavisio(client?.agencyId) ? couleurEtapeNovavisio(nom) : null;
 
   // Demandé le 2 septembre : « quand c'est à facturer, on met le montant ».
   // Même fenêtre que dans le Pipeline, pour le même geste : ici les pastilles
@@ -2289,7 +2290,7 @@ export default function ClientProfileView({
           — même constat/correctif que le liseré du champ de saisie du chat
           plus tôt dans la session : passage à border-white/15, nettement
           plus visible sans être criard. */}
-      <div className="bg-[#07191b] border-b border-white/15 p-4 sm:p-6 flex flex-col gap-4 sm:gap-6 sticky top-0 z-10">
+      <div className="bg-[#07191b] border-b border-white/15 px-4 sm:px-6 py-3 flex flex-col gap-3 sticky top-0 z-20">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <button onClick={onBack} className="p-2 rounded-xl bg-black/40 hover:bg-black/60 border border-[#144447]/60 text-slate-300 transition-colors shrink-0">
@@ -2297,11 +2298,27 @@ export default function ClientProfileView({
             </button>
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">{client.name}</h1>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 text-xs font-bold">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 min-w-0 text-sm">
+                <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 text-xs font-bold shrink-0">
                   {client.status}
                 </span>
-                <span className="text-sm text-slate-400">
+                {client.phone ? (
+                  <a
+                    href={`tel:${String(client.phone).replace(/[^+\d]/g, '')}`}
+                    title="Appeler"
+                    className="text-[#F9C977] font-semibold shrink-0 hover:text-[#FAD592]"
+                  >
+                    {client.phone}
+                  </a>
+                ) : (
+                  <span className="text-slate-500 shrink-0">Pas de téléphone</span>
+                )}
+                <span className="text-slate-500 shrink-0" aria-hidden>·</span>
+                <span className="text-slate-100 font-semibold truncate min-w-0" title={currentPipelineName}>
+                  {etapeCourante || 'Sans étape'}
+                </span>
+                <span className="hidden md:inline text-slate-500 shrink-0" aria-hidden>·</span>
+                <span className="hidden md:inline text-slate-400 truncate">
                   Créé le {new Date(client.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </span>
               </div>
@@ -2386,7 +2403,9 @@ export default function ClientProfileView({
             )}
           </div>
         </div>
+      </div>
 
+      <div className="bg-[#07191b] border-b border-white/15 px-4 sm:px-6 py-4">
         {/* Pipeline réel — cliquer une étape l'enregistre en base */}
         <div className="bg-[#0a1e20] rounded-xl border border-white/15 p-4 pb-6 relative shadow-inner">
           <div className="flex items-center gap-2 mb-4 text-xs font-bold text-slate-400">
