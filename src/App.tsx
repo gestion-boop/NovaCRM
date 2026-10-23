@@ -923,6 +923,12 @@ function App() {
           }
         }}
         onSelectContact={(contactId) => openClientProfile(contactId)}
+        onOpenMessage={(messageId) => {
+          setNovaOpen(false);
+          setSelectedClientProfileId(null);
+          setHighlightMessageId(messageId);
+          setCurrentNav('chat');
+        }}
         onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
         onToggleNotifications={() => setNotificationsPanelOpen((open) => !open)}
         menuOpen={mobileMenuOpen}
