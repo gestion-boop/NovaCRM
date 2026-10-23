@@ -51,7 +51,7 @@ const AssistantIAView = lazy(() => import('./components/AssistantIAView'));
 const ReserverCameraView = lazy(() => import('./components/ReserverCameraView'));
 const ClientProfileView = lazy(() => import('./components/ClientProfileView'));
 import NotificationsView from './components/NotificationsView';
-import MobileBottomNav from './components/MobileBottomNav';
+import MobileBottomNav, { MobileTopPlus } from './components/MobileBottomNav';
 import PublicQuestionnaire from './components/PublicQuestionnaire';
 import PublicConsentement from './components/PublicConsentement';
 import PublicVisiteImmosphera from './immosphera/pages/TourView';
@@ -1117,6 +1117,7 @@ function App() {
                     unreadMailCount={unreadMailCount}
                     unreadNotificationsCount={unreadMobileNotificationsCount}
                     onOpenNotifications={() => setNotificationsPanelOpen((open) => !open)}
+                    onOpenNouveauLead={() => setShowNouveauLead(true)}
                   />
                 ) : (
                   <AccueilGrid
@@ -1753,21 +1754,22 @@ function App() {
           // ensuite : "mode Commercial/Bureau" — openNovaMobile respecte le
           // dernier mode choisi (voir plus haut).
           onOpenNova={() => openNovaMobile()}
-          // Le « + » crée un lead, sauf sur le mail (« Écrire ») et l'agenda
-          // (« Ajouter »). Il disparaît pendant la lecture d'un message.
-          onCompose={
-            currentNav === 'mail'
-              ? (mailReading ? undefined : () => setMailComposeSignal((n) => n + 1))
-              : currentNav === 'agenda'
-                ? () => setAgendaCreateSignal((n) => n + 1)
-                : () => setShowNouveauLead(true)
-          }
-          composeLabel={currentNav === 'agenda' ? 'Ajouter' : currentNav === 'mail' ? 'Écrire' : 'Lead'}
-          composeTitle={currentNav === 'agenda' ? 'Ajouter un rendez-vous' : currentNav === 'mail' ? 'Écrire un message' : 'Créer un lead'}
           unreadMessagesCount={unreadMessagesCount}
           unreadNotificationsCount={unreadMobileNotificationsCount}
           unreadRemindersCount={unreadRemindersCount}
         />
+      )}
+      {/* Le « + » est en haut. Sur l'accueil il est déjà dans l'en-tête,
+          à côté de la clochette. Ailleurs il reste fixé en haut à droite
+          (lead, écrire un message, ajouter un rendez-vous). */}
+      {isMobile && currentNav !== 'accueil' && !(currentNav === 'chat' || novaOpen) && (
+        currentNav === 'mail'
+          ? (mailReading ? null : (
+            <MobileTopPlus onClick={() => setMailComposeSignal((n) => n + 1)} label="Écrire un message" />
+          ))
+          : currentNav === 'agenda'
+            ? <MobileTopPlus onClick={() => setAgendaCreateSignal((n) => n + 1)} label="Ajouter un rendez-vous" />
+            : <MobileTopPlus onClick={() => setShowNouveauLead(true)} label="Créer un lead" />
       )}
     </div>
   );

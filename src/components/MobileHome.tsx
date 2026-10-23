@@ -39,6 +39,8 @@ interface MobileHomeProps {
   // navigation du bas (simplifiée à Accueil/Nova/Menu) — demande explicite.
   unreadNotificationsCount?: number;
   onOpenNotifications?: () => void;
+  // Le « + » crée un lead. Il vit dans l'en-tête, plus dans la barre du bas.
+  onOpenNouveauLead?: () => void;
 }
 
 const AGENCY_LOGO_BY_NAME: Record<string, string> = {
@@ -142,6 +144,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   unreadMailCount,
   unreadNotificationsCount = 0,
   onOpenNotifications,
+  onOpenNouveauLead,
 }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
 
@@ -604,7 +607,18 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </h1>
           <p className="text-sm text-slate-400 capitalize">{dateLabel}</p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          {onOpenNouveauLead && (
+            <button
+              type="button"
+              onClick={onOpenNouveauLead}
+              title="Créer un lead"
+              aria-label="Créer un lead"
+              className="w-11 h-11 rounded-full bg-[#F7BC5F] text-[#061719] flex items-center justify-center shadow-md active:scale-95"
+            >
+              <Plus className="w-6 h-6" strokeWidth={3} />
+            </button>
+          )}
           {/* Loupe retirée (demande explicite) ; clochette agrandie à la
               même taille que la photo de profil (48px) juste à côté. */}
           {onOpenNotifications && (
@@ -662,7 +676,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   </span>
                 )}
               </div>
-              <span className="text-[11px] font-bold text-white text-center truncate w-full">{item.label}</span>
+              <span className="text-[10px] font-semibold text-slate-200 text-center truncate w-full">{item.label}</span>
             </motion.button>
           ))}
         </div>
@@ -698,7 +712,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           )}
         </div>
 
-        <div className="accueil-espaces rounded-3xl border overflow-hidden">
+        <div className="rounded-3xl bg-[#0b1c1e] border border-[#143c3f]/80 overflow-hidden">
           {visibleSpaces.length === 0 && !editMode ? (
             // Filet de sécurité : si tous les espaces ont été masqués, il n'y
             // a plus aucune tuile sur laquelle faire un appui long pour
@@ -720,7 +734,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             autoScroll={false}
           >
             <SortableContext items={cellSlotIds} strategy={rectSortingStrategy}>
-              <div className="grid grid-cols-3 divide-x divide-y divide-[var(--nv-hairline)]">
+              <div className="grid grid-cols-3 divide-x divide-y divide-[#143c3f]/60">
                 {(() => {
                   // Grille à positions libres : on affiche toutes les cases
                   // jusqu'à la dernière occupée (arrondi à la ligne
@@ -850,11 +864,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             Glissez une tuile pour la déplacer, ou touchez le − pour la masquer.
           </p>
         )}
-        {/* Ticket #48 : en édition, la tuile "Ajouter" tout en bas de la
-            grille doit toujours rester atteignable par un simple scroll —
-            une marge généreuse ici garantit qu'elle ne finit jamais collée
-            (ou masquée) contre la barre de navigation fixe du bas. */}
-        {editMode && <div className="h-24" aria-hidden="true" />}
+        {/* La barre du bas est fixe. Sans cette marge, la dernière tuile
+            (Ajouter en édition, Réduire quand tout est déplié) reste sous
+            la barre et le toucher part sur Accueil ou Menu. */}
+        {(editMode || showAllSpaces) && <div className="h-16" aria-hidden="true" />}
       </div>
 
       {showAddSheet && (
@@ -1043,7 +1056,7 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
           </span>
         )}
       </div>
-      <span className="text-[13px] font-bold text-white text-center leading-tight px-1">{space.label}</span>
+      <span className="text-xs font-semibold text-slate-200 text-center px-1">{space.label}</span>
     </div>
   );
 };
