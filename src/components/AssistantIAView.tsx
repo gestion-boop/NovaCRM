@@ -758,9 +758,11 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   // Tentative ElevenLabs (voix "Charlie", api/ai/agent.ts mode:'speak') —
   // renvoie l'audio joué avec succès, ou lève pour déclencher le repli.
   const speakViaElevenLabs = async (cleaned: string, onStart?: () => void): Promise<void> => {
+    const token = await currentUser?.getIdToken();
+    if (!token) throw new Error('Session expirée.');
     const res = await fetch('/api/ai/agent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ mode: 'speak', text: cleaned }),
     });
     if (!res.ok) throw new Error('elevenlabs_unavailable');
@@ -2188,7 +2190,8 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       // n'était pas transmis jusqu'ici (agent.ts ne pouvait identifier
       // personne) — nécessaire pour que le serveur puisse reconnaître un
       // compte "nova_super_assistant" (fondation, rien de visible encore).
-      const novaAuthToken = currentUser ? await currentUser.getIdToken().catch(() => null) : null;
+      const novaAuthToken = await currentUser?.getIdToken();
+      if (!novaAuthToken) throw new Error('Session expirée. Reconnectez-vous pour utiliser Nova.');
       const response = await fetch('/api/ai/agent', {
         method: 'POST',
         headers: {

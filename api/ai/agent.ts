@@ -1,4 +1,4 @@
-import { getAuthedUser, resolvePublicOrigin, supabaseAdmin } from '../_supabaseAdmin.js';
+import { getAuthedUser, isSuperAdminUser, resolvePublicOrigin, supabaseAdmin } from '../_supabaseAdmin.js';
 
 /**
  * POST /api/ai/agent — Assistant IA NovaSphere, propulsé par Claude
@@ -19,15 +19,29 @@ import { getAuthedUser, resolvePublicOrigin, supabaseAdmin } from '../_supabaseA
 // send-system-email/upload-client-document (compte système unique).
 const NOVA_SUPER_ASSISTANT_USER_ID = '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29';
 
-async function resolveIsNovaSuperAssistant(req: any): Promise<boolean> {
-  try {
-    const user = await getAuthedUser(req);
-    return user.id === NOVA_SUPER_ASSISTANT_USER_ID;
-  } catch {
-    // Pas de jeton (ou invalide) : traité comme non-privilégié, jamais
-    // bloquant pour l'usage normal de Nova par le reste de l'équipe.
-    return false;
+// Les services IA payants et les recherches avec la clé service_role sont
+// accessibles uniquement aux collaborateurs dont l'accès CRM est actif.
+async function requireNovaUser(req: any): Promise<{ id: string }> {
+  const user = await getAuthedUser(req);
+  const [{ data: profile, error: profileError }, { data: role, error: roleError }] = await Promise.all([
+    supabaseAdmin.from('profiles').select('is_active').eq('id', user.id).maybeSingle(),
+    supabaseAdmin.from('user_roles').select('role, expires_at').eq('user_id', user.id).maybeSingle(),
+  ]);
+  if (profileError || roleError) throw new Error('Vérification des droits indisponible.');
+  if (!profile || profile.is_active === false || ((!role || role.role === 'client_guest') && !(await isSuperAdminUser(user)))) {
+    throw new Error('Accès Nova non autorisé.');
   }
+  if (role?.expires_at && new Date(role.expires_at).getTime() <= Date.now()) {
+    throw new Error('Accès Nova expiré.');
+  }
+  if (role?.role === 'intern') {
+    const { data: intern, error: internError } = await supabaseAdmin
+      .from('intern_details').select('starts_at').eq('user_id', user.id).maybeSingle();
+    if (internError || (intern?.starts_at && new Date(intern.starts_at).getTime() > Date.now())) {
+      throw new Error('Accès Nova non autorisé.');
+    }
+  }
+  return user;
 }
 
 const TOOLS = [
@@ -891,7 +905,7 @@ async function handleSpeak(req: any, res: any) {
 async function handleDailySummaryCron(req: any, res: any) {
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers?.authorization || '';
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     res.status(401).json({ error: 'Non autorisé.' });
     return;
   }
@@ -1028,12 +1042,20 @@ async function handleDailySummaryCron(req: any, res: any) {
 }
 
 export default async function handler(req: any, res: any) {
-  if (req.method === 'GET' && req.query?.cron === 'daily-summary') {
+  if (req.method === 'GET') {
     return handleDailySummaryCron(req, res);
   }
 
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Méthode non autorisée.' });
+    return;
+  }
+
+  let novaUser: { id: string };
+  try {
+    novaUser = await requireNovaUser(req);
+  } catch {
+    res.status(401).json({ error: 'Session ou accès Nova invalide.' });
     return;
   }
 
@@ -1049,10 +1071,10 @@ export default async function handler(req: any, res: any) {
     }
 
     const { prompt, messages = [], context = {} } = req.body || {};
-    const isNovaSuperAssistant = await resolveIsNovaSuperAssistant(req);
+    const isNovaSuperAssistant = novaUser.id === NOVA_SUPER_ASSISTANT_USER_ID;
     // Ticket #267 : id utilisateur nécessaire pour retrouver son jeton
     // kDrive — jamais bloquant si absent/invalide (comme ci-dessus).
-    const currentUserId = await getAuthedUser(req).then((u) => u.id).catch(() => null);
+    const currentUserId = novaUser.id;
 
     const claudeMessages = (messages as any[]).map((m) => ({
       role: m.sender === 'user' ? 'user' : 'assistant',
