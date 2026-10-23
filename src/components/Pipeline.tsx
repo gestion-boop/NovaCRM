@@ -228,9 +228,9 @@ const PipelineCardContent: React.FC<{
               </span>
             )
           )}
-          <h4 className="text-sm sm:text-xs font-bold text-white truncate">{deal.title}</h4>
+          <h4 className="text-base font-bold text-white truncate">{deal.title}</h4>
         </div>
-        {contact && <p className="text-xs sm:text-[10px] text-gray-400 mt-1">{contact.name}</p>}
+        {contact && <p className="text-sm text-gray-300 mt-1">{contact.name}</p>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {/* Demande explicite : "mets Nova dans Pipeline" — même principe que
@@ -257,7 +257,7 @@ const PipelineCardContent: React.FC<{
         )}
       </div>
     </div>
-    <p className="text-sm sm:text-xs font-black text-[#F7BC5F] mt-3">{deal.amount.toLocaleString('fr-FR')} €</p>
+    <p className="text-sm font-black text-[#F7BC5F] mt-3">{deal.amount.toLocaleString('fr-FR')} €</p>
     {onOpenChecklist && deal.pipelineId === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID && (
       <TransactionsV2ChecklistBadge deal={deal} onOpen={() => onOpenChecklist(deal)} />
     )}
@@ -445,8 +445,8 @@ const PipelineColumn: React.FC<{
             </span>
           )}
           <div>
-            <h3 className="text-xs font-bold text-white">{stage}</h3>
-            <div className="flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-white">{stage}</h3>
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
               <p className="text-[10px] text-gray-500">{stageDeals.length} affaire(s)</p>
               {estSuperAdmin ? (
                 stageTotal > 0 && (

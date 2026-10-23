@@ -1289,6 +1289,32 @@ textarea[class]:not([class~="bg-transparent"]) {
   .nova-mascotte *, .nova-mascotte::before { animation: none !important; transition: none !important; }
 }
 
+/* La nuit se lit par le texte. Les fonds restent la teinte unique.
+   Le gris 500/600 tombe sous 3:1 sur #123336 : il rejoint l'encre
+   secondaire déjà en place (slate-400). Les lignes de 9, 10 et 11 px
+   passent à 13 px. Les pastilles rondes et les libellés collés aux
+   icônes (classe nv-texte-icone) gardent leur taille. Le survol reste
+   libre : la spécificité égale celle d'une classe Tailwind, et cette
+   règle est placée après. Le mode jour n'est pas concerné. */
+:where(html:not(.light-mode)) :is(
+  [class~="text-slate-500"],
+  [class~="text-slate-600"],
+  [class~="text-gray-500"],
+  [class~="text-gray-600"],
+  [class~="text-zinc-500"],
+  [class~="text-zinc-600"]
+) {
+  color: var(--ink-2);
+}
+:where(html:not(.light-mode)) :is(
+  .text-\[9px\],
+  .text-\[10px\],
+  .text-\[11px\]
+):where(:not(.rounded-full)):where(:not(.nv-texte-icone)) {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 /* Contour arc-en-ciel façon Siri autour de Nova IA sur mobile — tourne dans
    le sens des aiguilles d'une montre, léger pour ne pas gêner. Déplacé ici
    (global) depuis l'ancien tiroir de saisie rapide (MobileNovaSheet,

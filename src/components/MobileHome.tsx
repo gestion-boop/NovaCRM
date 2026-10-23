@@ -827,7 +827,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   </span>
                 )}
               </div>
-              <span className="text-[10px] font-semibold text-slate-200 text-center truncate w-full">{item.label}</span>
+              <span className="nv-texte-icone text-[10px] font-semibold text-slate-200 text-center truncate w-full">{item.label}</span>
             </motion.button>
           ))}
         </div>
@@ -1220,7 +1220,7 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
           </span>
         )}
       </div>
-      <span className="text-xs font-semibold text-slate-200 text-center px-1">{space.label}</span>
+      <span className="text-sm font-semibold text-slate-200 text-center px-1">{space.label}</span>
     </div>
   );
 };

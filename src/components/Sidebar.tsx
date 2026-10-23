@@ -385,7 +385,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => handleNavClick(item.id)}
                 title={collapsed && !isMobile ? `${item.label}${showBadge ? ` (${badgeCount})` : ''}` : undefined}
                 className={`w-full flex items-center justify-between transition-all duration-150 cursor-pointer border ${
-                  isMobile ? 'px-3.5 py-3 rounded-2xl text-[15px] font-semibold md:px-2.5 md:py-1.5 md:rounded-xl md:text-[13px]' : 'px-3 py-2.5 rounded-xl text-xs font-medium'
+                  isMobile ? 'px-3.5 py-3 rounded-2xl text-[15px] font-semibold md:px-2.5 md:py-1.5 md:rounded-xl md:text-[13px]' : 'px-3 py-2.5 rounded-xl text-sm font-medium'
                 } ${
                   isActive
                     ? 'bg-[#282112]/90 text-[#F7BC5F] border-[#F7BC5F]/80 shadow-sm font-semibold'

@@ -958,7 +958,7 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
 
           <div className="flex items-center justify-center gap-1 max-w-full mb-1 sm:mb-1.5">
             <Folder className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
-            <h3 className="text-white font-bold text-xs sm:text-sm tracking-tight truncate">
+            <h3 className="text-white font-bold text-sm sm:text-base tracking-tight truncate">
               {tile.title}
             </h3>
           </div>
@@ -1044,7 +1044,7 @@ const TuileFantome: React.FC<{ tile: TileItemNode; sousTuile?: boolean }> = ({ t
           </div>
           <div className="flex items-center justify-center gap-1 max-w-full">
             <Folder className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
-            <h3 className="text-white font-bold text-xs sm:text-sm tracking-tight truncate">{tile.title}</h3>
+            <h3 className="text-white font-bold text-sm sm:text-base tracking-tight truncate">{tile.title}</h3>
           </div>
         </div>
       ) : (
@@ -1139,7 +1139,7 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
       {subItem.isFolder ? (
         <div className="flex flex-col items-center">
           <Folder className="w-8 h-8 text-[#F7BC5F] mb-2" />
-          <span className="text-white font-semibold text-xs">{subItem.title}</span>
+          <span className="text-white font-semibold text-sm">{subItem.title}</span>
         </div>
       ) : (
         <div className="flex flex-col items-center">
@@ -1148,7 +1148,7 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
           ) : (
             <SubIcon className="w-8 h-8 text-white mb-2 z-10" />
           )}
-          <span className="text-white font-semibold text-xs z-10">{subItem.title}</span>
+          <span className="text-white font-semibold text-sm z-10">{subItem.title}</span>
           {subItem.externalUrl ? (
             <span className="inline-flex items-center gap-0.5 text-[9px] text-[#FAD592] font-medium mt-1 z-10 bg-black/40 px-2 py-0.5 rounded-full border border-white/10">
               <ExternalLink className="w-2.5 h-2.5" /> Web
