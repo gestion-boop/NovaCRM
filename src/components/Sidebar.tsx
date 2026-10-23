@@ -11,6 +11,7 @@ import {
 import { AGENCIES, Agency } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { getAgencyLogo, agencesDisponibles } from '@/lib/agency-logos';
+import { grouperMenu } from '@/lib/famillesMenu';
 import AgencyLogoSwitcher from './AgencyLogoSwitcher';
 
 export interface SidebarProps {
@@ -212,6 +213,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (onCloseMobile) onCloseMobile();
   };
 
+  const lignesMenu = useMemo(() => {
+    const groupe = grouperMenu(orderedNavItems);
+    const lignes: Array<
+      | { kind: 'titre'; id: string; titre: string }
+      | { kind: 'entree'; item: (typeof NAV_ITEMS)[number] }
+    > = [];
+    if (groupe.accueil) lignes.push({ kind: 'entree', item: groupe.accueil });
+    for (const famille of groupe.familles) {
+      lignes.push({ kind: 'titre', id: famille.id, titre: famille.titre });
+      for (const item of famille.items) lignes.push({ kind: 'entree', item });
+    }
+    return lignes;
+  }, [orderedNavItems]);
+
   const displayName = userProfile?.displayName || currentUser?.displayName || 'Utilisateur';
   const displayEmail = userProfile?.email || currentUser?.email || userEmail || '';
   const initial = displayName.charAt(0).toUpperCase();
@@ -335,13 +350,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation list - Scrollable container filling available space */}
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1 custom-scrollbar -webkit-overflow-scrolling-touch">
-        {(!collapsed || isMobile) && (
-          <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 select-none">
-            NAVIGATION
-          </p>
-        )}
+        {lignesMenu.map((ligne) => {
+          if (ligne.kind === 'titre') {
+            if (collapsed && !isMobile) {
+              return <div key={ligne.id} className="mx-2 my-1 h-px bg-white/10" />;
+            }
+            return (
+              <p key={ligne.id} className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 select-none">
+                {ligne.titre}
+              </p>
+            );
+          }
 
-        {orderedNavItems.map((item, itemIndex) => {
+          const item = ligne.item;
           const Icon = item.icon;
           const isActive = currentNav === item.id;
           const badgeCount =
@@ -358,10 +379,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           return (
             <React.Fragment key={item.id}>
-              {/* Séparateurs et grandes lignes : téléphone, menu plein écran.
-                  Sur ordinateur le tiroir fait 270px — les mêmes lignes
-                  n'y laissaient voir que quelques entrées. */}
-              {isMobile && itemIndex > 0 && <div className="h-px bg-white/10 mx-2 md:hidden" />}
               <div className="relative group">
               <button
                 data-tour={`nav-${item.id}`}

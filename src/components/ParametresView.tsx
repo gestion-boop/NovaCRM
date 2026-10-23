@@ -24,6 +24,7 @@ import { supabase } from '@/lib/supabase';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { NAV_ITEMS } from './Sidebar';
+import { familleMenu, ordonnerParFamille, titreFamille } from '@/lib/famillesMenu';
 
 interface ParametresViewProps {
   selectedAgency: Agency;
@@ -1971,6 +1972,14 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
         const visibleTabs = isNovavisioActive || !carteEntry
           ? tabs
           : tabs.filter(([, path]) => path !== 'carte-novavisio');
+        const tabsMenu = ordonnerParFamille(visibleTabs, ([, path]) => path);
+        const peutDeplacer = (index: number, sens: -1 | 1) => {
+          const voisin = tabsMenu[index + sens];
+          if (!voisin) return false;
+          const id = tabsMenu[index][1];
+          const famille = familleMenu(id);
+          return famille !== null && famille === familleMenu(voisin[1]);
+        };
         const rebuildFullTabs = (newVisible: Array<[string, string]>): Array<[string, string]> => {
           if (isNovavisioActive || !carteEntry) return newVisible;
           const result = [...newVisible];
@@ -1984,8 +1993,8 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
               <p className="font-semibold text-white">Ordre des onglets dans la barre latérale</p>
               <p className="text-xs text-slate-400 mt-1">
                 {isMobile
-                  ? "L'ordre se règle depuis la version ordinateur et se synchronise ici automatiquement, en direct — pas besoin de mise à jour."
-                  : 'Glissez-déposez les onglets. En passant sur un autre onglet, celui-ci s\'écarte pour glisser dessous. L\'ordre est appliqué immédiatement, y compris sur mobile.'}
+                  ? 'Le menu est rangé en Activité, Échanges et Agence. L’ordre à l’intérieur d’une famille se règle depuis l’ordinateur et se synchronise ici.'
+                  : 'Le menu est rangé en Activité, Échanges et Agence. Glissez une entrée : elle reste dans sa famille. L’ordre est appliqué immédiatement, y compris sur mobile.'}
               </p>
             </div>
             <button
@@ -2012,13 +2021,18 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
             onDragEnd={(result: DropResult) => {
               const { source, destination } = result;
               if (!destination || destination.index === source.index) return;
-              saveTabOrder(rebuildFullTabs(reorder(visibleTabs, source.index, destination.index)));
+              const idSource = tabsMenu[source.index]?.[1];
+              const idDestination = tabsMenu[destination.index]?.[1];
+              if (!idSource || !idDestination) return;
+              const famille = familleMenu(idSource);
+              if (famille === null || famille !== familleMenu(idDestination)) return;
+              saveTabOrder(rebuildFullTabs(reorder(tabsMenu, source.index, destination.index)));
             }}
           >
             <Droppable droppableId="settings-tabs" isDropDisabled={isMobile}>
               {(dropProvided) => (
                 <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="space-y-2 relative">
-                  {visibleTabs.map(([label, path], index) => {
+                  {tabsMenu.map(([label, path], index) => {
                     const NavIcon = NAV_ITEMS.find((n) => n.id === path)?.icon;
                     // Sur mobile, l'ordre des onglets ne se modifie que
                     // depuis la version ordinateur : glisser désactivé.
@@ -2049,6 +2063,9 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                               </div>
                             )}
                             <span className="font-semibold text-base sm:text-sm text-white flex-1 truncate">{label}</span>
+                            {titreFamille(path) && (
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 shrink-0">{titreFamille(path)}</span>
+                            )}
                             {!isMobile && dragSnapshot.isDragging && (
                               <span className="text-[10px] font-bold text-[#F7BC5F] uppercase tracking-wider bg-[#F7BC5F]/20 px-2 py-0.5 rounded-full border border-[#F7BC5F]/40">
                                 Déplacement...
@@ -2062,8 +2079,8 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
-                                  disabled={index === 0}
-                                  onClick={() => saveTabOrder(rebuildFullTabs(reorder(visibleTabs, index, index - 1)))}
+                                  disabled={!peutDeplacer(index, -1)}
+                                  onClick={() => saveTabOrder(rebuildFullTabs(reorder(tabsMenu, index, index - 1)))}
                                   className="p-1.5 text-slate-400 hover:text-[#F7BC5F] rounded-lg hover:bg-white/5 transition-colors disabled:opacity-30 disabled:pointer-events-none"
                                   title="Monter"
                                 >
@@ -2071,8 +2088,8 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                                 </button>
                                 <button
                                   type="button"
-                                  disabled={index === visibleTabs.length - 1}
-                                  onClick={() => saveTabOrder(rebuildFullTabs(reorder(visibleTabs, index, index + 1)))}
+                                  disabled={!peutDeplacer(index, 1)}
+                                  onClick={() => saveTabOrder(rebuildFullTabs(reorder(tabsMenu, index, index + 1)))}
                                   className="p-1.5 text-slate-400 hover:text-[#F7BC5F] rounded-lg hover:bg-white/5 transition-colors disabled:opacity-30 disabled:pointer-events-none"
                                   title="Descendre"
                                 >
