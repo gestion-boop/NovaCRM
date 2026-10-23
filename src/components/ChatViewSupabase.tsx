@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown, ChevronRight,
@@ -18,6 +18,12 @@ import { agencesDisponibles } from '@/lib/agency-logos';
 import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { NOVA_QUICK_REACTIONS, renderEmojiOrNova, isNovaReaction } from '@/lib/novaReactions';
 import { conversationASignaler, memoriserFilOuvert } from '@/lib/alerteChat';
+import {
+  comportementDefilementFil,
+  fusionnerMessage,
+  ligneCanalDepuisTempsReel,
+  ligneDirecteDepuisTempsReel,
+} from '@/lib/affichageFil';
 import { fermerNotificationsSysteme } from '@/lib/notificationsLues';
 
 interface ChatProject {
@@ -139,6 +145,17 @@ function signatureMessages(rows: { id: string; created_at: string; edited_at?: s
   return s;
 }
 
+/** Trois bulles qui respirent, le temps du premier chargement d'un fil vide. */
+function FilEnAttente() {
+  return (
+    <div className="space-y-3 py-6" aria-busy="true" aria-label="Chargement des messages">
+      <div className="h-11 w-2/3 max-w-xs rounded-2xl rounded-bl-md bg-white/5 animate-pulse" />
+      <div className="h-11 w-1/2 max-w-[10rem] rounded-2xl rounded-br-md bg-[#F7BC5F]/20 animate-pulse ml-auto" />
+      <div className="h-11 w-3/5 max-w-xs rounded-2xl rounded-bl-md bg-white/5 animate-pulse" />
+    </div>
+  );
+}
+
 interface ChatViewSupabaseProps {
   // Message ciblé par un clic sur une notification push/in-app — ouvre
   // automatiquement la bonne conversation et fait "rebondir" ce message
@@ -194,6 +211,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [activeChannel, setActiveChannel] = useState<ChatChannel | null>(null);
   const [messages, setMessages] = useState<ChatMessageRow[]>([]);
+  // Vrai seulement tant que le canal affiché n'a encore aucune ligne en
+  // mémoire : on montre alors une attente, pas le texte « aucun message ».
+  const [canalFilEnChargement, setCanalFilEnChargement] = useState(false);
   // Audit stabilité (20 octobre) : même bug que celui corrigé côté
   // conversations (voir activeConversationIdRef plus bas) mais côté canaux
   // d'équipe — loadMessages n'avait ni ref ni cache et remplaçait `messages`
@@ -202,11 +222,23 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // quelques secondes, les messages d'un AUTRE canal sous le nom du canal
   // actif.
   const activeChannelIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    activeChannelIdRef.current = activeChannel?.id || null;
-  }, [activeChannel?.id]);
   const channelMessagesCacheRef = useRef<Record<string, ChatMessageRow[]>>({});
   const signatureCanalRef = useRef<Record<string, string>>({});
+  // Avant le premier paint : le cache du canal (s'il existe) remplace tout
+  // de suite le fil précédent. Sinon l'écran gardait les messages de l'autre
+  // canal jusqu'au retour réseau, ce qui se lisait comme un affichage lent.
+  useLayoutEffect(() => {
+    const id = activeChannel?.id || null;
+    activeChannelIdRef.current = id;
+    if (!id) {
+      setCanalFilEnChargement(false);
+      return;
+    }
+    const connus = channelMessagesCacheRef.current[id] || [];
+    signatureCanalRef.current[id] = signatureMessages(connus);
+    setMessages(connus);
+    setCanalFilEnChargement(connus.length === 0);
+  }, [activeChannel?.id]);
   const [draft, setDraft] = useState('');
   const [showChannelEmoji, setShowChannelEmoji] = useState(false);
   // Signalé : "les Novadji dans les messages ne se mettent pas" — le
@@ -315,10 +347,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // changement, donne toujours la conversation RÉELLEMENT affichée à
   // l'instant de la fusion.
   const activeConversationIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    activeConversationIdRef.current = activeConversationId;
-  }, [activeConversationId]);
   const [convMessages, setConvMessages] = useState<DirectMessageRow[]>([]);
+  // Même principe que canalFilEnChargement : le premier chargement d'une
+  // conversation jamais ouverte ne doit pas afficher « aucun message ».
+  const [convFilEnChargement, setConvFilEnChargement] = useState(false);
+  useLayoutEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+    if (!activeConversationId) setConvFilEnChargement(false);
+  }, [activeConversationId]);
   // Perf (30/08/2026, signalé "plus de 10 secondes avant que tout
   // apparaisse" + proposition de l'utilisateur "classer des antécédents") :
   // chaque ouverture ET chaque sondage (toutes les 4s, voir plus bas)
@@ -352,6 +388,42 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // conversation plutôt qu'à la liste entière.
   const convMessagesCacheRef = useRef<Record<string, DirectMessageRow[]>>({});
   const signatureConvRef = useRef<Record<string, string>>({});
+
+  // Pose une ligne dans le cache ET à l'écran, sans attendre le rechargement
+  // des 60 derniers messages. La signature est mise à jour pour que ce
+  // rechargement, quand il revient identique, ne redessine pas le fil.
+  const integrerMessageDirect = (conversationId: string, row: DirectMessageRow) => {
+    const fusion = fusionnerMessage(convMessagesCacheRef.current[conversationId] || [], row);
+    convMessagesCacheRef.current[conversationId] = fusion;
+    const signature = signatureMessages(fusion);
+    const inchangee = signatureConvRef.current[conversationId] === signature;
+    signatureConvRef.current[conversationId] = signature;
+    if (activeConversationIdRef.current !== conversationId) return;
+    setConvFilEnChargement(false);
+    if (!inchangee) setConvMessages(fusion);
+  };
+  const retirerMessageDirect = (conversationId: string, messageId: string) => {
+    const reste = (convMessagesCacheRef.current[conversationId] || []).filter((m) => m.id !== messageId);
+    convMessagesCacheRef.current[conversationId] = reste;
+    signatureConvRef.current[conversationId] = signatureMessages(reste);
+    if (activeConversationIdRef.current === conversationId) setConvMessages(reste);
+  };
+  const integrerMessageCanal = (channelId: string, row: ChatMessageRow) => {
+    const fusion = fusionnerMessage(channelMessagesCacheRef.current[channelId] || [], row);
+    channelMessagesCacheRef.current[channelId] = fusion;
+    const signature = signatureMessages(fusion);
+    const inchangee = signatureCanalRef.current[channelId] === signature;
+    signatureCanalRef.current[channelId] = signature;
+    if (activeChannelIdRef.current !== channelId) return;
+    setCanalFilEnChargement(false);
+    if (!inchangee) setMessages(fusion);
+  };
+  const retirerMessageCanal = (channelId: string, messageId: string) => {
+    const reste = (channelMessagesCacheRef.current[channelId] || []).filter((m) => m.id !== messageId);
+    channelMessagesCacheRef.current[channelId] = reste;
+    signatureCanalRef.current[channelId] = signatureMessages(reste);
+    if (activeChannelIdRef.current === channelId) setMessages(reste);
+  };
   // Verrous d'envoi — un message à la fois par composeur. Un `useRef` et non
   // un `useState` : la valeur doit être lue et écrite dans le même tic, avant
   // tout nouveau rendu, sinon la garde arrive trop tard.
@@ -1042,6 +1114,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // événement temps réel réessaiera.
     if (error) {
       console.warn('Erreur chargement messages de conversation :', error);
+      if (activeConversationIdRef.current === conversationId) setConvFilEnChargement(false);
       return;
     }
 
@@ -1095,8 +1168,11 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     signatureConvRef.current[conversationId] = signature;
     // Le sondage toutes les 4 s ramenait la même liste et redessinait tout
     // le fil. On ne touche à l'écran que si un message a vraiment changé.
-    if (!inchangée && activeConversationIdRef.current === conversationId) {
-      setConvMessages(fusion);
+    // L'attente, elle, se termine même si la liste est vide ou identique :
+    // sinon les bulles de chargement resteraient sur un fil sans message.
+    if (activeConversationIdRef.current === conversationId) {
+      setConvFilEnChargement(false);
+      if (!inchangée) setConvMessages(fusion);
     }
     if (rows.length > 0) {
       await loadReactionsAndReceiptsFor(rows, conversationId);
@@ -1170,8 +1246,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     //     (voir convMessagesCacheRef) au lieu de vider l'écran en attendant
     //     le round-trip réseau ; `loadConvMessages` rafraîchit ensuite en
     //     tâche de fond et met le cache à jour. Une conversation jamais
-    //     ouverte cette session reste vide le temps du premier chargement,
-    //     comme avant.
+    //     ouverte cette session montre trois bulles le temps du premier
+    //     chargement, à la place du texte « aucun message ».
     //  2) `loadConvMessages(id)` n'est plus appelé ICI : l'effet plus bas
     //     (dépendances [activeConversationId, isActive]) le fait déjà dès
     //     que `activeConversationId` change — l'appeler aussi ici doublait
@@ -1179,8 +1255,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     //     réactions/accusés de lecture, jusqu'à 6 requêtes au lieu de 3).
     const connus = convMessagesCacheRef.current[id] || [];
     signatureConvRef.current[id] = signatureMessages(connus);
+    activeConversationIdRef.current = id;
     setConvMessages(connus);
     setConvHasMoreOlder(true);
+    setConvFilEnChargement(connus.length === 0);
   };
 
   // Signalé (urgent, 30/08/2026) : "elle ne sait pas d'où ça vient" —
@@ -1419,7 +1497,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeConversationId}` },
-        () => loadConvMessages(activeConversationId)
+        (payload) => {
+          // Le websocket a déjà la ligne. On la peint tout de suite, puis le
+          // rechargement habituel confirme (réactions, accusés) sans que
+          // l'écran ait attendu ce second aller-retour.
+          if (payload.eventType === 'INSERT') {
+            const row = ligneDirecteDepuisTempsReel(payload.new);
+            if (row?.conversation_id === activeConversationId) integrerMessageDirect(activeConversationId, row);
+          }
+          void loadConvMessages(activeConversationId);
+        }
       )
       // Signalé lors d'un audit général : sans filtre serveur possible
       // (`message_reactions` n'a pas de conversation_id), on écoute toutes
@@ -1491,6 +1578,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // liste ait fini de se mettre en page (scrollHeight pas encore à jour).
   // Un rAF force le saut au prochain paint, puis un rattrapage après le
   // rendu complet (images) garantit qu'on atterrit bien tout en bas.
+  //
+  // Le saut fluide sur TOUT le lot (60 messages) faisait croire que les
+  // messages mettaient du temps à arriver : on les voyait défiler depuis le
+  // haut. On ne garde le glissement que pour un seul nouveau message, quand
+  // le lecteur est déjà en bas. L'ouverture et un rattrapage de lot sautent.
+  const convTailleVueRef = useRef(0);
+  const convFilVuRef = useRef<string | null>(null);
   useEffect(() => {
     // Signalé (10 septembre, Sylvain/Pauline) : « ça ne va pas dans le bon
     // message » en cliquant sur une notification. Cause trouvée : CET effet
@@ -1503,18 +1597,30 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // systématiquement : on atterrissait toujours en bas de la conversation
     // (le message le plus récent), jamais sur le message visé par la
     // notification s'il ne s'agissait pas déjà du dernier.
-    if (highlightedMessageId) return;
     const pane = convScrollRef.current;
-    if (!pane) return;
-    const frame = window.requestAnimationFrame(() => {
-      pane.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
+    const ajout = convMessages.length - convTailleVueRef.current;
+    const changement = convFilVuRef.current !== activeConversationId;
+    convTailleVueRef.current = convMessages.length;
+    convFilVuRef.current = pane ? activeConversationId : null;
+    if (highlightedMessageId || !pane) return;
+    const behavior = comportementDefilementFil({
+      changementDeFil: changement,
+      messagesAjoutes: ajout,
+      distanceDuBas: pane.scrollHeight - pane.scrollTop - pane.clientHeight,
     });
-    const settle = window.setTimeout(() => {
-      pane.scrollTo({ top: pane.scrollHeight, behavior: 'auto' });
-    }, 150);
+    if (!behavior) return;
+    const frame = window.requestAnimationFrame(() => {
+      pane.scrollTo({ top: pane.scrollHeight, behavior });
+    });
+    // Le rattrapage à 150 ms annulerait le glissement d'un message seul.
+    const settle = behavior === 'auto'
+      ? window.setTimeout(() => {
+          pane.scrollTo({ top: pane.scrollHeight, behavior: 'auto' });
+        }, 150)
+      : 0;
     return () => {
       window.cancelAnimationFrame(frame);
-      window.clearTimeout(settle);
+      if (settle) window.clearTimeout(settle);
     };
   }, [convMessages.length, activeConversationId, highlightedMessageId]);
 
@@ -1541,6 +1647,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // double appui sur le bouton d'envoi...).
     if (sendingConvRef.current) return;
     sendingConvRef.current = true;
+    const convId = activeConversationId;
     setConvDraft('');
 
     // Signalé : le message met ~18s à apparaître, et le destinataire le
@@ -1562,21 +1669,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // double, signalé. C'est la reprise de l'id réel, plus bas, qui rend le
     // remplacement effectif. Ne pas la retirer.
     const optimisticId = `optimistic-${Date.now()}`;
-    setConvMessages((prev) => [
-      ...prev,
-      {
-        id: optimisticId,
-        conversation_id: activeConversationId,
-        user_id: currentUser.uid,
-        kind: 'text',
-        body,
-        attachment_url: null,
-        attachment_mime: null,
-        attachment_duration: null,
-        edited_at: null,
-        created_at: new Date().toISOString(),
-      },
-    ]);
+    // Le cache aussi : le sondage fusionne depuis lui, pas depuis l'écran.
+    // Sans ça, un sondage qui revient pendant l'envoi effaçait l'écho.
+    integrerMessageDirect(convId, {
+      id: optimisticId,
+      conversation_id: convId,
+      user_id: currentUser.uid,
+      kind: 'text',
+      body,
+      attachment_url: null,
+      attachment_mime: null,
+      attachment_duration: null,
+      edited_at: null,
+      created_at: new Date().toISOString(),
+    });
 
     let inserted: { id?: string } | null = null;
     let error: unknown = null;
@@ -1584,7 +1690,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       const res = await supabase
         .from('messages')
         .insert({
-          conversation_id: activeConversationId,
+          conversation_id: convId,
           user_id: currentUser.uid,
           kind: 'text',
           body,
@@ -1603,7 +1709,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (error) {
       // L'envoi a échoué : on retire l'écho optimiste et on restaure le
       // brouillon pour ne pas faire croire que le message est parti.
-      setConvMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      retirerMessageDirect(convId, optimisticId);
       setConvDraft(body);
       sendingConvRef.current = false;
       return;
@@ -1615,13 +1721,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // faisait apparaître chaque message en double.
     const realId = inserted?.id;
     if (realId) {
-      setConvMessages((prev) => prev.map((m) => (m.id === optimisticId ? { ...m, id: realId } : m)));
+      const remplacer = (m: DirectMessageRow) => (m.id === optimisticId ? { ...m, id: realId } : m);
+      const maj = (convMessagesCacheRef.current[convId] || []).map(remplacer);
+      convMessagesCacheRef.current[convId] = maj;
+      signatureConvRef.current[convId] = signatureMessages(maj);
+      if (activeConversationIdRef.current === convId) setConvMessages((prev) => prev.map(remplacer));
     } else {
-      setConvMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      retirerMessageDirect(convId, optimisticId);
     }
     sendingConvRef.current = false;
 
-    await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', activeConversationId);
+    await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId);
     loadConversations(true);
     // le push est géré côté base (voir note ci-dessous)
 
@@ -2208,16 +2318,30 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     fileName?: string
   ): Promise<string | null> => {
     if (!activeConversationId || !currentUser) return 'Conversation introuvable.';
+    const convId = activeConversationId;
     // Audit (10 septembre) : cet insert n'avait pas le filet try/catch que
     // sendConvMessage a (voir son commentaire "Réseau coupé en plein
     // envoi") — une coupure réseau ici levait une exception au lieu de
     // renvoyer { error }, qui ressortait comme un rejet de promesse jamais
     // rattrapé (l'appelant n'a pas de .catch) : le bouton "Envoyer"
     // semblait n'avoir rien fait, sans le moindre message d'erreur.
+    const optimisticId = `optimistic-${crypto.randomUUID()}`;
+    integrerMessageDirect(convId, {
+      id: optimisticId,
+      conversation_id: convId,
+      user_id: currentUser.uid,
+      kind,
+      body: fileName ?? null,
+      attachment_url: attachmentUrl,
+      attachment_mime: attachmentMime ?? null,
+      attachment_duration: attachmentDuration ?? null,
+      edited_at: null,
+      created_at: new Date().toISOString(),
+    });
     let error: { message: string } | null = null;
     try {
       const res = await supabase.from('messages').insert({
-        conversation_id: activeConversationId,
+        conversation_id: convId,
         user_id: currentUser.uid,
         kind,
         body: fileName ?? null,
@@ -2229,10 +2353,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     } catch (e) {
       error = { message: (e as Error)?.message || "Erreur réseau pendant l'envoi." };
     }
-    if (error) return error.message;
-    await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', activeConversationId);
+    if (error) {
+      retirerMessageDirect(convId, optimisticId);
+      return error.message;
+    }
+    await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId);
     loadConversations(true);
-    if (activeConversationId) loadConvMessages(activeConversationId);
+    void loadConvMessages(convId);
     return null;
   };
 
@@ -2299,17 +2426,38 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     fileName?: string
   ): Promise<string | null> => {
     if (!activeChannel || !currentUser) return 'Canal introuvable.';
+    const canalId = activeChannel.id;
     // Audit (10 septembre) : même filet que insertConvMessage (voir son
     // commentaire) — sans lui, une coupure réseau ici devenait un rejet de
     // promesse jamais rattrapé au lieu de remonter un message d'erreur.
+    const messageId = crypto.randomUUID();
+    const creeLe = new Date().toISOString();
+    integrerMessageCanal(canalId, {
+      id: messageId,
+      channel: canalId,
+      created_at: creeLe,
+      sender_id: currentUser.uid,
+      is_deleted: false,
+      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
+      data: {
+        body: fileName ?? '',
+        kind,
+        attachmentUrl,
+        attachmentMime: attachmentMime ?? undefined,
+        attachmentDuration: attachmentDuration ?? undefined,
+        sender_id: currentUser.uid,
+        sender_name: displayName,
+        created_at: creeLe,
+      },
+    });
     let error: { message: string } | null = null;
     try {
       const res = await supabase.from('chat_messages').insert({
-        id: crypto.randomUUID(),
-        channel: activeChannel.id,
+        id: messageId,
+        channel: canalId,
         sender_id: currentUser.uid,
         is_deleted: false,
-        read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
+        read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
         data: {
           body: fileName ?? '',
           kind,
@@ -2318,15 +2466,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           attachmentDuration: attachmentDuration ?? null,
           sender_id: currentUser.uid,
           sender_name: displayName,
-          created_at: new Date().toISOString(),
+          created_at: creeLe,
         },
       } as any);
       error = res.error;
     } catch (e) {
       error = { message: (e as Error)?.message || "Erreur réseau pendant l'envoi." };
     }
-    if (error) return error.message;
-    await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
+    if (error) {
+      retirerMessageCanal(canalId, messageId);
+      return error.message;
+    }
+    await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', canalId);
     return null;
   };
 
@@ -2886,12 +3037,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // RECENT_MESSAGES_PAGE derniers messages (triés du plus RÉCENT, pas du
     // plus ancien comme avant, qui pouvait même exclure les messages
     // récents sur un canal de 200+ messages) au lieu de 200 d'un coup.
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('chat_messages')
       .select('*')
       .eq('channel', channelId)
       .order('created_at', { ascending: false })
       .limit(RECENT_MESSAGES_PAGE);
+    if (error) {
+      console.warn('Erreur chargement messages de canal :', error);
+      if (activeChannelIdRef.current === channelId) setCanalFilEnChargement(false);
+      return;
+    }
     const rows = ((data as any[]) || []).slice().reverse() as ChatMessageRow[];
 
     // Audit stabilité (20 octobre) : même bug, même correctif que
@@ -2909,8 +3065,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     const signatureCanal = signatureMessages(fusionCanal);
     const canalInchangé = signatureCanalRef.current[channelId] === signatureCanal;
     signatureCanalRef.current[channelId] = signatureCanal;
-    if (!canalInchangé && activeChannelIdRef.current === channelId) {
-      setMessages(fusionCanal);
+    if (activeChannelIdRef.current === channelId) {
+      setCanalFilEnChargement(false);
+      if (!canalInchangé) setMessages(fusionCanal);
     }
 
     // Bug remonté : lire les messages d'un canal ne marquait jamais rien —
@@ -2978,7 +3135,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         // via loadMessages (déjà protégé) plutôt que fusionner à la main
         // corrige les deux en même temps.
         { event: '*', schema: 'public', table: 'chat_messages', filter: `channel=eq.${activeChannel.id}` },
-        () => loadMessages(activeChannel.id)
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const row = ligneCanalDepuisTempsReel(payload.new);
+            if (row?.channel === activeChannel.id) integrerMessageCanal(activeChannel.id, row);
+          }
+          void loadMessages(activeChannel.id);
+        }
       )
       .subscribe();
 
@@ -3020,19 +3183,35 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // sur le rebond ciblé (highlightedMessageId) au clic sur une notification
   // de message de canal, exactement la course déjà corrigée côté
   // conversations directes le 10 septembre.
+  const canalTailleVueRef = useRef(0);
+  const canalFilVuRef = useRef<string | null>(null);
   useEffect(() => {
-    if (highlightedMessageId) return;
     const pane = scrollRef.current;
-    if (!pane) return;
-    const frame = window.requestAnimationFrame(() => {
-      pane.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
+    const idCanal = activeChannel?.id || null;
+    const ajout = messages.length - canalTailleVueRef.current;
+    const changement = canalFilVuRef.current !== idCanal;
+    canalTailleVueRef.current = messages.length;
+    canalFilVuRef.current = pane ? idCanal : null;
+    // Même garde que côté conversations : un message ciblé par une
+    // notification ne doit pas être recouvert par le saut en bas du fil.
+    if (highlightedMessageId || !pane) return;
+    const behavior = comportementDefilementFil({
+      changementDeFil: changement,
+      messagesAjoutes: ajout,
+      distanceDuBas: pane.scrollHeight - pane.scrollTop - pane.clientHeight,
     });
-    const settle = window.setTimeout(() => {
-      pane.scrollTo({ top: pane.scrollHeight, behavior: 'auto' });
-    }, 150);
+    if (!behavior) return;
+    const frame = window.requestAnimationFrame(() => {
+      pane.scrollTo({ top: pane.scrollHeight, behavior });
+    });
+    const settle = behavior === 'auto'
+      ? window.setTimeout(() => {
+          pane.scrollTo({ top: pane.scrollHeight, behavior: 'auto' });
+        }, 150)
+      : 0;
     return () => {
       window.cancelAnimationFrame(frame);
-      window.clearTimeout(settle);
+      if (settle) window.clearTimeout(settle);
     };
   }, [messages.length, activeChannel?.id, highlightedMessageId]);
 
@@ -3128,9 +3307,23 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (sendingChannelRef.current) return;
     sendingChannelRef.current = true;
     const body = draft.trim();
+    const canal = activeChannel;
+    const canalId = canal.id;
+    const creeLe = new Date().toISOString();
     setDraft('');
     try {
     const messageId = crypto.randomUUID();
+    // Même id que l'insert : le retour temps réel fusionne cette bulle au
+    // lieu d'en ajouter une seconde. On la montre avant l'aller-retour.
+    integrerMessageCanal(canalId, {
+      id: messageId,
+      channel: canalId,
+      created_at: creeLe,
+      sender_id: currentUser.uid,
+      is_deleted: false,
+      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
+      data: { body, sender_id: currentUser.uid, sender_name: displayName, created_at: creeLe },
+    });
     const { error } = await supabase.from('chat_messages').insert({
       // Signalé : "les Novadji dans les messages ne se mettent pas" — en
       // creusant, la colonne `id` de `chat_messages` n'a pas de valeur par
@@ -3140,14 +3333,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       // en plus du correctif base, pour ne plus jamais dépendre d'un défaut
       // serveur pour cette colonne.
       id: messageId,
-      channel: activeChannel.id,
-      data: { body, sender_id: currentUser.uid, sender_name: displayName, created_at: new Date().toISOString() },
+      channel: canalId,
+      data: { body, sender_id: currentUser.uid, sender_name: displayName, created_at: creeLe },
       // Bug remonté : sans ces colonnes réelles (avant, seulement dans le
       // JSONB `data`), le badge "Chat" ne pouvait jamais reconnaître ni ses
       // propres messages ni un message lu — il grossissait indéfiniment.
       sender_id: currentUser.uid,
       is_deleted: false,
-      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
+      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
     } as any);
     // Signalé (19/09/2026, Laetitia Pioche/Réseaux sociaux) : "elle reçoit
     // bien le message mais ne peut pas répondre" — l'erreur de cet insert
@@ -3157,12 +3350,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // n'indiquait un échec — un blocage strictement invisible. Le texte
     // tapé est maintenant restauré et l'erreur réelle affichée.
     if (error) {
+      retirerMessageCanal(canalId, messageId);
       setDraft(body);
       toast.error(`Message non envoyé : ${error.message}`);
       return;
     }
-    await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
-    await notifierMembresDuDossier(activeChannel, body, messageId);
+    await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', canalId);
+    await notifierMembresDuDossier(canal, body, messageId);
     } finally {
       sendingChannelRef.current = false;
     }
@@ -3170,23 +3364,36 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const sendNovaChannelMessage = async (novaSrc: string) => {
     if (!activeChannel || !currentUser) return;
-    setShowChannelNovaPicker(false);
+    const canal = activeChannel;
+    const canalId = canal.id;
+    const creeLe = new Date().toISOString();
     const messageId = crypto.randomUUID();
-    const { error } = await supabase.from('chat_messages').insert({
+    setShowChannelNovaPicker(false);
+    integrerMessageCanal(canalId, {
       id: messageId,
-      channel: activeChannel.id,
-      data: { body: novaSrc, sender_id: currentUser.uid, sender_name: displayName, created_at: new Date().toISOString() },
+      channel: canalId,
+      created_at: creeLe,
       sender_id: currentUser.uid,
       is_deleted: false,
-      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
+      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
+      data: { body: novaSrc, sender_id: currentUser.uid, sender_name: displayName, created_at: creeLe },
+    });
+    const { error } = await supabase.from('chat_messages').insert({
+      id: messageId,
+      channel: canalId,
+      data: { body: novaSrc, sender_id: currentUser.uid, sender_name: displayName, created_at: creeLe },
+      sender_id: currentUser.uid,
+      is_deleted: false,
+      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
     } as any);
     // Même correctif que sendMessage : une erreur ici restait invisible.
     if (error) {
+      retirerMessageCanal(canalId, messageId);
       toast.error(`Mascotte non envoyée : ${error.message}`);
       return;
     }
-    await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', activeChannel.id);
-    await notifierMembresDuDossier(activeChannel, 'a envoye une mini-expression', messageId);
+    await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', canalId);
+    await notifierMembresDuDossier(canal, 'a envoye une mini-expression', messageId);
   };
 
   // ── Gestion des canaux (admin uniquement) ─────────────────────────────
@@ -4113,7 +4320,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
                 <div ref={convScrollRef} className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-3">
                   {convMessages.length === 0 ? (
-                    <p className="text-center text-sm text-slate-500 py-10">Aucun message pour l'instant. Lancez la conversation !</p>
+                    convFilEnChargement ? <FilEnAttente /> : (
+                      <p className="text-center text-sm text-slate-500 py-10">Aucun message pour l'instant. Lancez la conversation !</p>
+                    )
                   ) : (
                     <>
                     {convHasMoreOlder && (
@@ -4891,7 +5100,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
               <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-3">
                 {messages.length === 0 ? (
-                  <p className="text-center text-sm text-slate-500 py-10">Aucun message pour l'instant. Lancez la conversation !</p>
+                  canalFilEnChargement ? <FilEnAttente /> : (
+                    <p className="text-center text-sm text-slate-500 py-10">Aucun message pour l'instant. Lancez la conversation !</p>
+                  )
                 ) : (
                   messages.map((m) => {
                     const mine = (m.sender_id || m.data?.sender_id) === currentUser?.uid;
