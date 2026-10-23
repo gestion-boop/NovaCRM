@@ -21,17 +21,25 @@ import { prochainRendezVous, texteProchainGeste, type RendezVousProchain } from 
 import { lireDispositionAgence, lireHorodatageLocal } from '@/lib/dispositionAccueil';
 import {
   choisirVersion,
+  cleArrangementTelephone,
   cleCasesBureau,
   cleCasesBureauAnonyme,
   cleTuilesBureau,
   cleTuilesBureauAnonyme,
+  deplacerSurTelephone,
+  etendreGrilleEdition,
+  lireArrangement,
   lireCases,
   lireCasesValeur,
   lireTuiles,
   lireTuilesValeur,
+  masquerSurTelephone,
   ordonnerCommeLeBureau,
+  presenterTelephone,
+  reafficherSurTelephone,
   teteEcranTelephone,
   tuilesPourTelephone,
+  type ArrangementTelephone,
   type TuilePartagee,
   type VisibiliteTuiles,
 } from '@/lib/tuilesPartagees';
@@ -469,6 +477,25 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     return [...remplaces, ...manquants];
   }, [grilleBureau, casesBureau, visibiliteBureau, lockedMobileSpaces]);
   const grillePartagee = !!espacesPartages && espacesPartages.length > 0;
+  // Ordre et tuiles masquées du téléphone uniquement. Jamais écrit dans la
+  // grille de l'ordinateur : cette écriture relançait la synchro.
+  const [arrangement, setArrangement] = useState<ArrangementTelephone | null>(null);
+  useEffect(() => {
+    setArrangement(lireArrangement(localStorage.getItem(cleArrangementTelephone(currentUser?.uid, activeAgency?.id))));
+  }, [currentUser?.uid, activeAgency?.id]);
+  const memoriserArrangement = (next: ArrangementTelephone) => {
+    setArrangement(next);
+    try {
+      localStorage.setItem(
+        cleArrangementTelephone(currentUser?.uid, activeAgency?.id),
+        JSON.stringify(next),
+      );
+    } catch {
+      // Le geste reste visible le temps de la page.
+    }
+  };
+  const estVerrouTelephone = (id: string) =>
+    lockedSpaceIds.has(id) || !!espacesPartages?.some((espace) => espace.id === id && espace.locked);
   // Dossier verrouillé actuellement ouvert en plein écran (façon dossier
   // iPhone) — null quand aucun n'est ouvert.
   const [openLockedFolder, setOpenLockedFolder] = useState<SpaceDef | null>(null);
@@ -626,20 +653,29 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     .map((id) => ALL_SPACES.find((s) => s.id === id))
     .filter(Boolean) as SpaceDef[];
   const hiddenSpaces = ALL_SPACES.filter((s) => !visibleIds.includes(s.id));
+  const espacesAjoutables = grillePartagee && espacesPartages
+    ? espacesPartages.filter((espace) => {
+        const visibles = new Set(
+          presenterTelephone(espacesPartages.map((item) => item.id), arrangement, estVerrouTelephone)
+            .filter((id): id is string => !!id),
+        );
+        return !visibles.has(espace.id) && !estVerrouTelephone(espace.id);
+      })
+    : hiddenSpaces;
 
+  const [editMode, setEditMode] = useState(false);
   // Ids "slots" utilisés par le contexte triable de dnd-kit : un id réel
   // pour une case occupée, un id synthétique stable pour une case vide.
-  const cellulesAffichees = espacesPartages && espacesPartages.length > 0
-    ? espacesPartages.map((espace) => espace.id)
+  const cellulesAffichees = grillePartagee && espacesPartages
+    ? etendreGrilleEdition(
+        presenterTelephone(espacesPartages.map((espace) => espace.id), arrangement, estVerrouTelephone),
+        editMode,
+      )
     : cellIds;
   const espaceAffiche = (id: string) =>
     espacesPartages?.find((espace) => espace.id === id) || ALL_SPACES.find((espace) => espace.id === id);
   const cellSlotIds = cellulesAffichees.map((id, i) => id || `empty-${i}`);
 
-  const [editMode, setEditMode] = useState(false);
-  useEffect(() => {
-    if (grillePartagee) setEditMode(false);
-  }, [grillePartagee]);
   // Ticket #43 (nouvelle base) : au-delà d'un certain nombre de raccourcis
   // ajoutés, la grille s'étalait sur plusieurs pages sans jamais donner
   // accès au bouton "Ajouter" (poussé hors champ). On limite l'affichage
@@ -650,7 +686,6 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startLongPress = () => {
-    if (grillePartagee) return;
     longPressTimer.current = setTimeout(() => setEditMode(true), 480);
   };
   const cancelLongPress = () => {
@@ -665,10 +700,28 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   // Une tuile imposée par un verrou super admin ne peut pas être retirée par
   // un utilisateur normal — même règle que sur AccueilGrid (desktop).
   const hideSpace = (id: string) => {
-    if (lockedSpaceIds.has(id)) return;
+    if (estVerrouTelephone(id)) return;
+    if (grillePartagee && espacesPartages) {
+      memoriserArrangement(masquerSurTelephone(
+        espacesPartages.map((espace) => espace.id),
+        arrangement,
+        id,
+        estVerrouTelephone,
+      ));
+      return;
+    }
     setCellIds((cur) => cur.map((x) => (x === id ? null : x)));
   };
   const addSpace = (id: string) => {
+    if (grillePartagee && espacesPartages) {
+      memoriserArrangement(reafficherSurTelephone(
+        espacesPartages.map((espace) => espace.id),
+        arrangement,
+        id,
+      ));
+      setShowAddSheet(false);
+      return;
+    }
     setCellIds((cur) => {
       const firstEmpty = cur.indexOf(null);
       if (firstEmpty !== -1) {
@@ -696,8 +749,18 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const handleDragStart = (event: DragStartEvent) => setActiveDragId(String(event.active.id));
 
   const handleDragOver = (event: DragOverEvent) => {
-    if (grillePartagee) return;
     const { active, over } = event;
+    if (grillePartagee && espacesPartages) {
+      if (!over || active.id === over.id) return;
+      const source = espacesPartages.map((espace) => espace.id);
+      const cle = cleArrangementTelephone(currentUser?.uid, activeAgency?.id);
+      setArrangement((courant) => {
+        const next = deplacerSurTelephone(source, courant, String(active.id), String(over.id), estVerrouTelephone);
+        try { localStorage.setItem(cle, JSON.stringify(next)); } catch { /* geste visible le temps de la page */ }
+        return next;
+      });
+      return;
+    }
     if (!over || active.id === over.id) return;
     setCellIds((cur) => {
       const slotIds = cur.map((id, i) => id || `empty-${i}`);
@@ -876,7 +939,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
         </div>
 
         <div className="rounded-3xl bg-[#0b1c1e] border border-[#143c3f]/80 overflow-hidden">
-          {(espacesPartages && espacesPartages.length > 0 ? espacesPartages.length : visibleSpaces.length) === 0 && !editMode ? (
+          {cellulesAffichees.filter(Boolean).length === 0 && !editMode ? (
             // Filet de sécurité : si tous les espaces ont été masqués, il n'y
             // a plus aucune tuile sur laquelle faire un appui long pour
             // revenir en édition — ce bouton reste toujours accessible.
@@ -1044,11 +1107,11 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
               </button>
             </div>
             <div className="overflow-y-auto -mx-1 px-1">
-              {hiddenSpaces.length === 0 ? (
+              {espacesAjoutables.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-6">Tous les espaces sont déjà affichés.</p>
               ) : (
                 <div className="grid grid-cols-3 gap-3 pb-1">
-                  {hiddenSpaces.map((s) => (
+                  {espacesAjoutables.map((s) => (
                     <button
                       key={s.id}
                       onClick={() => addSpace(s.id)}

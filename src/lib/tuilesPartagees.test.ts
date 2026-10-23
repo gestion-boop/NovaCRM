@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   choisirVersion,
+  deplacerSurTelephone,
+  lireArrangement,
   lireTuiles,
+  masquerSurTelephone,
   ordonnerCommeLeBureau,
+  presenterTelephone,
+  reafficherSurTelephone,
   teteEcranTelephone,
   tuilesPourTelephone,
   type VisibiliteTuiles,
@@ -110,5 +115,29 @@ describe('tuiles partagées entre ordinateur et téléphone', () => {
     expect(tete).toEqual(['clients', 'pipeline', 'documents', 'banques', 'passerelle']);
     expect(tete).toHaveLength(5);
     expect(teteEcranTelephone(cases, false, () => false)).toEqual(cases);
+  });
+
+  it('masque, déplace et fait revenir une tuile sans toucher à un verrou', () => {
+    const source = ['clients', 'pipeline', 'documents', 'banques'];
+    const verrou = (id: string) => id === 'banques';
+    expect(presenterTelephone(source, null, verrou)).toEqual(source);
+
+    const masque = masquerSurTelephone(source, null, 'pipeline', verrou);
+    expect(presenterTelephone(source, masque, verrou)).toEqual(['clients', null, 'documents', 'banques']);
+    expect(masquerSurTelephone(source, null, 'banques', verrou).masquees).toEqual([]);
+
+    const deplace = deplacerSurTelephone(source, masque, 'documents', 'empty-1', verrou);
+    expect(presenterTelephone(source, deplace, verrou)).toEqual(['clients', 'documents', null, 'banques']);
+
+    const revenu = reafficherSurTelephone(source, deplace, 'pipeline');
+    expect(presenterTelephone(source, revenu, verrou).filter(Boolean)).toEqual(['clients', 'documents', 'pipeline', 'banques']);
+    expect(presenterTelephone([...source, 'support'], revenu, verrou).filter(Boolean)).toEqual([
+      'clients', 'documents', 'pipeline', 'banques', 'support',
+    ]);
+    expect(lireArrangement('{')).toBeNull();
+    expect(lireArrangement(JSON.stringify({ cases: ['clients', null], masquees: ['pipeline'] }))).toEqual({
+      cases: ['clients', null],
+      masquees: ['pipeline'],
+    });
   });
 });

@@ -6,6 +6,10 @@ import { estDossierImmosphera } from '@/lib/tuilesAccueilVisibles';
  * ses propres tuiles plates. Il ne réécrit jamais cette grille : une
  * écriture depuis le téléphone relançait la synchro et pouvait déplacer
  * ou vider des dossiers.
+ *
+ * L'ordre et les tuiles masquées sur le téléphone restent dans le
+ * navigateur du téléphone. Ils ne partent ni vers l'ordinateur, ni vers
+ * le compte.
  */
 
 export interface TuilePartagee {
@@ -66,6 +70,15 @@ export function cleCasesBureau(uid: string | null | undefined, agencyId: string 
 
 export function cleCasesBureauAnonyme(agencyId: string | null | undefined): string {
   return `novasphere_home_slots_v1_anon_${agencyId || 'default'}`;
+}
+
+export function cleArrangementTelephone(uid: string | null | undefined, agencyId: string | null | undefined): string {
+  return `novasphere_phone_arrangement_v1_${uid || 'anon'}_${agencyId || 'default'}`;
+}
+
+export interface ArrangementTelephone {
+  cases: (string | null)[];
+  masquees: string[];
 }
 
 function normaliserTuiles(valeur: unknown): TuilePartagee[] | null {
@@ -202,4 +215,120 @@ export function ordonnerCommeLeBureau(
     if (!vues.has(tuile.id)) ordre.push(tuile);
   }
   return ordre;
+}
+
+function rognerFin(cases: (string | null)[]): (string | null)[] {
+  const next = [...cases];
+  while (next.length > 0 && next[next.length - 1] === null) next.pop();
+  return next;
+}
+
+export function lireArrangement(brut: string | null): ArrangementTelephone | null {
+  if (!brut) return null;
+  try {
+    const valeur = JSON.parse(brut) as { cases?: unknown; masquees?: unknown };
+    if (!valeur || !Array.isArray(valeur.cases)) return null;
+    return {
+      cases: valeur.cases.map((id) => (typeof id === 'string' ? id : null)),
+      masquees: Array.isArray(valeur.masquees)
+        ? valeur.masquees.filter((id): id is string => typeof id === 'string')
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ordre du téléphone par-dessus les tuiles de l'ordinateur.
+ * Sans arrangement, l'ordre de l'ordinateur est repris tel quel.
+ * Une tuile masquée ici disparaît. Une tuile verrouillée reste.
+ * Une tuile nouvelle, arrivée depuis l'ordinateur, se pose à la fin.
+ */
+export function presenterTelephone(
+  sourceIds: string[],
+  arrangement: ArrangementTelephone | null,
+  estVerrou: (id: string) => boolean,
+): (string | null)[] {
+  if (!arrangement) return [...sourceIds];
+  const masquees = new Set(arrangement.masquees.filter((id) => !estVerrou(id)));
+  const autorises = new Set(sourceIds.filter((id) => !masquees.has(id)));
+  const places: (string | null)[] = [];
+  const deja = new Set<string>();
+  for (const id of arrangement.cases) {
+    if (!id || !autorises.has(id) || deja.has(id)) {
+      places.push(null);
+      continue;
+    }
+    places.push(id);
+    deja.add(id);
+  }
+  const posees = rognerFin(places);
+  for (const id of sourceIds) {
+    if (!autorises.has(id) || deja.has(id)) continue;
+    posees.push(id);
+    deja.add(id);
+  }
+  return posees;
+}
+
+export function etendreGrilleEdition(cases: (string | null)[], edition: boolean): (string | null)[] {
+  if (!edition) return cases;
+  const dernier = cases.reduce((acc, id, i) => (id ? i : acc), -1);
+  const lignes = Math.ceil(Math.max(dernier + 1, 1) / 3) + 1;
+  const taille = Math.max(6, lignes * 3);
+  const next = [...cases];
+  while (next.length < taille) next.push(null);
+  return next;
+}
+
+export function masquerSurTelephone(
+  sourceIds: string[],
+  arrangement: ArrangementTelephone | null,
+  id: string,
+  estVerrou: (id: string) => boolean,
+): ArrangementTelephone {
+  const actuel = arrangement ?? { cases: [...sourceIds], masquees: [] };
+  if (estVerrou(id)) return actuel;
+  const visibles = presenterTelephone(sourceIds, actuel, estVerrou);
+  return {
+    cases: rognerFin(visibles.map((place) => (place === id ? null : place))),
+    masquees: actuel.masquees.includes(id) ? actuel.masquees : [...actuel.masquees, id],
+  };
+}
+
+export function reafficherSurTelephone(
+  sourceIds: string[],
+  arrangement: ArrangementTelephone | null,
+  id: string,
+): ArrangementTelephone {
+  const actuel = arrangement ?? { cases: [...sourceIds], masquees: [] };
+  const cases = [...actuel.cases];
+  if (!cases.includes(id)) {
+    const trou = cases.indexOf(null);
+    if (trou === -1) cases.push(id);
+    else cases[trou] = id;
+  }
+  return {
+    cases: rognerFin(cases),
+    masquees: actuel.masquees.filter((masquee) => masquee !== id),
+  };
+}
+
+export function deplacerSurTelephone(
+  sourceIds: string[],
+  arrangement: ArrangementTelephone | null,
+  activeId: string,
+  overId: string,
+  estVerrou: (id: string) => boolean,
+): ArrangementTelephone {
+  const actuel = arrangement ?? { cases: [...sourceIds], masquees: [] };
+  const visibles = etendreGrilleEdition(presenterTelephone(sourceIds, actuel, estVerrou), true);
+  const slotIds = visibles.map((id, i) => id || `empty-${i}`);
+  const depart = slotIds.indexOf(activeId);
+  const arrivee = slotIds.indexOf(overId);
+  if (depart < 0 || arrivee < 0 || depart === arrivee) return actuel;
+  const next = [...visibles];
+  [next[depart], next[arrivee]] = [next[arrivee], next[depart]];
+  return { cases: rognerFin(next), masquees: actuel.masquees };
 }
