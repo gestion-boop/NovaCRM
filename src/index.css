@@ -1152,6 +1152,21 @@ textarea[class]:not([class~="bg-transparent"]) {
   background-color: var(--nv-surface-1);
 }
 
+/* Bloc « Mes espaces » de l'accueil mobile. La nuit, la carte et la page
+   partagent la même teinte : ce bloc s'éclaircit d'un cran et prend un
+   liseré pour se lire comme une carte posée dessus. Le jour, il reste
+   blanc sur le gris de la page. Les carrés de couleur des tuiles ne
+   passent pas par ici. */
+.accueil-espaces {
+  background-color: color-mix(in srgb, var(--nv-surface-1) 66%, white);
+  border-color: var(--nv-hairline);
+  box-shadow: 0 16px 36px -18px rgba(0, 0, 0, 0.85);
+}
+.light-mode .accueil-espaces {
+  background-color: var(--nv-surface-1);
+  box-shadow: 0 12px 28px -16px rgba(15, 30, 45, 0.32);
+}
+
 /* ── 9. Éléments à couleur dédiée ────────────────────────────────────────── */
 /* Ces quelques classes existent parce qu'elles doivent se régler
    indépendamment du remappage générique ci-dessus. */
