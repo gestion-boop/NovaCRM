@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { Task } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { toValidUuidOrNull, getAssignedUserIdAsUuid } from '@/data/teamMembers';
+import { majParId, retirerParId } from '@/lib/peintureImmediate';
 
 const CONSEILS_FINANCES_ID = '30f96ea9-41da-41c2-a95e-f5e7898f8d8e';
 
@@ -180,15 +181,23 @@ export const useTasks = () => {
       return { id, updates, data };
     },
 
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['tasks'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] }),
-      ]);
+    onMutate: ({ id, updates }) => {
+      const previous = queryClient.getQueriesData<Task[]>({ queryKey: ['tasks'] });
+      queryClient.setQueriesData<Task[]>({ queryKey: ['tasks'] }, (old) => majParId(old, id, updates));
+      void queryClient.cancelQueries({ queryKey: ['tasks'] });
+      return { previous };
     },
 
-    onError: (error) => {
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] });
+    },
+
+    onError: (error, _vars, context) => {
       console.error('Impossible de modifier le rappel :', error);
+      for (const [key, data] of context?.previous || []) {
+        queryClient.setQueryData(key, data);
+      }
     },
   });
 
@@ -215,15 +224,23 @@ export const useTasks = () => {
       return id;
     },
 
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['tasks'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] }),
-      ]);
+    onMutate: (id: string) => {
+      const previous = queryClient.getQueriesData<Task[]>({ queryKey: ['tasks'] });
+      queryClient.setQueriesData<Task[]>({ queryKey: ['tasks'] }, (old) => retirerParId(old, id));
+      void queryClient.cancelQueries({ queryKey: ['tasks'] });
+      return { previous };
     },
 
-    onError: (error) => {
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] });
+    },
+
+    onError: (error, _id, context) => {
       console.error('Impossible de supprimer le rappel :', error);
+      for (const [key, data] of context?.previous || []) {
+        queryClient.setQueryData(key, data);
+      }
     },
   });
 
