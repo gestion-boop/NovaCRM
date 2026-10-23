@@ -30,6 +30,7 @@ import {
   lireTuiles,
   lireTuilesValeur,
   ordonnerCommeLeBureau,
+  teteEcranTelephone,
   tuilesPourTelephone,
   type TuilePartagee,
   type VisibiliteTuiles,
@@ -172,7 +173,9 @@ const getDesktopTileOrder = (): string[] => {
 };
 
 const SPACE_TILE_CLASS =
-  'relative flex flex-col items-center justify-center gap-2 py-5 select-none';
+  'relative flex flex-col items-center justify-start gap-2 pt-3 pb-2 select-none';
+const SPACE_LABEL_CLASS =
+  'text-sm font-semibold text-center leading-tight line-clamp-2 min-h-[2.5rem] w-full px-1';
 
 export const MobileHome: React.FC<MobileHomeProps> = ({
   onNavigate,
@@ -911,23 +914,18 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   // étaler sur plusieurs pages sans jamais revoir le bouton
                   // "Ajouter".
                   const collapsed = !editMode && !showAllSpaces && filledCount > 6;
-                  // Bug trouvé (8 septembre) : « j'ai juste Passerelle,
-                  // c'est tout » — un dossier verrouillé ajouté après coup
-                  // (voir l'effet de comblement plus haut) tombe dans une
-                  // case vide QUELCONQUE de la grille personnelle de chacun,
-                  // parfois bien après les 5 premières. Replié, il restait
-                  // alors caché derrière la flèche "Voir plus" — alors qu'un
-                  // dossier verrouillé, imposé par le super admin, doit
-                  // rester visible comme sur desktop, pas optionnel. On
-                  // étend donc le repli jusqu'à couvrir la dernière case
-                  // verrouillée occupée, jamais moins que 5.
-                  const lastLockedIndex = cellulesAffichees.reduce(
-                    (last, id, i) => (id && (lockedSpaceIds.has(id) || espacesPartages?.some((espace) => espace.id === id && espace.locked)) ? i : last),
-                    -1
-                  );
-                  const visibleCount = collapsed ? Math.max(5, lastLockedIndex + 1) : slotCount;
+                  const estVerrou = (id: string | null) =>
+                    !!id && (lockedSpaceIds.has(id) || !!espacesPartages?.some((espace) => espace.id === id && espace.locked));
+                  // Cinq tuiles, puis la flèche sur la deuxième ligne.
+                  // Un dossier verrouillé placé plus loin remonte dans ces
+                  // cinq cases : il reste visible sans repousser la flèche
+                  // tout en bas de l'écran.
+                  const tete = collapsed
+                    ? teteEcranTelephone(cellulesAffichees, true, estVerrou)
+                    : cellulesAffichees.slice(0, slotCount);
+                  const reste = Math.max(0, cellulesAffichees.filter(Boolean).length - tete.filter(Boolean).length);
 
-                  const tiles = cellulesAffichees.slice(0, visibleCount).map((id, i) => {
+                  const tiles = tete.map((id, i) => {
                     const space = id ? espaceAffiche(id) : undefined;
                     if (space) {
                       return (
@@ -975,10 +973,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                         onClick={() => setShowAllSpaces(true)}
                         className={`${SPACE_TILE_CLASS} text-[#F9C977] hover:text-white`}
                       >
-                        <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
                           <ChevronDown className="w-6 h-6" />
                         </div>
-                        <span className="text-xs font-semibold">+{filledCount - 5}</span>
+                        <span className={`${SPACE_LABEL_CLASS} text-[#F9C977]`}>+{reste}</span>
                       </button>
                     );
                   }
@@ -991,10 +989,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                     onClick={() => setShowAllSpaces(false)}
                     className={`${SPACE_TILE_CLASS} text-slate-400 hover:text-white`}
                   >
-                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
                       <ChevronUp className="w-6 h-6" />
                     </div>
-                    <span className="text-xs font-semibold">Réduire</span>
+                    <span className={SPACE_LABEL_CLASS}>Réduire</span>
                   </button>
                 )}
                 {editMode && (
@@ -1008,10 +1006,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                     // cours n'a pas encore atteint cette colonne.
                     className={`${SPACE_TILE_CLASS} text-slate-400 hover:text-white col-start-3`}
                   >
-                    <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-white/20 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-white/20 flex items-center justify-center shrink-0">
                       <Plus className="w-6 h-6" />
                     </div>
-                    <span className="text-xs font-semibold">Ajouter</span>
+                    <span className={SPACE_LABEL_CLASS}>Ajouter</span>
                   </button>
                 )}
               </div>
@@ -1108,12 +1106,12 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                         onNavigate(c.nav);
                       }
                     }}
-                    className="flex flex-col items-center gap-2 py-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
+                    className="flex flex-col items-center justify-start gap-2 py-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
                   >
-                    <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${c.gradient} flex items-center justify-center`}>
+                    <div className={`w-11 h-11 shrink-0 rounded-2xl bg-gradient-to-br ${c.gradient} flex items-center justify-center`}>
                       <c.icon className="w-5 h-5 text-white" />
                     </div>
-                    <span className="text-[11px] font-semibold text-slate-200 text-center">{c.label}</span>
+                    <span className="text-sm font-semibold text-slate-200 text-center leading-tight line-clamp-2 min-h-[2.5rem] w-full px-1">{c.label}</span>
                   </button>
                 ))}
               </div>
@@ -1201,7 +1199,7 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
           </button>
         )
       )}
-      <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${space.gradient} flex items-center justify-center relative shadow-md`}>
+      <div className={`w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br ${space.gradient} flex items-center justify-center relative shadow-md overflow-hidden`}>
         {space.isFolder && space.children?.length ? (
           // Aperçu façon dossier iPhone : mini-grille des 4 premières icônes
           // du dossier plutôt qu'une seule icône générique de dossier.
@@ -1220,7 +1218,7 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
           </span>
         )}
       </div>
-      <span className="text-sm font-semibold text-slate-200 text-center px-1">{space.label}</span>
+      <span className={`${SPACE_LABEL_CLASS} text-slate-200`}>{space.label}</span>
     </div>
   );
 };

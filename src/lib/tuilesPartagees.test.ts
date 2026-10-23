@@ -3,6 +3,7 @@ import {
   choisirVersion,
   lireTuiles,
   ordonnerCommeLeBureau,
+  teteEcranTelephone,
   tuilesPourTelephone,
   type VisibiliteTuiles,
 } from './tuilesPartagees';
@@ -101,5 +102,13 @@ describe('tuiles partagées entre ordinateur et téléphone', () => {
       ['clients', null, 'rappels', 'documents'],
     );
     expect(ids(ordre)).toEqual(['clients', 'documents', 'tableau-de-bord']);
+  });
+
+  it('garde la flèche du téléphone sur la deuxième ligne', () => {
+    const cases = ['clients', 'pipeline', 'documents', 'support', 'equipe', 'notes', 'passerelle', 'banques'];
+    const tete = teteEcranTelephone(cases, true, (id) => id === 'passerelle' || id === 'banques');
+    expect(tete).toEqual(['clients', 'pipeline', 'documents', 'banques', 'passerelle']);
+    expect(tete).toHaveLength(5);
+    expect(teteEcranTelephone(cases, false, () => false)).toEqual(cases);
   });
 });

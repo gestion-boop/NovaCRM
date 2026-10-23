@@ -157,6 +157,33 @@ export function tuilesPourTelephone(racine: TuilePartagee[], visibilite: Visibil
   return [...nettoyees, TUILE_TABLEAU];
 }
 
+/**
+ * Écran replié du téléphone : cinq cases, puis la flèche.
+ * Un dossier verrouillé qui serait plus loin remonte dans ces cinq
+ * cases, à la place d'une tuile ordinaire. La flèche ne descend pas.
+ */
+export function teteEcranTelephone<T extends string | null>(
+  cases: T[],
+  replie: boolean,
+  estVerrou: (id: T) => boolean,
+): T[] {
+  if (!replie) return cases;
+  const tete = cases.slice(0, 5);
+  const presents = new Set(tete.filter((id) => id));
+  for (const id of cases) {
+    if (!id || !estVerrou(id) || presents.has(id)) continue;
+    let cible = -1;
+    for (let i = tete.length - 1; i >= 0; i--) {
+      if (tete[i] && !estVerrou(tete[i])) { cible = i; break; }
+    }
+    if (cible === -1) break;
+    presents.delete(tete[cible] as T);
+    tete[cible] = id;
+    presents.add(id);
+  }
+  return tete;
+}
+
 /** Même ordre que l'écran ordinateur (cases), sans les trous. */
 export function ordonnerCommeLeBureau(
   tuiles: TuilePartagee[],
