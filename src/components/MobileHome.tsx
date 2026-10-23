@@ -17,6 +17,7 @@ import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/
 import { estAgenceImmosphera, estBlocNotes, estDossierImmosphera } from '@/lib/tuilesAccueilVisibles';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
+import { prochainRendezVous, texteProchainGeste, type RendezVousProchain } from '@/lib/prochainGeste';
 import { supabase } from '@/lib/supabase';
 
 // Même table de correspondance nom → icône que AccueilGrid.tsx (ICON_MAP) —
@@ -192,6 +193,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
 
   // ── Rendez-vous du jour (Google Calendar) ────────────────────────────
   const [todaysEvents, setTodaysEvents] = useState<number | null>(null);
+  const [prochainRdv, setProchainRdv] = useState<RendezVousProchain | null>(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -208,7 +210,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           const d = new Date(raw);
           return d >= startOfDay && d < endOfDay;
         }).length;
-        if (!cancelled) setTodaysEvents(count);
+        if (!cancelled) {
+          setTodaysEvents(count);
+          setProchainRdv(prochainRendezVous(events, new Date()));
+        }
       } catch {
         // Pas grave : compte simplement masqué si Workspace n'est pas connecté.
       }
@@ -591,6 +596,13 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     { id: 'mail', label: 'Mails', count: unreadMailCount, icon: Mail, nav: 'mail-unread', gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]' },
     { id: 'agenda', label: 'Rendez-vous', count: todaysEvents || 0, icon: Calendar, nav: 'agenda', gradient: 'from-[#059669] via-[#047857] to-[#064E3B]' },
   ];
+  const gesteDuMoment = texteProchainGeste({
+    maintenant: now,
+    rendezVous: prochainRdv,
+    messagesNonLus: unreadMessagesCount || 0,
+    mailsNonLus: unreadMailCount || 0,
+    rappelsDuJour: unreadRemindersCount || 0,
+  });
 
   // pt-4 simple : le safe-area-inset-top est déjà appliqué une fois par
   // <main> dans App.tsx. La place de la barre du bas est aussi réservée
@@ -680,6 +692,15 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             </motion.button>
           ))}
         </div>
+        {gesteDuMoment && (
+          <button
+            type="button"
+            onClick={() => onNavigate(gesteDuMoment.nav)}
+            className="mt-2 w-full text-center text-sm font-semibold text-slate-100 truncate hover:text-[#F7BC5F]"
+          >
+            {gesteDuMoment.texte}
+          </button>
+        )}
       </div>
 
       {/* Mes espaces */}

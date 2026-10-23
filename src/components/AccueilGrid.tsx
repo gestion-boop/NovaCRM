@@ -44,6 +44,7 @@ import { chargerMasqueesDepuisServeur, masquerTuile, lireMasquees, reafficherTui
 import NovaMascotte from './NovaMascotte';
 import { NAV_ITEMS } from './Sidebar';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
+import { prochainRendezVous, texteProchainGeste, type RendezVousProchain } from '@/lib/prochainGeste';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import {
@@ -1219,6 +1220,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     return () => clearInterval(id);
   }, []);
   const [todayCount, setTodayCount] = useState<number>(0);
+  const [prochainRdv, setProchainRdv] = useState<RendezVousProchain | null>(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1235,7 +1237,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           const d = new Date(raw);
           return d >= startOfDay && d < endOfDay;
         }).length;
-        if (!cancelled) setTodayCount(count);
+        if (!cancelled) {
+          setTodayCount(count);
+          setProchainRdv(prochainRendezVous(events, new Date()));
+        }
       } catch {
         // Pas grave : compte simplement à 0 si Workspace n'est pas connecté.
       }
@@ -1282,6 +1287,14 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   const visiblePriorityTiles = ORDRE_BARRE_HAUT.map((id) =>
     priorityOptions.find((o) => o.id === id)
   ).filter((o): o is (typeof priorityOptions)[number] => Boolean(o));
+  // Une seule phrase sous les icônes. Les icônes elles-mêmes ne changent pas.
+  const gesteDuMoment = texteProchainGeste({
+    maintenant: now,
+    rendezVous: prochainRdv,
+    messagesNonLus: liveStats.chat,
+    mailsNonLus: liveStats.mail,
+    rappelsDuJour: liveStats.rappels,
+  });
 
   // ── Barre NovaAI (texte + micro) ─────────────────────────────────────
   const [novaInput, setNovaInput] = useState('');
@@ -3879,6 +3892,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                 );
               })}
             </div>
+            {gesteDuMoment && (
+              <button
+                type="button"
+                onClick={() => navigateToTile(gesteDuMoment.nav)}
+                className="mt-2 w-full text-center text-sm font-semibold text-slate-100 truncate hover:text-[#F7BC5F]"
+              >
+                {gesteDuMoment.texte}
+              </button>
+            )}
           </div>
         </div>
       )}
