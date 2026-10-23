@@ -1122,7 +1122,7 @@ export default function Dashboard({
     : null;
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8">
       {/* Header section (30/08/2026, demande explicite : "supprime le
           panneau tableau de bord et centre les objectifs à la place, avec
           un fond gris classique") — le panneau titre "Tableau de bord"

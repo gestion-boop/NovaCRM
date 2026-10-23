@@ -254,7 +254,7 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
   });
 
   return (
-    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5 text-[var(--ink-1)] animate-fade-in">
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5 text-[var(--ink-1)]">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--nv-surface-1)] p-4 sm:p-5 rounded-3xl border border-[var(--nv-hairline)]">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-11 h-11 rounded-2xl bg-purple-950/60 border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0">

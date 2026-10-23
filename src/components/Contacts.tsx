@@ -328,7 +328,7 @@ export default function Contacts({
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 animate-fade-in items-start">
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
       {/* List side */}
       <div className="xl:col-span-2 space-y-6">
         {/* En-tête compact */}

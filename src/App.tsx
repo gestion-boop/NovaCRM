@@ -1076,7 +1076,7 @@ function App() {
           <EcranErrorBoundary resetKey={selectedClientProfileId ? `fiche:${selectedClientProfileId}` : currentNav}>
           <div
             key={selectedClientProfileId ? 'client-profile' : currentNav}
-            className={`relative z-10 animate-page-in ${selectedClientProfileId ? '' : 'h-full'}`}
+            className={`relative z-10 ${selectedClientProfileId ? '' : 'h-full'}`}
           >
           {selectedClientProfileId ? (
             <ClientProfileView

@@ -2265,7 +2265,7 @@ export default function ClientProfileView({
     // "h-full" ne se calculait pas correctement dans ce contexte, coupant le
     // contenu). Simplifié : ce composant flotte maintenant normalement dans
     // <main>, qui gère le défilement de toute la page — plus de double scroll.
-    <div className="flex flex-col bg-[#051416] animate-fade-in relative">
+    <div className="flex flex-col bg-[#051416] relative">
       {(profileError || profileSuccess) && (
         <div className="px-6 pt-4">
           {profileError && (
@@ -3078,7 +3078,7 @@ export default function ClientProfileView({
             )}
             
             {activeTab === 'agenda' && (
-              <div className="space-y-6 animate-fade-in">
+              <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <div>
                     <h2 className="text-xl font-bold text-white">RDV</h2>
@@ -3222,7 +3222,7 @@ export default function ClientProfileView({
             )}
 
             {activeTab === 'notes' && (
-              <div className="space-y-6 animate-fade-in">
+              <div className="space-y-6">
                 {/* Ticket #109 : "Note générale & Remarques du client" retirée
                     d'ici — remplacée par le champ "Commentaire" directement
                     sur la fiche (carte de gauche), voir plus haut. */}
@@ -3514,7 +3514,7 @@ export default function ClientProfileView({
               </div>
             )}
             {activeTab === 'documents' && (
-              <div className="space-y-6 animate-fade-in">
+              <div className="space-y-6">
                 {guestAccess && (
                   <div className="bg-[#0a1e20] p-4 rounded-2xl border border-[#144447]/60 space-y-3">
                     <div className="flex items-center justify-between">
@@ -3819,7 +3819,7 @@ export default function ClientProfileView({
               </div>
             )}
             {activeTab === 'chat' && (
-              <div className="flex flex-col h-full min-h-[420px] animate-fade-in">
+              <div className="flex flex-col h-full min-h-[420px]">
                 <div ref={chatScrollRef} className="flex-1 overflow-y-auto custom-scrollbar space-y-1 pb-4">
                   {chatLoading ? (
                     <div className="p-12 text-center text-slate-500">Chargement du chat...</div>
@@ -4113,7 +4113,7 @@ export default function ClientProfileView({
               // `sticky` du bandeau Pipeline au-dessus, non touché) donne
               // enfin un vrai cadre défilant aux messages, avec la barre de
               // saisie fixée en bas de ce cadre.
-              <div className="flex flex-col h-[min(64vh,680px)] min-h-[420px] animate-fade-in">
+              <div className="flex flex-col h-[min(64vh,680px)] min-h-[420px]">
                 <div className="mb-3 px-3 py-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-[11px] text-sky-300 flex items-center gap-2 shrink-0">
                   <MessageSquare className="w-3.5 h-3.5 shrink-0" />
                   Conversation avec le client depuis son espace mobile — distincte des commentaires internes.

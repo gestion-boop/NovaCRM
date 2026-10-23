@@ -115,7 +115,7 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
   ].filter(Boolean).join(' · ');
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-8 animate-fade-in relative">
+    <div className="p-6 max-w-6xl mx-auto space-y-8 relative">
       {/* Signalé sur mobile : le titre + le badge + "Nouvelle tâche" tenus
           sur une seule ligne forçaient le titre à s'écraser sur 3 lignes en
           collision avec le bouton retour. Empilé en colonne sur petit
