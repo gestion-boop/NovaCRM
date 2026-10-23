@@ -4,11 +4,19 @@ import {
   Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown, ChevronRight,
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Mic2, Square, Eye, ArrowLeft, Check, CheckCheck,
-  Clock, Camera, Lock, Paperclip, FileText, Loader2,
+  Clock, Camera, Lock, Paperclip, FileText, Loader2, Video as VideoIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
+// Envoi de vidéos (23 octobre, signalé : « on ne peut pas uploader de vidéos
+// mp4 dans les discussions chats ») — les messages sont stockés en base en
+// data URL base64 directement dans la ligne (voir insertConvMessage /
+// insertChannelMedia), ce qui exclut toute vidéo réaliste (un .mp4 dépasse
+// vite les quelques Mo que ça tolère). Même parade déjà en place côté fiche
+// client (ClientProfileView.tsx, handleChatVideoSelected) : on dépose le
+// fichier sur le Drive Google de l'utilisateur et on ne stocke que le lien.
+import { getCachedAccessToken, requestWorkspaceAccessToken, uploadVideoToDriveFolder } from '@/lib/workspace';
 import { assemblerDictee } from '@/lib/dictee';
 import { ouvrirPieceJointe } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -17,6 +25,8 @@ import { AGENCIES } from '@/types';
 import { agencesDisponibles } from '@/lib/agency-logos';
 import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
 import { NOVA_QUICK_REACTIONS, renderEmojiOrNova, isNovaReaction } from '@/lib/novaReactions';
+
+const MAX_VIDEO_SIZE = 150 * 1024 * 1024; // 150 Mo — même plafond que ClientProfileView.tsx
 
 interface ChatProject {
   id: string;
@@ -77,7 +87,7 @@ interface ChatMessageRow {
     created_at?: string;
     // Photos et messages vocaux : `insertChannelMedia` écrit déjà ces
     // champs, le type ne les déclarait simplement pas.
-    kind?: 'text' | 'image' | 'voice' | 'file';
+    kind?: 'text' | 'image' | 'voice' | 'file' | 'video';
     attachmentUrl?: string;
     attachmentMime?: string;
     attachmentDuration?: number;
@@ -1705,6 +1715,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // qui demande au téléphone d'ouvrir l'appareil photo plutôt que la galerie.
   const channelCameraInputRef = useRef<HTMLInputElement>(null);
   const channelFileInputRef = useRef<HTMLInputElement>(null);
+  const channelVideoInputRef = useRef<HTMLInputElement>(null);
   const convCameraInputRef = useRef<HTMLInputElement>(null);
   // Zones de saisie qui grandissent avec le texte : la hauteur est remise à
   // zéro puis recalée sur le contenu à chaque frappe (une zone de texte ne
@@ -2035,6 +2046,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [uploadingConvMedia, setUploadingConvMedia] = useState(false);
   const convImageInputRef = useRef<HTMLInputElement>(null);
   const convFileInputRef = useRef<HTMLInputElement>(null);
+  const convVideoInputRef = useRef<HTMLInputElement>(null);
   const convMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const convAudioChunksRef = useRef<Blob[]>([]);
   const convRecordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -2074,7 +2086,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
    * plutôt que de perdre l'enregistrement en silence.
    */
   const insertConvMessage = async (
-    kind: 'image' | 'voice' | 'file',
+    kind: 'image' | 'voice' | 'file' | 'video',
     attachmentUrl: string,
     attachmentDuration?: number,
     attachmentMime?: string,
@@ -2156,6 +2168,38 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     reader.readAsDataURL(file);
   };
 
+  // Envoi d'une vidéo dans une conversation directe (23 octobre, signalé :
+  // « on ne peut pas uploader de vidéos mp4 dans les discussions chats »).
+  // Contrairement à l'image/au PDF ci-dessus, une vidéo ne tient pas en data
+  // URL dans la ligne — on la dépose sur le Drive Google de l'utilisateur
+  // (même mécanique que ClientProfileView.tsx, handleChatVideoSelected) et
+  // seul le lien est stocké comme attachment_url. Sans compte Workspace
+  // connecté, repli sur une URL locale au navigateur (perdue à la fermeture
+  // de l'onglet, mais au moins le message part).
+  const handleConvVideoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > MAX_VIDEO_SIZE) {
+      toast.error('Vidéo trop volumineuse (150 Mo maximum).');
+      return;
+    }
+    setUploadingConvMedia(true);
+    try {
+      let token = getCachedAccessToken();
+      if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
+      const url = token
+        ? (await uploadVideoToDriveFolder(token, file, 'Messagerie interne')).fileUrl
+        : URL.createObjectURL(file);
+      const erreur = await insertConvMessage('video', url, undefined, file.type || 'video/mp4', file.name);
+      if (erreur) toast.error(erreur);
+    } catch (err: any) {
+      toast.error(err?.message || "Impossible d'envoyer la vidéo");
+    } finally {
+      setUploadingConvMedia(false);
+    }
+  };
+
   /**
    * Envoie une image ou un vocal dans le canal de projet actif.
    *
@@ -2165,7 +2209,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
    * côté du corps du message, sans migration de schéma.
    */
   const insertChannelMedia = async (
-    kind: 'image' | 'voice' | 'file',
+    kind: 'image' | 'voice' | 'file' | 'video',
     attachmentUrl: string,
     attachmentDuration?: number,
     attachmentMime?: string,
@@ -2241,6 +2285,31 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     } finally {
       setUploadingChannelMedia(false);
       if (channelFileInputRef.current) channelFileInputRef.current.value = '';
+    }
+  };
+
+  // Même demande (23 octobre) que côté conversations directes — voir le
+  // commentaire détaillé sur handleConvVideoSelected.
+  const handleChannelVideoPick = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > MAX_VIDEO_SIZE) {
+      toast.error('Vidéo trop volumineuse (150 Mo maximum).');
+      return;
+    }
+    setUploadingChannelMedia(true);
+    try {
+      let token = getCachedAccessToken();
+      if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
+      const url = token
+        ? (await uploadVideoToDriveFolder(token, file, `Canal - ${activeChannel?.name || 'Messagerie'}`)).fileUrl
+        : URL.createObjectURL(file);
+      const erreur = await insertChannelMedia('video', url, undefined, file.type || 'video/mp4', file.name);
+      if (erreur) toast.error(erreur);
+    } catch (err: any) {
+      toast.error(err?.message || "Impossible d'envoyer la vidéo");
+    } finally {
+      setUploadingChannelMedia(false);
+      if (channelVideoInputRef.current) channelVideoInputRef.current.value = '';
     }
   };
 
@@ -4310,6 +4379,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   <input ref={convImageInputRef} type="file" accept="image/*" hidden onChange={handleConvImageSelected} />
                   <input ref={convCameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleConvImageSelected} />
                   <input ref={convFileInputRef} type="file" accept="application/pdf" hidden onChange={handleConvFileSelected} />
+                  <input ref={convVideoInputRef} type="file" accept="video/*" hidden onChange={handleConvVideoSelected} />
 
                   {isRecordingConv && (
                     <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30">
@@ -4473,6 +4543,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               </button>
                               <button
                                 type="button"
+                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convVideoInputRef.current?.click(); }}
+                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                              >
+                                <VideoIcon className="w-5 h-5 text-[#F7BC5F]" /> Vidéo (150 Mo max)
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvEmoji(true); }}
                                 className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                               >
@@ -4535,6 +4612,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         title="Envoyer un PDF"
                       >
                         <Paperclip className="w-5 h-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => convVideoInputRef.current?.click()}
+                        disabled={uploadingConvMedia || isRecordingConv}
+                        className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                        title="Envoyer une vidéo (150 Mo max)"
+                      >
+                        <VideoIcon className="w-5 h-5" />
                       </button>
                       <div className="sm:relative" ref={convEmojiRef}>
                         <button
@@ -4807,6 +4893,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           <button type="button" onClick={() => setConvLightboxUrl(m.data.attachmentUrl ?? null)} className="block">
                             <img src={m.data.attachmentUrl} alt="Pièce jointe" className="max-w-[220px] max-h-[220px] rounded-xl object-cover" />
                           </button>
+                        ) : m.data?.kind === 'video' && m.data?.attachmentUrl ? (
+                          <video src={m.data.attachmentUrl} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
                         ) : m.data?.kind === 'voice' && m.data?.attachmentUrl ? (
                           <div className="flex items-center gap-2">
                             <audio controls preload="none" src={m.data.attachmentUrl} className="h-9 max-w-[220px]" />
@@ -5087,6 +5175,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         </button>
                         <button
                           type="button"
+                          onClick={() => { fermerFeuille(() => setShowChannelPlus(false)); channelVideoInputRef.current?.click(); }}
+                          className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                        >
+                          <VideoIcon className="w-5 h-5 text-[#F7BC5F]" /> Vidéo (150 Mo max)
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => { fermerFeuille(() => setShowChannelPlus(false)); setShowChannelEmoji(true); }}
                           className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
                         >
@@ -5230,6 +5325,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   className="hidden"
                   onChange={(e) => void handleChannelFilePick(e.target.files?.[0] || null)}
                 />
+                <input
+                  ref={channelVideoInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(e) => void handleChannelVideoPick(e.target.files?.[0] || null)}
+                />
                 <button
                   type="button"
                   onClick={() => channelImageInputRef.current?.click()}
@@ -5247,6 +5349,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   className="p-2.5 rounded-xl hidden sm:block text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
                 >
                   <Paperclip className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => channelVideoInputRef.current?.click()}
+                  disabled={uploadingChannelMedia || isRecordingChannel}
+                  title="Envoyer une vidéo (150 Mo max)"
+                  className="p-2.5 rounded-xl hidden sm:block text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                >
+                  <VideoIcon className="w-4 h-4" />
                 </button>
                 {isRecordingChannel ? (
                   <>
