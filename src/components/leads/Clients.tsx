@@ -454,22 +454,13 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         </div>
       </div>
 
-      {/* ── Recherche, sur MOBILE uniquement ──────────────────────────────
-          Cette barre avait été retirée le 30/08/2026 sur demande explicite
-          ("supprime la barre de recherche car il y en a une tout en haut"),
-          la barre globale de l'appli faisant déjà le travail.
-          Signalé le 31/08/2026 : "elle n'a pas la barre de recherche du
-          téléphone portable". En effet — l'en-tête qui porte cette barre
-          globale est `hidden md:flex` (Header.tsx) : il DISPARAÎT entièrement
-          sous 768 px. Sur téléphone, il n'existait donc plus aucun moyen de
-          chercher un client depuis le 30/08.
-          Revenue sur TOUS les écrans le 31/08/2026, demande explicite :
-          « mets une barre de recherche client quand on clique dans Client,
-          Natacha par exemple n'a pas de barre de recherche ». Elle n'était
-          jusqu'ici rendue que sous 768 px (`md:hidden`), or un téléphone
-          pliable déplié dépasse ce seuil : ni la barre mobile, ni le réflexe
-          d'aller chercher celle de l'en-tête. Elle est donc partout. */}
-      <div className="relative">
+      {/* Recherche de la liste, téléphone seulement.
+          Sur ordinateur la barre du haut (« Rechercher : client, pipeline,
+          message… ») cherche déjà les clients : la garder ici faisait deux
+          recherches l'une sous l'autre. Sous 768 px cet en-tête disparaît
+          (Header.tsx, `hidden md:flex`), donc cette barre reste le seul
+          moyen de filtrer la liste. */}
+      <div className="relative md:hidden">
         <Search className="w-4 h-4 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input
           type="search"
