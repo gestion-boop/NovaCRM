@@ -6,7 +6,7 @@ import {
   Home as HomeIcon, Camera, Settings, Plus, GripVertical, 
   Palette, Folder, FolderPlus, ArrowLeft, Check, Trash2, Edit3, X, ChevronRight, LayoutGrid,
   Globe, ExternalLink, Bookmark, Target, Shield, Award, Sparkles, Image as ImageIcon,
-  CheckSquare, MoreVertical, Clock
+  CheckSquare, MoreVertical
 } from 'lucide-react';
 
 interface AccueilGridProps {
@@ -578,20 +578,58 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     }
   };
 
-  const formattedDate = useMemo(() => {
-    try {
-      const date = new Intl.DateTimeFormat('fr-FR', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-      }).format(new Date());
-      return date.charAt(0).toUpperCase() + date.slice(1);
-    } catch {
-      return '';
-    }
-  }, []);
-
   const currentDisplayTiles = activeFolder ? (activeFolder.children || []) : tiles;
+
+  const priorityItems = [
+    {
+      id: 'tableau-de-bord',
+      label: 'Tableau de bord',
+      nav: 'tableau-de-bord',
+      icon: BarChart2,
+      gradient: 'from-[#0D9488] via-[#0F766E] to-[#042F2E]',
+      count: 0,
+    },
+    {
+      id: 'rappels',
+      label: 'Rappels & Alertes',
+      nav: 'rappels',
+      icon: Bell,
+      gradient: 'from-[#8B1E3F] via-[#63142A] to-[#3B0A18]',
+      count: unreadNotificationsCount || 0,
+    },
+    {
+      id: 'chat',
+      label: 'Chat Équipe',
+      nav: 'chat',
+      icon: MessageSquare,
+      gradient: 'from-[#00B4DB] via-[#0083B0] to-[#005C8A]',
+      count: unreadMessagesCount || 0,
+    },
+    {
+      id: 'agenda',
+      label: 'Agenda & RDV',
+      nav: 'agenda',
+      icon: Calendar,
+      gradient: 'from-[#059669] via-[#047857] to-[#064E3B]',
+      count: unreadRemindersCount || 0,
+    },
+    {
+      id: 'mail',
+      label: 'Mail',
+      nav: 'mail',
+      icon: Mail,
+      gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]',
+      count: unreadMailCount || 0,
+    },
+  ];
+
+  const summaryText = useMemo(() => {
+    if (unreadMailCount > 0) return `${unreadMailCount} mail${unreadMailCount > 1 ? 's' : ''} non lu${unreadMailCount > 1 ? 's' : ''}`;
+    if (unreadMessagesCount > 0) return `${unreadMessagesCount} message${unreadMessagesCount > 1 ? 's' : ''} d'équipe non lu${unreadMessagesCount > 1 ? 's' : ''}`;
+    if (unreadNotificationsCount > 0) return `${unreadNotificationsCount} alerte${unreadNotificationsCount > 1 ? 's' : ''} ou rappel${unreadNotificationsCount > 1 ? 's' : ''} en attente`;
+    if (unreadRemindersCount > 0) return `${unreadRemindersCount} rendez-vous ou rappel${unreadRemindersCount > 1 ? 's' : ''} aujourd'hui`;
+    return null;
+  }, [unreadMailCount, unreadMessagesCount, unreadNotificationsCount, unreadRemindersCount]);
 
   return (
     <div 
@@ -602,131 +640,46 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-900/10 via-transparent to-transparent pointer-events-none" />
 
       <div className="max-w-7xl mx-auto w-full z-10">
-        {/* Welcome Banner & Date Header */}
+        {/* Priority Dock from Image 1 */}
         {!activeFolder && (
-          <div className="mb-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-white/[0.08]">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 mb-1">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>{formattedDate}</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block ml-1" />
-                  <span className="text-gray-400 font-normal">Connecté</span>
-                </div>
-                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  Espace Accueil NovaCRM
-                </h1>
-                <p className="text-xs sm:text-sm text-gray-400 mt-0.5">
-                  Accédez à vos outils, contacts, dossiers et raccourcis en un clic.
-                </p>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2.5 shrink-0">
-                <button
-                  onClick={handleOpenAddModal}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 stroke-[2.5]" />
-                  <span>Ajouter raccourci</span>
-                </button>
-                <button
-                  onClick={handleResetTiles}
-                  className="text-xs text-gray-400 hover:text-gray-200 bg-white/5 hover:bg-white/10 px-3 py-2 rounded-xl border border-white/10 transition-colors"
-                  title="Rétablir l'organisation par défaut"
-                >
-                  Réinitialiser
-                </button>
-              </div>
+          <div className="max-w-7xl mx-auto w-full mb-6 z-10 relative overflow-hidden rounded-2xl bg-[#2b2b2b]/80 backdrop-blur-xl p-3 sm:p-4 border border-black/60 shadow-[0_10px_24px_-8px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <div className="grid grid-cols-5 gap-1.5 sm:gap-4 items-center justify-items-center">
+              {priorityItems.map((opt) => {
+                const OptIcon = opt.icon;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => onNavigate(opt.nav)}
+                    className="flex flex-col items-center gap-1.5 transition-transform hover:scale-[1.03] active:scale-[0.98] w-full max-w-[120px] cursor-pointer"
+                  >
+                    <div className={`relative w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br ${opt.gradient} flex items-center justify-center shadow-md border border-white/15 transition-all`}>
+                      <OptIcon className="w-5 h-5 sm:w-7 sm:h-7 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
+                      {opt.count > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] sm:text-xs font-black min-w-5 h-5 sm:min-w-6 sm:h-6 px-1 rounded-full flex items-center justify-center ring-2 ring-[#0b1c1e] shadow-md animate-pulse">
+                          {opt.count > 9 ? '9+' : opt.count}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] sm:text-xs font-semibold text-slate-200 text-center truncate w-full" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>
+                      {opt.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-
-            {/* Glanceable Activity Stat Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 my-5">
-              <div 
-                onClick={() => onNavigate('agenda')} 
-                className="group p-3 sm:p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-emerald-500/40 transition-all cursor-pointer shadow-sm flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 group-hover:scale-105 transition-transform">
-                    <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </div>
-                  <div className="truncate">
-                    <p className="text-[10px] sm:text-xs text-gray-400 font-medium">Rappels & RDV</p>
-                    <p className="text-xs sm:text-sm font-bold text-white truncate">
-                      {unreadRemindersCount > 0 ? `${unreadRemindersCount} en attente` : 'À jour'}
-                    </p>
-                  </div>
-                </div>
-                {unreadRemindersCount > 0 && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                )}
-              </div>
-
-              <div 
-                onClick={() => onNavigate('chat')} 
-                className="group p-3 sm:p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-cyan-500/40 transition-all cursor-pointer shadow-sm flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0 group-hover:scale-105 transition-transform">
-                    <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </div>
-                  <div className="truncate">
-                    <p className="text-[10px] sm:text-xs text-gray-400 font-medium">Chat Équipe</p>
-                    <p className="text-xs sm:text-sm font-bold text-white truncate">
-                      {unreadMessagesCount > 0 ? `${unreadMessagesCount} non lus` : 'À jour'}
-                    </p>
-                  </div>
-                </div>
-                {unreadMessagesCount > 0 && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
-                )}
-              </div>
-
-              <div 
-                onClick={() => onNavigate('notifications')} 
-                className="group p-3 sm:p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-rose-500/40 transition-all cursor-pointer shadow-sm flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0 group-hover:scale-105 transition-transform">
-                    <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </div>
-                  <div className="truncate">
-                    <p className="text-[10px] sm:text-xs text-gray-400 font-medium">Notifications</p>
-                    <p className="text-xs sm:text-sm font-bold text-white truncate">
-                      {unreadNotificationsCount > 0 ? `${unreadNotificationsCount} alertes` : 'Aucune'}
-                    </p>
-                  </div>
-                </div>
-                {unreadNotificationsCount > 0 && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-400 animate-pulse shrink-0" />
-                )}
-              </div>
-
+            {summaryText && (
               <div 
                 onClick={() => {
-                  if (onOpenNova) {
-                    onOpenNova();
-                  } else {
-                    onNavigate('assistant-ia');
-                  }
-                }} 
-                className="group p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent hover:from-amber-500/25 border border-amber-500/30 hover:border-amber-400/50 transition-all cursor-pointer shadow-sm flex items-center justify-between"
+                  if (unreadMailCount > 0) onNavigate('mail');
+                  else if (unreadMessagesCount > 0) onNavigate('chat');
+                  else if (unreadNotificationsCount > 0) onNavigate('rappels');
+                  else if (unreadRemindersCount > 0) onNavigate('agenda');
+                }}
+                className="mt-2 text-center text-xs sm:text-sm font-semibold text-slate-100 hover:text-[#F7BC5F] transition-colors cursor-pointer truncate"
               >
-                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-110 transition-transform">
-                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </div>
-                  <div className="truncate">
-                    <p className="text-[10px] sm:text-xs text-amber-300/80 font-medium">Nova IA</p>
-                    <p className="text-xs sm:text-sm font-bold text-white truncate">Poser une question</p>
-                  </div>
-                </div>
-                <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full font-semibold shrink-0">
-                  Actif
-                </span>
+                {summaryText}
               </div>
-            </div>
-
+            )}
           </div>
         )}
 
