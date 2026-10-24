@@ -2469,9 +2469,22 @@ export default function ClientProfileView({
                       >
                         {isPast && <div className="w-1.5 h-1.5 bg-[#F7BC5F] rounded-full" style={couleur ? { backgroundColor: couleur } : undefined} />}
                       </button>
+                      {/* Signalé sur tablette (iPad Pro, capture à l'appui) :
+                          les libellés des étapes les plus longues
+                          ("Accord banque / Rendez-vous"...) débordaient de
+                          leur colonne et s'affichaient par-dessus les
+                          étapes voisines, illisibles — `whitespace-nowrap`
+                          empêchait tout retour à la ligne, alors que la
+                          largeur réelle de chaque colonne varie avec
+                          l'écran (flex-1). `w-full` fait que le texte
+                          revient proprement à la ligne dans SA colonne dès
+                          qu'elle est plus étroite que le libellé, au lieu
+                          de déborder sur les colonnes voisines — inchangé
+                          sur desktop, où chaque colonne est assez large
+                          pour que ça tienne sur une seule ligne. */}
                       <span
                         style={couleur ? { color: isActive ? couleur : `${couleur}b3` } : undefined}
-                        className={`text-[11px] font-bold tracking-wide text-center leading-tight whitespace-nowrap ${
+                        className={`w-full text-[11px] font-bold tracking-wide text-center leading-tight break-words ${
                           isActive ? 'text-[#F7BC5F]' : 'text-slate-500 group-hover:text-slate-300'
                         }`}
                       >
