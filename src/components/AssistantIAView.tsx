@@ -396,16 +396,22 @@ interface AssistantIAViewProps {
   // met pas l'historique à chaque fois... sauvegarde l'historique, mais
   // crée une nouvelle interface à chaque fois qu'on clique dessus" — l'accès
   // Nova plein écran (clic sur la mascotte, Sidebar → novaOpen dans
-  // App.tsx) doit désormais rouvrir sur l'accueil vierge à chaque fois,
-  // SANS ré-afficher les anciens messages. L'historique continue d'exister
-  // normalement (thread `assistant_threads`/`assistant_messages` inchangé,
-  // toujours écrit par persistNovaMessage plus bas, et toujours envoyé en
-  // contexte à l'IA via novaFullHistoryRef) — seul l'AFFICHAGE au montage
-  // est concerné. Par défaut `false` (comportement historique inchangé) :
-  // la mini-popup contextuelle (fiche client, Pipeline...) garde
-  // volontairement l'historique visible à la réouverture, comme demandé
-  // explicitement à l'origine de cette fonctionnalité ("en gardant
-  // l'historique si on réouvre", voir App.tsx/novaPopupOpen).
+  // App.tsx) doit rouvrir sur l'accueil vierge à chaque fois, sans
+  // ré-afficher les anciens messages.
+  // Étendu (24 octobre) : "quand on ouvre il faudrait qu'il y ait une
+  // nouvelle discussion" — par défaut `true` désormais (plus seulement pour
+  // le plein écran : aussi pour la mini-popup contextuelle fiche
+  // client/Pipeline, qui gardait jusqu'ici volontairement l'historique
+  // visible à la réouverture). Et une ouverture "fraîche" ne charge plus
+  // non plus l'ancien historique dans `novaFullHistoryRef` : Nova ne s'en
+  // souvient plus en coulisse non plus, la conversation repart vraiment de
+  // zéro à chaque ouverture. L'historique reste quand même en base
+  // (`assistant_messages` continue d'être écrit par persistNovaMessage plus
+  // bas) — seulement plus relu au montage quand `startFresh` est vrai.
+  // Passé explicitement à `false` uniquement pour l'agrandissement
+  // plein écran DEPUIS une popup déjà ouverte (App.tsx,
+  // `!novaExpandedFromPopup`) : ce n'est pas une nouvelle ouverture, juste
+  // un changement de taille de la même conversation en cours.
   startFresh?: boolean;
 }
 
@@ -428,7 +434,7 @@ const NEBULA_SPARKS = Array.from({ length: 16 }, (_, i) => {
   };
 });
 
-export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt, onInitialPromptConsumed, onFoundProperties, onClose, onOpenContact, currentClientId, prefillPrompt, onPrefillPromptConsumed, autoVoiceMode, onAutoVoiceModeConsumed, startFresh }) => {
+export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt, onInitialPromptConsumed, onFoundProperties, onClose, onOpenContact, currentClientId, prefillPrompt, onPrefillPromptConsumed, autoVoiceMode, onAutoVoiceModeConsumed, startFresh = true }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const { allContacts = [], addContact } = useContacts();
   const { tasks = [], addTask, updateTask } = useTasks();
@@ -593,16 +599,20 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           timestamp: format(new Date(m.created_at), 'HH:mm'),
         }));
 
-        novaFullHistoryRef.current = restored.map((m) => ({ sender: m.sender, text: m.text }));
+        // Demande explicite (24 octobre) : « quand on ouvre il faudrait
+        // qu'il y ait une nouvelle discussion » — contrairement à avant
+        // (où une ouverture "fraîche" ne remettait à zéro que l'affichage,
+        // Nova se souvenant quand même de tout en coulisse), l'historique
+        // n'est désormais chargé dans la mémoire envoyée à l'IA que si on
+        // N'est PAS en ouverture fraîche. L'historique reste en base
+        // (assistant_messages n'est pas touché, juste pas relu ici).
+        novaFullHistoryRef.current = startFresh ? [] : restored.map((m) => ({ sender: m.sender, text: m.text }));
 
         // Historique restauré = on remplace le message d'accueil générique
         // (déjà présent dans une session précédente, sinon ce serait un
         // doublon) ; sinon, aucun changement — la salutation par défaut reste.
         // On ne remontre que les 60 derniers à l'écran (lisibilité), même si
         // le ref ci-dessus, lui, garde tout ce qui a été chargé.
-        // `startFresh` (accès plein écran via la mascotte, voir le prop
-        // ci-dessus) : on garde novaFullHistoryRef à jour (Nova se souvient
-        // toujours) mais on n'écrase PAS l'accueil vierge déjà affiché.
         if (restored.length > 0 && !startFresh) {
           setMessages(restored.slice(-60) as Message[]);
           // Ouverture avec un historique restauré : démarrer sur les
