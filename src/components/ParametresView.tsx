@@ -1470,35 +1470,65 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
         // toutes les annonces passées) n'allonge plus la page, il défile
         // dans son propre panneau borné en hauteur (voir plus bas).
         <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-6 items-start">
-        <div className="space-y-4">
-          {/* Demandé (30/08/2026) : "ne fera pas des textes sur cinq lignes,
-              ça ne sert à rien d'avoir ce gros espace" — reréduite (avait été
-              montée à 6 lors du passage à deux colonnes) pour remonter tout
-              le bloc et gagner de la hauteur sur écran fixe (voir plus bas). */}
-          <textarea rows={3} value={announcement} onChange={(e) => setAnnouncement(e.target.value)} placeholder="Votre annonce… La dictée du clavier fonctionne dans ce champ." className={`${inputClass} resize-y`} />
+        <div className="space-y-5">
+          {/* Formulaire de composition d'annonce */}
+          <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] via-white/[0.02] to-transparent backdrop-blur-xl p-4 sm:p-6 space-y-4 shadow-[0_10px_35px_rgba(0,0,0,0.35)] relative overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#F7BC5F]/40 to-transparent pointer-events-none" />
 
-          <NiveauxAnnonce value={announcementLevel} onChange={setAnnouncementLevel} />
+            <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#F7BC5F] shadow-[0_0_8px_rgba(247,188,95,0.8)]" />
+                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">Rédiger un message</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-full font-medium">
+                <Sparkles className="w-3 h-3 text-[#F7BC5F]" />
+                <span>Dictée vocale & émoticônes</span>
+              </div>
+            </div>
 
-          {/* Demandé (30/08/2026) : "enlève l'expiration... cette ligne ne
-              sert à rien" — champ retiré. announcementExpiresAt reste déclaré
-              (toujours vide désormais → expiresAt: null à la publication,
-              voir publishAnnouncement) plutôt que de toucher au reste du
-              circuit pour un simple retrait de champ. */}
-          <input value={announcementLink} onChange={(e) => setAnnouncementLink(e.target.value)} placeholder="Lien facultatif — https://… ou un chemin interne" className={inputClass} />
-
-          {/* L'agence ouverte est le destinataire. « Une personne » ouvre
-              le sélecteur (avatars, filtre, recherche) et la liste démarre
-              sur cette agence. */}
-          <div className="space-y-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Pour</span>
-            <div className="flex flex-wrap items-center gap-2">
-              {!announcementTargetUserId && (
-                <AgencesAnnonce
-                  agencyId={selectedAgency.id}
-                  selectedIds={announcementAgencyIds}
-                  onToggle={(id) => setAnnouncementAgencyIds((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])}
-                />
+            <div className="relative rounded-2xl border border-white/10 bg-black/40 focus-within:border-[#F7BC5F]/70 focus-within:ring-2 focus-within:ring-[#F7BC5F]/20 transition-all overflow-hidden shadow-inner">
+              <textarea
+                rows={3}
+                value={announcement}
+                onChange={(e) => setAnnouncement(e.target.value)}
+                placeholder="Votre annonce… La dictée du clavier et les émoticônes fonctionnent dans ce champ."
+                className="w-full bg-transparent px-3.5 py-3 text-sm sm:text-base text-white placeholder-slate-500 outline-none resize-y min-h-[90px]"
+              />
+              {announcement.trim().length > 0 && (
+                <div className="px-3.5 pb-2 flex justify-end text-[10px] text-slate-500 font-mono">
+                  {announcement.length} caractères
+                </div>
               )}
+            </div>
+
+            <NiveauxAnnonce value={announcementLevel} onChange={setAnnouncementLevel} />
+
+            <div className="space-y-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Lien ou document joint (facultatif)</span>
+              <div className="relative rounded-xl border border-white/10 bg-black/40 focus-within:border-[#F7BC5F]/70 focus-within:ring-2 focus-within:ring-[#F7BC5F]/20 transition-all">
+                <Link className="w-4 h-4 text-[#F7BC5F]/70 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  value={announcementLink}
+                  onChange={(e) => setAnnouncementLink(e.target.value)}
+                  placeholder="Lien facultatif — https://… ou un chemin interne"
+                  className="w-full bg-transparent pl-10 pr-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* L'agence ouverte est le destinataire. « Une personne » ouvre
+                le sélecteur (avatars, filtre, recherche) et la liste démarre
+                sur cette agence. */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Destinataires</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {!announcementTargetUserId && (
+                  <AgencesAnnonce
+                    agencyId={selectedAgency.id}
+                    selectedIds={announcementAgencyIds}
+                    onToggle={(id) => setAnnouncementAgencyIds((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])}
+                  />
+                )}
               {(() => {
                 const picked = announcementTargetUserId ? users.find((u) => u.id === announcementTargetUserId) : null;
                 if (picked) {
@@ -1615,83 +1645,105 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
             );
           })()}
 
-          <div className="space-y-2 pt-1">
-            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-              <input type="checkbox" checked={pollEnabled} onChange={(e) => setPollEnabled(e.target.checked)} className="accent-[#F7BC5F]" />
-              <span className="font-semibold text-white">Sondage</span>
-              <span className="text-xs text-slate-500">les destinataires votent</span>
-            </label>
-            {pollEnabled && (
-              <div className="space-y-2 rounded-xl border border-[#1c4448] bg-[#071f21] p-3">
-                {pollOptions.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {pollOptions.map((opt, i) => (
-                      <span key={i} className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white">
-                        {opt}
-                        <button type="button" onClick={() => setPollOptions((cur) => cur.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-rose-300">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
+            {/* Sondage */}
+            <div className="space-y-3 pt-3 border-t border-white/[0.08]">
+              <label className="flex items-center gap-3 text-sm text-slate-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={pollEnabled}
+                  onChange={(e) => setPollEnabled(e.target.checked)}
+                  className="w-4 h-4 accent-[#F7BC5F] rounded cursor-pointer"
+                />
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white">Ajouter un sondage interactif</span>
+                  <span className="text-xs text-slate-400">· les destinataires votent en 1 clic</span>
+                </div>
+              </label>
+              {pollEnabled && (
+                <div className="space-y-3 rounded-2xl border border-white/10 bg-black/40 p-4 shadow-inner">
+                  {pollOptions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {pollOptions.map((opt, i) => (
+                        <span key={i} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-white font-medium shadow-sm">
+                          {opt}
+                          <button type="button" onClick={() => setPollOptions((cur) => cur.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-rose-300 ml-1">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      value={newPollOption}
+                      onChange={(e) => setNewPollOption(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPollOption(newPollOption); } }}
+                      placeholder="Ajouter un choix de réponse..."
+                      className={inputClass}
+                    />
+                    <button type="button" onClick={() => addPollOption(newPollOption)} disabled={!newPollOption.trim()} className="px-3.5 rounded-xl bg-[#F7BC5F]/20 hover:bg-[#F7BC5F]/30 text-[#F9C977] border border-[#F7BC5F]/40 disabled:opacity-40 transition-colors">
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    <span className="text-[10px] text-slate-400 self-center font-medium">Suggestions :</span>
+                    {POLL_OPTION_PRESETS.filter((p) => !pollOptions.includes(p)).map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => addPollOption(preset)}
+                        className="text-[11px] px-2.5 py-1 rounded-full border border-[#F7BC5F]/30 text-[#F9C977] bg-[#F7BC5F]/5 hover:bg-[#F7BC5F]/15 transition-colors cursor-pointer"
+                      >
+                        + {preset}
+                      </button>
                     ))}
                   </div>
-                )}
-                <div className="flex gap-2">
-                  <input
-                    value={newPollOption}
-                    onChange={(e) => setNewPollOption(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPollOption(newPollOption); } }}
-                    placeholder="Ajouter un choix..."
-                    className={inputClass}
-                  />
-                  <button type="button" onClick={() => addPollOption(newPollOption)} disabled={!newPollOption.trim()} className="px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white disabled:opacity-40">
-                    <Plus className="w-4 h-4" />
-                  </button>
+                  {pollOptions.length < 2 && (
+                    <p className="text-[11px] text-amber-300 font-medium">Ajoutez au moins 2 choix pour activer le sondage.</p>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <span className="text-[10px] text-slate-500 self-center">Suggestions :</span>
-                  {POLL_OPTION_PRESETS.filter((p) => !pollOptions.includes(p)).map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => addPollOption(preset)}
-                      className="text-[11px] px-2.5 py-1 rounded-full border border-[#F7BC5F]/30 text-[#F9C977] hover:bg-[#F7BC5F]/10"
-                    >
-                      + {preset}
-                    </button>
-                  ))}
-                </div>
-                {pollOptions.length < 2 && (
-                  <p className="text-[11px] text-amber-400">Ajoutez au moins 2 choix pour activer le sondage.</p>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          <div className="flex justify-end">
-            <button onClick={publishAnnouncement} disabled={!announcement.trim() || busy === 'announcement' || (!announcementTargetUserId && announcementAgencyIds.length === 0)} className={goldButton}>
-              <Megaphone className="w-4 h-4" />Publier
-            </button>
+            <div className="flex justify-end pt-3">
+              <button
+                onClick={publishAnnouncement}
+                disabled={!announcement.trim() || busy === 'announcement' || (!announcementTargetUserId && announcementAgencyIds.length === 0)}
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-[#F7BC5F] via-[#FAD592] to-[#E5A73E] text-slate-950 text-sm font-black flex items-center gap-2.5 shadow-[0_10px_25px_-5px_rgba(247,188,95,0.45)] hover:shadow-[0_12px_30px_-5px_rgba(247,188,95,0.65)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                {busy === 'announcement' ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                ) : (
+                  <Megaphone className="w-4 h-4 stroke-[2.5]" />
+                )}
+                Publier l'annonce
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Demande explicite : "qui a lu l'annonce" — les données
-            (announcement_reads) et le chargement (loadAnnouncementsAdmin)
-            existaient déjà mais n'étaient jamais affichés nulle part.
-            Panneau séparé (voir commentaire plus haut) : hauteur bornée +
-            défilement interne, plutôt qu'empilé sous le formulaire. */}
-        <div className={`rounded-2xl border border-[#1c4448] bg-[#071f21] p-4 space-y-2 ${showPastAnnouncements ? 'xl:max-h-[calc(100vh-260px)] xl:overflow-y-auto custom-scrollbar' : ''}`}>
+        {/* Panneau historique des annonces */}
+        <div className={`rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-4 sm:p-5 space-y-3 shadow-[0_8px_30px_rgba(0,0,0,0.25)] ${showPastAnnouncements ? 'xl:max-h-[calc(100vh-240px)] xl:overflow-y-auto custom-scrollbar' : ''}`}>
             <button
               type="button"
               onClick={() => setShowPastAnnouncements((v) => !v)}
-              className="w-full flex items-center justify-between gap-2 text-left"
+              className="w-full flex items-center justify-between gap-2 text-left group cursor-pointer"
             >
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                Annonces précédentes — qui a lu
+              <div className="flex items-center gap-2.5">
+                <Clock className="w-4 h-4 text-[#F7BC5F]" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-300 group-hover:text-white transition-colors">
+                  Annonces précédentes
+                </span>
                 {pastAnnouncements.length > 0 && (
-                  <span className="text-[10px] font-bold text-slate-500 normal-case">({pastAnnouncements.length})</span>
+                  <span className="text-[10px] font-bold text-[#F7BC5F] bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 px-2 py-0.5 rounded-full">
+                    {pastAnnouncements.length}
+                  </span>
                 )}
-              </span>
-              <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${showPastAnnouncements ? 'rotate-180' : ''}`} />
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-400 group-hover:text-white">
+                <span className="text-[11px] text-slate-500">Lectures</span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${showPastAnnouncements ? 'rotate-180' : ''}`} />
+              </div>
             </button>
             {showPastAnnouncements && (
               <>
@@ -1710,23 +1762,29 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
               </div>
             )}
             {pastAnnouncements.length === 0 ? (
-              <p className="text-xs text-slate-500">Aucune annonce publiée pour l'instant.</p>
+              <p className="text-xs text-slate-500 py-4 text-center">Aucune annonce publiée pour l'instant.</p>
             ) : (
               <div className="space-y-2">
                 {pastAnnouncements.map((a) => {
                   const readers = announcementReaders[a.id] || [];
                   const isOpen = expandedAnnouncementId === a.id;
                   return (
-                    <div key={a.id} className="rounded-xl border border-[#1c4448] bg-[#071f21] overflow-hidden">
-                      <div className="w-full flex items-center gap-2 px-4 py-3">
+                    <div key={a.id} className="rounded-xl border border-white/10 bg-black/40 hover:border-white/20 transition-all overflow-hidden shadow-sm">
+                      <div className="w-full flex items-center gap-2 px-3.5 py-3">
                         <button
                           type="button"
                           onClick={() => setExpandedAnnouncementId(isOpen ? null : a.id)}
-                          className="flex-1 min-w-0 flex items-center justify-between gap-3 text-left"
+                          className="flex-1 min-w-0 flex items-center justify-between gap-3 text-left cursor-pointer"
                         >
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm text-white truncate">{a.message}</p>
-                            <p className="text-[10px] text-slate-500">{new Date(a.created_at).toLocaleString('fr-FR')} · {readers.length} lecture{readers.length > 1 ? 's' : ''}</p>
+                            <p className="text-sm font-semibold text-white truncate">{a.message}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] text-slate-400">{new Date(a.created_at).toLocaleString('fr-FR')}</span>
+                              <span className="text-slate-600">·</span>
+                              <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                {readers.length} lecture{readers.length > 1 ? 's' : ''}
+                              </span>
+                            </div>
                           </div>
                           <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                         </button>
@@ -1735,7 +1793,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                           onClick={() => void deleteAnnouncement(a.id)}
                           disabled={deletingAnnouncementId === a.id}
                           title="Supprimer cette annonce"
-                          className="w-8 h-8 shrink-0 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 hover:bg-rose-500/20 flex items-center justify-center disabled:opacity-50"
+                          className="w-8 h-8 shrink-0 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 hover:bg-rose-500/20 flex items-center justify-center disabled:opacity-50 cursor-pointer"
                         >
                           {deletingAnnouncementId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         </button>
@@ -2673,18 +2731,35 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
             juste au ras de la barre de navigation du bas, sans marge de
             sécurité. Rien ne change à partir du format tablette (sm:p-6,
             comme avant). */}
-        <div className="flex-1 min-w-0 w-full rounded-2xl border border-[#173d40] bg-[#0b292b]/90 shadow-[0_10px_30px_rgba(0,0,0,.12)] p-5 pb-24 sm:p-6 overscroll-contain">
+        <div className="flex-1 min-w-0 w-full rounded-3xl border border-t-white/20 border-l-white/15 border-r-white/5 border-b-black/50 bg-[#07191c]/90 backdrop-blur-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7),inset_0_1px_2px_rgba(255,255,255,0.18)] p-6 sm:p-8 pb-24 overscroll-contain relative overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[#F7BC5F]/50 to-transparent pointer-events-none" />
+          <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[#F7BC5F]/10 blur-3xl pointer-events-none" />
           {activeSection && ActiveIcon ? (
             <>
-              {/* Demandé (30/08/2026) : "supprime tous les réglages, ça ne
-                  sert à rien d'aller dans Paramètres... faut que ça soit
-                  indépendant comme les autres [tuiles]" — le lien de secours
-                  vers la barre latérale complète est retiré : ce point
-                  d'entrée reste un écran autonome, comme les autres tuiles
-                  de l'accueil qui ne renvoient jamais vers Paramètres. */}
-              <h2 className="font-bold text-white text-lg flex items-center gap-2.5 mb-5">
-                <ActiveIcon className="w-5 h-5 text-[#F7BC5F]" /> {activeSection.label}
-              </h2>
+              {/* En-tête enrichi de section */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-white/10 relative z-10">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/25 via-amber-500/15 to-[#F7BC5F]/5 border border-[#F7BC5F]/50 flex items-center justify-center text-[#F7BC5F] shadow-[0_0_20px_rgba(247,188,95,0.3)] shrink-0">
+                    <ActiveIcon className="w-6 h-6 drop-shadow" />
+                  </div>
+                  <div>
+                    <h2 className="font-black text-white text-xl sm:text-2xl tracking-tight flex items-center gap-2">
+                      {activeSection.label}
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                      {activeSection.id === 'announcements'
+                        ? "Diffusez des alertes d'agence, actualités prioritaires et sondages interactifs à vos équipes"
+                        : "Gestion et personnalisation"}
+                    </p>
+                  </div>
+                </div>
+                {selectedAgency && (
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs font-semibold text-slate-300 self-start sm:self-auto shadow-sm backdrop-blur-md">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                    <span>{selectedAgency.name}</span>
+                  </div>
+                )}
+              </div>
               {sectionBody(activeSection.id)}
             </>
           ) : (
