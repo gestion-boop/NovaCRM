@@ -61,14 +61,13 @@
     <p>Les jetons d'accès Google sont conservés de façon chiffrée par notre prestataire d'authentification et servent uniquement à appeler les API Google en votre nom. Vous pouvez retirer cet accès à tout moment depuis votre compte Google (<a href="https://myaccount.google.com/permissions" rel="noopener">myaccount.google.com/permissions</a>) : les fonctions Gmail, Drive et Agenda du CRM cessent alors de fonctionner pour vous, le reste de l'application reste utilisable.</p>
 
     <h2>4. Assistant Nova</h2>
-    <p>L'assistant Nova permet de créer un contact, une tâche, une note ou un rendez-vous en langage naturel. Le texte que vous lui adressez, et les seules données du CRM nécessaires à la réponse, sont transmis à un fournisseur de modèle de langage (Anthropic) pour produire la réponse. Ces échanges ne servent pas à entraîner des modèles. Aucun contenu de votre boîte Gmail n'est transmis à l'assistant sans une action explicite de votre part.</p>
+    <p>L'assistant Nova permet de créer un contact, une tâche, une note ou un rendez-vous en langage naturel. Le texte que vous lui adressez, et les seules données du CRM nécessaires à la réponse, sont transmis à un fournisseur de modèle de langage (Google Gemini) pour produire la réponse. Ces échanges ne servent pas à entraîner des modèles. Aucun contenu de votre boîte Gmail n'est transmis à l'assistant sans une action explicite de votre part.</p>
 
     <h2>5. Hébergement et sous-traitants</h2>
     <ul>
       <li><b>Supabase</b> : base de données, authentification et stockage de fichiers.</li>
       <li><b>Vercel</b> : hébergement de l'application.</li>
-      <li><b>Google</b> : connexion et services Workspace décrits à la section 3.</li>
-      <li><b>Anthropic</b> : modèle de langage de l'assistant Nova.</li>
+      <li><b>Google</b> : modèle de langage de l'assistant Nova (Gemini), connexion et services Workspace décrits à la section 3.</li>
       <li><b>Infomaniak (kDrive)</b> : espace de stockage optionnel, uniquement pour les sociétés qui l'ont activé.</li>
     </ul>
     <p>Ces prestataires n'accèdent aux données que pour fournir leur service et sont tenus par des engagements de confidentialité.</p>

@@ -1,12 +1,10 @@
 import { getAuthedUser, resolvePublicOrigin, supabaseAdmin } from '../_supabaseAdmin.js';
 
 /**
- * POST /api/ai/agent — Assistant IA NovaSphere, propulsé par Claude
- * (Anthropic) plutôt que Gemini. Même contrat d'entrée/sortie que la
- * version Gemini précédente ({ text, functionCalls }), pour que
- * AssistantIAView.tsx n'ait rien à changer côté client — seul le moteur
- * change, et son exécution des actions (créer un contact/tâche/note/RDV)
- * reste entièrement côté client via les hooks existants.
+ * POST /api/ai/agent — Assistant IA NovaSphere, propulsé par Google Gemini
+ * (GEMINI_API_KEY) avec repli automatique sur Claude (Anthropic) si nécessaire.
+ * Même contrat d'entrée/sortie ({ text, functionCalls, speechText... }), pour que
+ * AssistantIAView.tsx fonctionne immédiatement sans modification côté client.
  */
 
 // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (2/16) : droit
@@ -1042,9 +1040,10 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      res.status(500).json({ error: 'ANTHROPIC_API_KEY non configurée.' });
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+    if (!geminiApiKey && !anthropicApiKey) {
+      res.status(500).json({ error: 'GEMINI_API_KEY non configurée.' });
       return;
     }
 
@@ -1172,247 +1171,445 @@ ${
     // le reste de l'équipe — pas seulement refusés après coup.
     const activeTools = isNovaSuperAssistant ? [...TOOLS, ...NOVA_ADMIN_TOOLS] : TOOLS;
 
-    const callClaude = async (msgs: any[]) => {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          // Demande explicite (24 octobre) : passer sur un modèle plus
-          // récent pour améliorer le raisonnement de Nova sur les demandes
-          // complexes à plusieurs étapes — Haiku 4.5 était volontairement
-          // léger/rapide mais moins fiable sur ce type de requêtes.
-          model: 'claude-sonnet-5-5',
-          // Relevé (#26 : recherche web, puis signalé : tâches/notes parfois
-          // ignorées sur une demande combinée) — plusieurs tool_use dans la
-          // même réponse (contact + tâche + note + rappel...) peuvent
-          // dépasser 2048 tokens cumulés, tronquant silencieusement les
-          // derniers appels d'outils de la liste.
-          max_tokens: 4096,
-          system: systemPrompt,
-          messages: msgs,
-          tools: activeTools,
-        }),
-      });
-      return r.json().catch(() => ({}));
-    };
+    // ─────────────────────────────────────────────────────────────────────────
+    // MOTEUR PRINCIPAL : GOOGLE GEMINI (GEMINI_API_KEY)
+    // ─────────────────────────────────────────────────────────────────────────
+    let geminiUsed = false;
+    let geminiError: any = null;
 
-    let data = await callClaude(cleaned);
-    if (data?.error) {
-      res.status(500).json({ error: data.error.message || 'Erreur Claude.' });
-      return;
+    if (geminiApiKey) {
+      try {
+        const toGeminiSchema = (schema: any): any => {
+          if (!schema || typeof schema !== 'object') return { type: 'OBJECT' };
+          const res: any = {
+            type: (schema.type || 'object').toUpperCase(),
+          };
+          if (schema.description) res.description = schema.description;
+          if (schema.enum) res.enum = schema.enum;
+          if (schema.properties) {
+            res.properties = {};
+            for (const [k, v] of Object.entries(schema.properties)) {
+              res.properties[k] = toGeminiSchema(v);
+            }
+          }
+          if (schema.required && Array.isArray(schema.required)) {
+            res.required = schema.required;
+          }
+          if (schema.items) {
+            res.items = toGeminiSchema(schema.items);
+          }
+          return res;
+        };
+
+        const geminiFunctionDeclarations = activeTools
+          .filter((t: any) => t.name !== 'web_search')
+          .map((t: any) => ({
+            name: t.name,
+            description: t.description || '',
+            parameters: toGeminiSchema(t.input_schema || t.parameters),
+          }));
+
+        const geminiContents: { role: string; parts: any[] }[] = [];
+        for (const m of messages as any[]) {
+          const role = m.sender === 'user' ? 'user' : 'model';
+          if (geminiContents.length === 0 && role !== 'user') continue;
+          if (geminiContents.length > 0 && geminiContents[geminiContents.length - 1].role === role) {
+            geminiContents[geminiContents.length - 1].parts[0].text += `\n${m.text}`;
+          } else {
+            geminiContents.push({ role, parts: [{ text: m.text }] });
+          }
+        }
+        if (prompt) {
+          if (geminiContents.length > 0 && geminiContents[geminiContents.length - 1].role === 'user') {
+            geminiContents[geminiContents.length - 1].parts[0].text += `\n${prompt}`;
+          } else {
+            geminiContents.push({ role: 'user', parts: [{ text: prompt }] });
+          }
+        }
+
+        const candidateGeminiModels = [
+          'gemini-3.8-flash',
+          'gemini-3.6-flash',
+          'gemini-3.7-flash',
+          'gemini-2.5-flash',
+          'gemini-flash-latest',
+        ];
+
+        const callGemini = async (contentsToSend: any[]) => {
+          let lastErr: any = null;
+          for (const model of candidateGeminiModels) {
+            try {
+              const r = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    contents: contentsToSend,
+                    tools: [{ functionDeclarations: geminiFunctionDeclarations }],
+                    generationConfig: {
+                      temperature: 0.4,
+                      maxOutputTokens: 4096,
+                    },
+                  }),
+                }
+              );
+              const data = await r.json().catch(() => ({}));
+              if (r.ok && data?.candidates?.[0]) {
+                return { ok: true, data, model };
+              }
+              if (data?.error) {
+                lastErr = data.error;
+                const msg = (data.error.message || '').toLowerCase();
+                if (data.error.status === 'NOT_FOUND' || msg.includes('not found') || msg.includes('no longer available')) {
+                  continue;
+                }
+                return { ok: false, error: data.error };
+              }
+            } catch (err: any) {
+              lastErr = err;
+            }
+          }
+          return { ok: false, error: lastErr || { message: 'Échec de connexion à l’API Gemini.' } };
+        };
+
+        const geminiRes = await callGemini(geminiContents);
+        if (geminiRes?.ok && geminiRes.data?.candidates?.[0]) {
+          geminiUsed = true;
+          let parts: any[] = geminiRes.data.candidates[0].content?.parts || [];
+          let properties: any[] | undefined;
+          let generatedImage: { dataUrl: string; intent: string; label: string } | undefined;
+
+          // 1. search_properties
+          const propCall = parts.find((p: any) => p.functionCall?.name === 'search_properties');
+          if (propCall) {
+            const result = await runPropertySearch(propCall.functionCall.args || {});
+            properties = result.properties;
+            const resultForModel = {
+              ...result,
+              properties: (result.properties || []).map((p: any) => ({
+                ...p,
+                description: p.description ? String(p.description).slice(0, 220) : '',
+                images: undefined,
+              })),
+            };
+            const followUp = await callGemini([
+              ...geminiContents,
+              { role: 'model', parts: [propCall] },
+              {
+                role: 'user',
+                parts: [{
+                  functionResponse: {
+                    name: 'search_properties',
+                    response: resultForModel,
+                  },
+                }],
+              },
+            ]);
+            if (followUp?.ok && followUp.data?.candidates?.[0]) {
+              parts = [...parts.filter((p: any) => !p.text), ...(followUp.data.candidates[0].content?.parts || [])];
+            }
+          }
+
+          // 2. generate_image
+          const imgCall = parts.find((p: any) => p.functionCall?.name === 'generate_image');
+          if (imgCall) {
+            const result = await runGenerateImage(imgCall.functionCall.args || {}, {
+              publicOrigin: resolvePublicOrigin(req),
+              agencyName: (context as any)?.activeAgency?.name,
+            });
+            const resultForModel = result.error
+              ? { error: result.error }
+              : { success: true, label: result.label };
+            const followUp = await callGemini([
+              ...geminiContents,
+              { role: 'model', parts: [imgCall] },
+              {
+                role: 'user',
+                parts: [{
+                  functionResponse: {
+                    name: 'generate_image',
+                    response: resultForModel,
+                  },
+                }],
+              },
+            ]);
+            if (followUp?.ok && followUp.data?.candidates?.[0]) {
+              parts = [...parts.filter((p: any) => !p.text), ...(followUp.data.candidates[0].content?.parts || [])];
+            }
+            if (result.image) {
+              generatedImage = {
+                dataUrl: `data:${result.image.mimeType};base64,${result.image.data}`,
+                intent: result.intent,
+                label: result.label,
+              };
+            }
+          }
+
+          // 3. search_kdrive_documents
+          const kdriveCall = parts.find((p: any) => p.functionCall?.name === 'search_kdrive_documents');
+          if (kdriveCall) {
+            const result = currentUserId
+              ? await runSearchKdrive(kdriveCall.functionCall.args || {}, currentUserId)
+              : { error: 'Utilisateur non authentifié.' };
+            const followUp = await callGemini([
+              ...geminiContents,
+              { role: 'model', parts: [kdriveCall] },
+              {
+                role: 'user',
+                parts: [{
+                  functionResponse: {
+                    name: 'search_kdrive_documents',
+                    response: result,
+                  },
+                }],
+              },
+            ]);
+            if (followUp?.ok && followUp.data?.candidates?.[0]) {
+              parts = [...parts.filter((p: any) => !p.text), ...(followUp.data.candidates[0].content?.parts || [])];
+            }
+          }
+
+          const rawText = parts
+            .filter((p: any) => typeof p.text === 'string')
+            .map((p: any) => p.text)
+            .join('\n')
+            .trim();
+
+          let text = rawText;
+          let speechText: string | null = null;
+          let shouldSpeak = true;
+          const noSpeechMatch = text.match(/\n?\[\[NO_SPEECH\]\]\s*$/);
+          if (noSpeechMatch) {
+            shouldSpeak = false;
+            text = text.slice(0, noSpeechMatch.index).trim();
+          } else {
+            const speechMatch = text.match(/\n?\[\[SPEECH:\s*([^\]]+?)\s*\]\]\s*$/);
+            if (speechMatch) {
+              speechText = speechMatch[1].trim();
+              text = text.slice(0, speechMatch.index).trim();
+              const words = speechText.split(/\s+/);
+              if (words.length > 40) speechText = `${words.slice(0, 40).join(' ')}…`;
+            }
+          }
+
+          const functionCalls = parts
+            .filter((p: any) => p.functionCall && p.functionCall.name !== 'search_properties' && p.functionCall.name !== 'generate_image' && p.functionCall.name !== 'search_kdrive_documents')
+            .map((p: any) => ({ name: p.functionCall.name, args: p.functionCall.args || {} }));
+
+          return res.status(200).json({
+            text,
+            speechText,
+            shouldSpeak,
+            functionCalls,
+            isNovaSuperAssistant,
+            ...(properties ? { properties } : {}),
+            ...(generatedImage ? { generatedImage } : {}),
+          });
+        } else {
+          geminiError = geminiRes?.error;
+        }
+      } catch (geminiEx: any) {
+        geminiError = geminiEx;
+      }
     }
 
-    let content: any[] = data.content || [];
-    let properties: any[] | undefined;
-
-    // ── Rattrapage des demandes combinées (31/08/2026) ──────────────────────
-    // Signalé : « quand on demande à Nova de créer une note ET une tâche, des
-    // fois il ne crée pas l'un des deux ».
-    //
-    // Le serveur renvoie bien tous les appels d'outils reçus, et le client les
-    // exécute tous en boucle — la perte est en amont : le modèle n'émet
-    // parfois qu'un seul `tool_use` malgré la règle impérative du prompt
-    // système, qui lui demande déjà explicitement de tous les émettre d'un
-    // coup. Une consigne ne suffit donc pas ; on vérifie.
-    //
-    // Quand la demande est visiblement multiple (« et », « puis », « ainsi
-    // que »…) et qu'un seul outil a été appelé, on relance Claude une fois en
-    // lui montrant sa propre réponse et en lui demandant les outils manquants.
-    // Ciblé volontairement : une seule passe supplémentaire, et seulement dans
-    // ce cas précis, pour ne pas doubler le coût de chaque échange.
-    const dernierMessageUtilisateur = [...cleaned].reverse()
-      .find((m: any) => m.role === 'user');
-    const texteDemande = typeof dernierMessageUtilisateur?.content === 'string'
-      ? dernierMessageUtilisateur.content
-      : (dernierMessageUtilisateur?.content || [])
-          .filter((b: any) => b.type === 'text').map((b: any) => b.text).join(' ');
-    const demandeMultiple = /\b(et|puis|ainsi que|également|aussi)\b/i.test(texteDemande || '');
-    const outilsAppeles = content.filter((b: any) => b.type === 'tool_use');
-
-    if (demandeMultiple && outilsAppeles.length === 1) {
-      const relance = await callClaude([
-        ...cleaned,
-        { role: 'assistant', content },
-        {
-          role: 'user',
-          content: [{
-            type: 'text',
-            text: `Tu n'as appelé qu'un seul outil (${outilsAppeles[0].name}) alors que ma demande en contenait plusieurs. `
-              + `Appelle MAINTENANT, dans cette réponse, les outils correspondant aux actions restantes — `
-              + `sans redemander de précisions et sans refaire celle déjà faite. `
-              + `Si tu hésites sur un détail, choisis une valeur raisonnable. `
-              + `Si vraiment il ne restait rien à faire, réponds simplement "OK" sans appeler d'outil.`,
-          }],
-        },
-      ]);
-      const complement = (relance?.content || [])
-        .filter((b: any) => b.type === 'tool_use' && b.name !== outilsAppeles[0].name);
-      if (complement.length > 0) content = [...content, ...complement];
-    }
-
-    // search_properties s'exécute côté serveur (contrairement aux autres
-    // outils, exécutés côté client) : on relance Claude avec le résultat
-    // réel pour qu'il termine sa réponse en connaissance de cause, tout en
-    // renvoyant la liste brute au client pour l'affichage en vignettes.
-    const propertySearchCall = content.find((b) => b.type === 'tool_use' && b.name === 'search_properties');
-    if (propertySearchCall) {
-      const result = await runPropertySearch(propertySearchCall.input || {});
-      properties = result.properties;
-
-      // Version allégée pour Claude (pas la galerie complète ni la
-      // description intégrale) — le client, lui, reçoit `properties`
-      // au complet pour la fiche détail (ticket #61).
-      const resultForClaude = {
-        ...result,
-        properties: (result.properties || []).map((p: any) => ({
-          ...p,
-          description: p.description ? String(p.description).slice(0, 220) : '',
-          images: undefined,
-        })),
+    // ─────────────────────────────────────────────────────────────────────────
+    // REPLI CLAUDE (SI ANTHROPIC_API_KEY CONFIGURÉE ET GEMINI EN ÉCHEC)
+    // ─────────────────────────────────────────────────────────────────────────
+    if (anthropicApiKey) {
+      const callClaude = async (msgs: any[]) => {
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': anthropicApiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-5-5',
+            max_tokens: 4096,
+            system: systemPrompt,
+            messages: msgs,
+            tools: activeTools,
+          }),
+        });
+        return r.json().catch(() => ({}));
       };
 
-      const followUpMessages = [
-        ...cleaned,
-        { role: 'assistant', content },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: propertySearchCall.id,
-              content: JSON.stringify(resultForClaude),
-            },
-          ],
-        },
-      ];
-      data = await callClaude(followUpMessages);
-      if (!data?.error) content = data.content || [];
-    }
+      let data = await callClaude(cleaned);
+      if (data?.error) {
+        res.status(500).json({ error: data.error.message || 'Erreur Claude.' });
+        return;
+      }
 
-    // Ticket #250 : génération d'image, exécutée côté serveur (nécessite
-    // GEMINI_API_KEY) — même principe que search_properties ci-dessus.
-    let generatedImage: { dataUrl: string; intent: string; label: string } | undefined;
-    const generateImageCall = content.find((b) => b.type === 'tool_use' && b.name === 'generate_image');
-    if (generateImageCall) {
-      const result = await runGenerateImage(generateImageCall.input || {}, {
-        publicOrigin: resolvePublicOrigin(req),
-        agencyName: (context as any)?.activeAgency?.name,
-      });
+      let content: any[] = data.content || [];
+      let properties: any[] | undefined;
 
-      // Jamais l'image complète (lourde, en base64) renvoyée à Claude —
-      // seul un texte court lui permet de conclure sa réponse normalement.
-      const resultForClaude = result.error
-        ? { error: result.error }
-        : { success: true, label: result.label };
+      const dernierMessageUtilisateur = [...cleaned].reverse()
+        .find((m: any) => m.role === 'user');
+      const texteDemande = typeof dernierMessageUtilisateur?.content === 'string'
+        ? dernierMessageUtilisateur.content
+        : (dernierMessageUtilisateur?.content || [])
+            .filter((b: any) => b.type === 'text').map((b: any) => b.text).join(' ');
+      const demandeMultiple = /\b(et|puis|ainsi que|également|aussi)\b/i.test(texteDemande || '');
+      const outilsAppeles = content.filter((b: any) => b.type === 'tool_use');
 
-      const followUpMessages = [
-        ...cleaned,
-        { role: 'assistant', content },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: generateImageCall.id,
-              content: JSON.stringify(resultForClaude),
-              ...(result.error ? { is_error: true } : {}),
-            },
-          ],
-        },
-      ];
-      data = await callClaude(followUpMessages);
-      if (!data?.error) content = data.content || [];
+      if (demandeMultiple && outilsAppeles.length === 1) {
+        const relance = await callClaude([
+          ...cleaned,
+          { role: 'assistant', content },
+          {
+            role: 'user',
+            content: [{
+              type: 'text',
+              text: `Tu n'as appelé qu'un seul outil (${outilsAppeles[0].name}) alors que ma demande en contenait plusieurs. `
+                + `Appelle MAINTENANT, dans cette réponse, les outils correspondant aux actions restantes — `
+                + `sans redemander de précisions et sans refaire celle déjà faite. `
+                + `Si tu hésites sur un détail, choisis une valeur raisonnable. `
+                + `Si vraiment il ne restait rien à faire, réponds simplement "OK" sans appeler d'outil.`,
+            }],
+          },
+        ]);
+        const complement = (relance?.content || [])
+          .filter((b: any) => b.type === 'tool_use' && b.name !== outilsAppeles[0].name);
+        if (complement.length > 0) content = [...content, ...complement];
+      }
 
-      if (result.image) {
-        generatedImage = {
-          dataUrl: `data:${result.image.mimeType};base64,${result.image.data}`,
-          intent: result.intent,
-          label: result.label,
+      const propertySearchCall = content.find((b) => b.type === 'tool_use' && b.name === 'search_properties');
+      if (propertySearchCall) {
+        const result = await runPropertySearch(propertySearchCall.input || {});
+        properties = result.properties;
+        const resultForClaude = {
+          ...result,
+          properties: (result.properties || []).map((p: any) => ({
+            ...p,
+            description: p.description ? String(p.description).slice(0, 220) : '',
+            images: undefined,
+          })),
         };
+        const followUpMessages = [
+          ...cleaned,
+          { role: 'assistant', content },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: propertySearchCall.id,
+                content: JSON.stringify(resultForClaude),
+              },
+            ],
+          },
+        ];
+        data = await callClaude(followUpMessages);
+        if (!data?.error) content = data.content || [];
       }
-    }
 
-    // Ticket #267 : search_kdrive_documents, exécuté côté serveur (jeton
-    // jamais transmis au client) — même principe que generate_image
-    // ci-dessus.
-    const searchKdriveCall = content.find((b) => b.type === 'tool_use' && b.name === 'search_kdrive_documents');
-    if (searchKdriveCall) {
-      const result = currentUserId
-        ? await runSearchKdrive(searchKdriveCall.input || {}, currentUserId)
-        : { error: 'Utilisateur non authentifié.' };
+      let generatedImage: { dataUrl: string; intent: string; label: string } | undefined;
+      const generateImageCall = content.find((b) => b.type === 'tool_use' && b.name === 'generate_image');
+      if (generateImageCall) {
+        const result = await runGenerateImage(generateImageCall.input || {}, {
+          publicOrigin: resolvePublicOrigin(req),
+          agencyName: (context as any)?.activeAgency?.name,
+        });
+        const resultForClaude = result.error
+          ? { error: result.error }
+          : { success: true, label: result.label };
+        const followUpMessages = [
+          ...cleaned,
+          { role: 'assistant', content },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: generateImageCall.id,
+                content: JSON.stringify(resultForClaude),
+                ...(result.error ? { is_error: true } : {}),
+              },
+            ],
+          },
+        ];
+        data = await callClaude(followUpMessages);
+        if (!data?.error) content = data.content || [];
 
-      const followUpMessages = [
-        ...cleaned,
-        { role: 'assistant', content },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: searchKdriveCall.id,
-              content: JSON.stringify(result),
-              ...(result.error ? { is_error: true } : {}),
-            },
-          ],
-        },
-      ];
-      data = await callClaude(followUpMessages);
-      if (!data?.error) content = data.content || [];
-    }
-
-    const rawText = content
-      .filter((b) => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n')
-      .trim();
-
-    // Architecture vocale à deux niveaux ("display_text" / "speech_text") :
-    // Claude peut terminer sa réponse par un marqueur dédié (voir prompt
-    // système, "Version courte à voix haute") — jamais affiché tel quel
-    // dans le chat, extrait ici et renvoyé à part. Objectif : en mode vocal
-    // (nébuleuse), Nova ne doit jamais lire à voix haute une longue liste,
-    // un e-mail entier ou des données sensibles — seulement un résumé
-    // court décidé par Claude lui-même. Le texte affiché à l'écran, lui,
-    // reste toujours complet.
-    let text = rawText;
-    let speechText: string | null = null;
-    let shouldSpeak = true;
-    const noSpeechMatch = text.match(/\n?\[\[NO_SPEECH\]\]\s*$/);
-    if (noSpeechMatch) {
-      shouldSpeak = false;
-      text = text.slice(0, noSpeechMatch.index).trim();
-    } else {
-      const speechMatch = text.match(/\n?\[\[SPEECH:\s*([^\]]+?)\s*\]\]\s*$/);
-      if (speechMatch) {
-        speechText = speechMatch[1].trim();
-        text = text.slice(0, speechMatch.index).trim();
-        // Garde-fou crédits ElevenLabs : la consigne demande 5-20 mots,
-        // mais le modèle ne la respecte pas toujours parfaitement — coupe
-        // au-delà d'une marge large plutôt que d'envoyer un texte long en
-        // synthèse vocale payante.
-        const words = speechText.split(/\s+/);
-        if (words.length > 40) speechText = `${words.slice(0, 40).join(' ')}…`;
+        if (result.image) {
+          generatedImage = {
+            dataUrl: `data:${result.image.mimeType};base64,${result.image.data}`,
+            intent: result.intent,
+            label: result.label,
+          };
+        }
       }
+
+      const searchKdriveCall = content.find((b) => b.type === 'tool_use' && b.name === 'search_kdrive_documents');
+      if (searchKdriveCall) {
+        const result = currentUserId
+          ? await runSearchKdrive(searchKdriveCall.input || {}, currentUserId)
+          : { error: 'Utilisateur non authentifié.' };
+
+        const followUpMessages = [
+          ...cleaned,
+          { role: 'assistant', content },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: searchKdriveCall.id,
+                content: JSON.stringify(result),
+                ...(result.error ? { is_error: true } : {}),
+              },
+            ],
+          },
+        ];
+        data = await callClaude(followUpMessages);
+        if (!data?.error) content = data.content || [];
+      }
+
+      const rawText = content
+        .filter((b) => b.type === 'text')
+        .map((b) => b.text)
+        .join('\n')
+        .trim();
+
+      let text = rawText;
+      let speechText: string | null = null;
+      let shouldSpeak = true;
+      const noSpeechMatch = text.match(/\n?\[\[NO_SPEECH\]\]\s*$/);
+      if (noSpeechMatch) {
+        shouldSpeak = false;
+        text = text.slice(0, noSpeechMatch.index).trim();
+      } else {
+        const speechMatch = text.match(/\n?\[\[SPEECH:\s*([^\]]+?)\s*\]\]\s*$/);
+        if (speechMatch) {
+          speechText = speechMatch[1].trim();
+          text = text.slice(0, speechMatch.index).trim();
+          const words = speechText.split(/\s+/);
+          if (words.length > 40) speechText = `${words.slice(0, 40).join(' ')}…`;
+        }
+      }
+
+      const functionCalls = content
+        .filter((b) => b.type === 'tool_use' && b.name !== 'search_properties' && b.name !== 'generate_image' && b.name !== 'search_kdrive_documents')
+        .map((b) => ({ name: b.name, args: b.input || {} }));
+
+      return res.status(200).json({
+        text,
+        speechText,
+        shouldSpeak,
+        functionCalls,
+        isNovaSuperAssistant,
+        ...(properties ? { properties } : {}),
+        ...(generatedImage ? { generatedImage } : {}),
+      });
     }
 
-    const functionCalls = content
-      .filter((b) => b.type === 'tool_use' && b.name !== 'search_properties' && b.name !== 'generate_image' && b.name !== 'search_kdrive_documents')
-      .map((b) => ({ name: b.name, args: b.input || {} }));
-
-    res.status(200).json({
-      text,
-      speechText,
-      shouldSpeak,
-      functionCalls,
-      isNovaSuperAssistant,
-      ...(properties ? { properties } : {}),
-      ...(generatedImage ? { generatedImage } : {}),
-    });
+    const errMsg = geminiError?.message || 'Erreur Gemini.';
+    res.status(500).json({ error: errMsg });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || 'Erreur Claude.' });
+    res.status(500).json({ error: e?.message || 'Erreur Nova IA.' });
   }
 }
