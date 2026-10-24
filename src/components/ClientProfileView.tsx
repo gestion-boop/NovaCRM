@@ -2378,11 +2378,14 @@ export default function ClientProfileView({
         </div>
 
         {/* Pipeline réel — cliquer une étape l'enregistre en base */}
-        <div className="bg-[#0a1e20] rounded-xl border border-white/15 p-4 pb-6 relative shadow-inner">
-          <div className="flex items-center gap-2 mb-4 text-xs font-bold text-slate-400">
+        {/* Demande explicite (24 octobre, maquette validée) : un peu plus
+            aérée — coins plus arrondis, espacements légèrement augmentés,
+            libellés d'étape un peu plus lisibles. */}
+        <div className="bg-[#0a1e20] rounded-2xl border border-white/15 p-5 pb-6 relative shadow-inner">
+          <div className="flex items-center gap-2.5 mb-5 text-xs font-bold text-slate-400">
             Pipeline :
             <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/30 border border-[#144447] text-white text-xs font-semibold hover:bg-black/50 transition-colors">
+              <DropdownMenuTrigger className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/30 border border-[#144447] text-white text-xs font-semibold hover:bg-black/50 transition-colors">
                 {currentPipelineName}
                 <ChevronDown className="w-3.5 h-3.5" />
               </DropdownMenuTrigger>
@@ -2453,7 +2456,7 @@ export default function ClientProfileView({
                     : undefined;
 
                   return (
-                    <div key={stage.id} className="relative z-10 flex flex-col items-center gap-2 group flex-1 min-w-[68px] px-1">
+                    <div key={stage.id} className="relative z-10 flex flex-col items-center gap-2.5 group flex-1 min-w-[68px] px-1">
                       <button
                         type="button"
                         onClick={() => changeStage(stage.id)}
@@ -2468,7 +2471,7 @@ export default function ClientProfileView({
                       </button>
                       <span
                         style={couleur ? { color: isActive ? couleur : `${couleur}b3` } : undefined}
-                        className={`text-[10px] font-bold tracking-wide text-center leading-tight whitespace-nowrap ${
+                        className={`text-[11px] font-bold tracking-wide text-center leading-tight whitespace-nowrap ${
                           isActive ? 'text-[#F7BC5F]' : 'text-slate-500 group-hover:text-slate-300'
                         }`}
                       >
