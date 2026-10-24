@@ -2863,6 +2863,17 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           </button>
         )}
         <TabSwitcher light />
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            title="Fermer Nova IA"
+            aria-label="Fermer Nova IA"
+            className="w-9 h-9 rounded-full bg-white/80 hover:bg-white border border-white/90 shadow-sm text-[#1a1230] flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ml-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Semis de points façon écran d'accueil Gemini, en surimpression du

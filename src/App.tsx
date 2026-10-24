@@ -1458,22 +1458,8 @@ function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                className="fixed top-[3.5rem] sm:top-[4rem] left-0 right-0 bottom-0 z-50 bg-[#050d0f] flex flex-col overflow-hidden"
+                className="absolute inset-0 z-40 bg-[#050d0f] flex flex-col overflow-hidden"
               >
-                {/* Bouton Fermer Nova IA */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNovaOpen(false);
-                    setNovaExpandedFromPopup(false);
-                  }}
-                  title="Fermer Nova IA"
-                  className="absolute z-50 w-9 h-9 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-md text-[#1a1230] flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95"
-                  style={{ top: 'calc(0.75rem + env(safe-area-inset-top, 0px))', right: '1.25rem' }}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-
                 {novaExpandedFromPopup && (
                   <button
                     type="button"

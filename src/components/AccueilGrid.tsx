@@ -4201,7 +4201,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         </div>
       )}
 
-      {/* Bouton Flottant Assistant Nova IA — Cercle Logo avec contour bleu */}
+      {/* Bouton Flottant Assistant Nova IA — Cercle Logo avec contour jaune identique du logo */}
       {!novaOpen && (
         <div className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-40">
           <button
@@ -4212,7 +4212,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                 onNavigate('assistant-ia');
               }
             }}
-            className="group relative w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#0a1820]/95 hover:bg-[#0f2430] border-2 border-sky-400 hover:border-cyan-300 shadow-[0_8px_30px_rgba(0,0,0,0.6),0_0_25px_rgba(56,189,248,0.5)] hover:shadow-[0_8px_35px_rgba(56,189,248,0.8)] backdrop-blur-md flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer"
+            className="group relative w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#0a2528]/95 hover:bg-[#0e3338] border-2 border-[#F7BC5F] hover:border-[#F9C977] ring-2 ring-[#F7BC5F]/35 hover:ring-[#F7BC5F]/60 shadow-[0_8px_30px_rgba(0,0,0,0.6),0_0_20px_rgba(247,188,95,0.45)] hover:shadow-[0_8px_35px_rgba(247,188,95,0.85)] backdrop-blur-md flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer"
             title="Ouvrir l'Assistant Nova IA"
             aria-label="Assistant Nova IA"
           >
@@ -4224,8 +4224,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               />
             </div>
             {/* Indicateur de statut en ligne */}
-            <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping absolute top-0.5 right-0.5" />
-            <span className="w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0a1820] absolute top-0.5 right-0.5 shadow" />
+            <span className="w-3 h-3 rounded-full bg-[#F7BC5F] animate-ping absolute top-0.5 right-0.5" />
+            <span className="w-3 h-3 rounded-full bg-[#F7BC5F] border-2 border-[#0a2528] absolute top-0.5 right-0.5 shadow" />
           </button>
         </div>
       )}
