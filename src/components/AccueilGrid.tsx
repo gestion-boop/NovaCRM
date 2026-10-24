@@ -3798,98 +3798,64 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           propre version de ces blocs) ; uniquement pour l'accueil desktop,
           alignés sur la même hauteur, avec des données 100% dynamiques. */}
       {!openFolderStack.length && showTopPanel && (
-        // Ticket #53 : un seul panneau au dégradé jaune continu pour "Ma
-        // journée" ET "Priorités" (au lieu de deux blocs disparates,
-        // un jaune et un sombre) — les cases de priorités deviennent des
-        // "vitres" claires posées sur le dégradé, plus un "+" pour choisir
-        // quels raccourcis afficher.
-        <div
-          // Ticket : fond gris translucide façon "tablette" Apple TV, plus
-          // de dégradé jaune plein — verre dépoli sombre, texte clair.
-          // Revu (30/08/2026, "on en voit rien") : bg-white/[0.06] (6%
-          // d'opacité) était quasiment invisible sur le fond étoilé chargé
-          // de l'accueil — remplacé par le même fond sombre opaque que les
-          // autres panneaux de l'appli (EquipeView, etc.), nettement visible.
-          // Revu (30/08/2026, suite) : "un peu plus transparent, pas de
-          // beaucoup, 80% d'opacité" — /95 ramené à /80.
-          // Revu (30/08/2026, encore) : "mets un fond plus gris... et
-          // opacité 80%... rajoute un liseré autour aussi très léger genre
-          // 1 [px] en noir" — bg-[#0a1e20] (bleu canard) remplacé par un
-          // gris anthracite (#2b2b2b), même teinte que le reste de la
-          // direction "anthracite" en cours ailleurs (voir Pipeline.tsx,
-          // essai mode jour) ; liseré noir fin ajouté par-dessus le liseré
-          // blanc existant.
-          className="hidden sm:flex max-w-7xl mx-auto w-full mb-2 z-10 relative overflow-hidden rounded-2xl bg-[#2b2b2b]/80 backdrop-blur-xl p-2.5 gap-4 items-stretch flex-col lg:flex-row"
-          style={{ boxShadow: '0 10px 24px -8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)', borderWidth: '1px', borderColor: 'rgba(0,0,0,0.6)' }}
-        >
-          {/* Signalé : bloc "Ma journée" (heure, date, nombre de rendez-vous)
-              retiré — ne reste plus que "Priorités", alignée sur toute la
-              largeur libérée. */}
-          {/* Demande explicite (30/08/2026) : "réduit la hauteur du
-              panneau... enlève éventuellement le mot priorité", puis
-              confirmé fermement juste après ("rappel chat mail et agenda
-              soit ENCORE UNE FOIS prioritaire, on ne peut pas les
-              modifier... ça sera tout pour tous les utilisateurs") — plus
-              de libellé "Priorités", plus de bouton "+"/menu pour les
-              masquer ou en choisir d'autres : ces 4 tuiles sont fixes,
-              rien à personnaliser ici. Panneau réduit à l'essentiel,
-              directement les icônes. */}
-          <div className="relative flex-1 min-w-0">
-            {/* Demande explicite (30/08/2026) : "réduire... une taille
-                peut-être un peu plus rectangle mais beaucoup plus réduit"
-                puis précisé ("prend exemple des icônes de la partie
-                mobile") — repris du style du dock mobile (voir
-                MobileHome.tsx, dockItems) : case-icône carrée en dégradé
-                avec le compteur en pastille ronde DANS le coin (pas une
-                ligne à part), libellé en petit texte EN DESSOUS plutôt que
-                dans la case. */}
-            {/* Demande explicite (30/08/2026, suite) : "grossi encore les 4
-                carrés des priorités c'est trop petits" — w-11/w-4/text-[10px]
-                passés à w-16/w-7/text-xs. */}
-            <div className="grid grid-cols-5 gap-2">
-              {visiblePriorityTiles.map((opt) => {
-                const OptIcon = ICON_MAP[opt.iconName || ''] || LayoutGrid;
-                // Demande explicite (30/08/2026) : "sur les icônes accueil et
-                // tuiles, je veux un effet halo quand on sélectionne un
-                // élément" — même halo (couleur propre à chaque icône) que
-                // les tuiles principales ci-dessous, au clic/appui.
-                const optAccent = extractTileAccentColor(opt.gradient);
-                return (
-                  <button
-                    key={opt.id}
-                    onClick={() => navigateToTile(opt.nav)}
-                    style={{ ['--tile-glow' as string]: optAccent }}
-                    className="flex flex-col items-center gap-1.5 transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    <div className={`relative w-16 h-16 rounded-2xl bg-gradient-to-br ${opt.gradient || 'from-slate-600 to-slate-800'} flex items-center justify-center shadow-md transition-shadow hover:shadow-[0_0_14px_4px_var(--tile-glow)] active:shadow-[0_0_0_3px_var(--tile-glow),0_0_18px_6px_var(--tile-glow)]`}>
-                      {/* 30/08/2026, "on ne voit plus les textes des priorités" :
-                          certains dégradés (ex. Mail, très sombre en bas) rendaient
-                          l'icône blanche peu contrastée selon la zone de la photo de
-                          fond qui transparaît derrière le panneau (80% d'opacité,
-                          volontaire — voir plus haut). Ombre portée fixe sur l'icône,
-                          garantit un minimum de contraste quel que soit le dégradé. */}
-                      <OptIcon className="w-7 h-7 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
-                      {opt.value !== null && opt.value > 0 ? (
-                        <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs font-black min-w-6 h-6 px-1 rounded-full flex items-center justify-center ring-2 ring-[#0b1c1e]">
-                          {opt.value > 9 ? '9+' : opt.value}
-                        </span>
-                      ) : null}
+        <div className="hidden sm:flex flex-col max-w-7xl mx-auto w-full mb-3 z-10">
+          {/* Cases d'activité & priorités (format cartes individuelles comme au début) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-5 gap-3 sm:gap-3.5 w-full">
+            {visiblePriorityTiles.map((opt) => {
+              const OptIcon = ICON_MAP[opt.iconName || ''] || LayoutGrid;
+              const optAccent = extractTileAccentColor(opt.gradient);
+              const hasAlert = opt.value !== null && opt.value > 0;
+              const statusText = hasAlert
+                ? opt.id === 'rappels'
+                  ? `${opt.value} en attente`
+                  : opt.id === 'chat'
+                  ? `${opt.value} non lu${opt.value > 1 ? 's' : ''}`
+                  : opt.id === 'agenda'
+                  ? `${opt.value} aujourd'hui`
+                  : opt.id === 'mail'
+                  ? `${opt.value} nouveau${opt.value > 1 ? 'x' : ''}`
+                  : `${opt.value} en attente`
+                : opt.id === 'tableau-de-bord'
+                ? "Vue d'ensemble"
+                : 'À jour';
+
+              return (
+                <div
+                  key={opt.id}
+                  onClick={() => navigateToTile(opt.nav)}
+                  style={{ ['--tile-glow' as string]: optAccent }}
+                  className="group p-3 sm:p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-t-white/20 border-l-white/15 border-r-white/5 border-b-black/40 shadow-[0_8px_20px_-6px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.15)] hover:border-[#F7BC5F]/50 hover:shadow-[0_12px_25px_-6px_rgba(0,0,0,0.6),0_0_14px_rgba(247,188,95,0.25)] transition-all duration-200 cursor-pointer flex items-center justify-between backdrop-blur-md active:scale-[0.98]"
+                  title={opt.label}
+                >
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br ${opt.gradient || 'from-slate-600 to-slate-800'} border border-white/25 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md`}>
+                      <OptIcon className="w-4 h-4 sm:w-5 sm:h-5 text-white drop-shadow" />
                     </div>
-                    <span className="text-xs font-semibold text-slate-200 text-center truncate w-full" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{opt.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {gesteDuMoment && (
-              <button
-                type="button"
-                onClick={() => navigateToTile(gesteDuMoment.nav)}
-                className="mt-2 w-full text-center text-sm font-semibold text-slate-100 truncate hover:text-[#F7BC5F]"
-              >
-                {gesteDuMoment.texte}
-              </button>
-            )}
+                    <div className="truncate text-left min-w-0">
+                      <p className="text-[10px] sm:text-xs text-gray-400 font-medium truncate">{opt.label}</p>
+                      <p className="text-xs sm:text-sm font-bold text-white truncate">
+                        {statusText}
+                      </p>
+                    </div>
+                  </div>
+                  {hasAlert ? (
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0 ml-1.5 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-white/20 group-hover:bg-[#F7BC5F]/60 transition-colors shrink-0 ml-1.5" />
+                  )}
+                </div>
+              );
+            })}
           </div>
+          {gesteDuMoment && (
+            <button
+              type="button"
+              onClick={() => navigateToTile(gesteDuMoment.nav)}
+              className="mt-2 text-center text-xs sm:text-sm font-medium text-slate-300 hover:text-[#F7BC5F] transition-colors truncate"
+            >
+              {gesteDuMoment.texte}
+            </button>
+          )}
         </div>
       )}
 
