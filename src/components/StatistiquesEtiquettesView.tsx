@@ -116,49 +116,107 @@ const firstNamePlusInitial = (fullName: string): string => {
 // d'un coup d'œil sans remonter à l'en-tête. `count` de 0 s'affiche grisée
 // (agent sans dossier sur cette étape, mais on ne le masque pas — il reste
 // visible dans le tableau).
-const BrassLabel: React.FC<{ count: number; color: string; caption: string; onClick?: () => void }> = ({ count, color, caption, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={!onClick || count === 0}
-    title={count > 0 ? 'Voir les dossiers concernés' : undefined}
-    className="rounded-xl border-2 px-3 sm:px-4 py-1.5 text-center min-w-[4.5rem] disabled:cursor-default enabled:hover:brightness-110 transition"
-    style={{ borderColor: '#9C7A2E', background: count > 0 ? color : '#4d5f5a' }}
-  >
-    <div className="text-lg sm:text-xl font-bold text-[#3A2E12] tabular-nums leading-none">{count}</div>
-    <div className="text-[9px] uppercase tracking-widest text-[#3A2E12]/70 mt-1">{caption}</div>
-  </button>
-);
+const STAGE_CHIP_STYLES: Record<string, { active: string; text: string; bg: string; border: string }> = {
+  location: {
+    active: 'text-sky-200 bg-sky-500/20 border-sky-400/50 shadow-[0_0_15px_rgba(14,165,233,0.3)]',
+    text: 'text-sky-300',
+    bg: 'bg-sky-500/10',
+    border: 'border-sky-500/25',
+  },
+  offre: {
+    active: 'text-amber-200 bg-amber-500/20 border-amber-400/50 shadow-[0_0_15px_rgba(245,158,11,0.3)]',
+    text: 'text-amber-300',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/25',
+  },
+  compromis: {
+    active: 'text-emerald-200 bg-emerald-500/20 border-emerald-400/50 shadow-[0_0_15px_rgba(16,185,129,0.3)]',
+    text: 'text-emerald-300',
+    bg: 'bg-emerald-500/10',
+    border: 'border-emerald-500/25',
+  },
+  signature: {
+    active: 'text-[#FAD592] bg-gradient-to-r from-amber-500/25 to-[#F7BC5F]/30 border-[#F7BC5F]/60 shadow-[0_0_18px_rgba(247,188,95,0.35)] ring-1 ring-[#F7BC5F]/40',
+    text: 'text-[#F7BC5F]',
+    bg: 'bg-[#F7BC5F]/10',
+    border: 'border-[#F7BC5F]/30',
+  },
+  conciergerie: {
+    active: 'text-purple-200 bg-purple-500/20 border-purple-400/50 shadow-[0_0_15px_rgba(168,85,247,0.3)]',
+    text: 'text-purple-300',
+    bg: 'bg-purple-500/10',
+    border: 'border-purple-500/25',
+  },
+};
 
-const AgentSeal: React.FC<{ display: string; fullName: string; color: string }> = ({ display, fullName, color }) => (
-  <div
-    className="relative shrink-0 rounded-full border-[3px] flex items-center justify-center px-3 py-1.5 min-w-[6rem] sm:min-w-[7rem] shadow-[0_2px_5px_rgba(0,0,0,0.45)]"
-    style={{ borderColor: '#9C7A2E', background: color }}
-    title={fullName}
-  >
-    <span className="text-sm sm:text-base font-bold text-[#3A2E12] truncate">{display}</span>
-    <div className="absolute inset-0 rounded-full ring-1 ring-inset ring-black/10" />
-  </div>
-);
+const StatChip: React.FC<{
+  count: number;
+  stageKey: string;
+  caption: string;
+  onClick?: () => void;
+}> = ({ count, stageKey, caption, onClick }) => {
+  const isPositive = count > 0;
+  const style = STAGE_CHIP_STYLES[stageKey] || STAGE_CHIP_STYLES.location;
 
-// Demandé : « ne fais pas un drag and drop, cela sera soumis uniquement aux
-// résultats des conseillers » — le classement se calcule, il ne se range plus
-// à la main. Le sélecteur de couleur d'étiquette est retiré de même.
-const AgentRow: React.FC<{ row: AgentRow; color: string; onOpen?: (stage: StageKey) => void }> = ({ row, color, onOpen }) => (
-  <div className="relative flex items-center gap-3 sm:gap-5 rounded-xl border border-[#3a2f1a] bg-[#1b1712]/80 px-3 sm:px-4 py-3">
-    <AgentSeal display={row.agentDisplay} fullName={row.agentFullName} color={color} />
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick || count === 0}
+      title={count > 0 ? `Voir les dossiers concernés (${count})` : undefined}
+      className={`rounded-2xl border px-3 sm:px-4 py-2 text-center min-w-[4.6rem] sm:min-w-[5.2rem] transition-all duration-200 ${
+        isPositive
+          ? `${style.active} hover:scale-105 cursor-pointer shadow-md`
+          : 'border-white/5 bg-white/[0.02] text-slate-500 opacity-60 cursor-default'
+      }`}
+    >
+      <div className={`text-base sm:text-lg font-black tabular-nums leading-none ${isPositive ? 'text-white' : 'text-slate-500'}`}>
+        {count}
+      </div>
+      <div className={`text-[9px] uppercase font-bold tracking-wider mt-1.5 ${isPositive ? style.text : 'text-slate-600'}`}>
+        {caption}
+      </div>
+    </button>
+  );
+};
 
-    <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 sm:gap-4">
-      <BrassLabel count={row.location} color={color} caption="Location" onClick={onOpen && (() => onOpen('location'))} />
-      <BrassLabel count={row.offre} color={color} caption="Offre" onClick={onOpen && (() => onOpen('offre'))} />
-      <BrassLabel count={row.compromis} color={color} caption="Compromis" onClick={onOpen && (() => onOpen('compromis'))} />
-      <BrassLabel count={row.signature} color={color} caption="Signature" onClick={onOpen && (() => onOpen('signature'))} />
-      <BrassLabel count={row.conciergerie} color={color} caption="Conciergerie" onClick={onOpen && (() => onOpen('conciergerie'))} />
+const AgentSeal: React.FC<{ display: string; fullName: string }> = ({ display, fullName }) => {
+  const initials = display.slice(0, 2).toUpperCase();
+  return (
+    <div
+      className="relative shrink-0 flex items-center gap-2.5 px-3 py-2 rounded-2xl bg-white/[0.04] border border-white/10 shadow-sm min-w-[7rem] sm:min-w-[8.5rem]"
+      title={fullName}
+    >
+      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#F7BC5F]/30 to-[#F7BC5F]/10 border border-[#F7BC5F]/40 text-[#FAD592] text-xs font-black flex items-center justify-center shrink-0 shadow-inner">
+        {initials}
+      </div>
+      <span className="text-xs sm:text-sm font-bold text-white truncate">{display}</span>
+    </div>
+  );
+};
+
+const AgentRow: React.FC<{ row: AgentRow; color: string; onOpen?: (stage: StageKey) => void }> = ({ row, onOpen }) => (
+  <div className="flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.04] via-white/[0.01] to-black/30 p-3 sm:p-4 backdrop-blur-md hover:border-white/20 transition-all shadow-sm">
+    <div className="w-full md:w-auto flex items-center justify-between md:justify-start gap-3">
+      <AgentSeal display={row.agentDisplay} fullName={row.agentFullName} />
+      <div className="md:hidden">
+        <div className="rounded-xl border border-[#F7BC5F]/30 bg-[#F7BC5F]/15 px-3 py-1.5 text-center">
+          <span className="text-sm font-black text-[#FAD592] tabular-nums">{row.total}</span>
+        </div>
+      </div>
     </div>
 
-    <div className="ml-auto flex items-center gap-3 sm:gap-4 shrink-0">
-      <div className="rounded-lg border-2 border-[#D4AF37] bg-[#2A2211] px-3 py-1.5 text-center min-w-[2.5rem]">
-        <span className="text-base sm:text-lg font-bold text-[#D4AF37] tabular-nums">{row.total}</span>
+    <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto max-w-full pb-1 md:pb-0 custom-scrollbar justify-center flex-1">
+      <StatChip count={row.location} stageKey="location" caption="Location" onClick={onOpen && (() => onOpen('location'))} />
+      <StatChip count={row.offre} stageKey="offre" caption="Offre" onClick={onOpen && (() => onOpen('offre'))} />
+      <StatChip count={row.compromis} stageKey="compromis" caption="Compromis" onClick={onOpen && (() => onOpen('compromis'))} />
+      <StatChip count={row.signature} stageKey="signature" caption="Signature" onClick={onOpen && (() => onOpen('signature'))} />
+      <StatChip count={row.conciergerie} stageKey="conciergerie" caption="Conciergerie" onClick={onOpen && (() => onOpen('conciergerie'))} />
+    </div>
+
+    <div className="hidden md:flex items-center gap-3 shrink-0">
+      <div className="rounded-2xl border border-[#F7BC5F]/40 bg-gradient-to-br from-[#F7BC5F]/20 to-[#F7BC5F]/5 px-4 py-2 text-center min-w-[3rem] shadow-[0_0_15px_rgba(247,188,95,0.2)]">
+        <span className="text-sm sm:text-base font-black text-[#FAD592] tabular-nums">{row.total}</span>
       </div>
     </div>
   </div>
@@ -476,39 +534,33 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
   };
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <div
-        className="rounded-2xl border-[6px] p-4 sm:p-6 relative"
-        style={{
-          borderColor: '#8a6a2a',
-          background: 'linear-gradient(160deg, #14110c 0%, #100d09 100%)',
-          boxShadow: 'inset 0 0 0 2px #3a2f1a, 0 8px 30px rgba(0,0,0,0.5)',
-        }}
+        className="rounded-3xl border border-white/10 bg-[#07191c]/90 backdrop-blur-2xl p-6 sm:p-8 relative shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)]"
       >
-        {/* rivets aux 4 coins du cadre, comme sur le casier photographié */}
-        {[
-          'top-3 left-3', 'top-3 right-3', 'bottom-3 left-3', 'bottom-3 right-3',
-        ].map((pos) => (
-          <div key={pos} className={`absolute ${pos} w-3 h-3 rounded-full bg-[#B8923F] border border-[#6B5220] shadow-inner`} />
-        ))}
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[#F7BC5F]/50 to-transparent pointer-events-none rounded-t-3xl" />
 
-        <div className="mb-4 sm:mb-5">
-          <h2 className="text-lg sm:text-2xl font-bold text-[#F3EAD3] tracking-wide">Statistiques — Locations, Offres, Compromis, Signatures &amp; Conciergerie</h2>
-          <p className="text-xs sm:text-sm text-[#C9B67B] mt-1">
-            Répartition en direct par agent ImmoSphera sur le pipeline Transactions V2.
-          </p>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+              Statistiques — Locations, Offres, Compromis, Signatures &amp; Conciergerie
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">
+              Répartition en direct par agent ImmoSphera sur le pipeline Transactions V2.
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 mb-4 sm:mb-5">
+        <div className="flex flex-wrap gap-2 mb-6">
           {TABS.map((t) => (
             <button
               key={t.key}
               type="button"
               onClick={() => setTab(t.key)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold tracking-wide transition-colors border ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all duration-200 border cursor-pointer ${
                 tab === t.key
-                  ? 'bg-[#D4AF37] text-[#1b1712] border-[#D4AF37]'
-                  : 'bg-[#2A2211] text-[#C9B67B] border-[#6B5220] hover:text-[#F3EAD3]'
+                  ? 'bg-gradient-to-r from-[#F7BC5F] to-[#E5A73E] text-slate-950 border-[#F7BC5F] shadow-[0_0_15px_rgba(247,188,95,0.35)] scale-105'
+                  : 'bg-white/[0.04] text-slate-300 border-white/10 hover:bg-white/[0.08] hover:text-white hover:border-white/20'
               }`}
             >
               {t.label}
@@ -675,39 +727,38 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           </div>
         )}
 
-        {/* Total agence — recentré au milieu du panneau, en médaillon, plutôt
-            qu'en pleine largeur comme les rangées agent. */}
+        {/* Total agence */}
         {!loading && orderedRows.length > 0 && (
-          <div className="mt-5 flex justify-center">
-            <div className="flex items-center gap-4 sm:gap-6 rounded-2xl border-2 border-[#D4AF37] bg-[#2A2211] px-5 sm:px-7 py-3 sm:py-4 shadow-[0_4px_14px_rgba(0,0,0,0.4)]">
-              <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-[#D4AF37]">
+          <div className="mt-8 flex justify-center">
+            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 rounded-3xl border border-[#F7BC5F]/30 bg-gradient-to-r from-[#F7BC5F]/15 via-white/[0.03] to-[#F7BC5F]/15 backdrop-blur-xl px-6 sm:px-10 py-4 sm:py-5 shadow-[0_10px_35px_-5px_rgba(0,0,0,0.5),0_0_20px_rgba(247,188,95,0.15)]">
+              <span className="text-xs sm:text-sm font-black uppercase tracking-widest text-[#FAD592]">
                 {estDirection ? 'Total agence' : 'Mes chiffres'}
               </span>
-              <div className="flex items-center gap-3 sm:gap-4">
+              <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                 <div className="text-center">
-                  <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.location}</div>
-                  <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Location</div>
+                  <div className="text-lg sm:text-xl font-black text-sky-300 tabular-nums leading-none">{totals.location}</div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mt-1">Location</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.offre}</div>
-                  <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Offre</div>
+                  <div className="text-lg sm:text-xl font-black text-amber-300 tabular-nums leading-none">{totals.offre}</div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mt-1">Offre</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.compromis}</div>
-                  <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Compromis</div>
+                  <div className="text-lg sm:text-xl font-black text-emerald-300 tabular-nums leading-none">{totals.compromis}</div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mt-1">Compromis</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.signature}</div>
-                  <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Signature</div>
+                  <div className="text-lg sm:text-xl font-black text-[#FAD592] tabular-nums leading-none">{totals.signature}</div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mt-1">Signature</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-base sm:text-lg font-bold text-[#F3EAD3] tabular-nums leading-none">{totals.conciergerie}</div>
-                  <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Conciergerie</div>
+                  <div className="text-lg sm:text-xl font-black text-purple-300 tabular-nums leading-none">{totals.conciergerie}</div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mt-1">Conciergerie</div>
                 </div>
-                <div className="w-px h-8 bg-[#D4AF37]/40" />
+                <div className="w-px h-8 bg-white/10 hidden sm:block" />
                 <div className="text-center">
-                  <div className="text-xl sm:text-2xl font-bold text-[#D4AF37] tabular-nums leading-none">{totals.total}</div>
-                  <div className="text-[9px] uppercase tracking-wider text-[#C9B67B] mt-1">Total</div>
+                  <div className="text-2xl sm:text-3xl font-black text-[#F7BC5F] tabular-nums leading-none drop-shadow">{totals.total}</div>
+                  <div className="text-[10px] uppercase font-black tracking-wider text-[#FAD592] mt-1">Total</div>
                 </div>
               </div>
             </div>

@@ -2304,14 +2304,14 @@ export default function ClientProfileView({
           reste du contenu. Le bouton retour n'a plus besoin de rester
           visible en permanence : le geste de retour au doigt (bord gauche)
           fonctionne depuis n'importe quelle position de défilement. */}
-      <div className="bg-[#07191b] border-b border-white/15 p-4 sm:p-6 flex flex-col gap-4 sm:gap-6">
+      <div className="bg-gradient-to-b from-[#0a1e22]/90 to-[#07191b]/95 border-b border-white/10 p-4 sm:p-6 flex flex-col gap-4 sm:gap-6 backdrop-blur-xl">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
-            <button onClick={onBack} className="p-2 rounded-xl bg-black/40 hover:bg-black/60 border border-[#144447]/60 text-slate-300 transition-colors shrink-0">
+            <button onClick={onBack} className="p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-300 hover:text-white transition-all shrink-0 cursor-pointer shadow-sm active:scale-95">
               <ChevronLeft className="w-5 h-5" />
             </button>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">{client.name}</h1>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">{client.name}</h1>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 {/* Signalé (24 octobre, capture à l'appui) : ce badge restait
                     toujours rose, quelle que soit la température réelle du
@@ -2321,9 +2321,9 @@ export default function ClientProfileView({
                     ici, retrouvée via `statutLead` (la valeur fiable) avec
                     un repli sur `status` pour les fiches plus anciennes qui
                     n'auraient que ce champ-là de renseigné. */}
-                <span className={`px-2 py-0.5 rounded-md text-xs font-bold ${
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-black tracking-wide border shadow-sm ${
                   CLIENT_TEMP_OPTIONS.find((o) => o.value === client.statutLead || o.label.toLowerCase() === (client.status || '').toLowerCase())?.activeClass
-                  || 'bg-rose-500/20 text-rose-400 border-rose-500/50'
+                  || 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-[0_0_10px_rgba(244,63,94,0.3)]'
                 }`}>
                   {client.status}
                 </span>
@@ -2429,7 +2429,7 @@ export default function ClientProfileView({
             libellés d'étape un peu plus lisibles. Resserré ensuite sur
             téléphone (24 octobre, "mets la barre plus petite") : padding et
             marges réduits sous sm:, inchangé sur tablette/ordinateur. */}
-        <div className="bg-[#0a1e20] rounded-2xl border border-white/15 p-3.5 pb-3.5 sm:p-5 sm:pb-6 relative shadow-inner">
+        <div className="bg-[#07191c]/80 rounded-2xl border border-white/10 p-4 sm:p-5 sm:pb-6 relative shadow-lg backdrop-blur-md">
           <div className="flex items-center gap-2.5 mb-3 sm:mb-5 text-xs font-bold text-slate-400">
             Pipeline :
             <DropdownMenu>
@@ -2669,11 +2669,11 @@ export default function ClientProfileView({
         {/* Left Column - Details */}
         <div className="lg:col-span-1 space-y-6">
           {/* Card */}
-          <div className={`bg-[#07191b] border border-white/15 rounded-2xl p-6 shadow-xl relative overflow-hidden transition-shadow hover:shadow-[0_0_20px_2px_rgba(247,188,95,0.15)] ${showHalo ? 'target-halo-bounce' : ''}`}>
-            <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#F7BC5F]" />
+          <div className={`bg-[#07191c]/90 border border-white/10 rounded-2xl p-6 shadow-xl relative overflow-hidden backdrop-blur-xl transition-all duration-200 hover:border-[#F7BC5F]/30 hover:shadow-[0_10px_35px_-10px_rgba(0,0,0,0.5),0_0_20px_2px_rgba(247,188,95,0.12)] ${showHalo ? 'target-halo-bounce' : ''}`}>
+            <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-[#F7BC5F] via-amber-400 to-[#F7BC5F]/50" />
             
             <div className="flex items-start gap-4 mb-6">
-              <div className="w-16 h-16 rounded-2xl bg-[#F7BC5F] flex items-center justify-center text-slate-950 font-black text-xl shadow-lg">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#F7BC5F] via-[#FAD592] to-[#D49635] flex items-center justify-center text-slate-950 font-black text-xl shadow-[0_0_20px_rgba(247,188,95,0.35)] shrink-0">
                 {client.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
               </div>
               <div className="space-y-1">
@@ -2801,10 +2801,15 @@ export default function ClientProfileView({
               </div>
             )}
 
-            <div className="pt-4 border-t border-[#143c3f]/50">
+            <div className="pt-4 border-t border-white/[0.08]">
               <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Montant Estimé</span>
-              <div className="text-3xl font-black text-[#F7BC5F] mt-1">
-                {activeDeal ? formatCurrency(activeDeal.amount) : '0 €'}
+              <div className="mt-1.5 p-3 rounded-xl bg-gradient-to-r from-emerald-500/10 via-[#F7BC5F]/10 to-transparent border border-[#F7BC5F]/30 flex items-center justify-between">
+                <div className="text-2xl sm:text-3xl font-black text-[#FAD592] drop-shadow-sm">
+                  {activeDeal ? formatCurrency(activeDeal.amount) : '0 €'}
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#F7BC5F]/20 text-[#FAD592] border border-[#F7BC5F]/40 uppercase tracking-wider">
+                  Honoraires
+                </span>
               </div>
             </div>
 
@@ -3034,13 +3039,13 @@ export default function ClientProfileView({
         </div>
 
         {/* Right Column - Tabs & Content */}
-        <div className="lg:col-span-2 bg-[#07191b] border border-white/15 rounded-2xl flex flex-col shadow-md overflow-hidden">
+        <div className="lg:col-span-2 bg-[#07191c]/90 border border-white/10 rounded-2xl flex flex-col shadow-xl backdrop-blur-xl overflow-hidden">
           {/* Tabs (30/08/2026, demande explicite : "effet hover et halo lors
               de la sélection aussi") — halo doré au survol de tout onglet,
               et légère lueur permanente sur l'onglet actif (déjà surligné
               par sa couleur/soulignement, la lueur renforce juste la
               sélection). */}
-          <div data-tour="client-tabs" className="flex border-b border-white/15 bg-black/20">
+          <div data-tour="client-tabs" className="flex border-b border-white/10 bg-black/30 overflow-x-auto custom-scrollbar">
             {[
               { id: 'rdv', label: 'Tâches' },
               { id: 'agenda', label: 'RDV' },

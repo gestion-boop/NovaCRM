@@ -647,7 +647,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
   // Signalé (30/08/2026) : "l'historique... ça crée un scroll" — repliée
   // par défaut plutôt que supprimée (aucune donnée perdue : qui a lu quoi
   // reste consultable en un clic, juste plus affiché par défaut).
-  const [showPastAnnouncements, setShowPastAnnouncements] = useState(false);
+  const [showPastAnnouncements, setShowPastAnnouncements] = useState(true);
   // Demandé (30/08/2026) : "ouvrir une fenêtre avec les icônes/profils des
   // utilisateurs pour les sélectionner... filtrer par société... petite
   // barre de recherche" — pour choisir UN destinataire ponctuel sans faire
@@ -1472,7 +1472,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
         // large plutôt qu'empilés — l'historique (potentiellement long,
         // toutes les annonces passées) n'allonge plus la page, il défile
         // dans son propre panneau borné en hauteur (voir plus bas).
-        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-6 items-start min-w-0 w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start min-w-0 w-full">
         <div className="space-y-5 min-w-0 w-full">
           {/* Formulaire de composition d'annonce */}
           <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] via-white/[0.02] to-transparent backdrop-blur-xl p-4 sm:p-6 space-y-4 shadow-[0_10px_35px_rgba(0,0,0,0.35)] relative overflow-hidden min-w-0 w-full">
@@ -2561,7 +2561,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
   const ActiveIcon = activeSection?.icon;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 text-white min-h-full">
+    <div className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-16 max-w-7xl mx-auto space-y-6 text-white min-h-full">
       {/* Signalé (30/08/2026) : "en haut il y a du texte transparent... la
           tuile ne prend pas de suite le plein écran" — cet en-tête générique
           (titre "Paramètres" + Déconnexion) posé à même la photo de fond

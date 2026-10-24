@@ -220,65 +220,78 @@ const PipelineCardContent: React.FC<{
   onDelete?: (dealId: string) => void;
   onOpenChecklist?: (deal: Deal) => void;
   onOpenNova?: (dealTitle: string) => void;
-}> = ({ deal, contact, taskStatus, onDelete, onOpenChecklist, onOpenNova }) => (
-  <>
-    <div className="flex items-start justify-between gap-2">
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5">
-          {taskStatus !== undefined && (
-            taskStatus ? (
-              <span
-                title={`Prochaine tâche : ${taskStatus.label}`}
-                className={`w-2 h-2 rounded-full shrink-0 ${taskStatus.dotClass}`}
-              />
-            ) : (
-              <span title="Aucune tâche planifiée pour ce client" className="shrink-0">
-                <AlertTriangle className="w-3 h-3 text-rose-400" />
-              </span>
-            )
-          )}
-          <h4 className="text-base font-bold text-white truncate">{deal.title}</h4>
+}> = ({ deal, contact, taskStatus, onDelete, onOpenChecklist, onOpenNova }) => {
+  const initials = (deal.title || '').trim().split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase() || 'D';
+  const showContactSub = contact && contact.name && contact.name.trim().toLowerCase() !== deal.title.trim().toLowerCase();
+
+  return (
+    <>
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+          <div className="relative shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#F7BC5F]/20 via-amber-500/10 to-[#F7BC5F]/5 border border-[#F7BC5F]/35 text-[#FAD592] text-xs font-black flex items-center justify-center shadow-inner">
+              {initials}
+            </div>
+            {taskStatus !== undefined && (
+              taskStatus ? (
+                <span
+                  title={`Prochaine tâche : ${taskStatus.label}`}
+                  className={`absolute -top-1 -left-1 w-2.5 h-2.5 rounded-full ring-2 ring-[#07191c] ${taskStatus.dotClass}`}
+                />
+              ) : (
+                <span title="Aucune tâche planifiée" className="absolute -top-1 -left-1 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-[#07191c]" />
+              )
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h4 className="text-sm font-bold text-white group-hover:text-[#FAD592] transition-colors truncate leading-snug">
+              {deal.title}
+            </h4>
+            {showContactSub && (
+              <p className="text-xs text-slate-400 truncate mt-0.5">{contact.name}</p>
+            )}
+          </div>
         </div>
-        {contact && <p className="text-sm text-gray-300 mt-1">{contact.name}</p>}
+        <div className="flex items-center gap-1 shrink-0">
+          {onOpenNova && (
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onOpenNova(deal.title); }}
+              title="Demander à Nova (changer d'étape, ajouter une note...)"
+              className="w-6 h-6 rounded-full overflow-hidden shrink-0 hover:scale-110 hover:ring-2 hover:ring-[#F7BC5F]/60 transition-all shadow-sm"
+            >
+              <img src="/nova-mascotte.png" alt="Nova" className="w-full h-full object-cover" />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onDelete(deal.id); }}
+              className="w-6 h-6 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition-colors"
+              title="Supprimer ce dossier"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-1 shrink-0">
-        {/* Demande explicite : "mets Nova dans Pipeline" — même principe que
-            la fiche client (ClientProfileView) : ouvre Nova avec le nom du
-            dossier déjà prêt à être dicté/complété, sans avoir à le taper. */}
-        {onOpenNova && (
-          <button
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onOpenNova(deal.title); }}
-            title="Demander à Nova (changer d'étape, ajouter une note...)"
-            className="w-5 h-5 rounded-full overflow-hidden shrink-0 hover:scale-110 transition-transform"
-          >
-            <img src="/nova-mascotte.png" alt="Nova" className="w-full h-full object-cover" />
-          </button>
-        )}
-        {onDelete && (
-          <button
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onDelete(deal.id); }}
-            className="text-gray-600 hover:text-rose-300 shrink-0 p-1 -m-1"
-          >
-            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-          </button>
-        )}
+
+      <div className="mt-3 pt-2.5 border-t border-white/[0.08] flex items-center justify-between">
+        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Montant estimé</span>
+        <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${
+          deal.amount > 0
+            ? 'bg-gradient-to-r from-[#F7BC5F]/15 to-amber-500/10 border border-[#F7BC5F]/35 text-[#FAD592] shadow-[0_0_12px_rgba(247,188,95,0.15)]'
+            : 'bg-white/[0.04] border border-white/10 text-slate-400'
+        }`}>
+          {deal.amount.toLocaleString('fr-FR')} €
+        </span>
       </div>
-    </div>
-    {/* Demande explicite (24 octobre, maquette validée) : même mécanique que
-        "Montant Estimé" sur la fiche client (ClientProfileView) — trait fin
-        + libellé en majuscules au-dessus de la valeur, pour séparer le bloc
-        identité (titre/contact ci-dessus) du bloc montant. */}
-    <div className="mt-3 pt-3 border-t border-[#143c3f]/50">
-      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Montant estimé</span>
-      <p className="text-sm font-black text-[#F7BC5F] mt-1">{deal.amount.toLocaleString('fr-FR')} €</p>
-    </div>
-    {onOpenChecklist && deal.pipelineId === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID && (
-      <TransactionsV2ChecklistBadge deal={deal} onOpen={() => onOpenChecklist(deal)} />
-    )}
-  </>
-);
+      {onOpenChecklist && deal.pipelineId === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID && (
+        <TransactionsV2ChecklistBadge deal={deal} onOpen={() => onOpenChecklist(deal)} />
+      )}
+    </>
+  );
+};
 
 // Carte déplaçable d'un dossier — pas de réordonnancement au sein d'une
 // colonne (aucune position n'est persistée, seule l'étape compte), donc un
@@ -342,13 +355,13 @@ const PipelineCard = React.memo<{
       {...attributes}
       {...listeners}
       onClick={() => { if (contact && onSelectContact) onSelectContact(contact.id); }}
-      style={couleur ? { borderLeft: `5px solid ${couleur}`, backgroundColor: `${couleur}1a` } : undefined}
-      className={`p-4 sm:p-3 rounded-xl bg-[#0b1719] border transition-colors duration-150 touch-auto select-none ${
-        contact ? 'cursor-pointer' : ''
+      style={couleur ? { borderLeft: `4px solid ${couleur}`, backgroundColor: `${couleur}15` } : undefined}
+      className={`group p-3.5 rounded-2xl bg-gradient-to-b from-white/[0.06] via-white/[0.02] to-black/40 border transition-all duration-200 touch-auto select-none backdrop-blur-md shadow-md ${
+        contact ? 'cursor-pointer hover:-translate-y-0.5' : ''
       } ${
         isDragging
           ? 'opacity-0'
-          : 'border-white/20 hover:border-[#F7BC5F]/40 hover:shadow-[0_0_0_3px_rgba(229,184,66,0.15),0_8px_20px_-6px_rgba(0,0,0,0.5)] hover:-translate-y-0.5'
+          : 'border-white/10 hover:border-[#F7BC5F]/50 hover:shadow-[0_8px_25px_-5px_rgba(0,0,0,0.5),0_0_15px_rgba(247,188,95,0.15)]'
       }`}
     >
       <PipelineCardContent deal={deal} contact={contact} taskStatus={taskStatus} onDelete={onDelete} onOpenChecklist={onOpenChecklist} onOpenNova={onOpenNova} />
@@ -441,64 +454,34 @@ const PipelineColumn: React.FC<{
       // précisément en CSS (voir index.css), sans toucher aux autres
       // éléments qui partagent le même bg-[#0a1e20] ailleurs dans l'appli
       // (essai isolé, pas encore généralisé).
-      className={`pipeline-column-bg w-[85vw] max-w-[320px] sm:w-[310px] shrink-0 snap-center snap-always bg-[#0a1e20] border border-white/20 border-t-4 rounded-2xl transition-shadow duration-200 max-h-[65dvh] overflow-y-auto sm:max-h-none sm:overflow-visible ${
+      className={`pipeline-column-bg w-[85vw] max-w-[320px] sm:w-[310px] shrink-0 snap-center snap-always bg-[#07191c]/90 backdrop-blur-xl border border-white/10 border-t-[3px] rounded-2xl transition-all duration-200 shadow-[0_12px_32px_rgba(0,0,0,0.4)] max-h-[65dvh] overflow-y-auto sm:max-h-none sm:overflow-visible ${
         isDragging ? 'scale-[1.01] opacity-70 z-30' : ''
       }`}
     >
-      {/* Demandé le 7 octobre (mobile) : « fige les cartes à l'intérieur du
-          pipeline pour rendre le scroll plus simple » — confirmé : l'en-tête
-          (nom d'étape + total) devait rester visible pendant qu'on scrolle
-          les cartes d'une colonne.
-          Premier essai (sticky tout seul, retiré) : ne fonctionnait PAS,
-          vérifié avec une reproduction isolée sous Playwright — la ligne de
-          colonnes a `overflow-x-auto` (nécessaire au swipe horizontal entre
-          colonnes), ce qui force `overflow-y` à se calculer en `auto` sur
-          CETTE ligne aussi (règle CSS : un axe non-`visible` empêche l'autre
-          de rester `visible`). La ligne devient donc malgré elle le
-          "conteneur de scroll" le plus proche pour `sticky`, au lieu de la
-          vraie page qui défile plus haut (`<main>`) — et comme la ligne ne
-          défile jamais elle-même (sa hauteur suit son contenu), l'en-tête ne
-          se fige nulle part.
-          Solution qui fonctionne (vérifiée de la même façon) : chaque
-          colonne défile maintenant elle-même (`overflow-y-auto`, hauteur
-          plafonnée), donc `sticky` s'accroche à SA PROPRE colonne — plus
-          besoin de dépendre du scroll de la page. Uniquement sur mobile
-          (où la demande porte) : `sm:` restaure le comportement d'origine
-          (colonne non plafonnée, page qui défile) sur tablette/desktop. */}
-      <div className="pipeline-column-bg bg-[#0a1e20] sticky top-0 z-10 rounded-t-2xl p-3 border-b border-white/20 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="pipeline-column-bg bg-gradient-to-b from-white/[0.06] to-transparent sticky top-0 z-10 rounded-t-2xl p-3.5 border-b border-white/10 flex items-center justify-between gap-2 backdrop-blur-md">
+        <div className="flex items-center gap-2 min-w-0">
           {canManageStructure && (
-            <span {...attributes} {...listeners} className="text-gray-500 cursor-grab touch-none">
+            <span {...attributes} {...listeners} className="text-slate-500 hover:text-[#F7BC5F] cursor-grab active:cursor-grabbing touch-none p-0.5">
               <GripVertical className="w-4 h-4" />
             </span>
           )}
-          <div>
-            <h3 className="text-sm font-bold text-white">{stage}</h3>
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-              <p className="text-[10px] text-gray-500">{stageDeals.length} affaire(s)</p>
+          <div className="min-w-0">
+            <h3 className="text-sm font-black text-white truncate tracking-tight">{stage}</h3>
+            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-slate-300">
+                {stageDeals.length} affaire{stageDeals.length > 1 ? 's' : ''}
+              </span>
               {estSuperAdmin ? (
                 stageTotal > 0 && (
-                  <>
-                    <span className="text-[10px] text-gray-600">·</span>
-                    <p className="text-[10px] font-bold" style={{ color: accentColor }} title={libelleMontant || 'Commission agence, hors taxes'}>{formatCurrency(stageTotal)}</p>
-                    {stageAdvisorHt > 0 && (
-                      <>
-                        <span className="text-[10px] text-gray-600">·</span>
-                        <p className="text-[10px] text-gray-400" title="Commission conseiller, saisie TTC et convertie hors taxes">
-                          dont conseiller {formatCurrency(stageAdvisorHt)} HT
-                        </p>
-                      </>
-                    )}
-                  </>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/35 text-[#FAD592] shadow-sm" title={libelleMontant || 'Commission agence, hors taxes'}>
+                    {formatCurrency(stageTotal)}
+                  </span>
                 )
               ) : (
                 stageMonHt > 0 && (
-                  <>
-                    <span className="text-[10px] text-gray-600">·</span>
-                    <p className="text-[10px] font-bold" style={{ color: accentColor }} title="Ta commission conseiller sur cette colonne, saisie TTC et convertie hors taxes. Personne d'autre ne la voit.">
-                      {formatCurrency(stageMonHt)} HT
-                    </p>
-                  </>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/35 text-[#FAD592] shadow-sm" title="Ta commission conseiller sur cette colonne, saisie TTC et convertie hors taxes. Personne d'autre ne la voit.">
+                    {formatCurrency(stageMonHt)} HT
+                  </span>
                 )
               )}
             </div>
