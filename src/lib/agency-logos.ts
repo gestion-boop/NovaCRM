@@ -18,10 +18,10 @@ export const getAgencyLogo = (name?: string | null): string => {
 // Ticket #228 : ordre impos\u00e9 partout o\u00f9 l'agence se s\u00e9lectionne \u2014 NovaSphere
 // ("all", vue consolid\u00e9e), Conseils Finances, ImmoSphera, NovaVisio.
 export const AGENCY_ORDER = [
-  "all",
   "30f96ea9-41da-41c2-a95e-f5e7898f8d8e", // Conseils Finances
   "15157da9-71ea-4760-ae1c-3bc99d9caa20", // Immosphera
   "0cd9362c-316e-4b57-af0b-b6cea092961b", // Novavisio
+  "all",
 ];
 
 export function sortByAgencyOrder<T extends { id: string }>(agencies: T[]): T[] {
@@ -34,12 +34,12 @@ export function sortByAgencyOrder<T extends { id: string }>(agencies: T[]): T[] 
   });
 }
 
-// Sociétés qu'une personne peut choisir : garantit l'affichage des 4 logos dans l'en-tête
+// Sociétés qu'une personne peut choisir : les 3 agences (Conseils Finances, Immosphera, Novavisio)
 export function agencesDisponibles<T extends { id: string }>(
   agencies: T[],
   profil: { role?: string; agencyIds?: string[] } | null | undefined,
 ): T[] {
-  const base = agencies;
+  const base = agencies.filter((ag) => ag.id !== 'all');
   const triees = sortByAgencyOrder(base);
   return triees.length > 0 ? triees : agencies.slice(0, 1);
 }

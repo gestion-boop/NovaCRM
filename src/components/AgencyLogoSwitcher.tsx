@@ -18,8 +18,8 @@ interface Props {
 }
 
 const AgencyLogoSwitcher: React.FC<Props> = ({ agencies, selectedId, onSelect, size = 'md', className = '' }) => {
-  // Affichage des 4 logos de sociétés dans la barre du haut (NovaSphere, Conseils Finances, Immosphera, Novavisio)
-  const agenciesAffichees = agencies;
+  // Affiche uniquement les 3 agences (Conseils Finances, Immosphera, Novavisio) en excluant NovaSphere ("all")
+  const agenciesAffichees = agencies.filter((a) => a.id !== 'all');
   if (agenciesAffichees.length < 2) return null;
   const dim = size === 'sm' ? 'w-8 h-8' : size === 'lg' ? 'w-12 h-12' : 'w-9 h-9 sm:w-10 sm:h-10';
   const espace = size === 'lg' ? 'gap-2 p-1.5' : 'gap-1.5 p-1';
