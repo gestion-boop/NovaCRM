@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidContact(data) {
+      return data.name is string && data.name.size() <= 100
+        && data.email is string && data.email.size() <= 150
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 30))
+        && (!('agencyId' in data) || (data.agencyId is string && data.agencyId.size() <= 128))
+        && (!('status' in data) || (data.status is string && data.status.size() <= 100))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50))
+        && (!('revenus' in data) || (data.revenus is number || data.revenus is int))
+        && (!('apport' in data) || (data.apport is number || data.apport is int))
+        && (!('credits' in data) || (data.credits is number || data.credits is int))
+        && (!('contractType' in data) || (data.contractType is string && data.contractType.size() <= 100))
+        && (!('projectType' in data) || (data.projectType is string && data.projectType.size() <= 100))
+        && (!('coBorrower' in data) || (data.coBorrower is string && data.coBorrower.size() <= 100))
+        && (!('comments' in data) || (data.comments is string && data.comments.size() <= 2000));
+    }
+
+    function isValidDeal(data) {
+      return data.title is string && data.title.size() <= 150
+        && (data.amount is number || data.amount is int)
+        && (!('stage' in data) || (data.stage is string && data.stage.size() <= 100))
+        && (!('agencyId' in data) || (data.agencyId is string && data.agencyId.size() <= 128))
+        && (!('contactId' in data) || (data.contactId is string && data.contactId.size() <= 128))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+    }
+
+    function isValidTask(data) {
+      return data.title is string && data.title.size() <= 200
+        && (!('completed' in data) || data.completed is bool)
+        && (!('dueDate' in data) || (data.dueDate is string && data.dueDate.size() <= 30))
+        && (!('agencyId' in data) || (data.agencyId is string && data.agencyId.size() <= 128))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+    }
+
+    // Global Catch-All Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Contacts Collection
+    match /contacts/{contactId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(contactId) && isValidContact(incoming());
+      allow update: if isSignedIn() && isValidId(contactId) && isValidContact(incoming());
+      allow delete: if isSignedIn() && isValidId(contactId);
+    }
+
+    // Deals Collection
+    match /deals/{dealId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(dealId) && isValidDeal(incoming());
+      allow update: if isSignedIn() && isValidId(dealId) && isValidDeal(incoming());
+      allow delete: if isSignedIn() && isValidId(dealId);
+    }
+
+    // Tasks Collection
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(taskId) && isValidTask(incoming());
+      allow update: if isSignedIn() && isValidId(taskId) && isValidTask(incoming());
+      allow delete: if isSignedIn() && isValidId(taskId);
+    }
+  }
+}

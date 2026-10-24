@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 213 60% 4%;
+    --foreground: 210 20% 98%;
+    --card: 214 45% 7%;
+    --card-foreground: 210 20% 98%;
+    --popover: 214 45% 5%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 38 92% 50%; /* Golden amber for highlight */
+    --primary-foreground: 210 20% 5%;
+    --secondary: 184 45% 12%; /* Dark Teal secondary */
+    --secondary-foreground: 210 20% 98%;
+    --muted: 184 45% 8%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 184 45% 15%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 184 45% 15%;
+    --input: 184 45% 12%;
+    --ring: 38 92% 50%;
+    --radius: 1rem;
+  }
+}
+
+body {
+  background-color: #051416;
+  color: #e2e8f0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar for deep dark-teal aesthetic */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #030d0e;
+}
+::-webkit-scrollbar-thumb {
+  background: #153c3f;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #256064;
+}
+
+/* Custom fade-in and slide-up animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.light-mode {
+  filter: invert(1) hue-rotate(180deg);
+}
+.light-mode img,
+.light-mode .lucide {
+  filter: invert(1) hue-rotate(180deg);
+}

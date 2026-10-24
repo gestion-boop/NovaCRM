@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "Contact": {
+      "title": "Contact",
+      "description": "Représente un prospect ou un client CRM",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "agencyId": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "email", "agencyId"]
+    },
+    "Deal": {
+      "title": "Deal",
+      "description": "Affaire ou opportunité commerciale dans le pipeline",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 150 },
+        "amount": { "type": "number" },
+        "stage": { "type": "string" },
+        "agencyId": { "type": "string" },
+        "contactId": { "type": "string" }
+      },
+      "required": ["title", "amount", "stage", "agencyId"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Tâche à accomplir par un conseiller",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 200 },
+        "completed": { "type": "boolean" },
+        "dueDate": { "type": "string" },
+        "agencyId": { "type": "string" }
+      },
+      "required": ["title", "agencyId"]
+    }
+  },
+  "firestore": {
+    "/contacts/{contactId}": {
+      "schema": "Contact",
+      "description": "Collection globale des contacts CRM"
+    },
+    "/deals/{dealId}": {
+      "schema": "Deal",
+      "description": "Collection des opportunités financières"
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Collection des tâches CRM"
+    }
+  }
+}
