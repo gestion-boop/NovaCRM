@@ -1415,7 +1415,7 @@ function App() {
                     type="button"
                     onClick={() => { setNovaPopupOpen(false); setNovaExpandedFromPopup(true); setNovaOpen(true); }}
                     title="Agrandir en plein écran"
-                    className="absolute z-30 w-8 h-8 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors"
+                    className="absolute z-30 w-8 h-8 rounded-full bg-[#07191b]/85 hover:bg-teal-900/50 border border-teal-500/30 shadow-md text-teal-200 hover:text-white flex items-center justify-center transition-all backdrop-blur-md hover:scale-105 active:scale-95"
                     style={{ top: 'calc(0.75rem + env(safe-area-inset-top, 0px))', left: '3.25rem' }}
                   >
                     <Maximize2 className="w-3.5 h-3.5" />
@@ -1424,7 +1424,7 @@ function App() {
                     type="button"
                     onClick={() => setNovaPopupOpen(false)}
                     title="Fermer"
-                    className="absolute z-30 w-8 h-8 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors"
+                    className="absolute z-30 w-8 h-8 rounded-full bg-[#07191b]/85 hover:bg-rose-900/40 border border-teal-500/30 hover:border-rose-500/40 shadow-md text-teal-200 hover:text-rose-200 flex items-center justify-center transition-all backdrop-blur-md hover:scale-105 active:scale-95"
                     style={{ top: 'calc(0.75rem + env(safe-area-inset-top, 0px))', left: '0.75rem' }}
                   >
                     <X className="w-4 h-4" />
@@ -1467,7 +1467,7 @@ function App() {
                     type="button"
                     onClick={() => { setNovaOpen(false); setNovaExpandedFromPopup(false); setNovaPopupOpen(true); }}
                     title="Revenir à la fenêtre réduite"
-                    className="absolute z-30 pl-2.5 pr-3.5 py-2 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] text-xs font-semibold flex items-center gap-1 transition-colors"
+                    className="absolute z-30 pl-2.5 pr-3.5 py-2 rounded-full bg-[#07191b]/85 hover:bg-teal-900/50 border border-teal-500/30 shadow-md text-teal-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all backdrop-blur-md hover:scale-105 active:scale-95"
                     style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))', left: '1rem' }}
                   >
                     <ChevronLeft className="w-4 h-4" />

@@ -289,6 +289,22 @@ const NOVA_WALLPAPER_OPACITY_STORAGE_KEY = 'novasphere:novaai-wallpaper-opacity'
 // Ticket #283 (KO sur les flèches, "plutôt un drag and drop") : une carte de
 // raccourci rapide déplaçable — même mécanisme dnd-kit que l'accueil et le
 // pipeline pour une prise en main cohérente avec le reste du CRM.
+// Helper de rendu de texte markdown léger (gestion du gras **texte**)
+const renderFormattedText = (text: string) => {
+  if (!text) return null;
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={idx} className="font-bold text-emerald-300">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <span key={idx}>{part}</span>;
+  });
+};
+
 const SortableQuickPrompt: React.FC<{
   label: string;
   Icon: React.FC<{ className?: string }>;
@@ -302,15 +318,15 @@ const SortableQuickPrompt: React.FC<{
       {...listeners}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       onClick={onSelect}
-      className={`w-full px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-2xl bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-left flex items-center gap-2 sm:gap-2.5 text-[#1a1230] text-xs sm:text-sm font-semibold transition-colors touch-none cursor-grab active:cursor-grabbing ${
-        isDragging ? 'opacity-40 z-50 shadow-lg' : ''
+      className={`w-full px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-2xl bg-[#081d21]/80 hover:bg-[#0c282d] border border-teal-500/25 hover:border-[#F7BC5F]/50 shadow-md text-left flex items-center gap-2 sm:gap-2.5 text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all touch-none cursor-grab active:cursor-grabbing backdrop-blur-md ${
+        isDragging ? 'opacity-40 z-50 shadow-2xl ring-2 ring-[#F7BC5F]' : ''
       }`}
     >
       {/* Demande explicite (30/08/2026) : "sur desktop, avoir les textes en
           entiers" — `truncate` coupait "Prochains RDV & Tâches"/"Ajouter
           une note client" en "...". Retiré : le texte passe à la ligne au
           besoin plutôt que d'être coupé. */}
-      <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+      <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 text-[#F7BC5F]" />
       <span className="leading-tight">{label}</span>
     </button>
   );
@@ -332,23 +348,23 @@ const SummaryDetails: React.FC<{ details: string }> = ({ details }) => {
     }
   });
   if (sections.length === 0) {
-    return <p className="mt-0.5 text-sm sm:text-base text-emerald-800/90 whitespace-pre-line leading-relaxed">{details}</p>;
+    return <p className="mt-0.5 text-sm sm:text-base text-emerald-200/90 whitespace-pre-line leading-relaxed">{renderFormattedText(details)}</p>;
   }
   return (
     // Ticket #284 : "comme un ovale, encadrement, qui sépare" les grandes
     // sections (tâches / rendez-vous) — chacune dans son propre cadre
     // arrondi, plutôt qu'un simple espacement vertical entre elles.
     // Texte encore agrandi sur ordinateur (sm:text-base).
-    <div className="mt-2 space-y-2.5">
+    <div className="mt-2.5 space-y-2.5">
       {sections.map((sec, si) => (
-        <div key={si} className="rounded-2xl border border-emerald-300/70 bg-white/40 px-3 py-2.5 sm:px-4 sm:py-3">
-          <p className="text-sm sm:text-base font-bold text-emerald-950">{sec.header}</p>
+        <div key={si} className="rounded-2xl border border-emerald-500/25 bg-emerald-950/30 backdrop-blur-md px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-inner">
+          <p className="text-sm sm:text-base font-bold text-emerald-300 tracking-wide">{sec.header}</p>
           {sec.items.length > 0 && (
-            <ul className="mt-1.5 space-y-1.5">
+            <ul className="mt-2 space-y-2">
               {sec.items.map((item, ii) => (
-                <li key={ii} className="text-sm sm:text-base text-emerald-800/90 leading-snug flex items-start gap-2">
-                  <span className="text-emerald-500 leading-snug">•</span>
-                  <span className="min-w-0">{item}</span>
+                <li key={ii} className="text-sm sm:text-base text-emerald-100/90 leading-relaxed flex items-start gap-2">
+                  <span className="text-emerald-400 font-bold leading-snug">•</span>
+                  <span className="min-w-0">{renderFormattedText(item)}</span>
                 </li>
               ))}
             </ul>
@@ -2639,11 +2655,9 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   // Bascule Discussion / Fonds d'écran, affichée en overlay au-dessus des
   // deux écrans (accueil clair et chat sombre) pour rester accessible
   // quelle que soit la vue active.
-  const TabSwitcher = ({ light }: { light: boolean }) => (
+  const TabSwitcher = ({ light }: { light?: boolean }) => (
     <div
-      className={`z-20 inline-flex items-center gap-1 rounded-full p-1 border shadow-md ${
-        light ? 'bg-white/80 backdrop-blur border-white/70' : 'bg-white/5 border-white/10'
-      }`}
+      className="z-20 inline-flex items-center gap-1 rounded-full p-1 border border-teal-500/30 bg-[#07191b]/85 backdrop-blur-md shadow-lg"
     >
       {[
         { id: 'chat' as const, label: 'Discussion', Icon: MessageSquare },
@@ -2654,12 +2668,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           type="button"
           onClick={() => setActiveTab(id)}
           title={label}
-          className={`px-2 sm:px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-colors ${
+          className={`px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all ${
             activeTab === id
-              ? 'bg-[#F7BC5F] text-slate-950'
-              : light
-              ? 'text-[#1a1230]/70 hover:bg-black/5'
-              : 'text-gray-300 hover:bg-white/10'
+              ? 'bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 shadow-[0_0_12px_rgba(247,188,95,0.35)]'
+              : 'text-teal-200/80 hover:text-white hover:bg-white/5'
           }`}
         >
           <Icon className="w-3.5 h-3.5" />
@@ -2825,7 +2837,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           type="button"
           onClick={onClose}
           title="Retour"
-          className="absolute left-4 z-20 w-9 h-9 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors cursor-pointer"
+          className="absolute left-4 z-20 w-9 h-9 rounded-full bg-[#07191b]/85 hover:bg-teal-900/50 border border-teal-500/30 shadow-md text-teal-200 hover:text-white flex items-center justify-center transition-all cursor-pointer backdrop-blur-md hover:scale-105 active:scale-95"
           style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
         >
           <ChevronLeft className="w-5 h-5" />
@@ -2836,7 +2848,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           mobile (Nova IA s'affiche en plein écran, sans la barre d'app qui
           gère habituellement cette zone) — padding de sécurité iOS ajouté. */}
       <div
-        className="absolute right-2 sm:right-6 z-20 flex items-center gap-1 sm:gap-2"
+        className="absolute right-2 sm:right-6 z-20 flex items-center gap-1.5 sm:gap-2"
         style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
       >
         {/* Signalé : "supprime le bouton Nova en haut car on l'a en bas" —
@@ -2848,7 +2860,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           type="button"
           onClick={() => void openActionHistory()}
           title="Historique des actions de Nova"
-          className="w-9 h-9 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors"
+          className="w-9 h-9 rounded-full bg-[#07191b]/85 hover:bg-teal-900/50 border border-teal-500/30 shadow-md text-teal-200 hover:text-white flex items-center justify-center transition-all backdrop-blur-md hover:scale-105 active:scale-95"
         >
           <Clock className="w-4 h-4" />
         </button>
@@ -2857,19 +2869,19 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
             type="button"
             onClick={handleClearHistory}
             title="Effacer l'historique"
-            className="w-9 h-9 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors"
+            className="w-9 h-9 rounded-full bg-[#07191b]/85 hover:bg-rose-950/40 border border-rose-500/30 shadow-md text-rose-300 hover:text-rose-100 flex items-center justify-center transition-all backdrop-blur-md hover:scale-105 active:scale-95"
           >
             <Trash2 className="w-4 h-4" />
           </button>
         )}
-        <TabSwitcher light />
+        <TabSwitcher />
         {onClose && (
           <button
             type="button"
             onClick={onClose}
             title="Fermer Nova IA"
             aria-label="Fermer Nova IA"
-            className="w-9 h-9 rounded-full bg-white/80 hover:bg-white border border-white/90 shadow-sm text-[#1a1230] flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ml-1"
+            className="w-9 h-9 rounded-full bg-[#07191b]/85 hover:bg-rose-900/40 border border-teal-500/30 hover:border-rose-500/40 shadow-md text-teal-200 hover:text-rose-200 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ml-1 backdrop-blur-md"
           >
             <X className="w-4 h-4" />
           </button>
@@ -2882,9 +2894,9 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
 
       {!hasConversation ? (
         <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar flex flex-col items-center justify-center text-center gap-6 z-10 w-full max-w-2xl">
-          <span className="text-xs font-black uppercase tracking-[0.3em] text-[#1a1230]/60">Nova</span>
+          <span className="text-xs font-black uppercase tracking-[0.3em] text-[#F7BC5F]">Nova</span>
           <NovaMascotte taille={140} />
-          <h1 className="text-3xl sm:text-4xl font-black text-[#1a1230] tracking-tight">
+          <h1 className="text-3xl sm:text-4xl font-black text-slate-100 tracking-tight">
             Comment ça va, {firstName} ?
           </h1>
 
@@ -2908,7 +2920,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           </DndContext>
         </div>
       ) : (
-        <div ref={messagesScrollRef} className="flex-1 min-h-0 z-10 w-full max-w-3xl mx-auto overflow-y-auto custom-scrollbar py-4 space-y-4">
+        <div ref={messagesScrollRef} className="flex-1 min-h-0 z-10 w-full max-w-3xl mx-auto overflow-y-auto custom-scrollbar pt-4 pb-28 sm:pb-32 space-y-4">
           {messages.map((m) => {
             const isUser = m.sender === 'user';
 
@@ -2940,8 +2952,8 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                   <div
                     className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${
                       isUser
-                        ? 'bg-[#F7BC5F] text-slate-950 font-medium rounded-tr-none shadow-lg'
-                        : 'bg-white/85 text-[#1a1230] border border-white/70 rounded-tl-none shadow-md'
+                        ? 'bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] text-slate-950 font-medium rounded-tr-none shadow-[0_8px_24px_rgba(247,188,95,0.25)] border border-[#FAD592]/50'
+                        : 'bg-[#081d21]/92 backdrop-blur-xl text-slate-100 border border-teal-500/30 rounded-tl-none shadow-[0_16px_36px_rgba(0,0,0,0.55),0_0_20px_rgba(20,184,166,0.06)]'
                     }`}
                   >
                     <div className="markdown-body">
@@ -2963,7 +2975,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                         type="button"
                         onClick={() => void toggleSpeakMessage(m.id, speakableText)}
                         title={speakingMessageId === m.id ? 'Arrêter la lecture' : 'Écouter cette réponse'}
-                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#8B7355] hover:text-[#1a1230] transition-colors"
+                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-teal-300 hover:text-[#F7BC5F] transition-colors"
                       >
                         {loadingSpeechMessageId === m.id ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -2982,17 +2994,17 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                         (📋 tâches / 📅 rendez-vous) mises en forme en vraie
                         liste au lieu d'un unique bloc de texte compact. */}
                     {m.actionsExecuted && m.actionsExecuted.length > 0 && (
-                      <div className="mt-3.5 pt-3.5 border-t border-black/10 space-y-2.5">
-                        <div className="text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4" />
+                      <div className="mt-3.5 pt-3.5 border-t border-teal-500/20 space-y-2.5">
+                        <div className="text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                           <span>Actions CRM Exécutées en direct :</span>
                         </div>
                         {m.actionsExecuted.map((act, i) => (
                           <div
                             key={i}
-                            className="p-3.5 sm:p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-sm sm:text-base flex items-start gap-3"
+                            className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-teal-950/30 to-[#06181b]/90 border border-emerald-500/30 text-emerald-100 text-sm sm:text-base flex items-start gap-3 shadow-lg"
                           >
-                            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+                            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
                               {act.type === 'contact' && <UserPlus className="w-4 h-4" />}
                               {act.type === 'task' && <CheckSquare className="w-4 h-4" />}
                               {act.type === 'note' && <FileText className="w-4 h-4" />}
@@ -3001,38 +3013,39 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                               {act.type === 'summary' && <Sparkles className="w-4 h-4" />}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="font-bold text-emerald-950 text-sm sm:text-base">{act.title}</p>
+                              <p className="font-bold text-emerald-200 text-sm sm:text-base">{act.title}</p>
                               {act.type === 'summary' ? (
                                 <SummaryDetails details={act.details} />
                               ) : (
-                                <p className="mt-0.5 text-sm text-emerald-800/90 whitespace-pre-line leading-relaxed">{act.details}</p>
+                                <p className="mt-0.5 text-sm text-emerald-200/90 whitespace-pre-line leading-relaxed">{renderFormattedText(act.details)}</p>
                               )}
                               {act.contactId && onOpenContact && (
                                 <button
                                   type="button"
                                   onClick={() => onOpenContact(act.contactId!)}
-                                  className="mt-2 inline-flex items-center gap-1 text-sm font-bold text-emerald-700 hover:text-emerald-900 underline underline-offset-2"
+                                  className="mt-2.5 inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-teal-300 hover:text-[#F7BC5F] transition-colors group"
                                 >
-                                  Voir la fiche du client <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Voir la fiche du client</span>
+                                  <ExternalLink className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
                                 </button>
                               )}
                               {act.driveFiles && act.driveFiles.length > 0 && (
-                                <div className="mt-2 space-y-1.5">
+                                <div className="mt-2.5 space-y-1.5">
                                   {act.driveFiles.map((f) => (
                                     <a
                                       key={f.id}
                                       href={f.webViewLink || '#'}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="flex items-center gap-2 p-2 rounded-lg bg-white/70 hover:bg-white text-emerald-900 text-sm truncate transition-colors"
+                                      className="flex items-center gap-2 p-2.5 rounded-xl bg-[#091e22]/80 hover:bg-[#0c282d] border border-teal-500/25 text-teal-100 text-sm truncate transition-all group"
                                     >
                                       {f.iconLink ? (
                                         <img src={f.iconLink} alt="" className="w-4 h-4 shrink-0" />
                                       ) : (
-                                        <FileText className="w-4 h-4 shrink-0" />
+                                        <FileText className="w-4 h-4 shrink-0 text-teal-400" />
                                       )}
                                       <span className="truncate font-semibold">{f.name}</span>
-                                      <ExternalLink className="w-3.5 h-3.5 shrink-0 ml-auto opacity-60" />
+                                      <ExternalLink className="w-3.5 h-3.5 shrink-0 ml-auto text-teal-400 opacity-70 group-hover:opacity-100" />
                                     </a>
                                   ))}
                                 </div>
@@ -3046,22 +3059,22 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                     {/* Actions échouées — ticket #7/#8 : affichées clairement
                         avec la raison précise, jamais passées sous silence. */}
                     {m.actionsFailed && m.actionsFailed.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-black/10 space-y-2">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-rose-700 flex items-center gap-1">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          <span>Actions échouées :</span>
+                      <div className="mt-3.5 pt-3.5 border-t border-rose-500/20 space-y-2">
+                        <div className="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                          <AlertCircle className="w-4 h-4" />
+                          <span>Actions non réalisées :</span>
                         </div>
                         {m.actionsFailed.map((fail, i) => (
                           <div
                             key={i}
-                            className="p-2.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-xs flex items-start gap-2"
+                            className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/30 text-rose-200 text-xs sm:text-sm flex items-start gap-2.5"
                           >
-                            <div className="w-5 h-5 rounded-lg bg-rose-500/20 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
+                            <div className="w-5 h-5 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 mt-0.5">
                               <AlertCircle className="w-3 h-3" />
                             </div>
                             <div>
-                              <p className="font-bold text-rose-950 text-xs">{fail.label}</p>
-                              <p className="text-[11px] text-rose-800/80">{fail.reason}</p>
+                              <p className="font-bold text-rose-200 text-xs">{fail.label}</p>
+                              <p className="text-[11px] text-rose-200/70">{fail.reason}</p>
                             </div>
                           </div>
                         ))}
@@ -3459,9 +3472,9 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
 
           {/* Loading Indicator */}
           {loading && (
-            <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/85 border border-white/70 w-fit text-xs text-[#1a1230] animate-pulse shadow-md">
-              <Bot className="w-4 h-4 animate-spin" />
-              <span>Nova réfléchit...</span>
+            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#081d21]/90 backdrop-blur-md border border-teal-500/30 w-fit text-xs text-teal-200 animate-pulse shadow-lg">
+              <Bot className="w-4 h-4 animate-spin text-[#F7BC5F]" />
+              <span className="font-medium tracking-wide">Nova réfléchit...</span>
             </div>
           )}
 
@@ -3470,27 +3483,21 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       )}
 
       {errorStatus && (
-        <div className="z-10 mb-3 px-4 py-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-700 text-xs flex items-center gap-2 max-w-xl w-full">
-          <AlertCircle className="w-4 h-4 shrink-0" />
+        <div className="z-10 mb-3 px-4 py-2.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2 max-w-3xl w-full backdrop-blur-md">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
           <span>{errorStatus}</span>
         </div>
       )}
 
       <form
         onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
-        // Au cas où "dans chat tu n'as pas mis le liseret" viserait aussi
-        // cette barre de saisie (Nova) : border-white/60 sur un fond
-        // bg-white/90 quasi identique (60% blanc sur 90% blanc) était très
-        // peu contrasté. border-black/15 reste discret mais délimite
-        // vraiment la barre, dans les deux thèmes (cette carte reste
-        // volontairement blanche quel que soit le mode, inchangé).
-        className="z-10 w-full max-w-xl flex items-end gap-2 bg-white/90 backdrop-blur rounded-3xl shadow-xl border border-black/15 px-2 py-2"
+        className="z-10 w-full max-w-3xl flex items-end gap-2 bg-[#081d21]/92 backdrop-blur-xl rounded-3xl shadow-[0_16px_40px_rgba(0,0,0,0.65),0_0_20px_rgba(247,188,95,0.12)] border border-teal-500/30 px-3 py-2.5 focus-within:border-[#F7BC5F]/60 transition-all"
       >
         <button
           type="button"
           title="Suggestions"
           onClick={() => setPromptInput('')}
-          className="w-9 h-9 shrink-0 rounded-full bg-black/5 hover:bg-black/10 text-[#1a1230] flex items-center justify-center transition-colors mb-0.5"
+          className="w-9 h-9 shrink-0 rounded-full bg-white/5 hover:bg-white/10 text-teal-200 hover:text-white flex items-center justify-center transition-colors mb-0.5"
         >
           <Plus className="w-4 h-4" />
         </button>
@@ -3503,7 +3510,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           onChange={(e) => { setPromptInput(e.target.value); autoResizePrompt(); }}
           placeholder={loading ? 'Demander autre chose à Nova (pas besoin d\'attendre)...' : 'Demander à Nova...'}
           rows={1}
-          className="flex-1 bg-transparent outline-none text-sm text-[#1a1230] placeholder-[#1a1230]/50 resize-none py-1.5 max-h-[45vh] custom-scrollbar"
+          className="flex-1 bg-transparent outline-none text-sm text-slate-100 placeholder-teal-200/40 resize-none py-1.5 max-h-[45vh] custom-scrollbar"
         />
         {VOICE_FEATURES_ENABLED && (
           <button
@@ -3511,7 +3518,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
             onClick={toggleHeroVoiceInput}
             title={heroListening ? 'Arrêter la dictée' : 'Dictée vocale'}
             className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-colors mb-0.5 ${
-              heroListening ? 'bg-rose-500/20 text-rose-600 animate-pulse' : 'bg-black/5 hover:bg-black/10 text-[#1a1230]'
+              heroListening ? 'bg-rose-500/25 text-rose-300 animate-pulse' : 'bg-white/5 hover:bg-white/10 text-teal-200 hover:text-white'
             }`}
           >
             {heroListening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-4 h-4" />}
@@ -3526,7 +3533,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
             type="button"
             onClick={enterVoiceMode}
             title="Mode vocal — parler avec Nova en direct"
-            className="w-9 h-9 shrink-0 rounded-full overflow-hidden bg-gradient-to-br from-[#F7BC5F] to-[#B8863F] hover:brightness-110 shadow-md transition-all mb-0.5"
+            className="w-9 h-9 shrink-0 rounded-full overflow-hidden bg-gradient-to-br from-[#F7BC5F] to-[#B8863F] hover:brightness-110 shadow-md transition-all mb-0.5 border border-[#FAD592]/50"
           >
             <img src="/nova-mascotte.png" alt="Nova" className="w-full h-full object-cover scale-110" />
           </button>
@@ -3535,7 +3542,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           type="submit"
           title="Envoyer"
           disabled={!promptInput.trim()}
-          className="w-9 h-9 shrink-0 rounded-full bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-40 disabled:cursor-default text-slate-950 flex items-center justify-center shadow-md transition-colors mb-0.5"
+          className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 flex items-center justify-center shadow-md transition-all mb-0.5"
         >
           <Send className="w-4 h-4" />
         </button>
