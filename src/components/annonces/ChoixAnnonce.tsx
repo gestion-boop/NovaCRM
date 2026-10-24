@@ -27,7 +27,7 @@ export function NiveauxAnnonce({
   onChange: (niveau: NiveauAnnonce) => void;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 w-full min-w-0">
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
           <span>Priorité & Catégorie</span>
@@ -35,7 +35,7 @@ export function NiveauxAnnonce({
           <span className="text-[11px] text-[#F7BC5F] font-normal normal-case">Choisissez le badge d'alerte</span>
         </span>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1.5 custom-scrollbar">
+      <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar w-full max-w-full">
         {NIVEAUX_ANNONCE.map(([niveau, court, complet, Icon, activeCls]) => {
           const isSelected = value === niveau;
           return (

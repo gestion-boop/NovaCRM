@@ -764,8 +764,8 @@ function App() {
   // contacts, notif...), donc le bon endroit où réagir une fois pour tous.
   const mainRef = React.useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (selectedClientProfileId) mainRef.current?.scrollTo({ top: 0 });
-  }, [selectedClientProfileId]);
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [currentNav, selectedClientProfileId]);
   useEffect(() => {
     if (novaOpen) mainRef.current?.scrollTo({ top: 0 });
   }, [novaOpen]);
@@ -1080,7 +1080,7 @@ function App() {
           <EcranErrorBoundary resetKey={selectedClientProfileId ? `fiche:${selectedClientProfileId}` : currentNav}>
           <div
             key={selectedClientProfileId ? 'client-profile' : currentNav}
-            className={`relative z-10 ${selectedClientProfileId ? '' : 'h-full'}`}
+            className={`relative z-10 ${selectedClientProfileId ? '' : (currentNav === 'mail' ? 'h-full' : 'min-h-full')}`}
           >
           {selectedClientProfileId ? (
             <ClientProfileView
@@ -1292,6 +1292,8 @@ function App() {
             <ParametresView
               selectedAgency={activeAgency}
               onSelectAgency={setActiveAgency}
+              onClose={() => setCurrentNav('accueil')}
+              onNavigate={setCurrentNav}
             />
           )}
 

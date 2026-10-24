@@ -29,6 +29,8 @@ import { familleMenu, ordonnerParFamille, titreFamille } from '@/lib/famillesMen
 interface ParametresViewProps {
   selectedAgency: Agency;
   onSelectAgency: (agency: Agency) => void;
+  onClose?: () => void;
+  onNavigate?: (nav: string) => void;
 }
 
 // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (10/16) : 'users' retiré —
@@ -279,7 +281,7 @@ const Toggle: React.FC<{ checked: boolean; onChange: (value: boolean) => void; d
   </button>
 );
 
-export default function ParametresView({ selectedAgency, onSelectAgency }: ParametresViewProps) {
+export default function ParametresView({ selectedAgency, onSelectAgency, onClose, onNavigate }: ParametresViewProps) {
   const { currentUser, userProfile, logout, activeAgency } = useAuth();
   const isAdmin = userProfile?.role === 'super_admin';
   const uid = currentUser?.uid;
@@ -316,6 +318,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
         setFocusedFromTile(true);
       }
     } catch { /* stockage indisponible, tant pis */ }
+    window.scrollTo({ top: 0, behavior: 'instant' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1469,24 +1472,24 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
         // large plutôt qu'empilés — l'historique (potentiellement long,
         // toutes les annonces passées) n'allonge plus la page, il défile
         // dans son propre panneau borné en hauteur (voir plus bas).
-        <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-6 items-start">
-        <div className="space-y-5">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-6 items-start min-w-0 w-full">
+        <div className="space-y-5 min-w-0 w-full">
           {/* Formulaire de composition d'annonce */}
-          <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] via-white/[0.02] to-transparent backdrop-blur-xl p-4 sm:p-6 space-y-4 shadow-[0_10px_35px_rgba(0,0,0,0.35)] relative overflow-hidden">
+          <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] via-white/[0.02] to-transparent backdrop-blur-xl p-4 sm:p-6 space-y-4 shadow-[0_10px_35px_rgba(0,0,0,0.35)] relative overflow-hidden min-w-0 w-full">
             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#F7BC5F]/40 to-transparent pointer-events-none" />
 
-            <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#F7BC5F] shadow-[0_0_8px_rgba(247,188,95,0.8)]" />
-                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">Rédiger un message</span>
+            <div className="flex items-center justify-between pb-2 border-b border-white/[0.08] min-w-0 gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-[#F7BC5F] shadow-[0_0_8px_rgba(247,188,95,0.8)] shrink-0" />
+                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider truncate">Rédiger un message</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-full font-medium">
+              <div className="hidden sm:inline-flex shrink-0 items-center gap-1.5 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-full font-medium">
                 <Sparkles className="w-3 h-3 text-[#F7BC5F]" />
                 <span>Dictée vocale & émoticônes</span>
               </div>
             </div>
 
-            <div className="relative rounded-2xl border border-white/10 bg-black/40 focus-within:border-[#F7BC5F]/70 focus-within:ring-2 focus-within:ring-[#F7BC5F]/20 transition-all overflow-hidden shadow-inner">
+            <div className="relative rounded-2xl border border-white/10 bg-black/40 focus-within:border-[#F7BC5F]/70 focus-within:ring-2 focus-within:ring-[#F7BC5F]/20 transition-all overflow-hidden shadow-inner w-full min-w-0">
               <textarea
                 rows={3}
                 value={announcement}
@@ -1503,15 +1506,15 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
 
             <NiveauxAnnonce value={announcementLevel} onChange={setAnnouncementLevel} />
 
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 w-full min-w-0">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Lien ou document joint (facultatif)</span>
-              <div className="relative rounded-xl border border-white/10 bg-black/40 focus-within:border-[#F7BC5F]/70 focus-within:ring-2 focus-within:ring-[#F7BC5F]/20 transition-all">
+              <div className="relative rounded-xl border border-white/10 bg-black/40 focus-within:border-[#F7BC5F]/70 focus-within:ring-2 focus-within:ring-[#F7BC5F]/20 transition-all w-full min-w-0">
                 <Link className="w-4 h-4 text-[#F7BC5F]/70 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   value={announcementLink}
                   onChange={(e) => setAnnouncementLink(e.target.value)}
                   placeholder="Lien facultatif — https://… ou un chemin interne"
-                  className="w-full bg-transparent pl-10 pr-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none"
+                  className="w-full bg-transparent pl-10 pr-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none truncate"
                 />
               </div>
             </div>
@@ -1519,7 +1522,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
             {/* L'agence ouverte est le destinataire. « Une personne » ouvre
                 le sélecteur (avatars, filtre, recherche) et la liste démarre
                 sur cette agence. */}
-            <div className="space-y-1.5 pt-1">
+            <div className="space-y-1.5 pt-1 w-full min-w-0">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Destinataires</span>
               <div className="flex flex-wrap items-center gap-2">
                 {!announcementTargetUserId && (
@@ -1705,11 +1708,11 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
               )}
             </div>
 
-            <div className="flex justify-end pt-3">
+            <div className="flex justify-end pt-3 w-full min-w-0">
               <button
                 onClick={publishAnnouncement}
                 disabled={!announcement.trim() || busy === 'announcement' || (!announcementTargetUserId && announcementAgencyIds.length === 0)}
-                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-[#F7BC5F] via-[#FAD592] to-[#E5A73E] text-slate-950 text-sm font-black flex items-center gap-2.5 shadow-[0_10px_25px_-5px_rgba(247,188,95,0.45)] hover:shadow-[0_12px_30px_-5px_rgba(247,188,95,0.65)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-[#F7BC5F] via-[#FAD592] to-[#E5A73E] text-slate-950 text-sm font-black flex items-center gap-2.5 shadow-[0_10px_25px_-5px_rgba(247,188,95,0.45)] hover:shadow-[0_12px_30px_-5px_rgba(247,188,95,0.65)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 shrink-0"
               >
                 {busy === 'announcement' ? (
                   <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
@@ -1723,7 +1726,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
         </div>
 
         {/* Panneau historique des annonces */}
-        <div className={`rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-4 sm:p-5 space-y-3 shadow-[0_8px_30px_rgba(0,0,0,0.25)] ${showPastAnnouncements ? 'xl:max-h-[calc(100vh-240px)] xl:overflow-y-auto custom-scrollbar' : ''}`}>
+        <div className={`rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-4 sm:p-5 space-y-3 shadow-[0_8px_30px_rgba(0,0,0,0.25)] min-w-0 w-full ${showPastAnnouncements ? 'lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto custom-scrollbar' : ''}`}>
             <button
               type="button"
               onClick={() => setShowPastAnnouncements((v) => !v)}
@@ -2558,7 +2561,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
   const ActiveIcon = activeSection?.icon;
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5 text-white">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 text-white min-h-full">
       {/* Signalé (30/08/2026) : "en haut il y a du texte transparent... la
           tuile ne prend pas de suite le plein écran" — cet en-tête générique
           (titre "Paramètres" + Déconnexion) posé à même la photo de fond
@@ -2595,7 +2598,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
           `overscroll-contain` : empêche l'effet "tirer pour actualiser" du
           navigateur mobile de se déclencher en bas de page (il rechargeait
           l'appli et faisait retomber sur Accueil). */}
-      <div className="flex flex-col md:flex-row gap-5 md:gap-6 items-start overscroll-contain">
+      <div className="flex flex-col md:flex-row gap-5 md:gap-6 items-start">
         {!focusedFromTile && (
         // Demande explicite (30/08/2026) : "prend pour de largeur sur
         // l'écran pour le panneau de gauche" — w-64 (256px) coupait la
@@ -2731,18 +2734,20 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
             juste au ras de la barre de navigation du bas, sans marge de
             sécurité. Rien ne change à partir du format tablette (sm:p-6,
             comme avant). */}
-        <div className="flex-1 min-w-0 w-full rounded-3xl border border-t-white/20 border-l-white/15 border-r-white/5 border-b-black/50 bg-[#07191c]/90 backdrop-blur-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7),inset_0_1px_2px_rgba(255,255,255,0.18)] p-6 sm:p-8 pb-24 overscroll-contain relative overflow-hidden">
-          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[#F7BC5F]/50 to-transparent pointer-events-none" />
-          <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[#F7BC5F]/10 blur-3xl pointer-events-none" />
+        <div className="flex-1 min-w-0 w-full rounded-3xl border border-t-white/20 border-l-white/15 border-r-white/5 border-b-black/50 bg-[#07191c]/90 backdrop-blur-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7),inset_0_1px_2px_rgba(255,255,255,0.18)] p-6 sm:p-8 pb-24 relative">
+          <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[#F7BC5F]/50 to-transparent" />
+            <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[#F7BC5F]/10 blur-3xl" />
+          </div>
           {activeSection && ActiveIcon ? (
             <>
               {/* En-tête enrichi de section */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-white/10 relative z-10">
-                <div className="flex items-center gap-3.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-white/10 relative z-10 min-w-0">
+                <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/25 via-amber-500/15 to-[#F7BC5F]/5 border border-[#F7BC5F]/50 flex items-center justify-center text-[#F7BC5F] shadow-[0_0_20px_rgba(247,188,95,0.3)] shrink-0">
                     <ActiveIcon className="w-6 h-6 drop-shadow" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h2 className="font-black text-white text-xl sm:text-2xl tracking-tight flex items-center gap-2">
                       {activeSection.label}
                     </h2>
@@ -2753,12 +2758,24 @@ export default function ParametresView({ selectedAgency, onSelectAgency }: Param
                     </p>
                   </div>
                 </div>
-                {selectedAgency && (
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs font-semibold text-slate-300 self-start sm:self-auto shadow-sm backdrop-blur-md">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                    <span>{selectedAgency.name}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+                  {selectedAgency && (
+                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs font-semibold text-slate-300 shadow-sm backdrop-blur-md">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                      <span>{selectedAgency.name}</span>
+                    </div>
+                  )}
+                  {onClose && (
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      title="Fermer et retourner à l'accueil"
+                      className="w-9 h-9 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 hover:border-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      <X className="w-4 h-4 stroke-[2.5]" />
+                    </button>
+                  )}
+                </div>
               </div>
               {sectionBody(activeSection.id)}
             </>
