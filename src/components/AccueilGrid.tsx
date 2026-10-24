@@ -916,7 +916,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         </div>
       </div>
 
-      {/* Bouton Flottant Assistant Nova IA */}
+      {/* Bouton Flottant Assistant Nova IA — Cercle Logo avec contour bleu */}
       {!novaOpen && (
         <div className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-40">
           <button
@@ -927,27 +927,20 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                 onNavigate('assistant-ia');
               }
             }}
-            className="group relative flex items-center gap-3 p-2 sm:pr-4 rounded-full bg-[#0a1820]/90 hover:bg-[#0f2430] border-2 border-[#F7BC5F]/60 hover:border-[#F7BC5F] shadow-[0_8px_30px_rgba(0,0,0,0.6),0_0_20px_rgba(247,188,95,0.3)] hover:shadow-[0_8px_35px_rgba(247,188,95,0.6)] backdrop-blur-md active:scale-95 transition-all duration-300 cursor-pointer"
+            className="group relative w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#0a1820]/95 hover:bg-[#0f2430] border-2 border-sky-400 hover:border-cyan-300 shadow-[0_8px_30px_rgba(0,0,0,0.6),0_0_25px_rgba(56,189,248,0.5)] hover:shadow-[0_8px_35px_rgba(56,189,248,0.8)] backdrop-blur-md flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer"
             title="Ouvrir l'Assistant Nova IA"
             aria-label="Assistant Nova IA"
           >
-            <div className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-tr from-amber-500/20 via-amber-400/30 to-amber-300/10 border border-[#F7BC5F]/40 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+            <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center overflow-hidden shrink-0">
               <img
                 src="/nova-mascotte.png"
                 alt="Nova"
-                className="w-9 h-9 sm:w-10 sm:h-10 object-contain drop-shadow group-hover:scale-110 transition-transform duration-300"
+                className="w-9 h-9 sm:w-11 sm:h-11 object-contain drop-shadow group-hover:scale-105 transition-transform duration-300"
               />
             </div>
-            <div className="hidden sm:flex flex-col text-left pr-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold text-amber-400/90 tracking-wider uppercase">Assistant</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              </div>
-              <span className="text-sm font-extrabold text-white tracking-tight -mt-0.5">Nova IA</span>
-            </div>
             {/* Indicateur de statut en ligne */}
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping absolute -top-0.5 -right-0.5" />
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 border border-slate-900 absolute -top-0.5 -right-0.5" />
+            <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping absolute top-0.5 right-0.5" />
+            <span className="w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0a1820] absolute top-0.5 right-0.5 shadow" />
           </button>
         </div>
       )}

@@ -230,6 +230,7 @@ function App() {
   // qu'on n'a pas ouverte cette fois-ci.
   const openNovaFullscreen = () => {
     setNovaExpandedFromPopup(false);
+    mainRef.current?.scrollTo({ top: 0 });
     setNovaOpen(true);
   };
   // Demande explicite : "mode Commercial / mode Bureau" — un commercial qui
@@ -765,6 +766,9 @@ function App() {
   useEffect(() => {
     if (selectedClientProfileId) mainRef.current?.scrollTo({ top: 0 });
   }, [selectedClientProfileId]);
+  useEffect(() => {
+    if (novaOpen) mainRef.current?.scrollTo({ top: 0 });
+  }, [novaOpen]);
   const [highlightPulse, setHighlightPulse] = useState(0);
   const [mailFullScreen, setMailFullScreen] = useState(false);
   const [mailComposeTo, setMailComposeTo] = useState<string | null>(null);
@@ -1433,26 +1437,22 @@ function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                // Correctif précédent (min-h-screen) retiré : cause réelle
-                // différente de ce qui avait été supposé. Vérifié en direct
-                // (mesure DOM) : <main> fait bien toute la hauteur disponible
-                // sous le bandeau du haut (ex. 836px sur 900px de fenêtre,
-                // bandeau de 64px) — `inset-0` seul la remplit déjà
-                // correctement. `min-h-screen` (100vh, donc 900px) forçait ce
-                // calque à dépasser de la hauteur du bandeau du haut (64px)
-                // sous le bas de l'écran, décalant tout son contenu centré
-                // vers le haut visuellement ("Nova remonte trop" — signalé
-                // avec Isabelle, capture à l'appui).
-                className="absolute inset-0 z-40 bg-[#050d0f]"
+                className="fixed top-[3.5rem] sm:top-[4rem] left-0 right-0 bottom-0 z-50 bg-[#050d0f] flex flex-col overflow-hidden"
               >
-                {/* Signalé : "quand on met la fenêtre en grand, on n'a pas
-                    la possibilité de la remettre en petit... on doit avoir
-                    un bouton retour pour basculer sur la fiche client" —
-                    visible UNIQUEMENT si on vient d'agrandir depuis la
-                    mini-popup (voir novaExpandedFromPopup) : ramène
-                    exactement là où on était (fiche client, dossier
-                    Pipeline...) plutôt qu'une simple fermeture vers
-                    l'accueil. */}
+                {/* Bouton Fermer Nova IA */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNovaOpen(false);
+                    setNovaExpandedFromPopup(false);
+                  }}
+                  title="Fermer Nova IA"
+                  className="absolute z-50 w-9 h-9 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-md text-[#1a1230] flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95"
+                  style={{ top: 'calc(0.75rem + env(safe-area-inset-top, 0px))', right: '1.25rem' }}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
                 {novaExpandedFromPopup && (
                   <button
                     type="button"
@@ -1472,13 +1472,11 @@ function App() {
                   currentClientId={selectedClientProfileId}
                   prefillPrompt={novaPrefillPrompt}
                   onPrefillPromptConsumed={() => setNovaPrefillPrompt(null)}
-                  // Demande explicite (30/08/2026) : clic direct sur la
-                  // mascotte (Sidebar) = toujours une interface neuve, JAMAIS
-                  // l'historique. Exception : si on vient d'agrandir depuis
-                  // la mini-popup contextuelle (novaExpandedFromPopup), on
-                  // garde la conversation déjà affichée (continuité déjà
-                  // demandée explicitement pour ce cas précis).
                   startFresh={!novaExpandedFromPopup}
+                  onClose={() => {
+                    setNovaOpen(false);
+                    setNovaExpandedFromPopup(false);
+                  }}
                   onFoundProperties={(ids, queryText) => {
                     setImmoSeedResultIds(ids);
                     setImmoSeedQueryText(queryText);

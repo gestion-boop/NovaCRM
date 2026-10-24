@@ -2825,7 +2825,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           type="button"
           onClick={onClose}
           title="Retour"
-          className="md:hidden absolute left-4 z-20 w-9 h-9 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors"
+          className="absolute left-4 z-20 w-9 h-9 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors cursor-pointer"
           style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
         >
           <ChevronLeft className="w-5 h-5" />
