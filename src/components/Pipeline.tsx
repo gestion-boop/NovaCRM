@@ -178,28 +178,37 @@ const TransactionsV2ChecklistBadge: React.FC<{ deal: Deal; onOpen: () => void }>
 
   if (!hasChecklist && !missingFromPrevStage) return null;
 
+  // Demande explicite (24 octobre, maquette validée) : « aérer » les
+  // cartes du pipeline comme la fiche client — un trait fin + un petit
+  // libellé en majuscules au-dessus de chaque bloc d'info, plutôt qu'un
+  // simple badge collé au reste. Le composant gère lui-même sa section
+  // (plutôt que le parent) pour que le trait/libellé disparaisse avec le
+  // reste quand il n'y a rien à afficher (return null ci-dessus).
   return (
-    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-      {hasChecklist && (
-        <button
-          type="button"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onOpen(); }}
-          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] text-[10px] font-bold hover:bg-[#F7BC5F]/25 transition-colors"
-        >
-          <ClipboardList className="w-3 h-3" />
-          Checklist
-          {currentCount && <span className="text-[9px] opacity-80">{currentCount.done}/{currentCount.total}</span>}
-        </button>
-      )}
-      {!!missingFromPrevStage && (
-        <span
-          title={`${missingFromPrevStage} document(s) obligatoire(s) manquant(s) à l'étape précédente — n'empêche pas d'avancer, juste un rappel.`}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-300 text-[10px] font-black"
-        >
-          {missingFromPrevStage} manquant{missingFromPrevStage > 1 ? 's' : ''}
-        </span>
-      )}
+    <div className="mt-3 pt-3 border-t border-[#143c3f]/50">
+      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Suivi</span>
+      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+        {hasChecklist && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onOpen(); }}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] text-[10px] font-bold hover:bg-[#F7BC5F]/25 transition-colors"
+          >
+            <ClipboardList className="w-3 h-3" />
+            Checklist
+            {currentCount && <span className="text-[9px] opacity-80">{currentCount.done}/{currentCount.total}</span>}
+          </button>
+        )}
+        {!!missingFromPrevStage && (
+          <span
+            title={`${missingFromPrevStage} document(s) obligatoire(s) manquant(s) à l'étape précédente — n'empêche pas d'avancer, juste un rappel.`}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-300 text-[10px] font-black"
+          >
+            {missingFromPrevStage} manquant{missingFromPrevStage > 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
     </div>
   );
 };
@@ -257,7 +266,14 @@ const PipelineCardContent: React.FC<{
         )}
       </div>
     </div>
-    <p className="text-sm font-black text-[#F7BC5F] mt-3">{deal.amount.toLocaleString('fr-FR')} €</p>
+    {/* Demande explicite (24 octobre, maquette validée) : même mécanique que
+        "Montant Estimé" sur la fiche client (ClientProfileView) — trait fin
+        + libellé en majuscules au-dessus de la valeur, pour séparer le bloc
+        identité (titre/contact ci-dessus) du bloc montant. */}
+    <div className="mt-3 pt-3 border-t border-[#143c3f]/50">
+      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Montant estimé</span>
+      <p className="text-sm font-black text-[#F7BC5F] mt-1">{deal.amount.toLocaleString('fr-FR')} €</p>
+    </div>
     {onOpenChecklist && deal.pipelineId === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID && (
       <TransactionsV2ChecklistBadge deal={deal} onOpen={() => onOpenChecklist(deal)} />
     )}
