@@ -6,7 +6,7 @@ import {
   Home as HomeIcon, Camera, Settings, Plus, GripVertical, 
   Palette, Folder, FolderPlus, ArrowLeft, Check, Trash2, Edit3, X, ChevronRight, LayoutGrid,
   Globe, ExternalLink, Bookmark, Target, Shield, Award, Sparkles, Image as ImageIcon,
-  CheckSquare, Search, SlidersHorizontal, MoreVertical, Clock
+  CheckSquare, MoreVertical, Clock
 } from 'lucide-react';
 
 interface AccueilGridProps {
@@ -276,10 +276,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   const [newIconName, setNewIconName] = useState('HomeIcon');
   const [newNavTarget, setNewNavTarget] = useState('notes');
   const [newGradient, setNewGradient] = useState(PRESET_GRADIENTS[1].value);
-
-  // Search and Category Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'activity' | 'comm' | 'folders'>('all');
 
   // Accessible Tile Context Menu (Mobile & Desktop)
   const [activeMenuTileId, setActiveMenuTileId] = useState<string | null>(null);
@@ -595,33 +591,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     }
   }, []);
 
-  const ACTIVITY_IDS = useMemo(() => new Set([
-    'agenda', 'clients', 'pipeline', 'tableau-de-bord', 'notes', 'documents', 'reserver-camera', 'lodgify', 'folder-business'
-  ]), []);
-
-  const COMM_IDS = useMemo(() => new Set([
-    'chat', 'mail', 'support', 'notifications', 'equipe', 'folder-comm'
-  ]), []);
-
-  const currentDisplayTiles = useMemo(() => {
-    let list = activeFolder ? (activeFolder.children || []) : tiles;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter(item => 
-        item.title.toLowerCase().includes(q) ||
-        (item.children && item.children.some(c => c.title.toLowerCase().includes(q)))
-      );
-    } else if (!activeFolder) {
-      if (activeFilter === 'folders') {
-        list = list.filter(item => item.isFolder);
-      } else if (activeFilter === 'activity') {
-        list = list.filter(item => ACTIVITY_IDS.has(item.id) || (item.isFolder && item.children?.some(c => ACTIVITY_IDS.has(c.id))));
-      } else if (activeFilter === 'comm') {
-        list = list.filter(item => COMM_IDS.has(item.id) || (item.isFolder && item.children?.some(c => COMM_IDS.has(c.id))));
-      }
-    }
-    return list;
-  }, [activeFolder, tiles, searchQuery, activeFilter, ACTIVITY_IDS, COMM_IDS]);
+  const currentDisplayTiles = activeFolder ? (activeFolder.children || []) : tiles;
 
   return (
     <div 
@@ -757,49 +727,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               </div>
             </div>
 
-            {/* Search & Filter Toolbar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
-              <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Rechercher un raccourci, dossier..."
-                  className="w-full pl-10 pr-9 py-2 bg-white/[0.04] border border-white/10 hover:border-white/20 focus:border-amber-400/60 rounded-xl text-xs text-white placeholder:text-gray-400 focus:outline-none transition-all shadow-inner"
-                />
-                {searchQuery && (
-                  <button 
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Filter tabs */}
-              <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/10 self-start sm:self-auto overflow-x-auto">
-                {[
-                  { key: 'all', label: 'Tous' },
-                  { key: 'activity', label: 'Activités' },
-                  { key: 'comm', label: 'Échanges' },
-                  { key: 'folders', label: 'Dossiers' },
-                ].map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveFilter(tab.key as any)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                      activeFilter === tab.key
-                        ? 'bg-amber-400 text-black shadow-sm'
-                        : 'text-gray-400 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
