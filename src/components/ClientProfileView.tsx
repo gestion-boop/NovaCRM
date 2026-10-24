@@ -3006,23 +3006,39 @@ export default function ClientProfileView({
                                       </div>
                                       
                                       <div className="space-y-1">
-                                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                                          <span className="text-white font-bold text-sm">
-                                            {task.completed ? 'Terminée' : 'A faire'}
+                                        {/* Demande explicite (24 octobre) : le titre du dossier
+                                            ("Att documents client"...) est l'info utile, pas un
+                                            "A faire"/"Terminée" générique déjà porté par l'icône
+                                            (cercle vide / coche) à gauche — remonté en titre, avec
+                                            le même rayé que les autres listes de tâches de l'appli
+                                            une fois cochée (voir RappelsView.tsx/Tasks.tsx). */}
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <span className={`font-bold text-sm ${task.completed ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                            {task.title}
                                           </span>
                                           <span className="px-2 py-0.5 rounded bg-[#143c3f] text-teal-400 text-[10px] font-bold">
                                             {task.type || 'Tâche'}
                                           </span>
-                                          {!task.completed && (
+                                          {task.completed ? (
+                                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+                                              Terminée
+                                            </span>
+                                          ) : (
                                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${dateStatus.badgeClass}`}>
                                               {dateStatus.label}
                                             </span>
                                           )}
                                         </div>
-                                        <p className="text-sm text-slate-300">{task.title}</p>
-                                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-2 font-mono">
-                                          <Calendar className="w-3.5 h-3.5" />
-                                          {dateStr ? new Date(dateStr).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                                        {/* Demande explicite (24 octobre, maquette validée) : même
+                                            mécanique que le pipeline / la fiche client — trait fin +
+                                            libellé en majuscules au-dessus de l'échéance, pour la
+                                            séparer du bloc identité (titre + badges) ci-dessus. */}
+                                        <div className="mt-3 pt-3 border-t border-[#144447]/50">
+                                          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Échéance</span>
+                                          <div className="flex items-center gap-1.5 text-[11px] text-slate-300 mt-1 font-mono">
+                                            <Calendar className="w-3.5 h-3.5" />
+                                            {dateStr ? new Date(dateStr).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
