@@ -1110,32 +1110,53 @@ function App() {
           ) : (
             <>
               {currentNav === 'accueil' && (
-                <AccueilGrid
-                  onNavigate={(nav) => {
-                    if (nav === 'mail-unread') {
-                      setMailInitialFolder('UNREAD');
-                      setCurrentNav('mail');
-                    } else if (nav === 'assistant-ia') {
+                isMobile ? (
+                  <MobileHome
+                    onNavigate={(nav) => {
+                      if (nav === 'mail-unread') {
+                        setMailInitialFolder('UNREAD');
+                        setCurrentNav('mail');
+                      } else if (nav === 'assistant-ia') {
+                        openNovaFullscreen();
+                      } else {
+                        setCurrentNav(nav);
+                      }
+                    }}
+                    unreadRemindersCount={unreadRemindersCount}
+                    unreadMessagesCount={unreadMessagesCount}
+                    unreadMailCount={unreadMailCount}
+                    unreadNotificationsCount={unreadMobileNotificationsCount}
+                    onOpenNotifications={() => setNotificationsPanelOpen((open) => !open)}
+                    onOpenNouveauLead={() => setShowNouveauLead(true)}
+                  />
+                ) : (
+                  <AccueilGrid
+                    onNavigate={(nav) => {
+                      if (nav === 'mail-unread') {
+                        setMailInitialFolder('UNREAD');
+                        setCurrentNav('mail');
+                      } else if (nav === 'assistant-ia') {
+                        openNovaFullscreen();
+                      } else if (nav === 'immosphera-partenaires') {
+                        setImmoInitialSection('partenaires');
+                        setCurrentNav('immosphera360');
+                      } else {
+                        setCurrentNav(nav);
+                      }
+                    }}
+                    unreadRemindersCount={unreadRemindersCount}
+                    unreadNotificationsCount={unreadNotificationsCount}
+                    unreadMessagesCount={unreadMessagesCount}
+                    unreadMailCount={unreadMailCount}
+                    openSupportTicketsCount={openSupportTicketsCount}
+                    onAskNovaAI={(prompt) => {
+                      setNovaAIPrompt(prompt);
                       openNovaFullscreen();
-                    } else if (nav === 'immosphera-partenaires') {
-                      setImmoInitialSection('partenaires');
-                      setCurrentNav('immosphera360');
-                    } else {
-                      setCurrentNav(nav);
-                    }
-                  }}
-                  unreadRemindersCount={unreadRemindersCount}
-                  unreadNotificationsCount={unreadNotificationsCount}
-                  unreadMessagesCount={unreadMessagesCount}
-                  unreadMailCount={unreadMailCount}
-                  openSupportTicketsCount={openSupportTicketsCount}
-                  onAskNovaAI={(prompt) => {
-                    setNovaAIPrompt(prompt);
-                    openNovaFullscreen();
-                  }}
-                  onOpenNova={() => openNovaFullscreen()}
-                  novaOpen={novaOpen}
-                />
+                    }}
+                    onOpenNova={() => openNovaFullscreen()}
+                    novaOpen={novaOpen}
+                  />
+                )
               )}
 
           {currentNav === 'tableau-de-bord' && (
