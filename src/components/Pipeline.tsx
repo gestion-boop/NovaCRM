@@ -32,6 +32,14 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, htDepuisTtc, ttcDepuisHt } from '@/lib/utils';
 import { toValidUuidOrNull } from '@/data/teamMembers';
+import {
+  estPipelineTransactions,
+  peutGererColonnes,
+  peutRenommerPipeline,
+  peutSupprimerPipeline,
+  pipelineVisiblePour,
+  type PipelinePourAcces,
+} from '@/lib/pipelinesAcces';
 import { couleurNovavisio, couleurEtapeNovavisio, estAgenceNovavisio } from '@/lib/couleursNovavisio';
 // Ticket #277 (suite) : même détection de mode jour que l'accueil, pour que
 // les colonnes du pipeline suivent la même bascule vers de vraies couleurs
@@ -170,28 +178,37 @@ const TransactionsV2ChecklistBadge: React.FC<{ deal: Deal; onOpen: () => void }>
 
   if (!hasChecklist && !missingFromPrevStage) return null;
 
+  // Demande explicite (24 octobre, maquette validée) : « aérer » les
+  // cartes du pipeline comme la fiche client — un trait fin + un petit
+  // libellé en majuscules au-dessus de chaque bloc d'info, plutôt qu'un
+  // simple badge collé au reste. Le composant gère lui-même sa section
+  // (plutôt que le parent) pour que le trait/libellé disparaisse avec le
+  // reste quand il n'y a rien à afficher (return null ci-dessus).
   return (
-    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-      {hasChecklist && (
-        <button
-          type="button"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onOpen(); }}
-          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] text-[10px] font-bold hover:bg-[#F7BC5F]/25 transition-colors"
-        >
-          <ClipboardList className="w-3 h-3" />
-          Checklist
-          {currentCount && <span className="text-[9px] opacity-80">{currentCount.done}/{currentCount.total}</span>}
-        </button>
-      )}
-      {!!missingFromPrevStage && (
-        <span
-          title={`${missingFromPrevStage} document(s) obligatoire(s) manquant(s) à l'étape précédente — n'empêche pas d'avancer, juste un rappel.`}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-300 text-[10px] font-black"
-        >
-          {missingFromPrevStage} manquant{missingFromPrevStage > 1 ? 's' : ''}
-        </span>
-      )}
+    <div className="mt-3 pt-3 border-t border-[#143c3f]/50">
+      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Suivi</span>
+      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+        {hasChecklist && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onOpen(); }}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] text-[10px] font-bold hover:bg-[#F7BC5F]/25 transition-colors"
+          >
+            <ClipboardList className="w-3 h-3" />
+            Checklist
+            {currentCount && <span className="text-[9px] opacity-80">{currentCount.done}/{currentCount.total}</span>}
+          </button>
+        )}
+        {!!missingFromPrevStage && (
+          <span
+            title={`${missingFromPrevStage} document(s) obligatoire(s) manquant(s) à l'étape précédente — n'empêche pas d'avancer, juste un rappel.`}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-300 text-[10px] font-black"
+          >
+            {missingFromPrevStage} manquant{missingFromPrevStage > 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
     </div>
   );
 };
@@ -220,9 +237,9 @@ const PipelineCardContent: React.FC<{
               </span>
             )
           )}
-          <h4 className="text-sm sm:text-xs font-bold text-white truncate">{deal.title}</h4>
+          <h4 className="text-base font-bold text-white truncate">{deal.title}</h4>
         </div>
-        {contact && <p className="text-xs sm:text-[10px] text-gray-400 mt-1">{contact.name}</p>}
+        {contact && <p className="text-sm text-gray-300 mt-1">{contact.name}</p>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {/* Demande explicite : "mets Nova dans Pipeline" — même principe que
@@ -249,7 +266,14 @@ const PipelineCardContent: React.FC<{
         )}
       </div>
     </div>
-    <p className="text-sm sm:text-xs font-black text-[#F7BC5F] mt-3">{deal.amount.toLocaleString('fr-FR')} €</p>
+    {/* Demande explicite (24 octobre, maquette validée) : même mécanique que
+        "Montant Estimé" sur la fiche client (ClientProfileView) — trait fin
+        + libellé en majuscules au-dessus de la valeur, pour séparer le bloc
+        identité (titre/contact ci-dessus) du bloc montant. */}
+    <div className="mt-3 pt-3 border-t border-[#143c3f]/50">
+      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Montant estimé</span>
+      <p className="text-sm font-black text-[#F7BC5F] mt-1">{deal.amount.toLocaleString('fr-FR')} €</p>
+    </div>
     {onOpenChecklist && deal.pipelineId === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID && (
       <TransactionsV2ChecklistBadge deal={deal} onOpen={() => onOpenChecklist(deal)} />
     )}
@@ -437,8 +461,8 @@ const PipelineColumn: React.FC<{
             </span>
           )}
           <div>
-            <h3 className="text-xs font-bold text-white">{stage}</h3>
-            <div className="flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-white">{stage}</h3>
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
               <p className="text-[10px] text-gray-500">{stageDeals.length} affaire(s)</p>
               {estSuperAdmin ? (
                 stageTotal > 0 && (
@@ -669,24 +693,31 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
   // UI ce que Supabase filtre déjà réellement côté serveur.
   const estAdminVueDossiers = canManageStructure || userProfile?.role === 'admin';
 
-  // « Je veux que les utilisateurs puissent supprimer les pipelines, sauf
-  // les pipelines officiels, ou même renommer » (2 septembre). Renommer et
-  // supprimer s'ouvrent donc à tout le monde, SAUF sur le pipeline officiel
-  // — celui marqué par défaut pour la société. La règle est aussi appliquée
-  // côté serveur (api/admin/announcements.ts) : ici, elle ne fait qu'éviter
-  // de proposer un bouton qui serait refusé.
-  //
-  // Ce qui touche à la STRUCTURE (colonnes : ajouter, renommer, supprimer,
-  // réordonner) reste réservé aux super admins : une colonne supprimée
-  // déplace tous les dossiers qui s'y trouvent.
-  const peutRenommerOuSupprimerPipeline = (pipeline?: StoredPipeline | null) => {
-    if (canManageStructure) return true;
-    if (!pipeline) return false;
-    // Officiel ou verrouillé : réservé aux super admins.
-    if (pipeline.officiel || pipeline.verrouille) return false;
-    // Sinon, chacun chez soi : uniquement les pipelines qu'on a créés.
-    return !!pipeline.proprietaire && pipeline.proprietaire === currentUser?.uid;
-  };
+  // Chacun ne renomme et ne supprime que son pipeline (officiel ou verrouillé
+  // : non). Pipelines Transactions est à part : titres et colonnes pour
+  // Mélanie et Sylvain seulement, suppression interdite à tous. Le détail
+  // est dans src/lib/pipelinesAcces.ts, et la suppression réelle dans
+  // api/admin/announcements.ts.
+  const utilisateurAcces = { uid: currentUser?.uid, email: currentUser?.email };
+  const versDroit = (pipeline?: StoredPipeline | null): PipelinePourAcces | null =>
+    pipeline
+      ? {
+          id: pipeline.id,
+          name: pipeline.name,
+          agencyId: pipeline.agencyId,
+          ownerId: pipeline.proprietaire,
+          officiel: pipeline.officiel,
+          verrouille: pipeline.verrouille,
+        }
+      : null;
+  // Titres : le créateur sur son pipeline, Mélanie et Sylvain sur Transactions.
+  // La suppression est la même règle, sauf Transactions que personne n'enlève.
+  const peutRenommerOuSupprimerPipeline = (pipeline?: StoredPipeline | null) =>
+    peutRenommerPipeline(versDroit(pipeline), utilisateurAcces, canManageStructure);
+  const peutSupprimerCePipeline = (pipeline?: StoredPipeline | null) =>
+    peutSupprimerPipeline(versDroit(pipeline), utilisateurAcces, canManageStructure);
+  const peutGererLesColonnes = (pipeline?: StoredPipeline | null) =>
+    peutGererColonnes(versDroit(pipeline), utilisateurAcces, canManageStructure);
 
   // Ticket #219 : le Pipeline était volontairement verrouillé sur Conseils
   // Finances ("temporaire", cf. historique) — toutes les autres agences
@@ -938,21 +969,22 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           .select('pipeline_id')
           .eq('user_id', currentUser.uid);
         const hiddenPipelineIds = new Set((hiddenRows || []).map((r: any) => r.pipeline_id));
-        if (hiddenPipelineIds.size > 0) {
-          pipeList = pipeList.filter((p) => !hiddenPipelineIds.has(p.id));
-        }
-
-        // Demande explicite (7 septembre) : « je veux que les utilisateurs
-        // ne voient que leur pipeline dans le menu déroulant, même ceux
-        // qu'ils ont créé » — maintenant qu'ils peuvent créer leur propre
-        // pipeline (voir handleCreatePipeline), il ne doit pas polluer le
-        // menu de tout le monde. Un non-admin ne voit que les pipelines
-        // partagés (sans propriétaire — ceux créés à l'initialisation de
-        // l'agence, ex. Transactions V2) et ceux qu'il a lui-même créés ;
-        // le super admin continue de tout voir.
-        if (!canManageStructure) {
-          pipeList = pipeList.filter((p: any) => !p.owner_id || p.owner_id === currentUser.uid);
-        }
+        const utilisateur = { uid: currentUser.uid, email: currentUser.email };
+        // Pipelines de la société (sans propriétaire, ou officiels) : tout
+        // le monde. Pipeline personnel : seulement son créateur. Transactions
+        // reste visible chez Immosphera sauf Sarah, et un masque personnel
+        // ne peut pas le cacher.
+        pipeList = pipeList.filter((p: any) => {
+          const fiche = {
+            id: p.id as string,
+            name: p.name as string,
+            agencyId: p.agency_id as string,
+            ownerId: (p.owner_id as string | null) ?? null,
+            officiel: Boolean(p.is_default),
+          };
+          if (!estPipelineTransactions(fiche) && hiddenPipelineIds.has(p.id)) return false;
+          return pipelineVisiblePour(fiche, utilisateur);
+        });
 
         const pipeIds = pipeList.map((p) => p.id);
         const { data: stagesData } = pipeIds.length
@@ -1056,16 +1088,23 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     // touche à la STRUCTURE des colonnes (ajout, suppression, réordre)
     // reste réservé aux super admins.
     const cible = pipelines.find((p) => p.id === pipelineId);
-    const droitRequis = updates.stages && !onlyRename
-      ? canManageStructure
-      : peutRenommerOuSupprimerPipeline(cible);
+    const droit = versDroit(cible);
+    const structure = Boolean(updates.stages && !onlyRename);
+    const transactions = estPipelineTransactions(droit || { id: pipelineId, agencyId: currentAgencyId });
+    const droitRequis = structure
+      ? peutGererColonnes(droit, utilisateurAcces, canManageStructure)
+      : peutRenommerPipeline(droit, utilisateurAcces, canManageStructure);
     if (!droitRequis) {
       setError(
-        updates.stages && !onlyRename
-          ? "Seul un super admin peut ajouter, supprimer ou réordonner les colonnes d'un pipeline."
-          : updates.stages
-            ? 'Seul le créateur de ce pipeline (ou un super admin) peut renommer ses colonnes.'
-            : 'Seul le créateur de ce pipeline (ou un super admin) peut le renommer.'
+        structure
+          ? transactions
+            ? 'Seul Mélanie ou Sylvain peut ajouter, supprimer ou déplacer les colonnes du pipeline Transactions.'
+            : "Seul un super admin peut ajouter, supprimer ou réordonner les colonnes d'un pipeline."
+          : transactions
+            ? 'Seul Mélanie ou Sylvain peut modifier les titres du pipeline Transactions.'
+            : updates.stages
+              ? 'Seul le créateur de ce pipeline (ou un super admin) peut renommer ses colonnes.'
+              : 'Seul le créateur de ce pipeline (ou un super admin) peut le renommer.'
       );
       throw new Error('Accès refusé');
     }
@@ -1302,6 +1341,10 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
   // société (marqué par défaut) est protégé sans avoir à être verrouillé.
   const basculerVerrouPipeline = async () => {
     if (!canManageStructure || !activePipeline) return;
+    if (estPipelineTransactions(versDroit(activePipeline)!)) {
+      setError('Le pipeline Transactions reste verrouillé. Seuls Mélanie et Sylvain en modifient les titres et les colonnes.');
+      return;
+    }
     setError(null);
     const suivant = !activePipeline.verrouille;
     try {
@@ -1331,30 +1374,23 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
   };
 
   const handleDeletePipeline = async () => {
-    if (!activePipeline || !peutRenommerOuSupprimerPipeline(activePipeline)) {
+    if (!activePipeline || !peutSupprimerCePipeline(activePipeline)) {
       return;
     }
 
-    if (pipelines.length <= 1) {
-      setError('Il faut conserver au moins un pipeline.');
-      return;
-    }
-
-    const fallback = pipelines.find((pipeline) => pipeline.id !== activePipeline.id);
-
-    if (!fallback) {
-      return;
-    }
+    // Le serveur refuse encore de supprimer le dernier pipeline de la
+    // société. Ici on ne bloque plus sur « le dernier que je vois » : les
+    // autres peuvent appartenir à d'autres personnes. Les contacts ne sont
+    // pas déplacés vers un pipeline de repli.
 
     // Ticket #231 (v3) : la suppression directe côté client
     // (`supabase.from('pipelines').delete()`) était bloquée en silence par
     // les policies RLS pour certains pipelines/agences — l'interface
     // annonçait "supprimé" alors que rien n'avait réellement disparu en
     // base. On passe désormais par une route serveur dédiée
-    // (/api/admin/announcements?resource=pipeline, réservée aux super admins, clé
-    // service_role) qui garantit la suppression réelle ET réaffecte
-    // elle-même les dossiers concernés vers le pipeline de repli — plus
-    // besoin de le faire ici en double. Le second `window.confirm()` natif
+    // (/api/admin/announcements?resource=pipeline, clé service_role) qui
+    // garantit la suppression réelle ET retire les contacts de ce pipeline
+    // sans les poser dans un autre. Le second `window.confirm()` natif
     // qui pouvait rester invisible par-dessus la fenêtre déjà affichée a
     // aussi été retiré : le nombre d'affaires concernées est annoncé
     // directement dans la fenêtre de confirmation de l'application.
@@ -1374,10 +1410,11 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
         throw new Error(body?.error || `Erreur HTTP ${response.status}`);
       }
 
-      setPipelines((prev) => prev.filter((p) => p.id !== activePipeline.id));
-      setActivePipelineId(fallback.id);
+      const reste = pipelines.filter((p) => p.id !== activePipeline.id);
+      setPipelines(reste);
+      setActivePipelineId(reste[0]?.id || '');
       setShowDeletePipelineModal(false);
-      setSuccess('Pipeline supprimé dans Supabase.');
+      setSuccess('Pipeline supprimé. Les contacts sont restés dans la fiche des contacts.');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['deals'] }),
         queryClient.invalidateQueries({ queryKey: ['contacts_all'] }),
@@ -1857,9 +1894,14 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
       return;
     }
 
-    // Colonne (réordonnancement des étapes)
-    if (!canManageStructure) {
-      setError("Seul un administrateur peut modifier l'ordre des colonnes.");
+    // Colonne (réordonnancement des étapes). Les cartes, elles, restent
+    // déplaçables par toute personne qui voit le pipeline.
+    if (!peutGererLesColonnes(activePipeline)) {
+      setError(
+        estPipelineTransactions(versDroit(activePipeline)!)
+          ? 'Seul Mélanie ou Sylvain peut déplacer les colonnes du pipeline Transactions.'
+          : "Seul un administrateur peut modifier l'ordre des colonnes."
+      );
       return;
     }
 
@@ -1994,7 +2036,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
           {/* Réservé aux super admins. À ne pas confondre avec l'étoile
               ci-dessus, qui reste un choix personnel d'ouverture. */}
-          {canManageStructure && activePipeline && !activePipeline.officiel && (
+          {canManageStructure && activePipeline && !activePipeline.officiel && !estPipelineTransactions(versDroit(activePipeline)!) && (
             <button
               onClick={() => void basculerVerrouPipeline()}
               title={
@@ -2030,7 +2072,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
             </button>
           )}
 
-          {peutRenommerOuSupprimerPipeline(activePipeline) && (
+          {peutSupprimerCePipeline(activePipeline) && (
             <button
               onClick={() =>
                 setShowDeletePipelineModal(
@@ -2046,14 +2088,16 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
           {/* Un pipeline qu'on ne peut pas modifier : on dit pourquoi, plutôt
               que de laisser chercher des boutons absents. */}
-          {!canManageStructure && activePipeline && !peutRenommerOuSupprimerPipeline(activePipeline) && (
+          {activePipeline && !peutRenommerOuSupprimerPipeline(activePipeline) && (
             <span className="px-3 py-2 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 text-[#F9C977] text-xs flex items-center gap-1.5">
               <Shield className="w-3.5 h-3.5" />
-              {activePipeline.officiel
-                ? 'Pipeline officiel'
-                : activePipeline.verrouille
-                  ? 'Pipeline verrouillé'
-                  : "Pipeline d'un autre membre"}
+              {estPipelineTransactions(versDroit(activePipeline)!)
+                ? 'Pipeline Transactions verrouillé'
+                : activePipeline.officiel
+                  ? 'Pipeline officiel'
+                  : activePipeline.verrouille
+                    ? 'Pipeline verrouillé'
+                    : "Pipeline d'un autre membre"}
             </span>
           )}
         </div>
@@ -2149,7 +2193,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                     libelleMontant={estVueDossiersPropres ? 'Montant de tes dossiers' : estConseilsFinances ? 'Honoraires agence, TTC' : 'Commission agence, hors taxes'}
                     stageMonHt={stageMonHt}
                     accentColor={accentColor}
-                    canManageStructure={canManageStructure}
+                    canManageStructure={peutGererLesColonnes(activePipeline)}
                     canRenameStage={peutRenommerOuSupprimerPipeline(activePipeline)}
                     contactsById={contactsById}
                     taskStatusByContactId={taskStatusByContactId}
@@ -2164,7 +2208,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                 );
               })}
 
-              {canManageStructure && (
+              {peutGererLesColonnes(activePipeline) && (
                 <button
                   onClick={() => setShowAddStageModal(true)}
                   className="w-[220px] shrink-0 min-h-[130px] rounded-2xl border border-dashed border-[#F7BC5F]/30 text-[#F7BC5F] hover:bg-[#F7BC5F]/5 flex flex-col items-center justify-center gap-2"
@@ -2307,18 +2351,18 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           }
         >
           <p className="text-sm text-gray-300">
-            Cette suppression concerne uniquement {currentAgency?.name}.
+            Cette suppression concerne uniquement {currentAgency?.name}. Les contacts
+            restent dans la fiche des contacts, sans être envoyés vers un autre pipeline.
           </p>
 
           {activePipeline && (() => {
             const affectedCount = agencyDeals.filter(
               (deal) => deal.pipelineId === activePipeline.id
             ).length;
-            const fallback = pipelines.find((p) => p.id !== activePipeline.id);
-            if (affectedCount === 0 || !fallback) return null;
+            if (affectedCount === 0) return null;
             return (
               <p className="text-sm text-amber-400 mt-2">
-                {affectedCount} affaire(s) seront déplacées vers « {fallback.name} ».
+                {affectedCount} contact(s) quitteront ce pipeline et resteront dans les fiches.
               </p>
             );
           })()}
