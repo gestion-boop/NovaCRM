@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Home, Menu, Plus } from 'lucide-react';
 import NovaMascotte from './NovaMascotte';
 
@@ -25,8 +25,44 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onOpenMobileMenu,
   onOpenNova,
 }) => {
+  // Demande explicite (24 octobre) : « quand on scroll vers le bas, la
+  // barre du bas disparaît et dès qu'on scroll vers le haut elle
+  // réapparaît de suite ». Le défilement de toute l'appli se fait dans
+  // <main> (voir le commentaire au-dessus de <main> dans App.tsx), jamais
+  // sur `window` — d'où un écouteur posé directement sur cet élément
+  // plutôt que sur `window`, qui ne verrait jamais défiler quoi que ce
+  // soit. Petit seuil (6px) avant de réagir : sans lui, le léger rebond
+  // élastique iOS en haut/bas de liste faisait clignoter la barre pour
+  // rien ; toujours visible tant qu'on est près du tout-haut (24px).
+  const [visible, setVisible] = useState(true);
+  const lastScrollTopRef = useRef(0);
+
+  useEffect(() => {
+    const scrollEl = document.querySelector('main');
+    if (!scrollEl) return;
+    lastScrollTopRef.current = scrollEl.scrollTop;
+    const handleScroll = () => {
+      const top = scrollEl.scrollTop;
+      const delta = top - lastScrollTopRef.current;
+      if (top <= 24) {
+        setVisible(true);
+      } else if (delta > 6) {
+        setVisible(false);
+      } else if (delta < -6) {
+        setVisible(true);
+      }
+      lastScrollTopRef.current = top;
+    };
+    scrollEl.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scrollEl.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pt-0 pb-[calc(0.35rem+env(safe-area-inset-bottom,0px))] select-none pointer-events-none">
+    <nav
+      className={`md:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pt-0 pb-[calc(0.35rem+env(safe-area-inset-bottom,0px))] select-none pointer-events-none transition-transform duration-300 ease-out ${
+        visible ? 'translate-y-0' : 'translate-y-[calc(100%+1rem+env(safe-area-inset-bottom,0px))]'
+      }`}
+    >
       <div className="pointer-events-auto mx-auto max-w-sm rounded-full bg-[#081318]/80 backdrop-blur-xl border border-white/15 shadow-[0_8px_24px_-10px_rgba(0,0,0,0.8)] px-5 py-1 flex items-center justify-between">
       <button
         onClick={() => onNavigate('accueil')}
