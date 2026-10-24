@@ -36,7 +36,6 @@ import { toast } from 'sonner';
 import TaskModal from './TaskModal';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { useContacts, matchesAgency } from '@/hooks/useContacts';
-import { pipelineVisiblePour } from '@/lib/pipelinesAcces';
 import { useDeals } from '@/hooks/useDeals';
 import { useTasks } from '@/hooks/useTasks';
 import { useLeadChat } from '@/hooks/useLeadChat';
@@ -487,22 +486,13 @@ export default function ClientProfileView({
     },
   });
 
-  const utilisateurPipeline = { uid: currentUser?.uid ?? null, email: currentUser?.email ?? null };
-  const pipelinesVisibles = pipelines.filter((p: any) =>
-    pipelineVisiblePour(
-      { id: p.id, name: p.name, agencyId: p.agency_id, ownerId: p.owner_id ?? null, officiel: Boolean(p.is_default) },
-      utilisateurPipeline
-    )
-  );
-  // Une fiche déjà posée sur un pipeline reste affichée telle quelle, même
-  // si ce pipeline n'est pas dans le menu de la personne. Sans pipeline
-  // (fiche neuve, ou contacts d'un pipeline supprimé), on n'en invente pas
-  // un : la fiche reste une fiche.
-  const currentPipelineId = leadStage?.pipeline_id ?? activePipelineId ?? null;
-  const pipelinesChoix =
-    currentPipelineId && !pipelinesVisibles.some((p: any) => p.id === currentPipelineId)
-      ? [pipelines.find((p: any) => p.id === currentPipelineId), ...pipelinesVisibles].filter(Boolean)
-      : pipelinesVisibles;
+  const currentPipelineId =
+    leadStage?.pipeline_id ??
+    activePipelineId ??
+    pipelines.find((p: any) => p.owner_id === null && p.is_default)?.id ??
+    pipelines.find((p: any) => p.owner_id === null)?.id ??
+    pipelines[0]?.id ??
+    null;
 
   const { data: stages = [] } = useQuery({
     queryKey: ['stages', agencyId, currentPipelineId],
@@ -519,14 +509,13 @@ export default function ClientProfileView({
   });
 
   const currentPipelineName =
-    pipelines.find((p: any) => p.id === currentPipelineId)?.name ?? (currentPipelineId ? 'Pipeline' : 'Aucun pipeline');
+    pipelines.find((p: any) => p.id === currentPipelineId)?.name ?? 'Sélectionner un pipeline';
   const currentStageIndex = leadStage?.stage_id
     ? stages.findIndex((s: any) => s.id === leadStage.stage_id)
     : -1;
-  const etapeCourante = currentStageIndex >= 0 ? stages[currentStageIndex]?.name : null;
   // Couleur d'une étape sur la fiche : code de Natacha pour Novavisio, sinon aucune (doré par défaut).
   const couleurEtapeFiche = (nom: string | undefined): string | null =>
-    estAgenceNovavisio(client?.agencyId) ? couleurEtapeNovavisio(nom) : null;
+    estAgenceNovavisio(client.agencyId) ? couleurEtapeNovavisio(nom) : null;
 
   // Demandé le 2 septembre : « quand c'est à facturer, on met le montant ».
   // Même fenêtre que dans le Pipeline, pour le même geste : ici les pastilles
@@ -2265,7 +2254,7 @@ export default function ClientProfileView({
     // "h-full" ne se calculait pas correctement dans ce contexte, coupant le
     // contenu). Simplifié : ce composant flotte maintenant normalement dans
     // <main>, qui gère le défilement de toute la page — plus de double scroll.
-    <div className="flex flex-col bg-[#051416] relative">
+    <div className="flex flex-col bg-[#051416] animate-fade-in relative">
       {(profileError || profileSuccess) && (
         <div className="px-6 pt-4">
           {profileError && (
@@ -2290,7 +2279,7 @@ export default function ClientProfileView({
           — même constat/correctif que le liseré du champ de saisie du chat
           plus tôt dans la session : passage à border-white/15, nettement
           plus visible sans être criard. */}
-      <div className="bg-[#07191b] border-b border-white/15 px-4 sm:px-6 py-3 flex flex-col gap-3 sticky top-0 z-20">
+      <div className="bg-[#07191b] border-b border-white/15 p-4 sm:p-6 flex flex-col gap-4 sm:gap-6 sticky top-0 z-10">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <button onClick={onBack} className="p-2 rounded-xl bg-black/40 hover:bg-black/60 border border-[#144447]/60 text-slate-300 transition-colors shrink-0">
@@ -2298,27 +2287,11 @@ export default function ClientProfileView({
             </button>
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">{client.name}</h1>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 min-w-0 text-sm">
-                <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 text-xs font-bold shrink-0">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 text-xs font-bold">
                   {client.status}
                 </span>
-                {client.phone ? (
-                  <a
-                    href={`tel:${String(client.phone).replace(/[^+\d]/g, '')}`}
-                    title="Appeler"
-                    className="text-[#F9C977] font-semibold shrink-0 hover:text-[#FAD592]"
-                  >
-                    {client.phone}
-                  </a>
-                ) : (
-                  <span className="text-slate-500 shrink-0">Pas de téléphone</span>
-                )}
-                <span className="text-slate-500 shrink-0" aria-hidden>·</span>
-                <span className="text-slate-100 font-semibold truncate min-w-0" title={currentPipelineName}>
-                  {etapeCourante || 'Sans étape'}
-                </span>
-                <span className="hidden md:inline text-slate-500 shrink-0" aria-hidden>·</span>
-                <span className="hidden md:inline text-slate-400 truncate">
+                <span className="text-sm text-slate-400">
                   Créé le {new Date(client.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </span>
               </div>
@@ -2403,9 +2376,7 @@ export default function ClientProfileView({
             )}
           </div>
         </div>
-      </div>
 
-      <div className="bg-[#07191b] border-b border-white/15 px-4 sm:px-6 py-4">
         {/* Pipeline réel — cliquer une étape l'enregistre en base */}
         <div className="bg-[#0a1e20] rounded-xl border border-white/15 p-4 pb-6 relative shadow-inner">
           <div className="flex items-center gap-2 mb-4 text-xs font-bold text-slate-400">
@@ -2416,7 +2387,7 @@ export default function ClientProfileView({
                 <ChevronDown className="w-3.5 h-3.5" />
               </DropdownMenuTrigger>
               <DropdownMenuContent className="min-w-[220px]">
-                {pipelinesChoix.map((p: any) => {
+                {pipelines.map((p: any) => {
                   const active = p.id === currentPipelineId;
                   return (
                     <DropdownMenuItem
@@ -2429,7 +2400,7 @@ export default function ClientProfileView({
                     </DropdownMenuItem>
                   );
                 })}
-                {pipelinesChoix.length === 0 && (
+                {pipelines.length === 0 && (
                   <div className="px-3 py-2 text-sm text-muted-foreground">Aucun pipeline</div>
                 )}
               </DropdownMenuContent>
@@ -3006,39 +2977,23 @@ export default function ClientProfileView({
                                       </div>
                                       
                                       <div className="space-y-1">
-                                        {/* Demande explicite (24 octobre) : le titre du dossier
-                                            ("Att documents client"...) est l'info utile, pas un
-                                            "A faire"/"Terminée" générique déjà porté par l'icône
-                                            (cercle vide / coche) à gauche — remonté en titre, avec
-                                            le même rayé que les autres listes de tâches de l'appli
-                                            une fois cochée (voir RappelsView.tsx/Tasks.tsx). */}
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <span className={`font-bold text-sm ${task.completed ? 'text-slate-500 line-through' : 'text-white'}`}>
-                                            {task.title}
+                                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                                          <span className="text-white font-bold text-sm">
+                                            {task.completed ? 'Terminée' : 'A faire'}
                                           </span>
                                           <span className="px-2 py-0.5 rounded bg-[#143c3f] text-teal-400 text-[10px] font-bold">
                                             {task.type || 'Tâche'}
                                           </span>
-                                          {task.completed ? (
-                                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
-                                              Terminée
-                                            </span>
-                                          ) : (
+                                          {!task.completed && (
                                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${dateStatus.badgeClass}`}>
                                               {dateStatus.label}
                                             </span>
                                           )}
                                         </div>
-                                        {/* Demande explicite (24 octobre, maquette validée) : même
-                                            mécanique que le pipeline / la fiche client — trait fin +
-                                            libellé en majuscules au-dessus de l'échéance, pour la
-                                            séparer du bloc identité (titre + badges) ci-dessus. */}
-                                        <div className="mt-3 pt-3 border-t border-[#144447]/50">
-                                          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Échéance</span>
-                                          <div className="flex items-center gap-1.5 text-[11px] text-slate-300 mt-1 font-mono">
-                                            <Calendar className="w-3.5 h-3.5" />
-                                            {dateStr ? new Date(dateStr).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''}
-                                          </div>
+                                        <p className="text-sm text-slate-300">{task.title}</p>
+                                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-2 font-mono">
+                                          <Calendar className="w-3.5 h-3.5" />
+                                          {dateStr ? new Date(dateStr).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''}
                                         </div>
                                       </div>
                                     </div>
@@ -3094,7 +3049,7 @@ export default function ClientProfileView({
             )}
             
             {activeTab === 'agenda' && (
-              <div className="space-y-6">
+              <div className="space-y-6 animate-fade-in">
                 <div className="flex justify-between items-center">
                   <div>
                     <h2 className="text-xl font-bold text-white">RDV</h2>
@@ -3238,7 +3193,7 @@ export default function ClientProfileView({
             )}
 
             {activeTab === 'notes' && (
-              <div className="space-y-6">
+              <div className="space-y-6 animate-fade-in">
                 {/* Ticket #109 : "Note générale & Remarques du client" retirée
                     d'ici — remplacée par le champ "Commentaire" directement
                     sur la fiche (carte de gauche), voir plus haut. */}
@@ -3530,7 +3485,7 @@ export default function ClientProfileView({
               </div>
             )}
             {activeTab === 'documents' && (
-              <div className="space-y-6">
+              <div className="space-y-6 animate-fade-in">
                 {guestAccess && (
                   <div className="bg-[#0a1e20] p-4 rounded-2xl border border-[#144447]/60 space-y-3">
                     <div className="flex items-center justify-between">
@@ -3835,7 +3790,7 @@ export default function ClientProfileView({
               </div>
             )}
             {activeTab === 'chat' && (
-              <div className="flex flex-col h-full min-h-[420px]">
+              <div className="flex flex-col h-full min-h-[420px] animate-fade-in">
                 <div ref={chatScrollRef} className="flex-1 overflow-y-auto custom-scrollbar space-y-1 pb-4">
                   {chatLoading ? (
                     <div className="p-12 text-center text-slate-500">Chargement du chat...</div>
@@ -4137,7 +4092,7 @@ export default function ClientProfileView({
               // `sticky` du bandeau Pipeline au-dessus, non touché) donne
               // enfin un vrai cadre défilant aux messages, avec la barre de
               // saisie fixée en bas de ce cadre.
-              <div className="flex flex-col h-[min(64vh,680px)] min-h-[420px]">
+              <div className="flex flex-col h-[min(64vh,680px)] min-h-[420px] animate-fade-in">
                 <div className="mb-3 px-3 py-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-[11px] text-sky-300 flex items-center gap-2 shrink-0">
                   <MessageSquare className="w-3.5 h-3.5 shrink-0" />
                   Conversation avec le client depuis son espace mobile — distincte des commentaires internes.
