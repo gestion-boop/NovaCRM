@@ -2794,7 +2794,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     // dessous, en overflow-y-auto) à défiler EN INTERNE à la place — la
     // barre de saisie reste ainsi toujours ancrée et visible en bas.
     <div
-      className="relative h-full overflow-hidden flex flex-col items-center justify-between p-6 sm:p-10 animate-novaai-bg"
+      className="relative h-full overflow-hidden flex flex-col items-center justify-between px-3 py-6 sm:p-10 animate-novaai-bg"
       style={hauteurVisible ? { height: `${hauteurVisible}px` } : undefined}
     >
       {/* Couche du fond d'écran choisi, posée par-dessus le dégradé par
