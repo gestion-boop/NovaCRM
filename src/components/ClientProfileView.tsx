@@ -2484,15 +2484,17 @@ export default function ClientProfileView({
             <p className="text-center text-xs text-slate-500 py-2">Aucune étape de pipeline configurée</p>
           )}
 
-          {stages.length > 0 && (!isMobileSaisieLead || pipelineMobileExpanded) && (
+          {stages.length > 0 && !isMobileSaisieLead && (
             // Signalé sur mobile : forcer toutes les étapes à tenir dans la
             // largeur de l'écran (w-0 flex-1) écrasait les libellés en 2
             // lignes qui se chevauchaient et devenaient illisibles dès qu'il
             // y avait plus de 5-6 étapes. Largeur minimale par étape +
             // défilement horizontal à la place : ça tient toujours sur
-            // desktop (assez de place, pas de scroll visible) et devient
-            // swipeable sur mobile au lieu de s'écraser.
-            <div data-swipe-back-exclude="true" className="w-full overflow-x-auto -mx-4 px-4 custom-scrollbar">
+            // desktop (assez de place, pas de scroll visible). Remplacé par
+            // des pastilles compactes sur téléphone (voir bloc ci-dessous,
+            // maquette validée le 24 octobre) : inchangé ici, réservé à
+            // tablette/ordinateur.
+            <div className="w-full overflow-x-auto -mx-4 px-4 custom-scrollbar">
               <div
                 className="flex items-start relative pb-1"
                 style={{ minWidth: `${Math.max(stages.length * 76, 100)}px` }}
@@ -2565,6 +2567,54 @@ export default function ClientProfileView({
                         {stage.name}
                       </span>
                     </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Demande explicite (24 octobre, maquette validée) : sur
+              téléphone, la grille de pastilles (rond + libellé sur 2 lignes)
+              prenait trop de hauteur une fois dépliée. Remplacée par une
+              seule ligne de petites étiquettes texte — coche pour les
+              étapes passées, pleine couleur pour l'étape en cours, contour
+              discret pour les suivantes — même fonctionnement (on tape
+              n'importe quelle étape, ça défile toujours horizontalement),
+              nettement moins haut. Inchangé sur tablette/ordinateur (bloc
+              ci-dessus). */}
+          {stages.length > 0 && isMobileSaisieLead && pipelineMobileExpanded && (
+            <div data-swipe-back-exclude="true" className="w-full overflow-x-auto -mx-4 px-4 custom-scrollbar">
+              <div className="flex items-center gap-1.5 w-max">
+                {stages.map((stage: any, index: number) => {
+                  const isActive = index === currentStageIndex;
+                  const isPast = index < currentStageIndex;
+                  const couleur = couleurEtapeFiche(stage.name);
+                  const stylePilule = couleur
+                    ? isActive
+                      ? { backgroundColor: couleur, boxShadow: `0 0 10px ${couleur}80` }
+                      : isPast
+                        ? { borderColor: couleur, color: couleur }
+                        : undefined
+                    : undefined;
+
+                  return (
+                    <button
+                      key={stage.id}
+                      type="button"
+                      onClick={() => changeStage(stage.id)}
+                      title={stage.name}
+                      style={stylePilule}
+                      className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors shrink-0 ${
+                        isActive
+                          ? 'bg-[#F7BC5F] text-[#061719] font-extrabold shadow-[0_0_10px_rgba(245,158,11,0.35)]'
+                          : isPast
+                            ? 'border border-[#F7BC5F]/35 bg-[#F7BC5F]/10 text-[#C9A463]'
+                            : 'border border-slate-600/40 text-slate-500'
+                      }`}
+                    >
+                      {isPast && <Check className="w-3 h-3 shrink-0" />}
+                      {stage.name}
+                    </button>
                   );
                 })}
               </div>
