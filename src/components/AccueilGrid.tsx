@@ -805,7 +805,7 @@ const EmptyRootCell: React.FC<{ id: string }> = ({ id }) => {
     <div
       ref={setNodeRef}
       aria-hidden="true"
-      className={`h-28 sm:h-36 rounded-2xl sm:rounded-3xl border-2 border-dashed transition-colors ${
+      className={`h-36 sm:h-44 md:h-48 rounded-2xl sm:rounded-3xl border-2 border-dashed transition-colors ${
         isOver ? 'border-[#F7BC5F]/60 bg-[#F7BC5F]/5' : 'border-transparent'
       }`}
     />
@@ -872,7 +872,7 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
       // maintenant AUSSI au survol (hover:shadow-[...] remplace l'ancien
       // hover:shadow-lg générique, qui n'utilisait pas la couleur propre
       // à la tuile).
-      className={`relative group h-28 sm:h-36 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${tile.gradient} p-2.5 sm:p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-shadow duration-200 shadow-md border border-white/10 overflow-hidden ${
+      className={`relative group h-36 sm:h-44 md:h-48 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${tile.gradient} p-2.5 sm:p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-shadow duration-200 shadow-md border border-white/10 overflow-hidden ${
         isDragging || dragEnCours
           ? 'z-10 pointer-events-none'
           : isDragTarget
@@ -939,15 +939,15 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
       {tile.isFolder ? (
         <div className="flex flex-col items-center w-full px-1">
           {/* Mini 2x2 Grid Preview of contained icons */}
-          <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-black/30 backdrop-blur-md border border-white/10 p-1 sm:p-2 grid grid-cols-2 gap-1 sm:gap-1.5 items-center justify-center mb-1.5 sm:mb-2 shadow-inner group-hover:scale-105 transition-transform overflow-hidden">
+          <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-black/30 backdrop-blur-md border border-white/10 p-1 sm:p-2 grid grid-cols-2 gap-1 sm:gap-1.5 items-center justify-center mb-2 sm:mb-3 shadow-inner group-hover:scale-105 transition-transform overflow-hidden">
             {(tile.children || []).slice(0, 4).map((subItem, i) => {
               const SubIcon = ICON_MAP[subItem.iconName] || LayoutGrid;
               return (
-                <div key={i} className="w-3.5 h-3.5 sm:w-5 sm:h-5 rounded bg-white/10 flex items-center justify-center text-white p-0.5 overflow-hidden">
+                <div key={i} className="w-4 h-4 sm:w-6 sm:h-6 rounded bg-white/10 flex items-center justify-center text-white p-0.5 overflow-hidden">
                   {subItem.imageUrl ? (
                     <img src={subItem.imageUrl} alt="" className="w-full h-full object-contain" />
                   ) : (
-                    <SubIcon className="w-2 h-2 sm:w-3 sm:h-3" />
+                    <SubIcon className="w-2.5 h-2.5 sm:w-4 sm:h-4" />
                   )}
                 </div>
               );
@@ -957,24 +957,15 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
             )}
           </div>
 
-          <div className="flex items-center justify-center gap-1 max-w-full mb-1 sm:mb-1.5">
-            <Folder className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
-            <h3 className="text-white font-bold text-sm sm:text-base tracking-tight truncate">
+          <div className="flex items-center justify-center gap-1.5 max-w-full mb-1 sm:mb-1.5">
+            <Folder className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+            <h3 className="text-white font-bold text-sm sm:text-base md:text-lg tracking-tight truncate">
               {tile.title}
             </h3>
           </div>
 
-          {/* Ticket #212 : le compteur "nombre de dossiers" est retiré
-              entièrement de la tuile (demande explicite) — ne pas le
-              réintroduire. Seul le badge de notifications ci-dessous
-              (count, sans rapport avec le nombre de sous-éléments) reste
-              affiché.
-              Ticket #217 : même structure (marge sur le titre plutôt que
-              sur le badge) que la tuile "raccourci" ci-dessous, pour que le
-              badge se retrouve exactement à la même hauteur sur toutes les
-              tuiles voisines. */}
           {count > 0 && (
-            <div className="bg-black/60 backdrop-blur-md border border-white/10 text-white font-bold text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 rounded-full shadow-inner">
+            <div className="bg-black/60 backdrop-blur-md border border-white/10 text-white font-bold text-[10px] sm:text-xs px-2.5 sm:px-3.5 py-0.5 rounded-full shadow-inner">
               {count}
             </div>
           )}
@@ -982,13 +973,7 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
       ) : (
         /* Regular Shortcut Tile Rendering */
         <div className="flex flex-col items-center w-full px-1">
-          {/* Ticket #223 : logo personnalisé et icône générique dans une
-              zone de taille FIXE identique (celle déjà utilisée par les
-              logos existants, ex. Immosphera 360 — pour ne pas rapetisser
-              un logo déjà validé), au lieu d'une icône visiblement plus
-              petite que le logo de la tuile voisine — l'image garde
-              `object-contain` (jamais déformée). */}
-          <div className="w-9 h-9 sm:w-12 sm:h-12 flex items-center justify-center mb-1 sm:mb-2 text-white transition-transform duration-300 group-hover:scale-110">
+          <div className="w-11 h-11 sm:w-16 sm:h-16 flex items-center justify-center mb-2 sm:mb-3 text-white transition-transform duration-300 group-hover:scale-110">
             {tile.imageUrl ? (
               <img
                 src={tile.imageUrl}
@@ -996,20 +981,17 @@ const SortableTile: React.FC<SortableTileProps> = ({ tile, count, isDragTarget, 
                 className="w-full h-full object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.65)] z-10"
               />
             ) : (
-              <Icon className="w-7 h-7 sm:w-11 sm:h-11 stroke-[1.5] z-10" />
+              <Icon className="w-8 h-8 sm:w-13 sm:h-13 stroke-[1.5] z-10" />
             )}
           </div>
 
-          <h3 className="text-white font-bold text-xs sm:text-base tracking-tight mb-1 sm:mb-1.5 drop-shadow-sm line-clamp-1 max-w-full z-10">
+          <h3 className="text-white font-bold text-xs sm:text-base md:text-lg tracking-tight mb-1 sm:mb-2 drop-shadow-sm line-clamp-1 max-w-full z-10">
             {tile.title}
           </h3>
 
-          {/* Demande explicite : retrait du badge "Ouvrir Onglet" sur les
-              tuiles vers un lien externe — le comportement (ouverture dans
-              un nouvel onglet) reste inchangé, seul le badge disparaît. */}
           <div className="flex flex-col items-center z-10">
             {!tile.externalUrl && count > 0 ? (
-              <div className="bg-black/60 backdrop-blur-md border border-white/10 text-white font-bold text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 rounded-full shadow-inner">
+              <div className="bg-black/60 backdrop-blur-md border border-white/10 text-white font-bold text-[10px] sm:text-xs px-2.5 sm:px-3.5 py-0.5 rounded-full shadow-inner">
                 {count}
               </div>
             ) : null}
@@ -1100,7 +1082,7 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
         transition: isDragging ? 'none' : transform ? (transition || 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)') : undefined,
         opacity: isDragging ? 0 : undefined,
       }}
-      className={`relative group h-36 rounded-2xl bg-gradient-to-br ${subItem.gradient} p-4 flex flex-col items-center justify-center text-center cursor-pointer shadow-md transition-shadow duration-200 border border-white/10 overflow-hidden ${
+      className={`relative group h-36 sm:h-44 md:h-48 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${subItem.gradient} p-4 flex flex-col items-center justify-center text-center cursor-pointer shadow-md transition-shadow duration-200 border border-white/10 overflow-hidden ${
         isDragging || dragEnCours
           ? 'z-10 pointer-events-none'
           : isDragTarget
@@ -1139,17 +1121,19 @@ const SortableSubTile: React.FC<SortableSubTileProps> = ({ subItem, count, isDra
 
       {subItem.isFolder ? (
         <div className="flex flex-col items-center">
-          <Folder className="w-8 h-8 text-[#F7BC5F] mb-2" />
-          <span className="text-white font-semibold text-sm">{subItem.title}</span>
+          <Folder className="w-10 h-10 sm:w-14 sm:h-14 text-[#F7BC5F] mb-2" />
+          <span className="text-white font-bold text-sm sm:text-base md:text-lg">{subItem.title}</span>
         </div>
       ) : (
         <div className="flex flex-col items-center">
-          {subItem.imageUrl ? (
-            <img src={subItem.imageUrl} alt={subItem.title} className="w-8 h-8 object-contain mb-2 drop-shadow-md z-10" />
-          ) : (
-            <SubIcon className="w-8 h-8 text-white mb-2 z-10" />
-          )}
-          <span className="text-white font-semibold text-sm z-10">{subItem.title}</span>
+          <div className="w-11 h-11 sm:w-16 sm:h-16 flex items-center justify-center mb-1.5 sm:mb-2.5 text-white transition-transform duration-300 group-hover:scale-110">
+            {subItem.imageUrl ? (
+              <img src={subItem.imageUrl} alt={subItem.title} className="w-full h-full object-contain drop-shadow-md z-10" />
+            ) : (
+              <SubIcon className="w-8 h-8 sm:w-12 sm:h-12 text-white stroke-[1.5] z-10" />
+            )}
+          </div>
+          <span className="text-white font-bold text-xs sm:text-base md:text-lg z-10">{subItem.title}</span>
           {subItem.externalUrl ? (
             <span className="inline-flex items-center gap-0.5 text-[9px] text-[#FAD592] font-medium mt-1 z-10 bg-black/40 px-2 py-0.5 rounded-full border border-white/10">
               <ExternalLink className="w-2.5 h-2.5" /> Web
@@ -4060,7 +4044,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                 // Case invisible, non cliquable, non déplaçable — réserve
                 // juste sa place dans la grille (cf. commentaire sur cette
                 // entrée dans INITIAL_TILES plus haut).
-                <div key={tile.id} className="h-28 sm:h-36" aria-hidden="true" />
+                <div key={tile.id} className="h-36 sm:h-44 md:h-48" aria-hidden="true" />
               ) : (
               <SortableTile
                 key={tile.id}
@@ -4128,78 +4112,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           fonctionnalité, d'où la case vide). Condition retirée : plus de
           raison de distinguer tactile/souris ici, seulement
           mobile/non-mobile, déjà géré en amont. */}
-      <div className="hidden sm:block h-24" aria-hidden="true" />
-
-      {/* Barre NovaAI — remplace l'ancien bouton flottant rond (même
-          destination "assistant-ia", pour ne pas dupliquer l'accès et rester
-          "moins chargé" comme demandé). Réutilise le formulaire d'envoi déjà
-          existant dans AssistantIAView via `onAskNovaAI`, pas de second appel
-          IA ici. */}
-      {!openFolderStack.length && !novaOpen && (
-        // Ticket #59 : seul le logo reste visible, centré en bas — la barre
-        // de saisie se déploie en tiroir vers la droite au clic, au lieu
-        // d'occuper en permanence toute la largeur.
-        // Recalibré en `fixed` (au lieu du flux normal du document) : sa
-        // position dépendait du nombre de tuiles au-dessus, donc du contenu
-        // — plus il y avait de tuiles, plus le logo descendait bas, parfois
-        // hors écran. Fixé en bas de la fenêtre, il reste toujours à la même
-        // hauteur, quel que soit le nombre de tuiles.
-        <div className="hidden sm:flex flex-col items-center gap-1 fixed bottom-4 inset-x-0 z-30 pointer-events-none">
-          <div className="flex items-center gap-2 pointer-events-auto">
-            <motion.button
-              onClick={() => onOpenNova?.()}
-              title="Ouvrir Nova"
-              // Taille doublée (2.25rem -> 4.5rem) + léger mouvement de
-              // flottement continu pour attirer l'œil, demandés en plus du
-              // tiroir du #59.
-              // Demande (3 septembre) : « laisse le logo Nova fixe » — plus de
-              // flottement continu ; seuls le survol et l'appui réagissent.
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.95 }}
-              className="w-[5.5rem] h-[5.5rem] shrink-0 z-10"
-            >
-              {/* Mascotte animée (pack "Nova Animation Plus") au lieu d'une
-                  image figée — clignement des yeux et petits gestes
-                  automatiques pendant les temps morts. Taille légèrement
-                  augmentée (72 → 88) sur demande explicite. */}
-              <NovaMascotte taille={88} fixe />
-            </motion.button>
-            <AnimatePresence>
-              {novaBarOpen && (
-                <motion.div
-                  initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: 'min(28rem, 60vw)', opacity: 1 }}
-                  exit={{ width: 0, opacity: 0 }}
-                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  className="overflow-hidden"
-                >
-                  <div className="flex items-center gap-2 rounded-2xl bg-[#0b1c1e] border border-[#F7BC5F]/30 pl-3 pr-2 py-2 shadow-lg whitespace-nowrap">
-                    <input
-                      ref={novaInputRef}
-                      type="text"
-                      value={novaInput}
-                      onChange={(e) => setNovaInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') submitNovaPrompt(); if (e.key === 'Escape') setNovaBarOpen(false); }}
-                      placeholder="Demandez à NovaAI..."
-                      className="flex-1 min-w-0 bg-transparent outline-none text-sm text-white placeholder-gray-500"
-                    />
-                    <button
-                      onClick={toggleVoiceInput}
-                      title="Dictée vocale"
-                      className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center transition-colors ${
-                        listening ? 'bg-rose-500/20 text-rose-400 animate-pulse' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <Mic className="w-4 h-4" />
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-          <p className="text-[11px] font-bold text-[#F9C977] tracking-wide">Nova</p>
-        </div>
-      )}
+      {/* Espace en bas pour aérer la grille et ne pas chevaucher le bouton flottant */}
+      <div className="h-16 sm:h-24" aria-hidden="true" />
 
       {/* Bouton Flottant Assistant Nova IA — Cercle Logo avec contour jaune identique du logo */}
       {!novaOpen && (
