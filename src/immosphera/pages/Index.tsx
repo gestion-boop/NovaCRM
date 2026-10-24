@@ -353,7 +353,7 @@ export default function Index({
 
       {/* Content */}
       {(!showMap || isMobile) && (
-        <div className="w-full px-11 pb-20 animate-fade-in">
+        <div className="w-full px-11 pb-20">
           {aiDisplayItems && (
             <div className="mb-5 flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3">
               <Sparkles className="h-4 w-4 text-primary shrink-0" />

@@ -11,6 +11,7 @@ import {
 import { AGENCIES, Agency } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { getAgencyLogo, agencesDisponibles } from '@/lib/agency-logos';
+import { grouperMenu } from '@/lib/famillesMenu';
 import AgencyLogoSwitcher from './AgencyLogoSwitcher';
 
 export interface SidebarProps {
@@ -212,16 +213,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (onCloseMobile) onCloseMobile();
   };
 
+  const lignesMenu = useMemo(() => {
+    const groupe = grouperMenu(orderedNavItems);
+    const lignes: Array<
+      | { kind: 'titre'; id: string; titre: string }
+      | { kind: 'entree'; item: (typeof NAV_ITEMS)[number] }
+    > = [];
+    if (groupe.accueil) lignes.push({ kind: 'entree', item: groupe.accueil });
+    for (const famille of groupe.familles) {
+      lignes.push({ kind: 'titre', id: famille.id, titre: famille.titre });
+      for (const item of famille.items) lignes.push({ kind: 'entree', item });
+    }
+    return lignes;
+  }, [orderedNavItems]);
+
   const displayName = userProfile?.displayName || currentUser?.displayName || 'Utilisateur';
   const displayEmail = userProfile?.email || currentUser?.email || userEmail || '';
   const initial = displayName.charAt(0).toUpperCase();
+  // Le nom de profil se termine souvent par la société, « Sylvain Grazia
+  // (NovaVisio) ». Dans 270px ça coupait au milieu du mot. On garde le nom
+  // sur une ligne, et la société en dessous — elle reste dans l'infobulle.
+  const societeDansLeNom = displayName.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  const nomMenu = (societeDansLeNom?.[1] || displayName).trim() || displayName;
+  const precisionMenu = societeDansLeNom?.[2]?.trim() || '';
 
   const sidebarContent = (isMobile: boolean = false) => (
     <div className="flex flex-col h-full w-full overflow-hidden bg-[#081318]">
       {/* Top Header & Agency Picker */}
       <div className="shrink-0">
         {isMobile && (
-          <div className="flex justify-end p-4 pb-2">
+          <div className="flex justify-end p-4 pb-2 md:px-3 md:pt-3 md:pb-1">
             <button
               onClick={onCloseMobile}
               className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
@@ -329,13 +350,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation list - Scrollable container filling available space */}
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1 custom-scrollbar -webkit-overflow-scrolling-touch">
-        {(!collapsed || isMobile) && (
-          <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 select-none">
-            NAVIGATION
-          </p>
-        )}
+        {lignesMenu.map((ligne) => {
+          if (ligne.kind === 'titre') {
+            if (collapsed && !isMobile) {
+              return <div key={ligne.id} className="mx-2 my-1 h-px bg-white/10" />;
+            }
+            return (
+              <p key={ligne.id} className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 select-none">
+                {ligne.titre}
+              </p>
+            );
+          }
 
-        {orderedNavItems.map((item, itemIndex) => {
+          const item = ligne.item;
           const Icon = item.icon;
           const isActive = currentNav === item.id;
           const badgeCount =
@@ -352,25 +379,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           return (
             <React.Fragment key={item.id}>
-              {/* Ticket (nouvelle base, signalé) : séparateurs entre les
-                  entrées + texte/icônes agrandis sur mobile, pour une
-                  lecture plus confortable dans le menu plein écran. */}
-              {isMobile && itemIndex > 0 && <div className="h-px bg-white/10 mx-2" />}
               <div className="relative group">
               <button
                 data-tour={`nav-${item.id}`}
                 onClick={() => handleNavClick(item.id)}
                 title={collapsed && !isMobile ? `${item.label}${showBadge ? ` (${badgeCount})` : ''}` : undefined}
-                className={`w-full flex items-center justify-between transition-all duration-150 cursor-pointer ${
-                  isMobile ? 'px-4 py-4 rounded-2xl text-base font-semibold' : 'px-3 py-2.5 rounded-xl text-xs font-medium'
+                className={`w-full flex items-center justify-between transition-all duration-150 cursor-pointer border ${
+                  isMobile ? 'px-3.5 py-3 rounded-2xl text-[15px] font-semibold md:px-2.5 md:py-1.5 md:rounded-xl md:text-[13px]' : 'px-3 py-2.5 rounded-xl text-sm font-medium'
                 } ${
                   isActive
-                    ? 'bg-[#282112]/90 text-[#F7BC5F] border border-[#F7BC5F]/80 shadow-sm font-semibold'
-                    : 'text-gray-300 hover:text-white hover:bg-white/5'
+                    ? 'bg-[#282112]/90 text-[#F7BC5F] border-[#F7BC5F]/80 shadow-sm font-semibold'
+                    : 'text-gray-200 hover:text-white hover:bg-white/5 border-transparent'
                 } ${collapsed && !isMobile ? 'justify-center px-0' : ''}`}
               >
-                <div className={`flex items-center min-w-0 ${isMobile ? 'gap-4' : 'gap-3'}`}>
-                  <Icon className={`shrink-0 ${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${isActive ? 'text-[#F7BC5F]' : 'text-gray-400'}`} />
+                <div className={`flex items-center min-w-0 ${isMobile ? 'gap-3 md:gap-2.5' : 'gap-3'}`}>
+                  <span className={`shrink-0 flex items-center justify-center rounded-lg ${
+                    isMobile ? 'w-9 h-9 md:w-7 md:h-7' : 'w-7 h-7'
+                  } ${isActive ? 'bg-[#F7BC5F]/20' : 'bg-white/10'}`}>
+                    <Icon className={`${isMobile ? 'w-5 h-5 md:w-4 md:h-4' : 'w-4 h-4'} ${isActive ? 'text-[#F7BC5F]' : 'text-gray-300'}`} />
+                  </span>
                   {(!collapsed || isMobile) && <span className="truncate">{item.label}</span>}
                 </div>
               {(!collapsed || isMobile) && showBadge && (
@@ -396,10 +423,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onClick={(e) => { e.stopPropagation(); onOpenInNewTab(item.id); if (onCloseMobile) onCloseMobile(); }}
                   title={`Ouvrir "${item.label}" dans un nouvel onglet`}
                   className={`absolute top-1/2 -translate-y-1/2 right-1.5 shrink-0 rounded-lg bg-[#0E1A20] text-gray-400 hover:text-[#F7BC5F] hover:bg-white/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer ${
-                    isMobile ? 'p-2.5' : 'p-1.5'
+                    isMobile ? 'p-2.5 md:p-1.5' : 'p-1.5'
                   }`}
                 >
-                  <ExternalLink className={isMobile ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
+                  <ExternalLink className={isMobile ? 'w-4 h-4 md:w-3.5 md:h-3.5' : 'w-3.5 h-3.5'} />
                 </button>
               )}
               </div>
@@ -412,14 +439,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="shrink-0 p-3 border-t border-white/5 bg-[#081318]">
         {(!collapsed || isMobile) ? (
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between bg-white/5 p-2 rounded-xl border border-white/5">
-              <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className="flex items-center justify-between gap-2 bg-white/5 p-2 rounded-xl border border-white/5">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 <div className="w-8 h-8 rounded-full bg-[#F7BC5F] text-black font-bold flex items-center justify-center text-sm shrink-0">
                   {initial}
                 </div>
-                <div className="truncate">
-                  <p className="text-xs font-semibold text-white truncate">{displayName}</p>
-                  <p className="text-[10px] text-gray-400 truncate">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-white truncate" title={displayName}>{nomMenu}</p>
+                  {precisionMenu && (
+                    <p className="text-[10px] font-medium text-[#F9C977] truncate" title={precisionMenu}>{precisionMenu}</p>
+                  )}
+                  <p className="text-[10px] text-gray-400 truncate" title={displayEmail}>
                     {displayEmail}
                   </p>
                 </div>
@@ -427,7 +457,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 onClick={onSignOut}
                 title="Déconnexion"
-                className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-white/5 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-white/5 transition-colors cursor-pointer shrink-0"
               >
                 <LogOut className="w-4 h-4" />
               </button>

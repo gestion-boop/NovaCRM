@@ -7,14 +7,43 @@ import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@d
 import { CSS } from '@dnd-kit/utilities';
 import {
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, CloudSun,
-  ChevronRight, Bell, MessageSquare, Users, GitFork, FileText, Mail, BarChart2,
-  Headphones, Calendar, FileEdit, UserPlus, Folder, Plus, X, UserPlus2,
+  Bell, MessageSquare, Users, GitFork, FileText, Mail, BarChart2,
+  Headphones, Calendar, FileEdit, UserPlus, Folder, Plus, X,
   ChevronDown, ChevronUp, Megaphone, Camera, Lock, Zap, Home as HomeIcon, Globe,
   ExternalLink, Bookmark, Target, Shield, Award, Sparkles, CheckSquare, Image as ImageIcon, MapPin, Settings,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
+import { estAgenceImmosphera, estBlocNotes, estDossierImmosphera } from '@/lib/tuilesAccueilVisibles';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
+import { prochainRendezVous, texteProchainGeste, type RendezVousProchain } from '@/lib/prochainGeste';
+import { lireDispositionAgence, lireHorodatageLocal } from '@/lib/dispositionAccueil';
+import {
+  choisirVersion,
+  cleArrangementTelephone,
+  cleCasesBureau,
+  cleCasesBureauAnonyme,
+  cleTuilesBureau,
+  cleTuilesBureauAnonyme,
+  deplacerSurTelephone,
+  etendreGrilleEdition,
+  lireArrangement,
+  lireCases,
+  lireCasesValeur,
+  lireTuiles,
+  lireTuilesValeur,
+  masquerSurTelephone,
+  ordonnerCommeLeBureau,
+  presenterTelephone,
+  reafficherSurTelephone,
+  teteEcranTelephone,
+  tuilesPourTelephone,
+  type ArrangementTelephone,
+  type TuilePartagee,
+  type VisibiliteTuiles,
+} from '@/lib/tuilesPartagees';
+import { lireMasquees } from '@/lib/tuilesMasquees';
 import { supabase } from '@/lib/supabase';
 
 // Même table de correspondance nom → icône que AccueilGrid.tsx (ICON_MAP) —
@@ -30,7 +59,6 @@ const LOCKED_ICON_MAP: Record<string, React.ElementType> = {
 
 interface MobileHomeProps {
   onNavigate: (nav: string) => void;
-  onOpenNouveauLead: () => void;
   unreadRemindersCount: number;
   unreadMessagesCount: number;
   unreadMailCount: number;
@@ -38,6 +66,8 @@ interface MobileHomeProps {
   // navigation du bas (simplifiée à Accueil/Nova/Menu) — demande explicite.
   unreadNotificationsCount?: number;
   onOpenNotifications?: () => void;
+  // Le « + » crée un lead. Il vit dans l'en-tête, plus dans la barre du bas.
+  onOpenNouveauLead?: () => void;
 }
 
 const AGENCY_LOGO_BY_NAME: Record<string, string> = {
@@ -81,6 +111,25 @@ interface SpaceDef {
   // ses cartes au lieu de naviguer directement — voir lockedMobileSpaces.
   isFolder?: boolean;
   children?: SpaceDef[];
+}
+
+function versEspacePartage(tuile: TuilePartagee): SpaceDef | null {
+  const enfants = (tuile.children || [])
+    .map(versEspacePartage)
+    .filter((espace): espace is SpaceDef => !!espace);
+  const dossier = !!(tuile.isFolder || enfants.length > 0);
+  if (!dossier && !tuile.navTarget && !tuile.externalUrl) return null;
+  return {
+    id: tuile.id,
+    label: tuile.title || tuile.id,
+    icon: (tuile.iconName && LOCKED_ICON_MAP[tuile.iconName]) || Folder,
+    nav: tuile.navTarget || '',
+    externalUrl: tuile.externalUrl || undefined,
+    gradient: tuile.gradient || 'from-[#334155] to-[#1e293b]',
+    locked: !!tuile.locked,
+    isFolder: dossier || undefined,
+    children: dossier ? enfants : undefined,
+  };
 }
 
 // Forme minimale d'un verrou tel qu'enregistré par AccueilGrid.tsx (type
@@ -132,16 +181,18 @@ const getDesktopTileOrder = (): string[] => {
 };
 
 const SPACE_TILE_CLASS =
-  'relative flex flex-col items-center justify-center gap-2 py-5 select-none';
+  'relative flex flex-col items-center justify-start gap-2 pt-3 pb-2 select-none';
+const SPACE_LABEL_CLASS =
+  'text-sm font-semibold text-center leading-tight line-clamp-2 min-h-[2.5rem] w-full px-1';
 
 export const MobileHome: React.FC<MobileHomeProps> = ({
   onNavigate,
-  onOpenNouveauLead,
   unreadRemindersCount,
   unreadMessagesCount,
   unreadMailCount,
   unreadNotificationsCount = 0,
   onOpenNotifications,
+  onOpenNouveauLead,
 }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
 
@@ -189,6 +240,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
 
   // ── Rendez-vous du jour (Google Calendar) ────────────────────────────
   const [todaysEvents, setTodaysEvents] = useState<number | null>(null);
+  const [prochainRdv, setProchainRdv] = useState<RendezVousProchain | null>(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -205,7 +257,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           const d = new Date(raw);
           return d >= startOfDay && d < endOfDay;
         }).length;
-        if (!cancelled) setTodaysEvents(count);
+        if (!cancelled) {
+          setTodaysEvents(count);
+          setProchainRdv(prochainRendezVous(events, new Date()));
+        }
       } catch {
         // Pas grave : compte simplement masqué si Workspace n'est pas connecté.
       }
@@ -265,6 +320,74 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     return () => { active = false; void supabase.removeChannel(channel); };
   }, [activeAgency?.id]);
 
+  // Grille de l'ordinateur, lue seulement. Le téléphone ne l'enregistre pas.
+  const [grilleBureau, setGrilleBureau] = useState<TuilePartagee[] | null>(null);
+  const [casesBureau, setCasesBureau] = useState<(string | null)[] | null>(null);
+  const [idsMasques, setIdsMasques] = useState<Set<string>>(() => new Set(lireMasquees().map((tuile) => tuile.id)));
+  useEffect(() => {
+    const uid = currentUser?.uid;
+    const agencyId = activeAgency?.id;
+    let actif = true;
+    const cleTuiles = cleTuilesBureau(uid, agencyId);
+    const cleCases = cleCasesBureau(uid, agencyId);
+    const locale = lireTuiles(localStorage.getItem(cleTuiles))
+      || lireTuiles(localStorage.getItem(cleTuilesBureauAnonyme(agencyId)));
+    const casesLocales = lireCases(localStorage.getItem(cleCases))
+      || lireCases(localStorage.getItem(cleCasesBureauAnonyme(agencyId)));
+    setGrilleBureau(locale);
+    setCasesBureau(casesLocales);
+    setIdsMasques(new Set(lireMasquees().map((tuile) => tuile.id)));
+    if (!uid || !agencyId) return () => { actif = false; };
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_ui_settings')
+          .select('home_tiles, home_root_slots, hidden_tiles')
+          .eq('user_id', uid)
+          .maybeSingle();
+        if (!actif || error || !data) return;
+        const lectureTuiles = lireDispositionAgence((data as { home_tiles?: unknown }).home_tiles, agencyId);
+        const lectureCases = lireDispositionAgence((data as { home_root_slots?: unknown }).home_root_slots, agencyId);
+        const localeFraiche = lireTuiles(localStorage.getItem(cleTuiles))
+          || lireTuiles(localStorage.getItem(cleTuilesBureauAnonyme(agencyId)));
+        const casesFraiches = lireCases(localStorage.getItem(cleCases))
+          || lireCases(localStorage.getItem(cleCasesBureauAnonyme(agencyId)));
+        setGrilleBureau(choisirVersion(
+          { items: localeFraiche, maj: lireHorodatageLocal(cleTuiles) },
+          { items: lireTuilesValeur(lectureTuiles.items), maj: lectureTuiles.maj },
+        ));
+        setCasesBureau(choisirVersion(
+          { items: casesFraiches, maj: lireHorodatageLocal(cleCases) },
+          { items: lireCasesValeur(lectureCases.items), maj: lectureCases.maj },
+        ));
+        const serveur = (data as { hidden_tiles?: { id?: string }[] }).hidden_tiles;
+        const ids = new Set(lireMasquees().map((tuile) => tuile.id));
+        if (Array.isArray(serveur)) {
+          for (const tuile of serveur) if (tuile?.id) ids.add(tuile.id);
+        }
+        setIdsMasques(ids);
+      } catch {
+        // Le navigateur reste la source si le compte ne répond pas.
+      }
+    })();
+    const relire = () => {
+      if (!actif) return;
+      const prochaine = lireTuiles(localStorage.getItem(cleTuiles))
+        || lireTuiles(localStorage.getItem(cleTuilesBureauAnonyme(agencyId)));
+      const prochainesCases = lireCases(localStorage.getItem(cleCases))
+        || lireCases(localStorage.getItem(cleCasesBureauAnonyme(agencyId)));
+      if (prochaine) setGrilleBureau(prochaine);
+      if (prochainesCases) setCasesBureau(prochainesCases);
+    };
+    window.addEventListener('novasphere:home-tiles-changed', relire);
+    window.addEventListener('storage', relire);
+    return () => {
+      actif = false;
+      window.removeEventListener('novasphere:home-tiles-changed', relire);
+      window.removeEventListener('storage', relire);
+    };
+  }, [currentUser?.uid, activeAgency?.id]);
+
   // Convertit les verrous du super admin en raccourcis mobiles — VRAIS
   // dossiers (façon dossier iPhone), pas des tuiles éclatées à plat : « je
   // veux que ça soit la même chose comme les produits iPhone ». Un dossier
@@ -293,6 +416,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const lockedMobileSpaces: SpaceDef[] = useMemo(() => {
     const out: SpaceDef[] = [];
     Object.entries(lockedTiles).forEach(([lockId, lock]) => {
+      // Dossiers « Banques » / « Assurances » : Conseils Finances uniquement.
+      if (estDossierReserveConseilsFinances(lock.title) && !estAgenceConseilsFinances(activeAgency)) return;
+      // Dossier « Immosphera » recopié dans les autres sociétés.
+      if (estDossierImmosphera(lock.title) && !estAgenceImmosphera(activeAgency)) return;
       // `isFolder` n'est en pratique jamais renseigné par AccueilGrid sur un
       // verrou (vérifié en base) : on détecte un dossier verrouillé à la
       // seule présence de `children`, pas à ce champ.
@@ -316,9 +443,59 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
         if (space) out.push(space);
       }
     });
-    return out;
-  }, [lockedTiles]);
+    const notes = out.filter((s) => estBlocNotes({ id: s.id, title: s.label, navTarget: s.nav }));
+    if (notes.length <= 1) return out;
+    const score = (s: SpaceDef) =>
+      (s.isFolder && (s.children?.length || 0) > 0 ? 100 + (s.children?.length || 0) : s.id === 'notes' ? 10 : 1)
+      + (s.locked ? 50 : 0);
+    const garde = [...notes].sort((a, b) => score(b) - score(a))[0];
+    return out.filter((s) => !estBlocNotes({ id: s.id, title: s.label, navTarget: s.nav }) || s.id === garde.id);
+  }, [lockedTiles, activeAgency]);
   const lockedSpaceIds = useMemo(() => new Set(lockedMobileSpaces.map((s) => s.id)), [lockedMobileSpaces]);
+  const visibiliteBureau: VisibiliteTuiles = useMemo(() => ({
+    immosphera: estAgenceImmosphera(activeAgency),
+    novavisio: /novavisio/i.test(activeAgency?.name ?? '') || /novavisio/i.test((activeAgency as { slug?: string } | null)?.slug ?? ''),
+    conseilsFinances: estAgenceConseilsFinances(activeAgency),
+    banquesAssurances: estAgenceConseilsFinances(activeAgency),
+    dossierImmosphera: estAgenceImmosphera(activeAgency),
+    annonce: userProfile?.role === 'super_admin' || currentUser?.uid === '3c6797de-456a-4988-8358-7e3d813e9474',
+    masquees: idsMasques,
+  }), [activeAgency, userProfile?.role, currentUser?.uid, idsMasques]);
+  const espacesPartages = useMemo(() => {
+    if (!grilleBureau) return null;
+    const prepares = ordonnerCommeLeBureau(tuilesPourTelephone(grilleBureau, visibiliteBureau), casesBureau);
+    const convertis = prepares
+      .map(versEspacePartage)
+      .filter((espace): espace is SpaceDef => !!espace);
+    const dejaLa = new Set(convertis.map((espace) => espace.id));
+    const notesVerrouille = lockedMobileSpaces.find((espace) =>
+      estBlocNotes({ id: espace.id, title: espace.label, navTarget: espace.nav }));
+    const remplaces = convertis
+      .filter((espace) => !notesVerrouille || !estBlocNotes({ id: espace.id, title: espace.label, navTarget: espace.nav }) || espace.id === notesVerrouille.id)
+      .map((espace) => lockedMobileSpaces.find((verrou) => verrou.id === espace.id) || espace);
+    const manquants = lockedMobileSpaces.filter((verrou) => !dejaLa.has(verrou.id));
+    return [...remplaces, ...manquants];
+  }, [grilleBureau, casesBureau, visibiliteBureau, lockedMobileSpaces]);
+  const grillePartagee = !!espacesPartages && espacesPartages.length > 0;
+  // Ordre et tuiles masquées du téléphone uniquement. Jamais écrit dans la
+  // grille de l'ordinateur : cette écriture relançait la synchro.
+  const [arrangement, setArrangement] = useState<ArrangementTelephone | null>(null);
+  useEffect(() => {
+    setArrangement(lireArrangement(localStorage.getItem(cleArrangementTelephone(currentUser?.uid, activeAgency?.id))));
+  }, [currentUser?.uid, activeAgency?.id]);
+  const memoriserArrangement = (next: ArrangementTelephone) => {
+    setArrangement(next);
+    try {
+      localStorage.setItem(
+        cleArrangementTelephone(currentUser?.uid, activeAgency?.id),
+        JSON.stringify(next),
+      );
+    } catch {
+      // Le geste reste visible le temps de la page.
+    }
+  };
+  const estVerrouTelephone = (id: string) =>
+    lockedSpaceIds.has(id) || !!espacesPartages?.some((espace) => espace.id === id && espace.locked);
   // Dossier verrouillé actuellement ouvert en plein écran (façon dossier
   // iPhone) — null quand aucun n'est ouvert.
   const [openLockedFolder, setOpenLockedFolder] = useState<SpaceDef | null>(null);
@@ -334,7 +511,11 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     { id: 'tableau-de-bord', label: 'Tableau de bord', icon: BarChart2, nav: 'tableau-de-bord', gradient: 'from-[#0d9488] to-[#065f46]' },
     { id: 'support', label: 'Support', icon: Headphones, nav: 'support', gradient: 'from-[#4338ca] to-[#312e81]' },
     { id: 'agenda', label: 'Agenda', icon: Calendar, nav: 'agenda', gradient: 'from-[#0f766e] to-[#134e4a]' },
-    { id: 'notes', label: 'Notes', icon: FileEdit, nav: 'notes', gradient: 'from-[#7c3aed] to-[#4c1d95]' },
+    // Le dossier « Blocs - Notes » verrouillé remplace le raccourci, sinon
+    // les deux s'affichent côte à côte.
+    ...(lockedMobileSpaces.some((s) => estBlocNotes({ id: s.id, title: s.label, navTarget: s.nav }))
+      ? []
+      : [{ id: 'notes', label: 'Notes', icon: FileEdit, nav: 'notes', gradient: 'from-[#7c3aed] to-[#4c1d95]' }]),
     { id: 'equipe', label: 'Équipe', icon: UserPlus, nav: 'equipe', gradient: 'from-[#334155] to-[#1e293b]' },
     { id: 'projets-internes', label: 'Projets internes', icon: Folder, nav: 'projets-internes', gradient: 'from-[#92400e] to-[#451a03]' },
     { id: 'chat', label: 'Chat', icon: MessageSquare, nav: 'chat', gradient: 'from-[#0891b2] to-[#155e75]', badge: unreadMessagesCount },
@@ -472,12 +653,29 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     .map((id) => ALL_SPACES.find((s) => s.id === id))
     .filter(Boolean) as SpaceDef[];
   const hiddenSpaces = ALL_SPACES.filter((s) => !visibleIds.includes(s.id));
-
-  // Ids "slots" utilisés par le contexte triable de dnd-kit : un id réel
-  // pour une case occupée, un id synthétique stable pour une case vide.
-  const cellSlotIds = cellIds.map((id, i) => id || `empty-${i}`);
+  const espacesAjoutables = grillePartagee && espacesPartages
+    ? espacesPartages.filter((espace) => {
+        const visibles = new Set(
+          presenterTelephone(espacesPartages.map((item) => item.id), arrangement, estVerrouTelephone)
+            .filter((id): id is string => !!id),
+        );
+        return !visibles.has(espace.id) && !estVerrouTelephone(espace.id);
+      })
+    : hiddenSpaces;
 
   const [editMode, setEditMode] = useState(false);
+  // Ids "slots" utilisés par le contexte triable de dnd-kit : un id réel
+  // pour une case occupée, un id synthétique stable pour une case vide.
+  const cellulesAffichees = grillePartagee && espacesPartages
+    ? etendreGrilleEdition(
+        presenterTelephone(espacesPartages.map((espace) => espace.id), arrangement, estVerrouTelephone),
+        editMode,
+      )
+    : cellIds;
+  const espaceAffiche = (id: string) =>
+    espacesPartages?.find((espace) => espace.id === id) || ALL_SPACES.find((espace) => espace.id === id);
+  const cellSlotIds = cellulesAffichees.map((id, i) => id || `empty-${i}`);
+
   // Ticket #43 (nouvelle base) : au-delà d'un certain nombre de raccourcis
   // ajoutés, la grille s'étalait sur plusieurs pages sans jamais donner
   // accès au bouton "Ajouter" (poussé hors champ). On limite l'affichage
@@ -502,10 +700,28 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   // Une tuile imposée par un verrou super admin ne peut pas être retirée par
   // un utilisateur normal — même règle que sur AccueilGrid (desktop).
   const hideSpace = (id: string) => {
-    if (lockedSpaceIds.has(id)) return;
+    if (estVerrouTelephone(id)) return;
+    if (grillePartagee && espacesPartages) {
+      memoriserArrangement(masquerSurTelephone(
+        espacesPartages.map((espace) => espace.id),
+        arrangement,
+        id,
+        estVerrouTelephone,
+      ));
+      return;
+    }
     setCellIds((cur) => cur.map((x) => (x === id ? null : x)));
   };
   const addSpace = (id: string) => {
+    if (grillePartagee && espacesPartages) {
+      memoriserArrangement(reafficherSurTelephone(
+        espacesPartages.map((espace) => espace.id),
+        arrangement,
+        id,
+      ));
+      setShowAddSheet(false);
+      return;
+    }
     setCellIds((cur) => {
       const firstEmpty = cur.indexOf(null);
       if (firstEmpty !== -1) {
@@ -534,6 +750,17 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
 
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
+    if (grillePartagee && espacesPartages) {
+      if (!over || active.id === over.id) return;
+      const source = espacesPartages.map((espace) => espace.id);
+      const cle = cleArrangementTelephone(currentUser?.uid, activeAgency?.id);
+      setArrangement((courant) => {
+        const next = deplacerSurTelephone(source, courant, String(active.id), String(over.id), estVerrouTelephone);
+        try { localStorage.setItem(cle, JSON.stringify(next)); } catch { /* geste visible le temps de la page */ }
+        return next;
+      });
+      return;
+    }
     if (!over || active.id === over.id) return;
     setCellIds((cur) => {
       const slotIds = cur.map((id, i) => id || `empty-${i}`);
@@ -574,22 +801,20 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     { id: 'mail', label: 'Mails', count: unreadMailCount, icon: Mail, nav: 'mail-unread', gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]' },
     { id: 'agenda', label: 'Rendez-vous', count: todaysEvents || 0, icon: Calendar, nav: 'agenda', gradient: 'from-[#059669] via-[#047857] to-[#064E3B]' },
   ];
+  const gesteDuMoment = texteProchainGeste({
+    maintenant: now,
+    rendezVous: prochainRdv,
+    messagesNonLus: unreadMessagesCount || 0,
+    mailsNonLus: unreadMailCount || 0,
+    rappelsDuJour: unreadRemindersCount || 0,
+  });
 
   // pt-4 simple : le safe-area-inset-top est déjà appliqué une fois par
-  // <main> dans App.tsx — l'ajouter une deuxième fois ici cumulait les deux
-  // et poussait tout le contenu (jusqu'au bouton "Créer un lead") largement
-  // hors de l'écran sur les appareils à encoche / îlot dynamique.
-  // Signalé (9 septembre, capture à l'appui) : un « trou » en bas de l'écran
-  // — en réalité la dernière ligne de tuiles ("Blocs - Notes", etc.) coincée
-  // entre le bouton flottant "Créer un lead" et la barre de navigation en
-  // dessous, tous les deux `fixed`. Le padding bas du contenu (`pb-4`,
-  // 1rem) ne réservait de la place pour AUCUN des deux — bien trop court
-  // face au bouton (positionné à 6.5rem du bas + sa propre hauteur) et à la
-  // barre de nav flottante en dessous. Porté à une valeur qui dégage
-  // franchement les deux, sans toucher au `pt-4` volontairement laissé tel
-  // quel juste au-dessus (voir commentaire).
+  // <main> dans App.tsx. La place de la barre du bas est aussi réservée
+  // là-bas ; ici un petit pb-6 suffit maintenant que le bouton flottant
+  // « Créer un lead » a rejoint le « + » de cette barre.
   return (
-    <div className="min-h-full p-4 sm:p-6 pb-[calc(11rem+env(safe-area-inset-bottom,0px))] pt-4 flex flex-col gap-4">
+    <div className="min-h-full p-4 sm:p-6 pb-6 pt-4 flex flex-col gap-4">
       {/* En-tête */}
       <div className="flex items-center justify-between pt-1">
         <div className="min-w-0">
@@ -599,7 +824,18 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </h1>
           <p className="text-sm text-slate-400 capitalize">{dateLabel}</p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          {onOpenNouveauLead && (
+            <button
+              type="button"
+              onClick={onOpenNouveauLead}
+              title="Créer un lead"
+              aria-label="Créer un lead"
+              className="w-11 h-11 rounded-full bg-[#F7BC5F] text-[#061719] flex items-center justify-center shadow-md active:scale-95"
+            >
+              <Plus className="w-6 h-6" strokeWidth={3} />
+            </button>
+          )}
           {/* Loupe retirée (demande explicite) ; clochette agrandie à la
               même taille que la photo de profil (48px) juste à côté. */}
           {onOpenNotifications && (
@@ -657,10 +893,19 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   </span>
                 )}
               </div>
-              <span className="text-[10px] font-semibold text-slate-200 text-center truncate w-full">{item.label}</span>
+              <span className="nv-texte-icone text-[10px] font-semibold text-slate-200 text-center truncate w-full">{item.label}</span>
             </motion.button>
           ))}
         </div>
+        {gesteDuMoment && (
+          <button
+            type="button"
+            onClick={() => onNavigate(gesteDuMoment.nav)}
+            className="mt-2 w-full text-center text-sm font-semibold text-slate-100 truncate hover:text-[#F7BC5F]"
+          >
+            {gesteDuMoment.texte}
+          </button>
+        )}
       </div>
 
       {/* Mes espaces */}
@@ -694,7 +939,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
         </div>
 
         <div className="rounded-3xl bg-[#0b1c1e] border border-[#143c3f]/80 overflow-hidden">
-          {visibleSpaces.length === 0 && !editMode ? (
+          {cellulesAffichees.filter(Boolean).length === 0 && !editMode ? (
             // Filet de sécurité : si tous les espaces ont été masqués, il n'y
             // a plus aucune tuile sur laquelle faire un appui long pour
             // revenir en édition — ce bouton reste toujours accessible.
@@ -722,7 +967,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   // complète), +1 ligne vide en mode édition pour avoir de
                   // la place où glisser une tuile — jamais moins de 2
                   // lignes (6 cases) pour garder une grille stable.
-                  const lastFilled = cellIds.reduce((last, id, i) => (id ? i : last), -1);
+                  const lastFilled = cellulesAffichees.reduce((last, id, i) => (id ? i : last), -1);
                   const filledCount = lastFilled + 1;
                   const rowsNeeded = Math.ceil(filledCount / 3) + (editMode ? 1 : 0);
                   const slotCount = Math.min(GRID_SLOTS, Math.max(6, rowsNeeded * 3));
@@ -732,24 +977,19 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   // étaler sur plusieurs pages sans jamais revoir le bouton
                   // "Ajouter".
                   const collapsed = !editMode && !showAllSpaces && filledCount > 6;
-                  // Bug trouvé (8 septembre) : « j'ai juste Passerelle,
-                  // c'est tout » — un dossier verrouillé ajouté après coup
-                  // (voir l'effet de comblement plus haut) tombe dans une
-                  // case vide QUELCONQUE de la grille personnelle de chacun,
-                  // parfois bien après les 5 premières. Replié, il restait
-                  // alors caché derrière la flèche "Voir plus" — alors qu'un
-                  // dossier verrouillé, imposé par le super admin, doit
-                  // rester visible comme sur desktop, pas optionnel. On
-                  // étend donc le repli jusqu'à couvrir la dernière case
-                  // verrouillée occupée, jamais moins que 5.
-                  const lastLockedIndex = cellIds.reduce(
-                    (last, id, i) => (id && lockedSpaceIds.has(id) ? i : last),
-                    -1
-                  );
-                  const visibleCount = collapsed ? Math.max(5, lastLockedIndex + 1) : slotCount;
+                  const estVerrou = (id: string | null) =>
+                    !!id && (lockedSpaceIds.has(id) || !!espacesPartages?.some((espace) => espace.id === id && espace.locked));
+                  // Cinq tuiles, puis la flèche sur la deuxième ligne.
+                  // Un dossier verrouillé placé plus loin remonte dans ces
+                  // cinq cases : il reste visible sans repousser la flèche
+                  // tout en bas de l'écran.
+                  const tete = collapsed
+                    ? teteEcranTelephone(cellulesAffichees, true, estVerrou)
+                    : cellulesAffichees.slice(0, slotCount);
+                  const reste = Math.max(0, cellulesAffichees.filter(Boolean).length - tete.filter(Boolean).length);
 
-                  const tiles = cellIds.slice(0, visibleCount).map((id, i) => {
-                    const space = id ? ALL_SPACES.find((s) => s.id === id) : undefined;
+                  const tiles = tete.map((id, i) => {
+                    const space = id ? espaceAffiche(id) : undefined;
                     if (space) {
                       return (
                         <SpaceTile
@@ -796,10 +1036,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                         onClick={() => setShowAllSpaces(true)}
                         className={`${SPACE_TILE_CLASS} text-[#F9C977] hover:text-white`}
                       >
-                        <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
                           <ChevronDown className="w-6 h-6" />
                         </div>
-                        <span className="text-xs font-semibold">+{filledCount - 5}</span>
+                        <span className={`${SPACE_LABEL_CLASS} text-[#F9C977]`}>+{reste}</span>
                       </button>
                     );
                   }
@@ -812,10 +1052,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                     onClick={() => setShowAllSpaces(false)}
                     className={`${SPACE_TILE_CLASS} text-slate-400 hover:text-white`}
                   >
-                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
                       <ChevronUp className="w-6 h-6" />
                     </div>
-                    <span className="text-xs font-semibold">Réduire</span>
+                    <span className={SPACE_LABEL_CLASS}>Réduire</span>
                   </button>
                 )}
                 {editMode && (
@@ -829,10 +1069,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                     // cours n'a pas encore atteint cette colonne.
                     className={`${SPACE_TILE_CLASS} text-slate-400 hover:text-white col-start-3`}
                   >
-                    <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-white/20 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-white/20 flex items-center justify-center shrink-0">
                       <Plus className="w-6 h-6" />
                     </div>
-                    <span className="text-xs font-semibold">Ajouter</span>
+                    <span className={SPACE_LABEL_CLASS}>Ajouter</span>
                   </button>
                 )}
               </div>
@@ -845,41 +1085,11 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             Glissez une tuile pour la déplacer, ou touchez le − pour la masquer.
           </p>
         )}
-        {/* Ticket #48 : en édition, la tuile "Ajouter" tout en bas de la
-            grille doit toujours rester atteignable par un simple scroll —
-            une marge généreuse ici garantit qu'elle ne finit jamais collée
-            (ou masquée) contre la barre de navigation fixe du bas. */}
-        {editMode && <div className="h-24" aria-hidden="true" />}
+        {/* La barre du bas est fixe. Sans cette marge, la dernière tuile
+            (Ajouter en édition, Réduire quand tout est déplié) reste sous
+            la barre et le toucher part sur Accueil ou Menu. */}
+        {(editMode || showAllSpaces) && <div className="h-16" aria-hidden="true" />}
       </div>
-
-      {/* Réserve la place du bouton "Créer un lead", désormais fixé tout en
-          bas de l'écran (voir plus bas) — sinon le contenu défilant passerait
-          en dessous. Signalé : une fois les tuiles dépliées, la tuile
-          "Réduire" tout en bas de la grille se retrouvait cachée derrière le
-          bouton "Créer un lead" — cette réserve (4.75rem) était plus courte
-          que l'empreinte réelle du bouton (décalé de 6.5rem + sa propre
-          hauteur), donc la fin du contenu défilant passait quand même
-          dessous. Portée à la même hauteur que cette empreinte. */}
-      <div className="h-[10.5rem]" aria-hidden="true" />
-
-      {/* Sélecteur d'espace à ré-ajouter — tiroir qui part du bas et remonte
-          jusqu'au centre de l'écran (au lieu de rester collé en bas, où les
-          icônes du bas pouvaient se retrouver masquées par la barre système
-          du téléphone). */}
-      {/* Créer un lead — fixé tout en bas de l'écran, juste au-dessus de la
-          barre de navigation (même style "panneau gris" que le dock du
-          haut, écriture jaune, comme demandé). */}
-      <button
-        onClick={onOpenNouveauLead}
-        className="fixed left-4 right-4 z-30 px-5 py-4 rounded-2xl bg-white/[0.06] backdrop-blur-xl border border-white/10 text-[#F7BC5F] font-black flex items-center justify-between gap-3 active:scale-[0.98] transition-all"
-        style={{ bottom: 'calc(6.5rem + env(safe-area-inset-bottom, 0px))' }}
-      >
-        <span className="flex items-center gap-2.5">
-          <UserPlus2 className="w-5 h-5" />
-          Créer un lead
-        </span>
-        <ChevronRight className="w-5 h-5" />
-      </button>
 
       {showAddSheet && (
         <div
@@ -897,11 +1107,11 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
               </button>
             </div>
             <div className="overflow-y-auto -mx-1 px-1">
-              {hiddenSpaces.length === 0 ? (
+              {espacesAjoutables.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-6">Tous les espaces sont déjà affichés.</p>
               ) : (
                 <div className="grid grid-cols-3 gap-3 pb-1">
-                  {hiddenSpaces.map((s) => (
+                  {espacesAjoutables.map((s) => (
                     <button
                       key={s.id}
                       onClick={() => addSpace(s.id)}
@@ -935,7 +1145,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           >
             <div className="flex items-center justify-between mb-4 shrink-0">
               <h3 className="text-white font-bold text-lg flex items-center gap-2">
-                <Lock className="w-4 h-4 text-slate-400" />
+                {openLockedFolder.locked && <Lock className="w-4 h-4 text-slate-400" />}
                 {openLockedFolder.label}
               </h3>
               <button onClick={() => setOpenLockedFolder(null)} className="p-2 rounded-xl bg-white/5 text-slate-300">
@@ -948,6 +1158,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   <button
                     key={c.id}
                     onClick={() => {
+                      if (c.isFolder) {
+                        setOpenLockedFolder(c);
+                        return;
+                      }
                       setOpenLockedFolder(null);
                       if (c.externalUrl) {
                         window.open(c.externalUrl, '_blank', 'noopener,noreferrer');
@@ -955,12 +1169,12 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                         onNavigate(c.nav);
                       }
                     }}
-                    className="flex flex-col items-center gap-2 py-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
+                    className="flex flex-col items-center justify-start gap-2 py-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
                   >
-                    <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${c.gradient} flex items-center justify-center`}>
+                    <div className={`w-11 h-11 shrink-0 rounded-2xl bg-gradient-to-br ${c.gradient} flex items-center justify-center`}>
                       <c.icon className="w-5 h-5 text-white" />
                     </div>
-                    <span className="text-[11px] font-semibold text-slate-200 text-center">{c.label}</span>
+                    <span className="text-sm font-semibold text-slate-200 text-center leading-tight line-clamp-2 min-h-[2.5rem] w-full px-1">{c.label}</span>
                   </button>
                 ))}
               </div>
@@ -1048,7 +1262,7 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
           </button>
         )
       )}
-      <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${space.gradient} flex items-center justify-center relative shadow-md`}>
+      <div className={`w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br ${space.gradient} flex items-center justify-center relative shadow-md overflow-hidden`}>
         {space.isFolder && space.children?.length ? (
           // Aperçu façon dossier iPhone : mini-grille des 4 premières icônes
           // du dossier plutôt qu'une seule icône générique de dossier.
@@ -1067,7 +1281,7 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
           </span>
         )}
       </div>
-      <span className="text-xs font-semibold text-slate-200 text-center px-1">{space.label}</span>
+      <span className={`${SPACE_LABEL_CLASS} text-slate-200`}>{space.label}</span>
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
 import { getCachedAccessToken } from '@/lib/workspace';
 import { NAV_ITEMS } from '@/components/Sidebar';
 import type { Contact } from '@/types';
@@ -13,10 +14,12 @@ import type { Contact } from '@/types';
  * e-mail, téléphone, société, secteur), les tuiles et dossiers de l'accueil,
  * les modules du menu, les rendez-vous (Google Agenda et table appointments),
  * les rappels, les documents, les projets internes, les notes et l'équipe.
+ * Les cartes du pipeline (nom, notes, numéro d'étape) et le texte des
+ * messages (conversations et canaux) s'y ajoutent.
  */
 
 export type TypeResultat =
-  | 'client' | 'rdv' | 'rappel' | 'dossier' | 'module' | 'document' | 'projet' | 'note' | 'membre';
+  | 'client' | 'pipeline' | 'message' | 'rdv' | 'rappel' | 'dossier' | 'module' | 'document' | 'projet' | 'note' | 'membre';
 
 export interface Resultat {
   cle: string;
@@ -29,11 +32,14 @@ export interface Resultat {
     | { genre: 'nav'; nav: string }
     | { genre: 'dossier-accueil'; dossierId: string }
     | { genre: 'agenda'; date: string }
-    | { genre: 'lien'; url: string };
+    | { genre: 'lien'; url: string }
+    | { genre: 'message'; messageId: string };
 }
 
 export const LIBELLES_TYPES: Record<TypeResultat, string> = {
   client: 'Clients',
+  pipeline: 'Pipeline',
+  message: 'Messages',
   rdv: 'Rendez-vous',
   rappel: 'Rappels',
   dossier: 'Dossiers de l\'accueil',
@@ -44,7 +50,7 @@ export const LIBELLES_TYPES: Record<TypeResultat, string> = {
   membre: 'Équipe',
 };
 
-export const ORDRE_TYPES: TypeResultat[] = ['client', 'rdv', 'rappel', 'dossier', 'module', 'projet', 'document', 'note', 'membre'];
+export const ORDRE_TYPES: TypeResultat[] = ['client', 'pipeline', 'message', 'rdv', 'rappel', 'dossier', 'module', 'projet', 'document', 'note', 'membre'];
 
 /** Événements : dispatchés par la barre, écoutés par l'Agenda et l'Accueil. */
 export const EVENEMENT_AGENDA_ALLER_A = 'nova:agenda-aller-a';
@@ -112,7 +118,8 @@ export function chercherClients(contacts: Contact[], q: string, max = 8): Result
 interface TuileBrute { id: string; title?: string; navTarget?: string; isFolder?: boolean; externalUrl?: string; children?: TuileBrute[] }
 
 /** Tuiles et dossiers de la grille d'accueil enregistrée pour cette agence. */
-export function chercherAccueil(agencyId: string | undefined, q: string): Resultat[] {
+export function chercherAccueil(agencyId: string | undefined, q: string, agency?: { name?: string | null; slug?: string | null } | null): Resultat[] {
+  const cfSeulement = estAgenceConseilsFinances(agency);
   const mots = motsDe(q);
   if (!mots.length) return [];
   const resultats: Resultat[] = [];
@@ -122,6 +129,8 @@ export function chercherAccueil(agencyId: string | undefined, q: string): Result
     const grille: TuileBrute[] = brut ? JSON.parse(brut) : [];
     const parcourir = (items: TuileBrute[], dossierParent?: TuileBrute) => {
       for (const t of items) {
+        // « Banques » / « Assurances » : Conseils Finances uniquement.
+        if (estDossierReserveConseilsFinances(t.title) && !cfSeulement) continue;
         if (t.title && correspond(t.title, mots) && !vus.has(t.id)) {
           vus.add(t.id);
           if (t.isFolder) {
@@ -154,7 +163,62 @@ export function chercherAccueil(agencyId: string | undefined, q: string): Result
 
 // ─── Sources distantes (Supabase, Google) ───────────────────────────────────
 
-const motif = (q: string) => `%${q.trim().replace(/[%_]/g, '')}%`;
+const motif = (q: string) => `%${q.trim().replace(/[%_,()]/g, '')}%`;
+
+export function extrait(texte: string | null | undefined, max = 80): string {
+  const propre = (texte || '').replace(/\s+/g, ' ').trim();
+  if (!propre) return '';
+  if (propre.length <= max) return propre;
+  return `${propre.slice(0, max - 1)}…`;
+}
+
+export function resultatCartePipeline(carte: {
+  id: string;
+  nom: string;
+  etape?: string | null;
+  contactId: string;
+}): Resultat {
+  return {
+    cle: `pipeline-${carte.id}`,
+    type: 'pipeline',
+    titre: carte.nom.trim() || 'Carte sans nom',
+    sousTitre: carte.etape?.trim() || 'Pipeline',
+    action: { genre: 'client', contactId: carte.contactId },
+  };
+}
+
+export function resultatMessage(message: {
+  id: string;
+  texte: string;
+  lieu?: string | null;
+  quand?: string | null;
+}): Resultat {
+  const lieu = message.lieu?.trim();
+  return {
+    cle: `message-${message.id}`,
+    type: 'message',
+    titre: extrait(message.texte) || 'Message',
+    sousTitre: [lieu, message.quand].filter(Boolean).join(' · ') || undefined,
+    action: { genre: 'message', messageId: message.id },
+  };
+}
+
+export function fusionnerResultats(lots: Resultat[][], max = 6): Resultat[] {
+  const vus = new Set<string>();
+  const sortie: Resultat[] = [];
+  for (const lot of lots) {
+    for (const resultat of lot) {
+      if (vus.has(resultat.cle)) continue;
+      vus.add(resultat.cle);
+      sortie.push(resultat);
+      if (sortie.length >= max) return sortie;
+    }
+  }
+  return sortie;
+}
+
+const memeAgence = (agencyId: string | undefined, cible: string | null | undefined) =>
+  !agencyId || agencyId === 'all' || !cible || cible === agencyId;
 
 async function chercherRappels(agencyId: string | undefined, q: string): Promise<Resultat[]> {
   let req = supabase.from('reminders').select('id, title, description, due_at, is_done').ilike('title', motif(q)).order('due_at', { ascending: false }).limit(6);
@@ -247,10 +311,138 @@ async function chercherEquipe(q: string): Promise<Resultat[]> {
   }));
 }
 
+function nomCarte(ligne: { full_name?: string | null; first_name?: string | null; last_name?: string | null }): string {
+  return (ligne.full_name || [ligne.first_name, ligne.last_name].filter(Boolean).join(' ') || '').trim();
+}
+
+/** Cartes du pipeline : le nom, les notes, et le nom de l'étape. */
+async function chercherCartesPipeline(agencyId: string | undefined, q: string): Promise<Resultat[]> {
+  const like = motif(q).replace(/"/g, '');
+  if (like === '%%') return [];
+  const filtre = ['full_name', 'first_name', 'last_name', 'notes', 'comments']
+    .map((colonne) => `${colonne}.ilike."${like}"`)
+    .join(',');
+  let parTexte = (supabase.from('leads') as any)
+    .select('id, full_name, first_name, last_name, notes, comments, stage_id, master_contact_id, temperature, archived_at, deleted_at')
+    .or(filtre)
+    .is('archived_at', null)
+    .order('updated_at', { ascending: false })
+    .limit(8);
+  if (agencyId && agencyId !== 'all') parTexte = parTexte.eq('agency_id', agencyId);
+
+  let etapes = supabase.from('pipeline_stages').select('id, name').ilike('name', like).limit(6);
+  if (agencyId && agencyId !== 'all') etapes = etapes.eq('agency_id', agencyId);
+
+  const [texte, colonnes] = await Promise.all([parTexte, etapes]);
+  const lignesTexte = ((texte.data as any[]) || []).filter((ligne) => !ligne.deleted_at && !ligne.archived_at);
+  const idsEtapes = ((colonnes.data as { id: string; name: string }[]) || []).map((etape) => etape.id);
+  let lignesEtape: any[] = [];
+  if (idsEtapes.length) {
+    let req = (supabase.from('leads') as any)
+      .select('id, full_name, first_name, last_name, stage_id, master_contact_id, temperature, archived_at, deleted_at')
+      .in('stage_id', idsEtapes)
+      .is('archived_at', null)
+      .order('updated_at', { ascending: false })
+      .limit(6);
+    if (agencyId && agencyId !== 'all') req = req.eq('agency_id', agencyId);
+    const { data } = await req;
+    lignesEtape = ((data as any[]) || []).filter((ligne) => !ligne.deleted_at && !ligne.archived_at);
+  }
+
+  const noms = new Map<string, string>(((colonnes.data as { id: string; name: string }[]) || []).map((etape) => [etape.id, etape.name]));
+  const stageIds = [...new Set([...lignesTexte, ...lignesEtape].map((ligne) => ligne.stage_id).filter(Boolean))]
+    .filter((id) => !noms.has(id as string));
+  if (stageIds.length) {
+    const { data } = await supabase.from('pipeline_stages').select('id, name').in('id', stageIds as string[]);
+    for (const etape of (data as { id: string; name: string }[]) || []) noms.set(etape.id, etape.name);
+  }
+
+  const versResultat = (ligne: any) => resultatCartePipeline({
+    id: ligne.id,
+    nom: nomCarte(ligne),
+    etape: (ligne.stage_id && noms.get(ligne.stage_id)) || ligne.temperature || null,
+    contactId: ligne.master_contact_id || ligne.id,
+  });
+  return fusionnerResultats([lignesTexte.map(versResultat), lignesEtape.map(versResultat)]);
+}
+
+async function chercherMessagesDirects(agencyId: string | undefined, q: string): Promise<Resultat[]> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, body, created_at, conversation_id')
+    .ilike('body', motif(q))
+    .order('created_at', { ascending: false })
+    .limit(12);
+  if (error || !data?.length) return [];
+  const convIds = [...new Set(data.map((message) => message.conversation_id).filter(Boolean))] as string[];
+  const { data: conversations } = convIds.length
+    ? await supabase.from('conversations').select('id, title, agency_id').in('id', convIds)
+    : { data: [] };
+  const parId = new Map((conversations || []).map((conversation) => [conversation.id, conversation]));
+  return data.flatMap((message) => {
+    if (!message.body?.trim() || !message.conversation_id) return [];
+    const conversation = parId.get(message.conversation_id);
+    if (conversation && !memeAgence(agencyId, conversation.agency_id)) return [];
+    return [resultatMessage({
+      id: message.id,
+      texte: message.body,
+      lieu: conversation?.title || 'Conversation',
+      quand: dateCourte(message.created_at),
+    })];
+  }).slice(0, 6);
+}
+
+async function chercherMessagesCanaux(agencyId: string | undefined, q: string): Promise<Resultat[]> {
+  const { data, error } = await (supabase.from('chat_messages') as any)
+    .select('id, channel, data, created_at, is_deleted')
+    .filter('data->>body', 'ilike', motif(q))
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: false })
+    .limit(12);
+  if (error || !data?.length) return [];
+  const lignes = (data as { id: string; channel: string; data: { body?: string } | null; created_at: string }[])
+    .filter((ligne) => ligne.data?.body?.trim());
+  const channelIds = [...new Set(lignes.map((ligne) => ligne.channel).filter(Boolean))];
+  const { data: canaux } = channelIds.length
+    ? await (supabase.from('chat_channels') as any).select('id, name, project_id').in('id', channelIds)
+    : { data: [] };
+  const canalParId = new Map<string, { name?: string; project_id?: string }>(
+    ((canaux as { id: string; name?: string; project_id?: string }[]) || []).map((canal) => [canal.id, canal]),
+  );
+  const projectIds = [...new Set([...canalParId.values()].map((canal) => canal.project_id).filter(Boolean))] as string[];
+  const { data: projets } = projectIds.length
+    ? await (supabase.from('chat_projects') as any).select('id, agency_id').in('id', projectIds)
+    : { data: [] };
+  const agenceParProjet = new Map<string, string | null>(
+    ((projets as { id: string; agency_id?: string | null }[]) || []).map((projet) => [projet.id, projet.agency_id ?? null]),
+  );
+  return lignes.flatMap((ligne) => {
+    const canal = canalParId.get(ligne.channel);
+    const agence = canal?.project_id ? agenceParProjet.get(canal.project_id) : null;
+    if (canal?.project_id && !memeAgence(agencyId, agence)) return [];
+    return [resultatMessage({
+      id: ligne.id,
+      texte: ligne.data?.body || '',
+      lieu: canal?.name || 'Canal',
+      quand: dateCourte(ligne.created_at),
+    })];
+  }).slice(0, 6);
+}
+
+async function chercherMessages(agencyId: string | undefined, q: string): Promise<Resultat[]> {
+  const [directs, canaux] = await Promise.all([
+    chercherMessagesDirects(agencyId, q),
+    chercherMessagesCanaux(agencyId, q),
+  ]);
+  return fusionnerResultats([directs, canaux]);
+}
+
 /** Toutes les sources distantes, chacune best-effort : une qui échoue n'empêche pas les autres. */
 export async function chercherADistance(agencyId: string | undefined, q: string): Promise<Resultat[]> {
   if (q.trim().length < 2) return [];
   const sources = [
+    chercherCartesPipeline(agencyId, q),
+    chercherMessages(agencyId, q),
     chercherRendezVousGoogle(q),
     chercherRendezVousTable(agencyId, q),
     chercherRappels(agencyId, q),

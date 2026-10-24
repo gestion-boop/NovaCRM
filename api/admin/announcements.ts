@@ -1,4 +1,5 @@
 import { getAuthedUser, isSuperAdminUser, requireSuperAdmin, statusForError, supabaseAdmin } from '../_supabaseAdmin.js';
+import { estPipelineTransactions } from '../../src/lib/pipelinesAcces.js';
 
 /**
  * DELETE /api/admin/announcements?resource=pipeline&id=... — Ticket #231
@@ -36,6 +37,11 @@ async function handleDeletePipeline(req: any, res: any) {
   if (pipeErr) throw pipeErr;
   if (!pipeline) throw new Error('Pipeline introuvable.');
 
+  const fiche = pipeline as { name: string; agency_id: string; is_default: boolean; locked?: boolean; owner_id?: string | null };
+  if (estPipelineTransactions({ id: pipelineId, name: fiche.name, agencyId: fiche.agency_id })) {
+    throw new Error(`« ${fiche.name} » est le pipeline Transactions d'Immosphera : personne ne peut le supprimer.`);
+  }
+
   if (!estSuperAdmin) {
     const p = pipeline as { name: string; agency_id: string; is_default: boolean; locked?: boolean; owner_id?: string | null };
     if (p.is_default) {
@@ -72,25 +78,31 @@ async function handleDeletePipeline(req: any, res: any) {
     throw new Error('Il faut conserver au moins un pipeline pour cette société.');
   }
 
-  const fallbackId = siblings.find((p) => p.id !== pipelineId)?.id;
-  if (!fallbackId) throw new Error('Aucun pipeline de repli disponible.');
+  // Les contacts restent des fiches : on retire le pipeline et la colonne
+  // AVANT de supprimer, pour qu'un ON DELETE CASCADE ne les emporte pas.
+  const maintenant = new Date().toISOString();
+  const { error: detachErr } = await supabaseAdmin
+    .from('leads')
+    .update({ pipeline_id: null, stage_id: null, updated_at: maintenant })
+    .eq('pipeline_id', pipelineId);
+  if (detachErr) {
+    throw new Error(
+      `Impossible de laisser les contacts dans la fiche sans pipeline. ${detachErr.message || ''} Appliquez la migration 20261022120000.`
+    );
+  }
 
-  const { data: fallbackStages } = await supabaseAdmin
+  const { data: etapes } = await supabaseAdmin
     .from('pipeline_stages')
     .select('id')
-    .eq('pipeline_id', fallbackId)
-    .order('position', { ascending: true })
-    .limit(1);
-  const fallbackFirstStageId = fallbackStages?.[0]?.id || null;
-
-  // Ré-affecte les dossiers/affaires de ce pipeline vers le pipeline de
-  // repli AVANT de supprimer, pour ne jamais en perdre (même règle que le
-  // frontend, cf. Pipeline.tsx).
-  const { error: reassignErr } = await supabaseAdmin
-    .from('leads')
-    .update({ pipeline_id: fallbackId, stage_id: fallbackFirstStageId, updated_at: new Date().toISOString() })
     .eq('pipeline_id', pipelineId);
-  if (reassignErr) throw reassignErr;
+  const idsEtapes = (etapes || []).map((e: { id: string }) => e.id);
+  if (idsEtapes.length > 0) {
+    const { error: detachEtapeErr } = await supabaseAdmin
+      .from('leads')
+      .update({ pipeline_id: null, stage_id: null, updated_at: maintenant })
+      .in('stage_id', idsEtapes);
+    if (detachEtapeErr) throw detachEtapeErr;
+  }
 
   const { error: stagesDeleteErr } = await supabaseAdmin
     .from('pipeline_stages')
@@ -108,7 +120,7 @@ async function handleDeletePipeline(req: any, res: any) {
     throw new Error('La suppression a échoué côté base de données.');
   }
 
-  res.status(200).json({ ok: true, fallbackPipelineId: fallbackId });
+  res.status(200).json({ ok: true });
 }
 
 /**
@@ -145,7 +157,7 @@ export default async function handler(req: any, res: any) {
     // Ticket #241 : 5 niveaux (info/a_verifier/important/succes/veille) —
     // l'ancien "urgent" a été retiré et remappé sur "important" par la
     // migration SQL du même ticket.
-    const level = ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_acte'].includes(req.body?.level) ? req.body.level : 'info';
+    const level = ['info', 'a_verifier', 'important', 'succes', 'veille', 'reponse_demandee', 'signature_compromis', 'signature_acte'].includes(req.body?.level) ? req.body.level : 'info';
     const link = req.body?.link ? String(req.body.link).trim() : null;
     const expiresAt = req.body?.expiresAt ? new Date(req.body.expiresAt).toISOString() : null;
     const targetUserId = req.body?.targetUserId ? String(req.body.targetUserId) : null;

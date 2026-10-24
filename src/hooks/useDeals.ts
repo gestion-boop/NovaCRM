@@ -12,6 +12,7 @@ import { Deal } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { matchesAgency } from '@/hooks/useContacts';
 import { toValidUuidOrNull, getAssignedUserIdAsUuid } from '@/data/teamMembers';
+import { majParId } from '@/lib/peintureImmediate';
 
 const CONSEILS_FINANCES_ID = '30f96ea9-41da-41c2-a95e-f5e7898f8d8e';
 
@@ -326,36 +327,26 @@ export const useDeals = () => {
       return { id, updates, data };
     },
 
-    // Ticket #114 (suivi) : sans mise à jour optimiste, la carte glissée
-    // restait affichée dans son ancienne colonne jusqu'à ce que Supabase
-    // réponde et que la requête soit invalidée — d'où l'effet "revient sur
-    // l'ancienne colonne puis repart sur la nouvelle" pendant l'aller-retour
-    // réseau. On met à jour le cache local immédiatement (avant même
-    // l'appel réseau), et on revient en arrière seulement si ça échoue.
-    onMutate: async ({ id, updates }) => {
-      const queryKey = ['deals', activeAgency.id, allStages.length];
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<Deal[]>(queryKey);
-      if (previous) {
-        queryClient.setQueryData<Deal[]>(queryKey, (old) =>
-          (old || []).map((d) => (d.id === id ? { ...d, ...updates } : d))
-        );
-      }
-      return { previous, queryKey };
+    // La carte change de colonne avant la réponse du serveur. L'attente
+    // d'annulation des requêtes en cours laissait un instant l'ancienne
+    // colonne : on peint d'abord, l'annulation part ensuite.
+    onMutate: ({ id, updates }) => {
+      const previous = queryClient.getQueriesData<Deal[]>({ queryKey: ['deals'] });
+      queryClient.setQueriesData<Deal[]>({ queryKey: ['deals'] }, (old) => majParId(old, id, updates));
+      void queryClient.cancelQueries({ queryKey: ['deals'] });
+      return { previous };
     },
 
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['deals'] }),
-        queryClient.invalidateQueries({ queryKey: ['contacts_all'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] }),
-      ]);
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['deals'] });
+      void queryClient.invalidateQueries({ queryKey: ['contacts_all'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] });
     },
 
     onError: (error, _vars, context) => {
       console.error("Impossible de modifier l'opportunité :", error);
-      if (context?.previous && context?.queryKey) {
-        queryClient.setQueryData(context.queryKey, context.previous);
+      for (const [key, data] of context?.previous || []) {
+        queryClient.setQueryData(key, data);
       }
     },
   });

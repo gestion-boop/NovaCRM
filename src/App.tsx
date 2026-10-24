@@ -10,6 +10,7 @@ import { useContacts } from '@/hooks/useContacts';
 import { useTasks } from '@/hooks/useTasks';
 import { countTodayAndOverdueTasks } from '@/lib/taskUtils';
 import { updateCssAccentVars, updateCssCalendarAccentVars } from '@/utils/theme';
+import { cibleDepuisLien } from '@/lib/lienNotification';
 
 // Components
 import Auth from './components/Auth';
@@ -50,11 +51,12 @@ const AssistantIAView = lazy(() => import('./components/AssistantIAView'));
 const ReserverCameraView = lazy(() => import('./components/ReserverCameraView'));
 const ClientProfileView = lazy(() => import('./components/ClientProfileView'));
 import NotificationsView from './components/NotificationsView';
-import MobileBottomNav from './components/MobileBottomNav';
+import MobileBottomNav, { MobileTopPlus } from './components/MobileBottomNav';
 import PublicQuestionnaire from './components/PublicQuestionnaire';
 import PublicConsentement from './components/PublicConsentement';
 import PublicVisiteImmosphera from './immosphera/pages/TourView';
 import { EVENEMENT_COMPOSER_MAIL } from './lib/composerMail';
+import { EcranErrorBoundary } from './components/EcranErrorBoundary';
 import UpdateBanner from './components/UpdateBanner';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
@@ -101,20 +103,15 @@ function App() {
   // Ouverture directe sur la messagerie quand l'app est chargée depuis le
   // lien d'une notification push (?highlight=<messageId> sur /messagerie) —
   // sinon le clic sur la notification rouvrait toujours l'accueil.
-  const initialHighlightMessageId = (() => {
+  const cibleMessagerieInitiale = (() => {
     try {
       if (window.location.pathname.startsWith('/messagerie')) {
-        const params = new URLSearchParams(window.location.search);
-        // Signalé : cliquer sur une notification de RÉACTION ne redirigeait
-        // jamais vers le message. Son lien utilise ?conversation=&message=
-        // (pas ?highlight=, seul format lu jusqu'ici) — `message` pointe
-        // déjà vers le même id de message, la recherche par id existante
-        // dans ChatViewSupabase retrouve la conversation toute seule.
-        return params.get('highlight') || params.get('message');
+        return cibleDepuisLien(window.location.pathname + window.location.search);
       }
     } catch { /* noop */ }
-    return null;
+    return {};
   })();
+  const initialHighlightMessageId = cibleMessagerieInitiale.messageId || null;
   // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (1/16) : la sélection
   // jaune du menu ne dépendait d'aucune route réelle — juste de cet état
   // React remis à "accueil" à chaque montage, donc perdue après une
@@ -143,7 +140,11 @@ function App() {
   //
   // Enveloppé ici, au niveau du setter, plutôt qu'aux 20 endroits qui
   // l'appellent : impossible d'en oublier un.
-  const [currentNav, setCurrentNavImmediat] = useState(initialHighlightMessageId ? 'chat' : initialNavFromUrl || 'accueil');
+  const [currentNav, setCurrentNavImmediat] = useState(
+    (initialHighlightMessageId || cibleMessagerieInitiale.conversationId || cibleMessagerieInitiale.channelId)
+      ? 'chat'
+      : initialNavFromUrl || 'accueil'
+  );
   const setCurrentNav = React.useCallback((valeur: React.SetStateAction<string>) => {
     React.startTransition(() => setCurrentNavImmediat(valeur));
   }, []);
@@ -156,7 +157,8 @@ function App() {
   // s'ouvre directement dessus, ex. clic sur une notification de message).
   // Conversation à ouvrir au clic sur une notification (01/09/2026) — voir
   // applyFromLocation et le message NOTIFICATION_NAVIGATE du service worker.
-  const [targetConversationId, setTargetConversationId] = useState<string | null>(null);
+  const [targetConversationId, setTargetConversationId] = useState<string | null>(cibleMessagerieInitiale.conversationId || null);
+  const [targetChannelId, setTargetChannelId] = useState<string | null>(cibleMessagerieInitiale.channelId || null);
   const [hasOpenedChat, setHasOpenedChat] = useState(() => currentNav === 'chat');
   useEffect(() => {
     if (currentNav === 'chat') setHasOpenedChat(true);
@@ -408,24 +410,13 @@ function App() {
     const applyFromLocation = () => {
       try {
         if (!window.location.pathname.startsWith('/messagerie')) return;
-        const params = new URLSearchParams(window.location.search);
-        // Même correctif que pour initialHighlightMessageId ci-dessus
-        // (notifications de réaction, lien ?conversation=&message=).
-        const highlight = params.get('highlight') || params.get('message');
-        if (highlight) {
-          setHighlightMessageId(highlight);
-          setCurrentNav('chat');
-        }
-        // Signalé : « au clic sur la notification, elle ne va pas directement
-        // à la cible ». Une notification de nouveau message porte l'URL
-        // `/messagerie?conversation=<id>` dès qu'aucun identifiant de message
-        // n'est disponible (voir send-push) — ce paramètre n'était lu nulle
-        // part : on atterrissait sur la liste, jamais sur la bonne
-        // conversation.
-        const conversation = params.get('conversation');
-        if (conversation) {
-          setTargetConversationId(conversation);
-          setCurrentNav('chat');
+        const cible = cibleDepuisLien(window.location.pathname + window.location.search);
+        if (cible.messageId) setHighlightMessageId(cible.messageId);
+        if (cible.conversationId) setTargetConversationId(cible.conversationId);
+        if (cible.channelId) setTargetChannelId(cible.channelId);
+        if (cible.messageId || cible.conversationId || cible.channelId) {
+          setHasOpenedChat(true);
+          setCurrentNavImmediat('chat');
         }
       } catch { /* noop */ }
     };
@@ -452,7 +443,8 @@ function App() {
         // conversation plutôt que la liste.
         if (d.conversationId) {
           setTargetConversationId(d.conversationId);
-          setCurrentNav('chat');
+          setHasOpenedChat(true);
+          setCurrentNavImmediat('chat');
         }
       } catch { /* noop */ }
     };
@@ -931,6 +923,12 @@ function App() {
           }
         }}
         onSelectContact={(contactId) => openClientProfile(contactId)}
+        onOpenMessage={(messageId) => {
+          setNovaOpen(false);
+          setSelectedClientProfileId(null);
+          setHighlightMessageId(messageId);
+          setCurrentNav('chat');
+        }}
         onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
         onToggleNotifications={() => setNotificationsPanelOpen((open) => !open)}
         menuOpen={mobileMenuOpen}
@@ -1075,9 +1073,10 @@ function App() {
               les navigateurs mobiles, une hauteur fixe combinée au défilement
               du parent se comporte mal et fige le contenu. On retire donc la
               contrainte là où elle ne sert à rien. */}
+          <EcranErrorBoundary resetKey={selectedClientProfileId ? `fiche:${selectedClientProfileId}` : currentNav}>
           <div
             key={selectedClientProfileId ? 'client-profile' : currentNav}
-            className={`relative z-10 animate-page-in ${selectedClientProfileId ? '' : 'h-full'}`}
+            className={`relative z-10 ${selectedClientProfileId ? '' : 'h-full'}`}
           >
           {selectedClientProfileId ? (
             <ClientProfileView
@@ -1119,12 +1118,12 @@ function App() {
                         setCurrentNav(nav);
                       }
                     }}
-                    onOpenNouveauLead={() => setShowNouveauLead(true)}
                     unreadRemindersCount={unreadRemindersCount}
                     unreadMessagesCount={unreadMessagesCount}
                     unreadMailCount={unreadMailCount}
                     unreadNotificationsCount={unreadMobileNotificationsCount}
                     onOpenNotifications={() => setNotificationsPanelOpen((open) => !open)}
+                    onOpenNouveauLead={() => setShowNouveauLead(true)}
                   />
                 ) : (
                   <AccueilGrid
@@ -1366,13 +1365,16 @@ function App() {
               <ChatView
                 initialHighlightMessageId={highlightMessageId}
                 initialConversationId={targetConversationId}
+                initialChannelId={targetChannelId}
                 onConversationTargetConsumed={() => setTargetConversationId(null)}
+                onChannelTargetConsumed={() => setTargetChannelId(null)}
                 onHighlightConsumed={() => setHighlightMessageId(null)}
                 onExitMobile={() => setCurrentNav('accueil')}
                 isActive={currentNav === 'chat'}
               />
             </div>
           )}
+          </EcranErrorBoundary>
 
           {/* Demande explicite : "en dehors de l'interface principale...
               clique sur le logo de Nova... une fenêtre avec derrière le
@@ -1430,6 +1432,7 @@ function App() {
                   >
                     <X className="w-4 h-4" />
                   </button>
+                  <EcranErrorBoundary resetKey="nova-popup" plein>
                   <AssistantIAView
                     currentClientId={selectedClientProfileId}
                     prefillPrompt={novaPrefillPrompt}
@@ -1439,6 +1442,7 @@ function App() {
                       setNovaPopupOpen(false);
                     }}
                   />
+                  </EcranErrorBoundary>
                 </motion.div>
               </motion.div>
             )}
@@ -1491,6 +1495,7 @@ function App() {
                     Retour
                   </button>
                 )}
+                <EcranErrorBoundary resetKey="nova" plein>
                 <AssistantIAView
                   initialPrompt={novaAIPrompt}
                   onInitialPromptConsumed={() => setNovaAIPrompt(null)}
@@ -1517,6 +1522,7 @@ function App() {
                     setNovaExpandedFromPopup(false);
                   }}
                 />
+                </EcranErrorBoundary>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1574,6 +1580,7 @@ function App() {
                       bouton sans effet, sur mobile uniquement.
 
                       Sa propre frontière, donc. */}
+                  <EcranErrorBoundary resetKey="nova-mobile" plein>
                   <Suspense fallback={<ChargementEcran />}>
                   <AssistantIAView
                     initialPrompt={novaAIPrompt}
@@ -1605,6 +1612,7 @@ function App() {
                     }}
                   />
                   </Suspense>
+                  </EcranErrorBoundary>
                 </div>
               </motion.div>
             )}
@@ -1622,16 +1630,16 @@ function App() {
           className={`fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm cursor-default ${
             notificationsPanelOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
           }`}
-          style={{ transition: 'opacity 900ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+          style={{ transition: 'opacity 220ms cubic-bezier(0.22, 1, 0.36, 1)' }}
         />
         <aside
           className={`fixed right-3 sm:right-4 top-3 sm:top-4 bottom-3 sm:bottom-4 z-[80] w-[calc(100%-1.5rem)] sm:w-[440px] lg:w-[500px] bg-[#071015] border border-[#F7BC5F]/50 rounded-3xl shadow-2xl flex flex-col overflow-hidden ${
-            notificationsPanelOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
+            notificationsPanelOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
           }`}
           style={{
             top: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
             bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
-            transition: 'transform 900ms cubic-bezier(0.22, 1, 0.36, 1), opacity 900ms cubic-bezier(0.22, 1, 0.36, 1)',
+            transition: 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms cubic-bezier(0.22, 1, 0.36, 1)',
           }}
         >
             <div className="min-h-14 shrink-0 px-4 flex items-center justify-between border-b border-white/10 bg-[#081318] pt-[env(safe-area-inset-top,0px)]">
@@ -1647,6 +1655,7 @@ function App() {
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
               <NotificationsView
+                ouverte={notificationsPanelOpen}
                 onNavigate={(nav) => {
                   setNotificationsPanelOpen(false);
                   setCurrentNav(nav);
@@ -1660,11 +1669,14 @@ function App() {
                   openClientProfile(contactId, tab);
                   setHighlightPulse(Date.now());
                 }}
-                onOpenMessage={(messageId) => {
+                onOpenMessage={(cible) => {
                   setNotificationsPanelOpen(false);
                   openClientProfile(null);
-                  setHighlightMessageId(messageId);
-                  setCurrentNav('chat');
+                  if (cible.messageId) setHighlightMessageId(cible.messageId);
+                  if (cible.conversationId) setTargetConversationId(cible.conversationId);
+                  if (cible.channelId) setTargetChannelId(cible.channelId);
+                  setHasOpenedChat(true);
+                  setCurrentNavImmediat('chat');
                 }}
                 onOpenInternalTask={(taskId, messageId) => {
                   setNotificationsPanelOpen(false);
@@ -1748,20 +1760,22 @@ function App() {
           // ensuite : "mode Commercial/Bureau" — openNovaMobile respecte le
           // dernier mode choisi (voir plus haut).
           onOpenNova={() => openNovaMobile()}
-          // Le « + » n'apparaît que sur l'écran Mail — ailleurs, la barre
-          // garde ses trois boutons (Accueil / Nova / Menu).
-          onCompose={
-            currentNav === 'mail' && !mailReading
-              ? () => setMailComposeSignal((n) => n + 1)
-              : currentNav === 'agenda'
-                ? () => setAgendaCreateSignal((n) => n + 1)
-                : undefined
-          }
-          composeLabel={currentNav === 'agenda' ? 'Ajouter' : 'Écrire'}
           unreadMessagesCount={unreadMessagesCount}
           unreadNotificationsCount={unreadMobileNotificationsCount}
           unreadRemindersCount={unreadRemindersCount}
         />
+      )}
+      {/* Le « + » est en haut. Sur l'accueil il est déjà dans l'en-tête,
+          à côté de la clochette. Ailleurs il reste fixé en haut à droite
+          (lead, écrire un message, ajouter un rendez-vous). */}
+      {isMobile && currentNav !== 'accueil' && !(currentNav === 'chat' || novaOpen) && (
+        currentNav === 'mail'
+          ? (mailReading ? null : (
+            <MobileTopPlus onClick={() => setMailComposeSignal((n) => n + 1)} label="Écrire un message" />
+          ))
+          : currentNav === 'agenda'
+            ? <MobileTopPlus onClick={() => setAgendaCreateSignal((n) => n + 1)} label="Ajouter un rendez-vous" />
+            : <MobileTopPlus onClick={() => setShowNouveauLead(true)} label="Créer un lead" />
       )}
     </div>
   );

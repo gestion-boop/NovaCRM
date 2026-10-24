@@ -498,7 +498,7 @@ export const NotesView: React.FC = () => {
   const noteCountInFolder = (folderId: string) => agencyNotes.filter((n) => n.folderId === folderId).length;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 text-white animate-fade-in">
+    <div className="p-6 max-w-7xl mx-auto space-y-6 text-white">
       {/* HEADER */}
       {/* Signalé (30/08/2026, capture à l'appui) : "améliore le haut car on
           ne voit pas les écritures" — ce bandeau n'avait aucun fond propre,

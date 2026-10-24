@@ -1,6 +1,7 @@
 import React, {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -28,6 +29,10 @@ import {
 import {
   supabase,
 } from '@/lib/supabase';
+import { cibleDepuisLien } from '@/lib/lienNotification';
+import { filOuvert, notifsChatAAnnoncer, regardeDejaLeFil, texteAnnonce } from '@/lib/alerteChat';
+import { fermerNotificationsSysteme, notificationsDisparues } from '@/lib/notificationsLues';
+import { toast } from 'sonner';
 
 import {
   useAuth,
@@ -60,7 +65,9 @@ interface NotificationsViewProps {
   // Ouvre directement la conversation/canal du message ciblé — sans ça, un
   // clic sur une notif "message" ne faisait que naviguer vers l'onglet Chat
   // générique (liste des projets), sans jamais ouvrir la bonne conversation.
-  onOpenMessage?: (messageId: string) => void;
+  onOpenMessage?: (cible: { messageId?: string; conversationId?: string; channelId?: string }) => void;
+  /** Vrai quand le tiroir est ouvert : on recharge la liste tout de suite. */
+  ouverte?: boolean;
   // Signalé (8 septembre) : « cliquer sur la notif d'un message dans un
   // projet ne m'amène pas directement au projet ». Même principe
   // qu'onOpenMessage, mais pour une carte de projet interne : ouvre
@@ -136,6 +143,8 @@ type NotificationItem = {
   // défaut de la fiche client.
   contactTab?: 'espace-client';
   messageId?: string;
+  conversationId?: string;
+  channelId?: string;
   taskId?: string;
   // Id du message précis à l'intérieur de la carte de projet interne — voir
   // useTaskMessages.ts (message_id dans les métadonnées). Distinct de
@@ -222,6 +231,7 @@ export const NotificationsView: React.FC<
   onOpenContact,
   onOpenMessage,
   onOpenInternalTask,
+  ouverte = false,
 }) => {
   const {
     currentUser,
@@ -340,29 +350,69 @@ export const NotificationsView: React.FC<
   // tant que les notifications ne sont pas encore actives sur l'appareil).
   const [pushCardExpanded, setPushCardExpanded] = useState(false);
 
+  const dejaAnnoncees = useRef<Set<string> | null>(null);
+  const nonLuesPrecedentes = useRef<RealNotificationRow[] | null>(null);
+  const onOpenMessageRef = useRef(onOpenMessage);
+  onOpenMessageRef.current = onOpenMessage;
+  const chargementListe = useRef(false);
+  const relancerListe = useRef(false);
+
   const loadNotifications = async () => {
     if (!currentUser) {
       setRealNotifications([]);
       setLoading(false);
       return;
     }
-    // Filtre is_read=false directement côté serveur (au lieu de charger les
-    // 100 dernières notifications toutes confondues puis filtrer côté
-    // client) : avec .limit(100), un utilisateur ayant plus de 100
-    // notifications lues+non lues cumulées voyait des non-lues ANCIENNES
-    // disparaître de cette liste alors qu'elles comptaient toujours dans le
-    // badge de la cloche (qui, lui, compte côté serveur sans limite) — la
-    // cloche et ce panneau affichaient donc deux chiffres différents.
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', currentUser.uid)
-      .eq('is_read', false)
-      .is('dismissed_at', null)
-      .order('created_at', { ascending: false })
-      .limit(300);
-    if (!error) setRealNotifications((data as RealNotificationRow[]) || []);
-    setLoading(false);
+    if (chargementListe.current) {
+      relancerListe.current = true;
+      return;
+    }
+    chargementListe.current = true;
+    try {
+      do {
+        relancerListe.current = false;
+        // Filtre is_read=false directement côté serveur (au lieu de charger les
+        // 100 dernières notifications toutes confondues puis filtrer côté
+        // client) : avec .limit(100), un utilisateur ayant plus de 100
+        // notifications lues+non lues cumulées voyait des non-lues ANCIENNES
+        // disparaître de cette liste alors qu'elles comptaient toujours dans le
+        // badge de la cloche (qui, lui, compte côté serveur sans limite) — la
+        // cloche et ce panneau affichaient donc deux chiffres différents.
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', currentUser.uid)
+          .eq('is_read', false)
+          .is('dismissed_at', null)
+          .order('created_at', { ascending: false })
+          .limit(300);
+        if (error) continue;
+        const rows = (data as RealNotificationRow[]) || [];
+        const fil = filOuvert();
+        const fraiches = notifsChatAAnnoncer(dejaAnnoncees.current, rows, Date.now()).filter(
+          (n) => !regardeDejaLeFil(fil.chatVisible, fil.onglet, fil.conversationId, n.link),
+        );
+        dejaAnnoncees.current = new Set(rows.map((n) => n.id));
+        // Une ligne qui n'est plus non lue a été lue sur cet appareil ou un
+        // autre : on retire aussi la bannière système d'ici.
+        fermerNotificationsSysteme(notificationsDisparues(nonLuesPrecedentes.current, rows));
+        nonLuesPrecedentes.current = rows;
+        const annonce = texteAnnonce(fraiches);
+        if (annonce) {
+          toast(annonce.titre, {
+            description: annonce.description,
+            action: {
+              label: 'Ouvrir',
+              onClick: () => onOpenMessageRef.current?.(cibleDepuisLien(annonce.lien)),
+            },
+          });
+        }
+        setRealNotifications(rows);
+      } while (relancerListe.current);
+    } finally {
+      chargementListe.current = false;
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -381,13 +431,64 @@ export const NotificationsView: React.FC<
       )
       .subscribe();
 
+    // Le temps réel peut arriver en retard. Tant que l'onglet est visible,
+    // un sondage court rattrape un chat reçu sans attendre une demi-minute.
+    let poll: number | null = null;
+    const demarrer = () => {
+      if (poll) return;
+      poll = window.setInterval(() => { void loadNotifications(); }, 8000);
+    };
+    const arreter = () => {
+      if (poll) window.clearInterval(poll);
+      poll = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void loadNotifications();
+        demarrer();
+      } else {
+        arreter();
+      }
+    };
+    if (document.visibilityState === 'visible') demarrer();
+    document.addEventListener('visibilitychange', onVisibility);
+
     return () => {
       supabase.removeChannel(channel);
+      arreter();
+      document.removeEventListener('visibilitychange', onVisibility);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
 
+  useEffect(() => {
+    if (ouverte) void loadNotifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ouverte]);
+
+  // Au retour sur cet appareil, ferme les bannières déjà lues ailleurs
+  // pendant que l'application était fermée.
+  useEffect(() => {
+    if (!currentUser) return;
+    let annule = false;
+    const depuis = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    void supabase
+      .from('notifications')
+      .select('id, type, link, entity_id, entity_type')
+      .eq('user_id', currentUser.uid)
+      .or('is_read.eq.true,dismissed_at.not.is.null')
+      .gte('created_at', depuis)
+      .order('created_at', { ascending: false })
+      .limit(80)
+      .then(({ data }) => {
+        if (!annule && data) fermerNotificationsSysteme(data);
+      });
+    return () => { annule = true; };
+  }, [currentUser?.uid]);
+
   const markNotificationRead = async (id: string) => {
+    const row = realNotifications.find((n) => n.id === id);
+    if (row) fermerNotificationsSysteme([row]);
     setRealNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
     await supabase.from('notifications').update({ is_read: true }).eq('id', id);
   };
@@ -397,6 +498,8 @@ export const NotificationsView: React.FC<
   // notification via `dismissed_at` plutôt qu'un DELETE, ce qui l'exclut
   // immédiatement de `loadNotifications()` (filtre `.is('dismissed_at', null)`).
   const dismissNotification = async (id: string) => {
+    const row = realNotifications.find((n) => n.id === id);
+    if (row) fermerNotificationsSysteme([row]);
     setRealNotifications((prev) => prev.filter((n) => n.id !== id));
     await supabase.from('notifications').update({ dismissed_at: new Date().toISOString() }).eq('id', id);
   };
@@ -510,10 +613,17 @@ export const NotificationsView: React.FC<
         navTarget: navTargetFor(n),
         contactId: n.link?.match(/\/clients\/([0-9a-f-]{36})/)?.[1],
         contactTab: n.type === 'client_message' ? 'espace-client' : undefined,
-        // Récupéré depuis le lien stocké par le trigger de message
-        // (`?highlight=<id>` ou `&highlight_message=<id>`) — c'est ce qui
-        // permet d'ouvrir directement la bonne conversation au clic.
-        messageId: n.link?.match(/[?&]highlight(?:_message)?=([0-9a-f-]{36})/)?.[1],
+        // Le lien réel est tantôt `?highlight=`, tantôt `?conversation=&message=`,
+        // tantôt `?channel=&message=`. Sans les trois, le clic ouvrait le chat
+        // sur la liste, jamais sur le message.
+        ...(() => {
+          const cible = cibleDepuisLien(n.link);
+          return {
+            messageId: cible.messageId,
+            conversationId: cible.conversationId,
+            channelId: cible.channelId,
+          };
+        })(),
         // Id de la CARTE de projet interne — encodé dans `link` (voir
         // useTaskMessages.ts, `?task=<id>`) et non dans les métadonnées : la
         // table `notifications` n'a PAS de colonne `metadata`, un premier
@@ -790,8 +900,16 @@ export const NotificationsView: React.FC<
             }
             if (notification.contactId && onOpenContact) {
               onOpenContact(notification.contactId, notification.contactTab);
-            } else if (notification.navTarget === 'chat' && notification.messageId && onOpenMessage) {
-              onOpenMessage(notification.messageId);
+            } else if (
+              notification.navTarget === 'chat'
+              && (notification.messageId || notification.conversationId || notification.channelId)
+              && onOpenMessage
+            ) {
+              onOpenMessage({
+                messageId: notification.messageId,
+                conversationId: notification.conversationId,
+                channelId: notification.channelId,
+              });
             } else if (notification.navTarget === 'projets-internes' && notification.taskId && onOpenInternalTask) {
               onOpenInternalTask(notification.taskId, notification.taskMessageId);
             } else {

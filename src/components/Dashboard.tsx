@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { AGENCIES } from '@/types';
 import { formatCurrency, formatCurrencyPrecis } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -99,7 +99,7 @@ function CamembertObjectif({ realise, cible }: { realise: number; cible: number 
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <span className="text-sm font-black text-white">{pourcent} %</span>
+        <span className="text-sm font-semibold text-white">{pourcent} %</span>
       </div>
     </div>
   );
@@ -1122,7 +1122,7 @@ export default function Dashboard({
     : null;
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8">
       {/* Header section (30/08/2026, demande explicite : "supprime le
           panneau tableau de bord et centre les objectifs à la place, avec
           un fond gris classique") — le panneau titre "Tableau de bord"
@@ -1133,7 +1133,7 @@ export default function Dashboard({
           fin que le panneau Priorités de l'accueil (voir AccueilGrid.tsx),
           pour une teinte cohérente entre les deux écrans. */}
       <div className="flex justify-center">
-        <div className="bg-[#2b2b2b]/80 border border-black/60 px-4 py-2.5 rounded-xl flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-xs text-[#F9C977]">
+        <div className="bg-[#2b2b2b]/80 border border-white/10 px-5 py-3 rounded-2xl flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
           <Sparkles className="w-4 h-4 text-[#F7BC5F] shrink-0" />
           {editingGoal ? (
             <>
@@ -1159,11 +1159,17 @@ export default function Dashboard({
             </>
           ) : (
             <>
-              <span>
-                Objectif du mois : <b>{monthlyGoal ? formatCurrency(monthlyGoal.target_amount) : 'non défini'}</b>
-                {' · '}Facturé : <b>{formatCurrency(billedThisMonth)}</b>
-                {goalPercent !== null && ` (${goalPercent}%)`}
+              <span className="text-slate-400">
+                Objectif
+                <b className="text-white font-semibold ml-1.5">{monthlyGoal ? formatCurrency(monthlyGoal.target_amount) : 'non défini'}</b>
               </span>
+              <span className="hidden sm:block w-px h-4 bg-white/15" aria-hidden />
+              <span className="text-slate-400">
+                Facturé
+                <b className="text-white font-semibold ml-1.5">{formatCurrency(billedThisMonth)}</b>
+                {goalPercent !== null && <span className="text-slate-500"> ({goalPercent}%)</span>}
+              </span>
+              <span className="hidden sm:block w-px h-4 bg-white/15" aria-hidden />
               <span className={`flex items-center gap-1 font-semibold ${billedDelta >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {billedDelta >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
                 {billedDelta >= 0 ? '+' : ''}{formatCurrency(billedDelta)} vs mois dernier
@@ -1232,9 +1238,9 @@ export default function Dashboard({
             onClick={() => setDetailCa('realise')}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('realise'); } }}
             title="Voir le détail des affaires comptabilisées, ligne par ligne"
-            className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
+            className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">Chiffre d'affaires de l'agence</span>
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Chiffre d'affaires de l'agence</span>
               {/* Demandé le 6 septembre : « le chiffre d'affaires de l'agence
                   doit être uniquement les chiffres qui ont été comptabilisés
                   du moment qu'on a archivé la fiche du client et que nous
@@ -1244,7 +1250,7 @@ export default function Dashboard({
                   exactement la somme des cases CA par courtier
                   (caRealiseCourtiers), jamais l'encours (CA à venir),
                   affiché à part (case dédiée, et en info ci-dessous). */}
-              <div className="text-2xl font-black text-[#F9C977] tracking-tight">
+              <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
                 {formatCurrency(
                   estConseilsFinances
                     ? caRealiseCourtiers
@@ -1254,7 +1260,7 @@ export default function Dashboard({
               {/* Une tuile qui affiche zéro sans dire pourquoi fait perdre une
                   soirée. Elle explique donc ce qu'elle a trouvé, et où ça
                   bloque : le pipeline, l'étape, ou le montant. */}
-              <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
+              <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                 {!chiffreAffairesAgence.pipelineTrouve ? (
                   <span className="text-amber-400/90">
                     {parPipelinePrincipal
@@ -1318,7 +1324,7 @@ export default function Dashboard({
                 )}
               </span>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977] group-hover:scale-105 transition-transform">
+            <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977]">
               <TrendingUp className="w-6 h-6" />
             </div>
           </div>
@@ -1333,13 +1339,13 @@ export default function Dashboard({
             `perimetre` plus haut) : ces tuiles reprennent donc les mêmes
             chiffres que celles des super admins, restreints à lui. */}
         {!estDirectionCF && estConseilsFinances && (
-          <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg flex items-start justify-between group">
+          <div className="dash-card p-6 rounded-2xl border border-white/10 flex items-start justify-between group">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">CA du collaborateur</span>
-              <div className="text-2xl font-black text-[#F9C977] tracking-tight">
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">CA du collaborateur</span>
+              <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
                 {formatCurrency(maCommissionPersonnelle + maComBanquePersonnelle)}
               </div>
-              <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
+              <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                 {!chiffreAffairesAgence.pipelineTrouve ? (
                   <span className="text-amber-400/90">Aucun pipeline principal pour cette agence</span>
                 ) : (
@@ -1364,13 +1370,13 @@ export default function Dashboard({
         )}
 
         {!estDirectionCF && estConseilsFinances && (
-          <div className="dash-card p-6 rounded-2xl border border-teal-500/25 shadow-lg flex items-start justify-between group">
+          <div className="dash-card p-6 rounded-2xl border border-white/10 flex items-start justify-between group">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">CA à venir</span>
-              <div className="text-2xl font-black text-white tracking-tight">
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">CA à venir</span>
+              <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
                 {formatCurrency(chiffreAffairesAgence.aVenir)}
               </div>
-              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+              <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                 {chiffreAffairesAgence.comptessAVenir === 0
                   ? "Aucun de vos dossiers à partir de l'étape Accord banque / Rendez-vous"
                   : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Accord banque / Rendez-vous, honoraires agence TTC`}
@@ -1387,13 +1393,13 @@ export default function Dashboard({
             est réglé par un super admin (panneau plus bas) ; ici, le
             collaborateur voit le sien et où il en est. */}
         {!estDirectionCF && estConseilsFinances && (
-          <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg flex items-start justify-between gap-4 group">
+          <div className="dash-card p-6 rounded-2xl border border-white/10 flex items-start justify-between gap-4 group">
             <div className="space-y-1 min-w-0 flex-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">Objectif de l'année {currentYear}</span>
-              <div className="text-2xl font-black text-[#F9C977] tracking-tight">
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Objectif de l'année {currentYear}</span>
+              <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
                 {monObjectifAnnee > 0 ? formatCurrency(monObjectifAnnee) : <span className="text-base font-bold text-slate-500">non défini</span>}
               </div>
-              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+              <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                 {erreurObjectifsCollab ? (
                   <span className="text-amber-400/90">Objectif indisponible : {(erreurObjectifsCollab as Error).message}</span>
                 ) : monObjectifAnnee <= 0 ? (
@@ -1433,19 +1439,19 @@ export default function Dashboard({
             onClick={() => setDetailCa('avenir')}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('avenir'); } }}
             title="Voir le détail des dossiers à venir, ligne par ligne"
-            className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
+            className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">CA à venir agence</span>
-              <div className="text-2xl font-black text-white tracking-tight">
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">CA à venir agence</span>
+              <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
                 {formatCurrency(chiffreAffairesAgence.aVenir)}
               </div>
-              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+              <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                 {chiffreAffairesAgence.comptessAVenir === 0
                   ? "Aucun dossier à partir de l'étape Accord banque / Rendez-vous"
                   : `${chiffreAffairesAgence.comptessAVenir} dossier${chiffreAffairesAgence.comptessAVenir > 1 ? 's' : ''} à partir de l'étape Accord banque / Rendez-vous, honoraires agence TTC — pas dans le chiffre d'affaires de l'agence tant que non archivé et signé`}
               </span>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
+            <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300">
               <Coins className="w-6 h-6" />
             </div>
           </div>
@@ -1472,15 +1478,15 @@ export default function Dashboard({
             onClick={() => setDetailCa('avenir')}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('avenir'); } }}
             title="Voir le détail des affaires à venir, ligne par ligne"
-            className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group cursor-pointer text-left">
+            className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">
                 {voitChiffresAgence ? 'CA à venir agence' : 'CA à venir'}
               </span>
-              <div className="text-2xl font-black text-white tracking-tight">
+              <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
                 {formatCurrency(chiffreAffairesAgence.aVenir)}
               </div>
-              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+              <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                 {chiffreAffairesAgence.comptessAVenir === 0
                   ? (voitChiffresAgence
                       ? "Aucun dossier à partir de l'étape Offre d'achat"
@@ -1490,7 +1496,7 @@ export default function Dashboard({
                       : `${chiffreAffairesAgence.comptessAVenir} de vos dossiers à partir de l'étape Mandat, commission agence HT`)}
               </span>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
+            <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300">
               <Coins className="w-6 h-6" />
             </div>
           </div>
@@ -1501,9 +1507,9 @@ export default function Dashboard({
             soustraction demandée. Objectif atteint : cercle tout doré et
             dépassement affiché. */}
         {voitChiffresAgence && !estNovavisio && !vueReunionSansAgence && (
-          <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 hover:border-[#F7BC5F]/50 shadow-lg transition-all duration-300 flex items-start justify-between gap-4 group">
+          <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between gap-4 group">
             <div className="space-y-1 min-w-0 flex-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">Objectif de l'année {currentYear}</span>
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Objectif de l'année {currentYear}</span>
               {editionObjectifAnnee ? (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <input
@@ -1526,7 +1532,7 @@ export default function Dashboard({
                   <button onClick={() => setEditionObjectifAnnee(false)} className="text-xs text-slate-400 hover:text-white">Annuler</button>
                 </div>
               ) : (
-                <div className="text-2xl font-black text-[#F9C977] tracking-tight flex items-center gap-2">
+                <div className="text-3xl font-semibold text-white tracking-tight tabular-nums flex items-center gap-2">
                   {cibleAnnee > 0 ? formatCurrency(cibleAnnee) : <span className="text-base font-bold text-slate-500">non défini</span>}
                   <button
                     onClick={() => { setSaisieObjectifAnnee(cibleAnnee > 0 ? String(cibleAnnee) : ''); setEditionObjectifAnnee(true); }}
@@ -1537,7 +1543,7 @@ export default function Dashboard({
                   </button>
                 </div>
               )}
-              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+              <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                 {erreurObjectifAnnee ? (
                   <span className="text-amber-400/90">Objectif indisponible : {(erreurObjectifAnnee as Error).message}</span>
                 ) : cibleAnnee <= 0 ? (
@@ -1583,7 +1589,7 @@ export default function Dashboard({
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <span className="text-sm font-black text-white">{pourcentAnnee} %</span>
+                  <span className="text-sm font-semibold text-white">{pourcentAnnee} %</span>
                 </div>
               </div>
             ) : (
@@ -1599,57 +1605,57 @@ export default function Dashboard({
             devis à venir ». Deux tuiles de plus, seulement sur Novavisio :
             ailleurs, elles n'auraient aucun sens. */}
         {isSuperAdmin && estNovavisio && (
-          <div className="dash-card p-6 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group">
+          <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">
                 Commission {natacha?.name?.split(' ')[0] || 'Natacha'}
               </span>
-              <div className="text-2xl font-black text-sky-300 tracking-tight">{formatCurrency(commissionNatacha)}</div>
-              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+              <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">{formatCurrency(commissionNatacha)}</div>
+              <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                 {natacha
                   ? 'Sa commission, saisie à l\'archivage — distincte du CA agence'
                   : "Aucun collaborateur nommé Natacha dans cette agence"}
               </span>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300 group-hover:scale-105 transition-transform">
+            <div className="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300">
               <TrendingUp className="w-6 h-6" />
             </div>
           </div>
         )}
 
         {isSuperAdmin && estNovavisio && (
-          <div className="dash-card p-6 rounded-2xl border border-violet-500/25 hover:border-violet-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group">
+          <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">Devis signés à venir</span>
-              <div className="text-2xl font-black text-violet-300 tracking-tight">
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Devis signés à venir</span>
+              <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
                 {formatCurrency(chiffreAffairesAgence.devis)}
               </div>
-              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+              <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                 {chiffreAffairesAgence.devisNb === 0
                   ? 'Aucun devis en attente — case « Devis signés à venir » de la fiche client'
                   : `${chiffreAffairesAgence.devisNb} devis en attente de facturation`}
               </span>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-violet-300 group-hover:scale-105 transition-transform">
+            <div className="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-violet-300">
               <Briefcase className="w-6 h-6" />
             </div>
           </div>
         )}
 
         {isSuperAdmin && estNovavisio && (
-          <div className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg transition-all duration-300 hover:-translate-y-1 flex items-start justify-between group">
+          <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group">
             <div className="space-y-1">
-              <span className="text-xs text-slate-400 font-medium tracking-wide">Récurrence</span>
-              <div className="text-2xl font-black text-teal-300 tracking-tight">
+              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Récurrence</span>
+              <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
                 {formatCurrency(chiffreAffairesAgence.recurrence)}
               </div>
-              <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+              <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                 {chiffreAffairesAgence.recurrenceNb === 0
                   ? 'Aucune récurrence notée — case « Récurrence » à l\'archivage'
                   : `${chiffreAffairesAgence.recurrenceNb} client${chiffreAffairesAgence.recurrenceNb > 1 ? 's' : ''} avec une récurrence`}
               </span>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300 group-hover:scale-105 transition-transform">
+            <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-300">
               <TrendingUp className="w-6 h-6" />
             </div>
           </div>
@@ -1662,11 +1668,63 @@ export default function Dashboard({
           Une case par personne, même règle que le CA de l'agence (archivés +
           à partir de Montage dossier), la plus grosse en premier. */}
       {estDirectionCF && estVueDirectionCF && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">CA par courtier</h3>
+        <div className="space-y-3">
+          <h3 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">CA par courtier</h3>
           {caCourtiersVises.length === 0 ? (
             <p className="text-xs text-slate-500 px-1">Aucun collaborateur rattaché à cette agence.</p>
           ) : (
+            <>
+            {/* Une seule comparaison : les cartes disent le détail, la barre
+                dit qui est devant. Même total, même clic vers le détail. */}
+            {caCourtiersVises.some((c) => c.total > 0) && (
+              <div className="dash-card rounded-2xl border border-white/10 px-3 pt-3 pb-1">
+                <div style={{ height: Math.max(148, caCourtiersVises.length * 40) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={caCourtiersVises.map((c) => ({ id: c.id, prenom: c.prenom, total: c.total }))}
+                      layout="vertical"
+                      margin={{ top: 4, right: 72, left: 0, bottom: 4 }}
+                    >
+                      <XAxis type="number" hide />
+                      <YAxis
+                        type="category"
+                        dataKey="prenom"
+                        width={76}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fill: 'var(--nv-chart-axis)', fontSize: 12 }}
+                      />
+                      <Tooltip
+                        formatter={(value: unknown) => [formatCurrency(Number(value) || 0), 'CA']}
+                        contentStyle={{ ...CHART_TOOLTIP_STYLE, fontSize: '11px' }}
+                        cursor={{ fill: 'var(--nv-wash)' }}
+                      />
+                      <Bar
+                        dataKey="total"
+                        fill="var(--accent-color, #F7BC5F)"
+                        radius={[0, 6, 6, 0]}
+                        barSize={12}
+                        cursor="pointer"
+                        isAnimationActive={false}
+                        onClick={(barre) => {
+                          const id = barre?.payload?.id as string | undefined;
+                          if (!id) return;
+                          setRechercheCourtier('');
+                          setDetailCourtierId(id);
+                        }}
+                      >
+                        <LabelList
+                          dataKey="total"
+                          position="right"
+                          formatter={(value) => formatCurrency(Number(value) || 0)}
+                          style={{ fill: 'var(--ink-2)', fontSize: 11 }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {caCourtiersVises.map((c) => (
                 <div
@@ -1676,14 +1734,14 @@ export default function Dashboard({
                   onClick={() => { setRechercheCourtier(''); setDetailCourtierId(c.id); }}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setRechercheCourtier(''); setDetailCourtierId(c.id); } }}
                   title={`Voir le détail des dossiers de ${c.prenom}, client par client`}
-                  className="dash-card p-5 rounded-2xl border border-sky-500/25 hover:border-sky-500/40 shadow-lg transition-all duration-300 flex items-start justify-between gap-3 group cursor-pointer">
-                  <div className="space-y-1 min-w-0">
-                    <span className="text-xs text-slate-400 font-medium tracking-wide block truncate" title={c.nom}>CA {c.prenom}</span>
-                    <div className="text-xl font-black text-sky-300 tracking-tight">{formatCurrency(c.total)}</div>
-                    <span className="text-[11px] text-slate-500 font-semibold tracking-wide block">
+                  className="dash-card p-5 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between gap-3 group cursor-pointer">
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium block truncate" title={c.nom}>CA {c.prenom}</span>
+                    <div className="text-2xl font-semibold text-white tracking-tight tabular-nums">{formatCurrency(c.total)}</div>
+                    <span className="text-[11px] text-slate-500 font-normal leading-snug block">
                       {c.total === 0
                         ? 'Aucun dossier archivé et signé'
-                        : `${formatCurrency(c.archive)} archivé + ${formatCurrency(c.commission)} commission + ${formatCurrencyPrecis(c.comBanque)} commission Banque`}
+                        : `${formatCurrency(c.archive)} archivé`}
                     </span>
                     {/* Le CA à venir (encore vivant, pas archivé) reste
                         informatif, à part du total ci-dessus qui ne compte
@@ -1693,21 +1751,23 @@ export default function Dashboard({
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setDetailCourtierAvenirId(c.id); }}
                         title={`Voir le détail des dossiers en cours de ${c.prenom}, client par client`}
-                        className="text-[11px] text-slate-500 hover:text-[#F9C977] font-semibold tracking-wide block underline decoration-dotted underline-offset-2"
+                        className="text-[11px] text-slate-500 hover:text-[#F9C977] font-normal block underline decoration-dotted underline-offset-2 text-left"
                       >
-                        + {formatCurrency(c.aVenir)} en cours (non archivé, pas dans le total)
+                        + {formatCurrency(c.aVenir)} en cours, hors total
                       </button>
                     )}
                     {/* Demandé le 6 septembre : la commission du courtier
                         (advisor_commission_ttc, tous ses dossiers archivés)
                         et, en dessous, la commission Banque (com_banque). */}
-                    <div className="pt-1 mt-1 border-t border-white/5 space-y-0.5">
-                      <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
-                        Commission des courtiers : <span className="text-slate-200">{formatCurrency(c.commission)}</span>
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-semibold tracking-wide block">
-                        Commission Banque : <span className="text-slate-200">{formatCurrencyPrecis(c.comBanque)}</span>
-                      </span>
+                    <div className="pt-2 mt-1 space-y-1">
+                      <div className="flex items-baseline justify-between gap-3 text-[11px]">
+                        <span className="text-slate-500">Courtiers</span>
+                        <span className="text-slate-200 tabular-nums">{formatCurrency(c.commission)}</span>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-3 text-[11px]">
+                        <span className="text-slate-500">Banque</span>
+                        <span className="text-slate-200 tabular-nums">{formatCurrencyPrecis(c.comBanque)}</span>
+                      </div>
                     </div>
                   </div>
                   <div className="w-10 h-10 shrink-0 rounded-xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-300">
@@ -1716,6 +1776,7 @@ export default function Dashboard({
                 </div>
               ))}
             </div>
+            </>
           )}
         </div>
       )}
@@ -1726,9 +1787,9 @@ export default function Dashboard({
           réalisé est celui de l'année en cours, dossiers archivés et
           confirmés, attribués à la personne. */}
       {estDirectionCF && estVueDirectionCF && goalAgencyId && (
-        <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/30 shadow-lg space-y-4">
+        <div className="dash-card p-6 rounded-2xl border border-white/10 space-y-4">
           <div>
-            <h3 className="font-bold text-sm text-white">Objectifs de l'année {currentYear} — par collaborateur</h3>
+            <h3 className="font-semibold text-sm text-white">Objectifs {currentYear}</h3>
             <p className="text-xs text-slate-400">
               Chaque collaborateur voit son objectif en tête de son tableau de bord ; le réalisé est celui de ses dossiers archivés cette année.
             </p>
@@ -1739,26 +1800,32 @@ export default function Dashboard({
           {collaborateursCourtiers.length === 0 ? (
             <p className="text-xs text-slate-500">Aucun collaborateur rattaché à cette agence.</p>
           ) : (
-            <div className="divide-y divide-[#144447]/40">
+            <div className="divide-y divide-white/10">
               {collaborateursCourtiers.map((collab) => {
                 const cible = objectifDe(collab.id);
                 const realise = chiffreAffairesAgence.parConseillerAnnee.get(collab.id) || 0;
                 const enEdition = collabEnEdition === collab.id;
+                const avance = cible > 0 ? Math.min(100, Math.round((realise / cible) * 100)) : 0;
                 return (
-                  <div key={collab.id} className="py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div key={collab.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold text-white truncate">{collab.name}</div>
-                      <div className="text-[11px] text-slate-500">
-                        Réalisé en {currentYear} : <b className="text-slate-300">{formatCurrency(realise)}</b>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        Réalisé <b className="text-slate-300 font-medium">{formatCurrency(realise)}</b>
                         {cible > 0 && (
                           <span>
                             {' · '}
                             {realise > cible
-                              ? `objectif dépassé de ${formatCurrency(realise - cible)}`
-                              : `reste à faire : ${formatCurrency(cible - realise)}`}
+                              ? `dépassé de ${formatCurrency(realise - cible)}`
+                              : `reste ${formatCurrency(cible - realise)}`}
                           </span>
                         )}
                       </div>
+                      {cible > 0 && (
+                        <div className="mt-2 h-1.5 max-w-xs rounded-full bg-white/10 overflow-hidden">
+                          <div className="h-full rounded-full bg-[#F7BC5F]" style={{ width: `${avance}%` }} />
+                        </div>
+                      )}
                     </div>
                     {enEdition ? (
                       <div className="flex flex-wrap items-center gap-2">
@@ -1783,7 +1850,7 @@ export default function Dashboard({
                       </div>
                     ) : (
                       <div className="flex items-center gap-3">
-                        <span className="text-base font-black text-[#F9C977] tabular-nums">
+                        <span className="text-base font-semibold text-white tabular-nums">
                           {cible > 0 ? formatCurrency(cible) : <span className="text-sm font-bold text-slate-500">non défini</span>}
                         </span>
                         <button
@@ -1807,10 +1874,10 @@ export default function Dashboard({
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1 - Prospects (Deep Teal theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-teal-500/25 hover:border-teal-500/40 shadow-lg hover:shadow-teal-500/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
           <div className="space-y-1">
-            <span className="text-xs text-slate-400 font-medium tracking-wide">Prospects & Clients</span>
-            <div className="text-3xl font-black text-white tracking-tight">{totalContacts}</div>
+            <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Prospects & Clients</span>
+            <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">{totalContacts}</div>
             <button 
               onClick={() => onNavigate('clients')} 
               className="text-[11px] text-[#F9C977] font-bold hover:text-[#FAD592] inline-flex items-center gap-1 cursor-pointer transition-all hover:underline"
@@ -1818,16 +1885,16 @@ export default function Dashboard({
               Gérer les contacts <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
             </button>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-400 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/25 flex items-center justify-center text-teal-400">
             <Users className="w-6 h-6" />
           </div>
         </div>
 
         {/* Metric 2 - Dossiers Actifs (Deep Amber theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-[#F7BC5F]/25 hover:border-[#F7BC5F]/40 shadow-lg hover:shadow-[#F7BC5F]/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
           <div className="space-y-1">
-            <span className="text-xs text-slate-400 font-medium tracking-wide">Dossiers actifs</span>
-            <div className="text-3xl font-black text-white tracking-tight">{activeDeals}</div>
+            <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Dossiers actifs</span>
+            <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">{activeDeals}</div>
             <button 
               onClick={() => onNavigate('pipeline')} 
               className="text-[11px] text-[#F9C977] font-bold hover:text-[#FAD592] inline-flex items-center gap-1 cursor-pointer transition-all hover:underline"
@@ -1835,28 +1902,28 @@ export default function Dashboard({
               Voir le pipeline <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
             </button>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977] group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 flex items-center justify-center text-[#F9C977]">
             <Briefcase className="w-6 h-6" />
           </div>
         </div>
 
         {/* Metric 3 - Volume Financier (Deep Emerald theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-emerald-500/25 hover:border-emerald-500/40 shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
           <div className="space-y-1">
-            <span className="text-xs text-slate-400 font-medium tracking-wide">Volume financier</span>
-            <div className="text-2xl font-black text-emerald-400 tracking-tight">{formatCurrency(totalDealValue)}</div>
+            <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Volume financier</span>
+            <div className="text-2xl font-semibold text-emerald-300 tracking-tight tabular-nums">{formatCurrency(totalDealValue)}</div>
             <span className="text-[11px] text-emerald-400/90 font-semibold tracking-wide block">Encours total sécurisé</span>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
             <Coins className="w-6 h-6" />
           </div>
         </div>
 
         {/* Metric 4 - Tâches en Attente (Deep Slate-Indigo theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-indigo-500/25 hover:border-indigo-500/40 shadow-lg hover:shadow-indigo-500/5 transition-all duration-300 hover:-translate-y-1 flex items-center justify-between group">
+        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
           <div className="space-y-1">
-            <span className="text-xs text-slate-400 font-medium tracking-wide">Tâches en attente</span>
-            <div className="text-3xl font-black text-white tracking-tight">{pendingTasks}</div>
+            <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Tâches en attente</span>
+            <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">{pendingTasks}</div>
             <button 
               onClick={() => onNavigate('rappels')} 
               className="text-[11px] text-[#F9C977] font-bold hover:text-[#FAD592] inline-flex items-center gap-1 cursor-pointer transition-all hover:underline"
@@ -1864,7 +1931,7 @@ export default function Dashboard({
               Traiter les tâches <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
             </button>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center text-indigo-400">
             <CheckCircle2 className="w-6 h-6" />
           </div>
         </div>
@@ -1873,7 +1940,7 @@ export default function Dashboard({
       {/* Visualizer charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Stages Chart */}
-        <div className="dash-card lg:col-span-2 p-6 rounded-2xl border border-[#144447]/60 hover:border-[#1e5d61] shadow-xl hover:shadow-teal-500/5 transition-all duration-300 flex flex-col justify-between">
+        <div className="dash-card lg:col-span-2 p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex flex-col justify-between">
           <div className="mb-4">
             <h3 className="font-bold text-sm text-white">Répartition du Volume par Étape (€)</h3>
             <p className="text-xs text-slate-400">Total des opportunités financières valorisées dans le pipeline.</p>
@@ -1925,7 +1992,7 @@ export default function Dashboard({
             colonne ; la tuile dorée, elle, montre le réalisé. Masqué en vue
             réunion (6 septembre) : c'est un chiffre agence. */}
         {!vueReunionSansAgence && (
-        <div className="dash-card p-6 rounded-2xl border border-[#144447]/60 hover:border-[#1e5d61] shadow-xl hover:shadow-teal-500/5 transition-all duration-300 flex flex-col justify-between">
+        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-sm text-white">CA à venir</h3>
             <p className="text-xs text-slate-400">
@@ -2003,7 +2070,7 @@ export default function Dashboard({
       {estNovavisio && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Contacts List */}
-        <div className="dash-card lg:col-span-2 p-6 rounded-2xl border border-[#144447]/60 hover:border-[#1e5d61] shadow-xl hover:shadow-teal-500/5 transition-all duration-300 space-y-4">
+        <div className="dash-card lg:col-span-2 p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors space-y-4">
           <div>
             <h3 className="font-bold text-sm text-white">Prospects Récemment Enregistrés</h3>
             <p className="text-xs text-slate-400">Derniers dossiers ajoutés pour attribution ou qualification.</p>
@@ -2047,7 +2114,7 @@ export default function Dashboard({
         </div>
 
         {/* Info panel */}
-        <div className="dash-card p-6 rounded-2xl border border-[#144447]/60 hover:border-[#1e5d61] shadow-xl hover:shadow-teal-500/5 transition-all duration-300 space-y-4 flex flex-col justify-between">
+        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors space-y-4 flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 text-[#F9C977] font-bold text-xs uppercase tracking-wider mb-2">
               <Sparkles className="w-4 h-4" />

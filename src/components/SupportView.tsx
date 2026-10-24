@@ -8,6 +8,7 @@ import {
   SupportTicket, SupportTicketMessage, SupportPriority, SupportCategory, SupportStatus, AGENCIES,
 } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { fermerNotificationsSysteme } from '@/lib/notificationsLues';
 import { useAuth } from '@/context/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -314,7 +315,11 @@ export const SupportView: React.FC = () => {
           .eq('user_id', currentUser.uid)
           .eq('entity_type', 'support_ticket')
           .eq('entity_id', ticketId)
-          .eq('is_read', false);
+          .eq('is_read', false)
+          .select('id, type, link, entity_id, entity_type')
+          .then(({ data }) => {
+            if (data) fermerNotificationsSysteme(data);
+          });
       }
     } catch (e) {
       console.warn('Erreur chargement des messages du ticket :', e);
@@ -462,11 +467,13 @@ export const SupportView: React.FC = () => {
       // anciennes notifications (nouveau ticket, nouveau message...) n'ont
       // plus lieu de trainer dans la clochette — on les supprime.
       if (next === 'ferme') {
-        await supabase
+        const { data: retirees } = await supabase
           .from('notifications')
           .update({ dismissed_at: new Date().toISOString() })
           .eq('entity_type', 'support_ticket')
-          .eq('entity_id', ticket.id);
+          .eq('entity_id', ticket.id)
+          .select('id, type, link, entity_id, entity_type');
+        if (retirees) fermerNotificationsSysteme(retirees);
       }
 
       // Prévenir le créateur du ticket quand son statut avance — seulement

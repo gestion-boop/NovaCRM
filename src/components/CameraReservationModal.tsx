@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import {
-  Camera, X, ChevronLeft, ChevronRight, Clock, MapPin, Calendar,
-  Hash, Briefcase, CheckCircle2, XCircle, Video, Film, Package, Clapperboard, Send,
-  FileText,
+  Camera, X, Clock, ClipboardList, Calendar, Hash, Briefcase,
+  CheckCircle2, XCircle, Video, Film, Package, Clapperboard,
 } from 'lucide-react';
 import { CameraReservation } from '@/types';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
@@ -14,6 +14,17 @@ import {
   EQUIPMENT_LABEL_TO_KEY,
   formatReservationDateFr,
 } from '@/hooks/useCameraReservations';
+import { equipementsReservation, partagentUnEquipement } from '@/lib/equipementsReservation';
+import {
+  ajouterMinutes,
+  creneauConflit,
+  creneauxAffiches,
+  disponibiliteJour,
+  heuresFinAffichees,
+  libelleDuree,
+  plageConflit,
+} from '@/lib/creneauxReservationCamera';
+import { FormulaireReservationMateriel } from '@/components/reservation/FormulaireReservationMateriel';
 
 interface CameraReservationModalProps {
   isOpen: boolean;
@@ -23,44 +34,6 @@ interface CameraReservationModalProps {
   // (depuis ReserverCameraView) pour la modifier au lieu d'en recréer une —
   // ouvre ce même formulaire pré-rempli, en UPDATE plutôt qu'en INSERT.
   editReservation?: StoredCameraReservation | null;
-}
-
-// Refonte (21 octobre, demande explicite : « les personnes se mélangent »,
-// maquette validée par Sylvain) : qui a déjà réservé quoi devait avant se
-// deviner en recoupant une liste séparée. Chaque agent reçoit maintenant un
-// avatar (initiales + couleur stable, dérivée de son nom) affiché directement
-// sur le créneau ou le matériel qu'il occupe — plus besoin de recouper.
-const AVATAR_PALETTE = ['#2dd4bf', '#38bdf8', '#fbbf24', '#f472b6', '#a78bfa', '#fb923c', '#4ade80', '#60a5fa'];
-const getAgentInitials = (name: string): string => {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-};
-const getAgentColor = (name: string): string => {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
-};
-
-// Grille de créneaux fixes de 30 min (remplace les deux champs horaires
-// libres) — bornes vérifiées en base le 21 octobre pour couvrir toutes les
-// réservations réelles existantes (09:00-19:00).
-const SLOT_STEP_MINUTES = 30;
-const SLOT_GRID_START_MIN = 8 * 60;
-const SLOT_GRID_END_MIN = 19 * 60 + 30;
-const minutesToTime = (mins: number): string => {
-  const h = Math.floor(mins / 60) % 24;
-  const m = mins % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-};
-const timeToMinutes = (time: string): number => {
-  const [h, m] = time.split(':').map(Number);
-  return h * 60 + m;
-};
-const SLOT_TIMES: string[] = [];
-for (let m = SLOT_GRID_START_MIN; m < SLOT_GRID_END_MIN; m += SLOT_STEP_MINUTES) {
-  SLOT_TIMES.push(minutesToTime(m));
 }
 
 export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
@@ -115,6 +88,17 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   const [showRefusePanel, setShowRefusePanel] = useState(false);
   const [refuseReason, setRefuseReason] = useState('');
   const [altSlots, setAltSlots] = useState<string[]>(['', '', '']);
+  const [voirReservations, setVoirReservations] = useState(false);
+  const [etapeMobile, setEtapeMobile] = useState(1);
+  const [sensMois, setSensMois] = useState<1 | -1>(1);
+  const [ecranEtroit, setEcranEtroit] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  const [ongletHoraire, setOngletHoraire] = useState<'debut' | 'fin'>('debut');
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const appliquer = () => setEcranEtroit(media.matches);
+    media.addEventListener('change', appliquer);
+    return () => media.removeEventListener('change', appliquer);
+  }, []);
 
   const loadDayEvents = async (dateStr: string, tokenOverride?: string) => {
     setLoadingDayEvents(true);
@@ -157,6 +141,13 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
   // y compris la date, pour que le calendrier s'ouvre directement sur le
   // bon jour au lieu de rester sur celui parcouru la dernière fois.
   useEffect(() => {
+    if (!isOpen) return;
+    setVoirReservations(false);
+    setEtapeMobile(1);
+    setOngletHoraire('debut');
+  }, [isOpen]);
+
+  useEffect(() => {
     if (!isOpen || !editReservation) return;
     const [datePart, timePart] = editReservation.startDate.split(' ');
     const [y, m, d] = datePart.split('-').map(Number);
@@ -166,28 +157,22 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     }
     setStartTime(editReservation.startTime || timePart || '09:00');
     setEndTime(editReservation.endTime || '10:00');
-    setSelectedEquipment(
-      editReservation.equipmentList?.length
-        ? editReservation.equipmentList
-        : editReservation.equipmentName.split(',').map((item) => item.trim())
-    );
+    setSelectedEquipment(equipementsReservation(editReservation));
     setLocation(editReservation.location || editReservation.propertyAddress || '');
     setMandateNumber(editReservation.mandateNumber || '');
     setProjectName(editReservation.projectName || '');
     setNote(editReservation.note || '');
     setSubmitError(null);
+    setOngletHoraire('debut');
   }, [isOpen, editReservation]);
 
   if (!isOpen) return null;
 
-  // Demande explicite (10 octobre) : « comme une appli, avec des boutons
-  // comme des pads plus gros, et plus facile à utiliser » — icônes vectorielles
-  // (déjà présentes ici, juste jamais affichées) à la place des emoji.
-  const EQUIPMENT_OPTIONS = [
-    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', sub: 'Visites immersives', icon: Video, tileClass: 'bg-gradient-to-br from-teal-700 to-teal-400' },
-    { id: 'Caméra DJI', label: 'Caméra DJI', sub: 'Visites immersives', icon: Camera, tileClass: 'bg-gradient-to-br from-blue-700 to-blue-400' },
-    { id: 'Caméra X4', label: 'Caméra X4', sub: 'Visites immersives', icon: Package, tileClass: 'bg-gradient-to-br from-zinc-600 to-zinc-400' },
-    { id: 'Community Manager', label: 'Community Manager', sub: 'Photos & réseaux', icon: Clapperboard, tileClass: 'bg-gradient-to-br from-amber-700 to-amber-400' },
+  const MATERIELS = [
+    { id: 'Caméra Giraffe', label: 'Caméra Giraffe', detail: 'Visites immersives', tint: 'from-violet-950 to-fuchsia-900', Icon: Video },
+    { id: 'Caméra DJI', label: 'Caméra DJI', detail: 'Visites immersives', tint: 'from-slate-800 to-violet-950', Icon: Camera },
+    { id: 'Caméra X4', label: 'Caméra X4', detail: 'Photos 360', tint: 'from-zinc-800 to-slate-900', Icon: Package },
+    { id: 'Community Manager', label: 'Community Manager', detail: 'Photos pro', tint: 'from-amber-950 to-orange-950', Icon: Clapperboard },
   ];
 
   // Calendar calculations
@@ -197,13 +182,55 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
-  const dayNames = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
-
   const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Navigate month
-  const handlePrevMonth = () => setViewDate(new Date(year, month - 1, 1));
-  const handleNextMonth = () => setViewDate(new Date(year, month + 1, 1));
+  const changerMois = (delta: 1 | -1) => {
+    setSensMois(delta);
+    const next = new Date(year, month + delta, 1);
+    setViewDate(next);
+    const max = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    setSelectedDayNum((jour) => Math.min(jour, max));
+  };
+  const allerAujourdhui = () => {
+    const maintenant = new Date();
+    setSensMois(maintenant >= viewDate ? 1 : -1);
+    setViewDate(new Date(maintenant.getFullYear(), maintenant.getMonth(), 1));
+    setSelectedDayNum(maintenant.getDate());
+    if (ecranEtroit) setEtapeMobile(2);
+  };
+  const choisirJour = (jour: number) => {
+    setSelectedDayNum(jour);
+    if (ecranEtroit) setEtapeMobile(2);
+  };
+  const choisirDebut = (heure: string) => {
+    const reservationsDuCreneau = selectedDayReservations;
+    const equipement = selectedEquipment;
+    const ignore = editReservation?.id;
+    if (creneauConflit(heure, reservationsDuCreneau, equipement, ignore)) {
+      setSubmitError('Cette heure de début est déjà prise pour le matériel choisi.');
+      return;
+    }
+    setStartTime(heure);
+    setEndTime((fin) => (fin > heure ? fin : ajouterMinutes(heure, 60)));
+    setOngletHoraire('fin');
+    setSubmitError(null);
+  };
+  const choisirFin = (heure: string) => {
+    const reservationsDuCreneau = selectedDayReservations;
+    const equipement = selectedEquipment;
+    const ignore = editReservation?.id;
+    if (heure <= startTime) {
+      setSubmitError('L’heure de fin doit être après le début.');
+      return;
+    }
+    if (plageConflit(startTime, heure, reservationsDuCreneau, equipement, ignore)) {
+      setSubmitError('Cette plage chevauche une réservation déjà posée pour ce matériel.');
+      return;
+    }
+    setEndTime(heure);
+    setSubmitError(null);
+    if (ecranEtroit) setEtapeMobile(3);
+  };
 
   // Equipment toggle
   const toggleEquipment = (id: string) => {
@@ -214,19 +241,6 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     }
   };
 
-  // Refonte (21 octobre) : clic sur un créneau — premier clic (ou clic sur un
-  // créneau antérieur au début actuel) repart d'une réservation de 30 min à
-  // cet horaire ; un clic sur un créneau plus tardif étend la fin jusqu'à
-  // couvrir ce créneau, comme un sélecteur de plage de dates classique.
-  const handleSlotClick = (time: string) => {
-    if (time <= startTime) {
-      setStartTime(time);
-      setEndTime(minutesToTime(timeToMinutes(time) + SLOT_STEP_MINUTES));
-    } else {
-      setEndTime(minutesToTime(timeToMinutes(time) + SLOT_STEP_MINUTES));
-    }
-  };
-
   // Réservations du jour sélectionné
   const formattedDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(selectedDayNum).padStart(2, '0')}`;
 
@@ -234,74 +248,22 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     .filter((reservation) => reservation.startDate.startsWith(formattedDateStr))
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  // Refonte (21 octobre) : renvoie désormais la réservation en conflit (pas
-  // juste un booléen) pour pouvoir afficher QUI bloque le créneau/matériel —
-  // c'est le cœur du correctif « les personnes se mélangent ».
-  const findConflictingReservation = (
-    equipment: string,
-    start: string,
-    end: string,
-    excludeId?: string
-  ): StoredCameraReservation | null => {
-    return (
-      selectedDayReservations.find((reservation) => {
-        if (excludeId && reservation.id === excludeId) return false;
+  const hasTimeConflict = (equipment: string, start: string, end: string, excludeId?: string) => {
+    return selectedDayReservations.some((reservation) => {
+      if (excludeId && reservation.id === excludeId) return false;
 
-        const bookedEquipment = reservation.equipmentList?.length
-          ? reservation.equipmentList
-          : reservation.equipmentName.split(',').map((item) => item.trim());
+      const bookedEquipment = equipementsReservation(reservation);
 
-        if (!bookedEquipment.includes(equipment)) {
-          return false;
-        }
+      if (!bookedEquipment.includes(equipment)) {
+        return false;
+      }
 
-        const bookedStart = reservation.startTime || reservation.startDate.slice(-5);
-        const bookedEnd = reservation.endTime || reservation.endDate.slice(-5);
+      const bookedStart = reservation.startTime || reservation.startDate.slice(-5);
+      const bookedEnd = reservation.endTime || reservation.endDate.slice(-5);
 
-        return start < bookedEnd && end > bookedStart;
-      }) || null
-    );
+      return start < bookedEnd && end > bookedStart;
+    });
   };
-
-  const hasTimeConflict = (equipment: string, start: string, end: string, excludeId?: string) =>
-    !!findConflictingReservation(equipment, start, end, excludeId);
-
-  // Un créneau de la grille (étape 2) est pris dès qu'il chevauche une
-  // réservation sur L'UN des matériels actuellement sélectionnés.
-  const findSlotConflict = (slotStart: string): StoredCameraReservation | null => {
-    const slotEnd = minutesToTime(timeToMinutes(slotStart) + SLOT_STEP_MINUTES);
-    for (const equipment of selectedEquipment) {
-      const conflict = findConflictingReservation(equipment, slotStart, slotEnd, editReservation?.id);
-      if (conflict) return conflict;
-    }
-    return null;
-  };
-
-  // Trombinoscope du jour (bandeau en haut du formulaire) : un agent par
-  // personne, même s'il a plusieurs réservations ce jour-là.
-  const todaysAgents = Array.from(
-    new Map(selectedDayReservations.map((reservation) => [reservation.agentName, reservation])).values()
-  );
-
-  // Grille du calendrier mensuel (remplace le défilement horizontal) — cases
-  // des mois voisins non cliquables, pastille de densité par jour.
-  const firstDayWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // 0 = lundi
-  const daysInPrevMonth = new Date(year, month, 0).getDate();
-  const totalCalendarCells = Math.ceil((firstDayWeekday + totalDaysInMonth) / 7) * 7;
-  const calendarCells = Array.from({ length: totalCalendarCells }, (_, idx) => {
-    const dayOffset = idx - firstDayWeekday;
-    if (dayOffset < 0) {
-      return { label: daysInPrevMonth + dayOffset + 1, inMonth: false as const, dayNum: null, isSelected: false, density: null };
-    }
-    if (dayOffset >= totalDaysInMonth) {
-      return { label: dayOffset - totalDaysInMonth + 1, inMonth: false as const, dayNum: null, isSelected: false, density: null };
-    }
-    const dayNum = dayOffset + 1;
-    const dayDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-    const dayCount = reservations.filter((r) => r.startDate.startsWith(dayDate)).length;
-    const density = dayCount === 0 ? null : dayCount >= 4 ? 'full' : dayCount >= 2 ? 'busy' : 'light';
-    return { label: dayNum, inMonth: true as const, dayNum, isSelected: dayNum === selectedDayNum, density };
-  });
 
   // Conflits avec les autres réservations (mêmes équipements, créneau qui se
   // chevauche) — utilisé pour l'indicateur de disponibilité vu par l'admin
@@ -314,9 +276,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
       const sameDay = reservation.startDate.slice(0, 10) === target.startDate.slice(0, 10);
       if (!sameDay) return false;
 
-      const sharesEquipment = reservation.equipmentList.some((equipment) =>
-        target.equipmentList.includes(equipment)
-      );
+      const sharesEquipment = partagentUnEquipement(reservation, target);
       if (!sharesEquipment) return false;
 
       const rStart = reservation.startTime || reservation.startDate.slice(-5);
@@ -343,7 +303,7 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     }
 
     if (endTime <= startTime) {
-      setSubmitError("L'heure de fin doit être postérieure à l'heure de début.");
+      setSubmitError('Choisissez l’heure de début, puis l’heure de fin.');
       return;
     }
 
@@ -461,65 +421,125 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     }
   };
 
-  const hasExistingReservation = selectedDayReservations.length > 0;
+  const aujourdhui = new Date();
+  const aujourdhuiIso = `${aujourdhui.getFullYear()}-${String(aujourdhui.getMonth() + 1).padStart(2, '0')}-${String(aujourdhui.getDate()).padStart(2, '0')}`;
+  const premierJour = new Date(year, month, 1).getDay();
+  const decalage = (premierJour + 6) % 7;
+  const jours = [
+    ...Array.from({ length: decalage }, (_, index) => ({
+      cle: `vide-${month}-${index}`,
+      jour: null as number | null,
+      selectionne: false,
+      passe: false,
+      niveau: null,
+    })),
+    ...Array.from({ length: totalDaysInMonth }, (_, index) => {
+      const jour = index + 1;
+      const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+      return {
+        cle: iso,
+        jour,
+        selectionne: jour === selectedDayNum,
+        passe: iso < aujourdhuiIso,
+        niveau: disponibiliteJour(iso, aujourdhuiIso, reservations, selectedEquipment),
+      };
+    }),
+  ];
+  const dateChoisie = new Date(year, month, selectedDayNum).toLocaleDateString('fr-FR', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+  const creneauxDebut = creneauxAffiches(startTime).map((heure) => ({
+    debut: heure,
+    occupe: creneauConflit(heure, selectedDayReservations, selectedEquipment, editReservation?.id),
+    actif: heure === startTime,
+  }));
+  const creneauxFin = heuresFinAffichees(startTime, endTime).map((heure) => ({
+    debut: heure,
+    occupe: plageConflit(startTime, heure, selectedDayReservations, selectedEquipment, editReservation?.id),
+    dansPlage: heure > startTime && heure < endTime,
+    actif: heure === endTime,
+  }));
+  const plage = endTime > startTime
+    ? `${startTime} – ${endTime} · ${libelleDuree(startTime, endTime)}`
+    : 'Choisissez l’heure de début, puis l’heure de fin.';
+  const reservationsDuJour = selectedDayReservations
+    .filter((reservation) => reservation.status !== 'Refusée')
+    .map((reservation) => ({
+      id: reservation.id,
+      label: reservation.equipmentName,
+      horaire: `${reservation.startTime || reservation.startDate.slice(-5)}–${reservation.endTime || reservation.endDate.slice(-5)}`,
+      statut: reservation.status,
+    }));
+  const resumes: [string, string, string, string] = [
+    dateChoisie,
+    plage,
+    selectedEquipment.join(', ') || 'Aucun matériel',
+    location.trim() || 'Lieu, projet, note',
+  ];
+  const reservationsVisibles = (isCameraAdmin
+    ? reservations
+    : reservations.filter((reservation) => reservation.createdByUserId === currentUser?.uid)
+  ).slice().sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-      {/* Demande explicite (21 octobre, répétée une 2e fois plus fermement :
-          « sur pc l'écran prenne toute la place... en une vue on doit avoir
-          les infos ») — la première tentative (hauteur fixée à la fenêtre
-          seule) ne suffisait pas : le contenu lui-même dépassait encore.
-          Ici on compacte tout (grille de créneaux en 5 colonnes au lieu de
-          3, paddings et espacements resserrés partout) pour que ça tienne
-          réellement dans un écran PC classique sans le moindre défilement.
-          Le scroll interne est conservé seulement comme filet de sécurité
-          sur un très petit écran, il ne devrait normalement jamais servir. */}
-      <div className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full sm:max-w-[1680px] sm:h-[calc(100vh-32px)] p-5 sm:p-6 text-white shadow-2xl relative space-y-4 overflow-y-auto custom-scrollbar">
-
-        {/* Top Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer border border-white/10"
-          title="Fermer"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* Modal Header */}
-        <div className="flex items-start gap-3 pr-10">
-          <div className="w-9 h-9 rounded-2xl bg-[#2a133d] border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0 shadow-lg shadow-purple-950/40">
-            <Camera className="w-5 h-5 text-purple-300" />
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/45 backdrop-blur-sm p-0 sm:p-6 overflow-hidden">
+      <motion.div
+        initial={{ opacity: 0, y: 18, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        className="bg-[var(--nv-surface-1)] text-[var(--ink-1)] border border-[var(--nv-border-1)] w-full sm:max-w-6xl rounded-t-[28px] sm:rounded-[28px] shadow-2xl h-[100dvh] sm:h-[min(92vh,920px)] max-h-[100dvh] flex flex-col overflow-hidden"
+      >
+        <div className="shrink-0 bg-[var(--nv-surface-1)] px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-start gap-3 border-b border-[var(--nv-border-1)]">
+          <div className="w-11 h-11 rounded-2xl bg-violet-600 text-white flex items-center justify-center shrink-0">
+            <Camera className="w-5 h-5" />
           </div>
-          <div>
-            <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg sm:text-xl font-bold text-[var(--ink-1)] tracking-tight">
               {editReservation ? 'Modifier la réservation' : 'Réservation de matériel'}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {editReservation
-                ? 'Ajustez le créneau ou le matériel, puis enregistrez.'
-                : <>Remplissez le formulaire. La demande sera validée par <span className="text-slate-200 font-semibold">Sylvain ou Mélanie Grazia</span>.</>}
+            <p className="text-xs sm:text-sm text-[var(--ink-2)] mt-0.5">
+              Réservez facilement une caméra pour vos prises de vue immersives.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setVoirReservations((ouvert) => !ouvert)}
+            className="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-[var(--nv-border-1)] text-sm font-medium text-[var(--ink-2)] hover:bg-[var(--nv-wash)]"
+          >
+            <ClipboardList className="w-4 h-4" />
+            {voirReservations ? 'Nouvelle demande' : 'Vos réservations'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fermer"
+            className="w-9 h-9 rounded-full text-[var(--ink-2)] hover:bg-[var(--nv-wash)] hover:text-[var(--ink-1)] flex items-center justify-center"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Panneau admin : demandes en attente (Sylvain / Mélanie uniquement) */}
-        {isCameraAdmin && pendingReservations.length > 0 && !isSuccess && (
-          <div className="bg-purple-950/20 border border-purple-500/30 rounded-2xl p-3 space-y-2">
-            <p className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5" />
-              {pendingReservations.length} demande(s) en attente de validation
-            </p>
-            <div className="space-y-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth px-4 sm:px-6 py-4 sm:py-5 space-y-4">
+          <button
+            type="button"
+            onClick={() => setVoirReservations((ouvert) => !ouvert)}
+            className="sm:hidden inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-[var(--nv-border-1)] text-sm font-medium text-[var(--ink-2)]"
+          >
+            <ClipboardList className="w-4 h-4" />
+            {voirReservations ? 'Nouvelle demande' : 'Vos réservations'}
+          </button>
+
+          {isCameraAdmin && pendingReservations.length > 0 && !isSuccess && (
+            <div className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-3 space-y-2">
+              <p className="text-xs font-semibold text-violet-300 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                {pendingReservations.length} demande{pendingReservations.length > 1 ? 's' : ''} en attente
+              </p>
               {pendingReservations.map((res) => (
                 <button
                   key={res.id}
                   type="button"
                   onClick={() => {
-                    // Demande explicite : on perdait le fil de la date
-                    // demandée en parcourant le calendrier soi-même — on
-                    // recale systématiquement le calendrier sur le jour de
-                    // la demande ouverte, pour qu'il ne reste jamais sur un
-                    // mois parcouru entre-temps.
                     const [datePart] = res.startDate.split(' ');
                     const [y, m, d] = datePart.split('-').map(Number);
                     if (y && m && d) {
@@ -528,364 +548,129 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                     }
                     setDetailReservation(res);
                   }}
-                  className="w-full flex items-center justify-between gap-3 bg-[#050f14] border border-[#182e38] rounded-xl p-3 text-left hover:border-[#F7BC5F]/40 transition-colors"
+                  className="w-full flex items-center justify-between gap-3 bg-[var(--nv-field)] border border-[var(--nv-border-1)] rounded-xl px-3 py-2 text-left"
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-white truncate">{res.equipmentName}</p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {res.agentName} • {formatReservationDateFr(res)}
-                      {res.projectName ? ` • ${res.projectName}` : ''}
-                    </p>
-                  </div>
-                  <span className="text-[11px] font-semibold text-[#F9C977] shrink-0">Contrôler →</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-[var(--ink-1)] truncate">{res.equipmentName}</span>
+                    <span className="block text-[11px] text-[var(--ink-2)] truncate">{res.agentName} · {formatReservationDateFr(res)}</span>
+                  </span>
+                  <span className="text-xs font-semibold text-[var(--ink-violet)] shrink-0">Contrôler</span>
                 </button>
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Success Feedback Overlay */}
-        {isSuccess ? (
-          <div className="p-12 text-center space-y-3 bg-[#051319] border border-emerald-500/30 rounded-2xl animate-scale-up">
-            <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-            <h3 className="text-lg font-bold text-white">
-              {editReservation ? 'Réservation mise à jour !' : 'Demande enregistrée avec succès !'}
-            </h3>
-            <p className="text-xs text-slate-400">
-              {editReservation
-                ? 'Les modifications ont été enregistrées.'
-                : 'Sylvain et Mélanie Grazia ont été notifiés et valideront votre demande.'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {(submitError || loadError) && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs">
-                {submitError || loadError}
-              </div>
-            )}
+          {(submitError || loadError) && (
+            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-[var(--ink-rose)] text-sm">
+              {submitError || loadError}
+            </div>
+          )}
 
-            {loadingReservations && (
-              <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-200 text-xs">
-                Chargement du planning en cours...
-              </div>
-            )}
-
-          {/* Refonte (21 octobre, demande explicite : « les personnes se
-              mélangent ») — maquette validée par Sylvain. Calendrier mensuel
-              + grille de créneaux + liste de matériel, tous les trois avec
-              un avatar nominatif dès qu'ils sont déjà pris, plus un bandeau
-              listant qui a déjà réservé ce jour-là : qui a quoi est visible
-              d'un coup d'œil, sans recouper une liste séparée. */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-
-            {hasExistingReservation && (
-              <div className="flex items-center gap-3 px-3.5 py-2 bg-purple-950/20 border border-purple-500/25 rounded-2xl">
-                <div className="flex shrink-0">
-                  {todaysAgents.map((agent, idx) => (
-                    <span
-                      key={agent.id}
-                      title={agent.agentName}
-                      style={{ backgroundColor: getAgentColor(agent.agentName), marginLeft: idx === 0 ? 0 : -8 }}
-                      className="w-6 h-6 rounded-full border-2 border-[#09151c] flex items-center justify-center text-[10px] font-extrabold text-[#04090c]"
-                    >
-                      {getAgentInitials(agent.agentName)}
-                    </span>
-                  ))}
-                </div>
-                <p className="text-xs font-bold text-purple-200 flex-1">
-                  {selectedDayReservations.length} réservation{selectedDayReservations.length > 1 ? 's' : ''} ce jour — vérifiez avant de choisir, pour éviter les doublons.
+          <AnimatePresence mode="wait" initial={false}>
+            {isSuccess ? (
+              <motion.div
+                key="succes"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="py-16 text-center"
+              >
+                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
+                <h3 className="text-lg font-semibold text-[var(--ink-1)] mt-3">
+                  {editReservation ? 'Réservation mise à jour' : 'Demande enregistrée'}
+                </h3>
+                <p className="text-sm text-[var(--ink-2)] mt-1">
+                  {editReservation
+                    ? 'Les modifications ont été enregistrées.'
+                    : 'Sylvain et Mélanie Grazia ont été notifiés.'}
                 </p>
-              </div>
+              </motion.div>
+            ) : voirReservations ? (
+              <motion.div
+                key="liste"
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -16 }}
+                transition={{ duration: 0.25 }}
+                className="space-y-2"
+              >
+                {reservationsVisibles.length === 0 ? (
+                  <p className="text-sm text-[var(--ink-2)] py-8 text-center">Aucune réservation pour le moment.</p>
+                ) : reservationsVisibles.map((reservation) => (
+                  <div key={reservation.id} className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--nv-border-1)] bg-[var(--nv-field)] px-3 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[var(--ink-1)] truncate">{reservation.equipmentName}</p>
+                      <p className="text-xs text-[var(--ink-2)] truncate">{formatReservationDateFr(reservation)}</p>
+                    </div>
+                    <span className={`text-[11px] font-semibold px-2 py-1 rounded-full shrink-0 ${
+                      reservation.status === 'Confirmée'
+                        ? 'bg-emerald-500/15 text-[var(--ink-emerald)]'
+                        : reservation.status === 'Refusée'
+                          ? 'bg-rose-500/15 text-[var(--ink-rose)]'
+                          : 'bg-amber-500/15 text-[var(--ink-amber)]'
+                    }`}>
+                      {reservation.status}
+                    </span>
+                  </div>
+                ))}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="formulaire"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 12 }}
+                transition={{ duration: 0.25 }}
+              >
+                {loadingReservations && (
+                  <p className="text-xs text-[var(--ink-violet)] mb-3">Chargement du planning...</p>
+                )}
+                <FormulaireReservationMateriel
+                  mobile={ecranEtroit}
+                  etape={etapeMobile}
+                  onEtape={setEtapeMobile}
+                  resumes={resumes}
+                  moisLabel={`${monthNames[month]} ${year}`}
+                  moisCle={`${year}-${month}`}
+                  sensMois={sensMois}
+                  onMoisPrecedent={() => changerMois(-1)}
+                  onMoisSuivant={() => changerMois(1)}
+                  onAujourdhui={allerAujourdhui}
+                  jours={jours}
+                  onChoisirJour={choisirJour}
+                  dateChoisie={dateChoisie}
+                  ongletHoraire={ongletHoraire}
+                  onOngletHoraire={setOngletHoraire}
+                  debut={startTime}
+                  fin={endTime}
+                  creneauxDebut={creneauxDebut}
+                  creneauxFin={creneauxFin}
+                  plage={plage}
+                  onChoisirDebut={choisirDebut}
+                  onChoisirFin={choisirFin}
+                  reservationsDuJour={reservationsDuJour}
+                  materiels={MATERIELS.map((materiel) => ({
+                    ...materiel,
+                    selectionne: selectedEquipment.includes(materiel.id),
+                  }))}
+                  onBasculerMateriel={toggleEquipment}
+                  lieu={location}
+                  onLieu={setLocation}
+                  projet={projectName}
+                  onProjet={setProjectName}
+                  mandat={mandateNumber}
+                  onMandat={setMandateNumber}
+                  note={note}
+                  onNote={setNote}
+                  onAnnuler={onClose}
+                  onConfirmer={() => { void handleSubmit({ preventDefault() {} } as React.FormEvent); }}
+                  confirmationLabel={submitting ? 'Enregistrement...' : editReservation ? 'Enregistrer les modifications' : 'Confirmer la réservation'}
+                  confirmationDesactivee={submitting || loadingReservations || endTime <= startTime}
+                />
+              </motion.div>
             )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-
-              {/* 1. Date */}
-              <div>
-                <div className="flex items-center gap-2.5 mb-2.5">
-                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">1</span>
-                  <label className="text-sm font-extrabold text-white">Choisir une date *</label>
-                </div>
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
-                  <div className="flex items-center justify-between mb-2.5">
-                    <button
-                      type="button"
-                      onClick={handlePrevMonth}
-                      className="w-7 h-7 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm font-bold text-slate-200">{monthNames[month]} {year}</span>
-                    <button
-                      type="button"
-                      onClick={handleNextMonth}
-                      className="w-7 h-7 rounded-full bg-[#0a1a21] hover:bg-[#132c37] text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 mb-1">
-                    {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((wd, i) => (
-                      <span key={i} className="text-center text-[10px] font-extrabold text-slate-500">{wd}</span>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 gap-1">
-                    {calendarCells.map((cell, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        disabled={!cell.inMonth}
-                        onClick={() => cell.inMonth && cell.dayNum && setSelectedDayNum(cell.dayNum)}
-                        className={`relative h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
-                          !cell.inMonth
-                            ? 'text-slate-700 cursor-default'
-                            : cell.isSelected
-                            ? 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-600 text-white shadow-md shadow-purple-900/40 cursor-pointer'
-                            : 'text-slate-300 hover:bg-white/5 cursor-pointer'
-                        }`}
-                      >
-                        {cell.label}
-                        {cell.inMonth && cell.density && !cell.isSelected && (
-                          <span
-                            className="absolute bottom-1 w-1.5 h-1.5 rounded-full"
-                            style={{ backgroundColor: cell.density === 'full' ? '#fb7185' : cell.density === 'busy' ? '#fbbf24' : '#a78bfa' }}
-                          />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-3 mt-2.5 pt-2.5 border-t border-[#132c37] flex-wrap">
-                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#a78bfa]" />Disponible</span>
-                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24]" />Peu de créneaux</span>
-                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-[#fb7185]" />Complet</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. Créneau */}
-              <div>
-                <div className="flex items-center gap-2.5 mb-2.5">
-                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">2</span>
-                  <label className="text-sm font-extrabold text-white">Choisir un créneau *</label>
-                </div>
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3.5">
-                  <p className="text-xs font-bold text-slate-400 mb-2.5 capitalize">
-                    {dayNames[new Date(year, month, selectedDayNum).getDay()]} {selectedDayNum} {monthNames[month].toLowerCase()} {year}
-                  </p>
-                  {/* 5 colonnes au lieu de 3 (demande explicite « en une vue,
-                      sans scroller ») : 23 créneaux tiennent sur 5 lignes au
-                      lieu de 8, et le cap de défilement interne a été retiré
-                      — il contredisait justement la demande. */}
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {SLOT_TIMES.map((time) => {
-                      const conflict = findSlotConflict(time);
-                      const taken = !!conflict;
-                      const inRange = !taken && timeToMinutes(time) >= timeToMinutes(startTime) && timeToMinutes(time) < timeToMinutes(endTime);
-                      return (
-                        <button
-                          key={time}
-                          type="button"
-                          disabled={taken}
-                          onClick={() => handleSlotClick(time)}
-                          className={`h-11 rounded-lg flex flex-col items-center justify-center gap-0.5 border transition-colors ${
-                            taken
-                              ? 'bg-[#0a1319] border-[#1c2b32] cursor-default'
-                              : inRange
-                              ? 'bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-600 border-transparent shadow-md shadow-purple-900/40 cursor-pointer'
-                              : 'bg-[#09151c] border-[#16303b] hover:border-purple-500/40 cursor-pointer'
-                          }`}
-                        >
-                          <span className={`text-[11px] font-extrabold ${taken ? 'text-slate-600 line-through' : inRange ? 'text-white' : 'text-slate-200'}`}>
-                            {time}
-                          </span>
-                          {conflict && (
-                            <span className="flex items-center gap-0.5">
-                              <span
-                                style={{ backgroundColor: getAgentColor(conflict.agentName) }}
-                                className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-extrabold text-[#04090c] shrink-0"
-                              >
-                                {getAgentInitials(conflict.agentName)}
-                              </span>
-                              <span className="text-[7.5px] font-bold text-slate-500 truncate max-w-[36px]">{conflict.agentName.split(' ')[0]}</span>
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="mt-2.5 pt-2.5 border-t border-[#132c37] text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-purple-400" />
-                    {startTime} – {endTime}
-                  </p>
-                </div>
-              </div>
-
-              {/* 3. Matériel */}
-              <div>
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">3</span>
-                    <label className="text-sm font-extrabold text-white">Matériel requis *</label>
-                  </div>
-                  <span className="text-xs text-slate-400 font-medium">
-                    {selectedEquipment.length} sélectionné
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  {EQUIPMENT_OPTIONS.map((item) => {
-                    const isSelected = selectedEquipment.includes(item.id);
-                    const conflict = findConflictingReservation(item.id, startTime, endTime, editReservation?.id);
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => toggleEquipment(item.id)}
-                        aria-pressed={isSelected}
-                        className={`w-full p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all select-none text-left ${
-                          isSelected
-                            ? 'bg-[#28133b] border-purple-500 text-white shadow-sm shadow-purple-900/20'
-                            : 'bg-[#051319] border-[#132c37] text-slate-300 hover:border-purple-500/40'
-                        }`}
-                      >
-                        <span className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 text-white ${item.tileClass}`}>
-                          <item.icon className="w-5 h-5" strokeWidth={1.8} />
-                        </span>
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-sm font-extrabold truncate">{item.label}</span>
-                          <span className="block text-[11px] text-slate-500 truncate mt-0.5">{item.sub}</span>
-                        </span>
-                        {conflict ? (
-                          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 shrink-0">
-                            <span
-                              style={{ backgroundColor: getAgentColor(conflict.agentName) }}
-                              className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-extrabold text-[#04090c] shrink-0"
-                            >
-                              {getAgentInitials(conflict.agentName)}
-                            </span>
-                            <span className="text-[9px] font-extrabold text-amber-300 truncate max-w-[70px]">Pris par {conflict.agentName.split(' ')[0]}</span>
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-[9px] font-extrabold text-emerald-400 shrink-0">Libre</span>
-                        )}
-                        <span
-                          aria-hidden="true"
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                            isSelected ? 'border-transparent bg-gradient-to-br from-purple-600 via-fuchsia-600 to-pink-600' : 'border-slate-600'
-                          }`}
-                        >
-                          {isSelected && <span className="w-2.5 h-2.5 rounded-full bg-white" />}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Informations complémentaires */}
-            <div>
-              <div className="flex items-center gap-2.5 mb-2">
-                <span className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 text-white text-xs font-black flex items-center justify-center shrink-0">4</span>
-                <label className="text-sm font-extrabold text-white">Informations complémentaires</label>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-purple-400" />
-                    Lieu
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Adresse, ville..."
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-1.5">
-                    <Hash className="w-3.5 h-3.5 text-purple-400" />
-                    N° mandat (optionnel)
-                  </label>
-                  {/* Signalé (8 septembre, Mélanie, ImmoSphera/NovaVisio) :
-                      « la réservation ne fonctionne pas » — en réalité, ce
-                      champ obligatoire bloquait silencieusement l'envoi du
-                      formulaire (validation HTML native, sans message
-                      clair) dès qu'une réservation n'était pas rattachée à
-                      un mandat précis (tournage interne, contenu NovaVisio,
-                      etc.). Toutes les autres infos restent facultatives
-                      sauf le matériel et les horaires — pas de raison
-                      d'exiger un mandat pour réserver la caméra. */}
-                  <input
-                    type="text"
-                    placeholder="Ex : 2024-001"
-                    value={mandateNumber}
-                    onChange={(e) => setMandateNumber(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-1.5">
-                    <Briefcase className="w-3.5 h-3.5 text-purple-400" />
-                    Projet
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Nom du projet..."
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <div className="bg-[#051319] border border-[#132c37] rounded-2xl p-3">
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-white mb-1.5">
-                    <FileText className="w-3.5 h-3.5 text-purple-400" />
-                    Note (optionnel)
-                  </label>
-                  <textarea
-                    rows={1}
-                    placeholder="Informations supplémentaires..."
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    className="w-full bg-[#050f14] border border-[#142832] focus:border-purple-500 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none resize-none transition-colors"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Action Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#142832]">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-5 py-2.5 rounded-full border border-[#132c37] bg-[#051319] text-slate-300 hover:text-white hover:border-purple-500/40 text-xs font-bold transition-colors cursor-pointer"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                disabled={submitting || loadingReservations}
-                className="px-6 py-2.5 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:opacity-95 text-white font-black text-xs shadow-lg shadow-purple-900/40 flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-              >
-                <Send className="w-4 h-4" />
-                <span>
-                  {submitting
-                    ? 'Enregistrement...'
-                    : editReservation
-                    ? 'Enregistrer les modifications'
-                    : 'Envoyer la demande'}
-                </span>
-              </button>
-            </div>
-          </form>
-          </>
-        )}
-      </div>
+          </AnimatePresence>
+        </div>
+      </motion.div>
 
       {/* Fenêtre de contrôle détaillée d'une réservation (ticket #19) */}
       {detailReservation && (

@@ -57,6 +57,8 @@ interface HeaderProps {
     contactId: string
   ) => void;
 
+  onOpenMessage?: (messageId: string) => void;
+
   onToggleMobileMenu?: () => void;
   onToggleNotifications?: () => void;
   // État du panneau "Menu" (partagé avec le tiroir mobile existant) — sert
@@ -82,6 +84,7 @@ export const Header: React.FC<
 
   onNavigate,
   onSelectContact,
+  onOpenMessage,
 
   onToggleMobileMenu,
   onToggleNotifications,
@@ -151,7 +154,7 @@ export const Header: React.FC<
   const resultatsLocaux = useMemo<Resultat[]>(() => {
     const q = searchQuery.trim();
     if (!q) return [];
-    return [...chercherClients(contacts as any, q), ...chercherAccueil(activeAgency?.id, q)];
+    return [...chercherClients(contacts as any, q), ...chercherAccueil(activeAgency?.id, q, activeAgency)];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, contacts, activeAgency?.id]);
   const [resultatsDistants, setResultatsDistants] = useState<Resultat[]>([]);
@@ -177,6 +180,7 @@ export const Header: React.FC<
     else if (a.genre === 'dossier-accueil') { onNavigate?.('accueil'); demanderOuvrirDossierAccueil(a.dossierId); }
     else if (a.genre === 'agenda') { onNavigate?.('agenda'); demanderAgendaAllerA(a.date); }
     else if (a.genre === 'lien') window.open(a.url, '_blank', 'noopener,noreferrer');
+    else if (a.genre === 'message') onOpenMessage?.(a.messageId);
     setSearchQuery('');
     setSearchFocused(false);
   };
@@ -276,7 +280,7 @@ export const Header: React.FC<
             if (e.key === 'Escape') { setSearchQuery(''); (e.currentTarget as HTMLInputElement).blur(); }
             if (e.key === 'Enter' && groupes.length > 0) ouvrirResultat(groupes[0].items[0]);
           }}
-          placeholder="Rechercher : client, rendez-vous, dossier, document…"
+          placeholder="Rechercher : client, pipeline, message…"
           className="w-full bg-[#0b1c1e] border border-white/10 focus:border-[#F7BC5F]/50 rounded-xl pl-10 pr-9 py-2 text-sm text-white placeholder-gray-500 outline-none transition-colors"
         />
         {searchQuery && (
@@ -309,7 +313,7 @@ export const Header: React.FC<
             ))}
             {rechercheEnCours && (
               <div className="px-3.5 py-2 text-[11px] text-gray-500 flex items-center gap-2">
-                <Loader2 className="w-3 h-3 animate-spin" /> Recherche dans l'agenda, les rappels, les documents…
+                <Loader2 className="w-3 h-3 animate-spin" /> Recherche dans le pipeline, les messages, l'agenda…
               </div>
             )}
             {!rechercheEnCours && groupes.length === 0 && (
