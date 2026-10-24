@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Contact } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { toValidUuidOrNull, getAssignedUserIdAsUuid } from '@/data/teamMembers';
+import { ajouterDevant, contactProvisoire, remplacerParId, retirerParId } from '@/lib/peintureImmediate';
 
 const CONSEILS_FINANCES_ID = '30f96ea9-41da-41c2-a95e-f5e7898f8d8e';
 const NOVAVISIO_ID = '0cd9362c-316e-4b57-af0b-b6cea092961b';
@@ -360,16 +361,29 @@ export const useContacts = () => {
       return supabaseLeadToContact(data as Record<string, unknown>);
     },
 
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['contacts_all'] }),
-        queryClient.invalidateQueries({ queryKey: ['deals'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] }),
-      ]);
+    onMutate: (newContact) => {
+      const tempId = `optimistic-${crypto.randomUUID()}`;
+      const previous = queryClient.getQueryData<Contact[]>(['contacts_all']);
+      const provisoire = contactProvisoire(newContact, tempId) as Contact;
+      queryClient.setQueryData<Contact[]>(['contacts_all'], (old) => ajouterDevant(old, provisoire));
+      void queryClient.cancelQueries({ queryKey: ['contacts_all'] });
+      return { tempId, previous };
     },
 
-    onError: (error) => {
+    onSuccess: (created, _saisie, context) => {
+      if (context?.tempId) {
+        queryClient.setQueryData<Contact[]>(['contacts_all'], (old) => remplacerParId(old, context.tempId, created));
+      }
+      void queryClient.invalidateQueries({ queryKey: ['contacts_all'] });
+      void queryClient.invalidateQueries({ queryKey: ['deals'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] });
+    },
+
+    onError: (error, _saisie, context) => {
       console.error('Impossible de créer le contact :', error);
+      if (!context) return;
+      if (context.previous) queryClient.setQueryData(['contacts_all'], context.previous);
+      else queryClient.setQueryData<Contact[]>(['contacts_all'], (old) => retirerParId(old, context.tempId));
     },
   });
 
