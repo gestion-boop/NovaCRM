@@ -1080,7 +1080,7 @@ function App() {
           <EcranErrorBoundary resetKey={selectedClientProfileId ? `fiche:${selectedClientProfileId}` : currentNav}>
           <div
             key={selectedClientProfileId ? 'client-profile' : currentNav}
-            className={`relative z-10 ${selectedClientProfileId ? '' : (currentNav === 'mail' ? 'h-full' : 'min-h-full')}`}
+            className={`relative z-10 ${selectedClientProfileId ? '' : (currentNav === 'mail' || currentNav === 'carte-novavisio' ? 'h-full' : 'min-h-full')}`}
           >
           {selectedClientProfileId ? (
             <ClientProfileView
