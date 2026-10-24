@@ -2298,7 +2298,13 @@ export default function ClientProfileView({
           — même constat/correctif que le liseré du champ de saisie du chat
           plus tôt dans la session : passage à border-white/15, nettement
           plus visible sans être criard. */}
-      <div className="bg-[#07191b] border-b border-white/15 p-4 sm:p-6 flex flex-col gap-4 sm:gap-6 sticky top-0 z-10">
+      {/* Signalé (24 octobre) : cet en-tête (avec la barre de pipeline)
+          restait figé en haut de l'écran pendant tout le défilement de la
+          fiche — "sticky" retiré pour qu'il défile normalement, comme le
+          reste du contenu. Le bouton retour n'a plus besoin de rester
+          visible en permanence : le geste de retour au doigt (bord gauche)
+          fonctionne depuis n'importe quelle position de défilement. */}
+      <div className="bg-[#07191b] border-b border-white/15 p-4 sm:p-6 flex flex-col gap-4 sm:gap-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <button onClick={onBack} className="p-2 rounded-xl bg-black/40 hover:bg-black/60 border border-[#144447]/60 text-slate-300 transition-colors shrink-0">
@@ -2420,12 +2426,14 @@ export default function ClientProfileView({
         {/* Pipeline réel — cliquer une étape l'enregistre en base */}
         {/* Demande explicite (24 octobre, maquette validée) : un peu plus
             aérée — coins plus arrondis, espacements légèrement augmentés,
-            libellés d'étape un peu plus lisibles. */}
-        <div className="bg-[#0a1e20] rounded-2xl border border-white/15 p-5 pb-6 relative shadow-inner">
-          <div className="flex items-center gap-2.5 mb-5 text-xs font-bold text-slate-400">
+            libellés d'étape un peu plus lisibles. Resserré ensuite sur
+            téléphone (24 octobre, "mets la barre plus petite") : padding et
+            marges réduits sous sm:, inchangé sur tablette/ordinateur. */}
+        <div className="bg-[#0a1e20] rounded-2xl border border-white/15 p-3.5 pb-3.5 sm:p-5 sm:pb-6 relative shadow-inner">
+          <div className="flex items-center gap-2.5 mb-3 sm:mb-5 text-xs font-bold text-slate-400">
             Pipeline :
             <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/30 border border-[#144447] text-white text-xs font-semibold hover:bg-black/50 transition-colors">
+              <DropdownMenuTrigger className="flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-black/30 border border-[#144447] text-white text-xs font-semibold hover:bg-black/50 transition-colors">
                 {currentPipelineName}
                 <ChevronDown className="w-3.5 h-3.5" />
               </DropdownMenuTrigger>
@@ -2464,16 +2472,16 @@ export default function ClientProfileView({
                 <span className="truncate">{currentPipelineName}</span>
                 <span className="shrink-0">Étape {Math.max(currentStageIndex, 0) + 1}/{stages.length}</span>
               </div>
-              <p className="mt-1.5 text-base font-extrabold text-white truncate">
+              <p className="mt-1 text-sm font-extrabold text-white truncate">
                 {stages[Math.max(currentStageIndex, 0)]?.name}
               </p>
-              <div className="mt-2.5 h-1.5 rounded-full bg-slate-700/40 overflow-hidden">
+              <div className="mt-1.5 h-1.5 rounded-full bg-slate-700/40 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-[#F7BC5F] transition-all"
                   style={{ width: `${((Math.max(currentStageIndex, 0) + 1) / stages.length) * 100}%` }}
                 />
               </div>
-              <div className="mt-2 flex items-center justify-end gap-1 text-[11px] font-bold text-[#F7BC5F]">
+              <div className="mt-1.5 flex items-center justify-end gap-1 text-[11px] font-bold text-[#F7BC5F]">
                 Voir toutes les étapes
                 <ChevronDown className="w-3.5 h-3.5" />
               </div>
