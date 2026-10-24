@@ -18,13 +18,8 @@ interface Props {
 }
 
 const AgencyLogoSwitcher: React.FC<Props> = ({ agencies, selectedId, onSelect, size = 'md', className = '' }) => {
-  // Demandé le 6 septembre : « enlève le logo de NovaSphere sur mobile et
-  // desktop, il ne sert à rien pour l'instant » — masqué, pas supprimé : on
-  // pourrait en avoir besoin plus tard. Le logo NovaSphere est celui de la
-  // pseudo-agence « Toutes les sociétés » (id 'all'), un temps ajoutée à la
-  // liste ; elle disparaît juste de cette rangée, la fonctionnalité reste
-  // intacte pour qui y accède autrement (ex. sélecteur du menu).
-  const agenciesAffichees = agencies.filter((a) => a.id !== 'all');
+  // Affichage des 4 logos de sociétés dans la barre du haut (NovaSphere, Conseils Finances, Immosphera, Novavisio)
+  const agenciesAffichees = agencies;
   if (agenciesAffichees.length < 2) return null;
   const dim = size === 'sm' ? 'w-8 h-8' : size === 'lg' ? 'w-12 h-12' : 'w-9 h-9 sm:w-10 sm:h-10';
   const espace = size === 'lg' ? 'gap-2 p-1.5' : 'gap-1.5 p-1';
