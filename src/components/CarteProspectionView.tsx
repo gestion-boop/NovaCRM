@@ -333,16 +333,14 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
       attributionControl: true,
     });
 
-    const url =
-      mapTheme === "dark"
-        ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+    const url = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
     const layer = L.tileLayer(url, {
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> &copy; <a href="https://carto.com/" target="_blank" rel="noreferrer">CARTO</a>',
-      subdomains: "abcd",
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
+      subdomains: ["a", "b", "c"],
       maxZoom: 19,
+      className: mapTheme === "dark" ? "nova-dark-tiles" : "",
     }).addTo(map);
 
     tileLayerRef.current = layer;
@@ -362,7 +360,7 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
     };
   }, [isNovavisio]);
 
-  // Changement dynamique du fond de carte (Dark Matter vs Voyager)
+  // Changement dynamique du fond de carte (Sombre vs Clair)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -371,16 +369,14 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
       tileLayerRef.current.remove();
     }
 
-    const url =
-      mapTheme === "dark"
-        ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+    const url = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
     const layer = L.tileLayer(url, {
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> &copy; <a href="https://carto.com/" target="_blank" rel="noreferrer">CARTO</a>',
-      subdomains: "abcd",
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
+      subdomains: ["a", "b", "c"],
       maxZoom: 19,
+      className: mapTheme === "dark" ? "nova-dark-tiles" : "",
     }).addTo(map);
 
     tileLayerRef.current = layer;
@@ -508,6 +504,10 @@ export default function CarteProspectionView({ onSelectContact }: CarteProspecti
         @keyframes carteprospection-pulse {
           0% { transform: scale(0.6); opacity: 0.45; }
           100% { transform: scale(2.0); opacity: 0; }
+        }
+        /* Rendu Dark Night haute fidélité pour OpenStreetMap sans watermark ni clé */
+        .nova-dark-tiles img {
+          filter: brightness(0.6) invert(1) contrast(2.4) hue-rotate(195deg) saturate(0.35) brightness(0.75) !important;
         }
         .leaflet-tooltip.nova-carte-fiche {
           background: transparent !important;

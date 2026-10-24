@@ -110,6 +110,27 @@ const firstNamePlusInitial = (fullName: string): string => {
   return lastInitial ? `${first} ${lastInitial}` : first;
 };
 
+// Seuls les conseillers commerciaux qui réalisent des ventes figurent au tableau.
+// La direction (Sylvain, Mélanie), la communication (Sarah) et les membres sans
+// ventes en sont exclus (demande explicite : « supprime les 4 car ils ne vendent pas »).
+const NON_VENDEURS_IDS = new Set([
+  '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29', // Sylvain Grazia
+  '15bcec53-de3e-40b8-8b7e-bb6874836f29', // Mélanie Grazia
+  '3fd7bce8-cdd5-471c-96df-67c10a55d4b6', // Sarah Combres
+]);
+
+const estNonVendeur = (fullName: string, id: string): boolean => {
+  if (NON_VENDEURS_IDS.has(id)) return true;
+  const nom = (fullName || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return (
+    nom.includes('sylvain') ||
+    nom.includes('melanie') ||
+    nom.includes('sarah') ||
+    nom.includes('muriel') ||
+    nom.includes('adrien')
+  );
+};
+
 // Une "étiquette" laiton — reprend le style de la photo de référence :
 // cadre doré à rivets, plaquette arrondie, petite languette débordante en
 // bas, et désormais un mini-libellé sous le nombre pour identifier l'étape
@@ -364,10 +385,13 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
           caConciergerie: 0,
         };
       };
-      // Un membre désactivé n'a plus à figurer au classement.
-      membreIds.filter((id) => actifById[id] !== false).forEach((id) => { byAgent[id] = ligneVide(id); });
+      // Un membre désactivé ou non-vendeur n'a plus à figurer au classement.
+      membreIds
+        .filter((id) => actifById[id] !== false && !estNonVendeur(nameById[id] || '', id))
+        .forEach((id) => { byAgent[id] = ligneVide(id); });
       relevant.forEach((l: any) => {
         const id = (l.assigned_to || l.created_by) as string;
+        if (estNonVendeur(nameById[id] || '', id)) return;
         if (!byAgent[id]) byAgent[id] = ligneVide(id);
         const honoraires = Number(l.estimated_value) || 0;
         const etape = etapeDe(l);
@@ -401,8 +425,13 @@ const StatistiquesEtiquettesView: React.FC<{ onSelectContact?: (contactId: strin
   }, []);
 
   // Classement par résultats : le conseiller le plus performant en tête.
+  // Demande explicite : « supprime les 4 car ils ne vendent pas ».
+  // Ne conserve que les conseillers qui réalisent des ventes (total > 0 et non exclus).
   const orderedRowsToutesLignes = useMemo(
-    () => [...rows].sort((a, b) => b.total - a.total || a.agentFullName.localeCompare(b.agentFullName, 'fr')),
+    () =>
+      [...rows]
+        .filter((r) => !estNonVendeur(r.agentFullName, r.agentId) && r.total > 0)
+        .sort((a, b) => b.total - a.total || a.agentFullName.localeCompare(b.agentFullName, 'fr')),
     [rows]
   );
   // Verrouillage des montants (6 septembre) : un agent simple ne voit que sa
