@@ -1181,7 +1181,11 @@ ${
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
+          // Demande explicite (24 octobre) : passer sur un modèle plus
+          // récent pour améliorer le raisonnement de Nova sur les demandes
+          // complexes à plusieurs étapes — Haiku 4.5 était volontairement
+          // léger/rapide mais moins fiable sur ce type de requêtes.
+          model: 'claude-sonnet-5-5',
           // Relevé (#26 : recherche web, puis signalé : tâches/notes parfois
           // ignorées sur une demande combinée) — plusieurs tool_use dans la
           // même réponse (contact + tâche + note + rappel...) peuvent
