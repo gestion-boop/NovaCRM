@@ -1610,24 +1610,32 @@ function App() {
           style={{ transition: 'opacity 220ms cubic-bezier(0.22, 1, 0.36, 1)' }}
         />
         <aside
-          className={`fixed right-3 sm:right-4 top-3 sm:top-4 bottom-3 sm:bottom-4 z-[80] w-[calc(100%-1.5rem)] sm:w-[440px] lg:w-[500px] bg-[#071015] border border-[#F7BC5F]/50 rounded-3xl shadow-2xl flex flex-col overflow-hidden ${
+          className={`fixed right-3 sm:right-4 top-3 sm:top-4 bottom-3 sm:bottom-4 z-[80] w-[calc(100%-1.5rem)] sm:w-[440px] lg:w-[480px] bg-[#071317]/95 backdrop-blur-2xl border border-teal-500/25 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_30px_rgba(247,188,95,0.1)] flex flex-col overflow-hidden ${
             notificationsPanelOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
           }`}
           style={{
             top: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
             bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
-            transition: 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms cubic-bezier(0.22, 1, 0.36, 1)',
+            transition: 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >
-            <div className="min-h-14 shrink-0 px-4 flex items-center justify-between border-b border-white/10 bg-[#081318] pt-[env(safe-area-inset-top,0px)]">
-              <div className="font-bold text-white">Rappels & Alertes</div>
+            {/* Liseré supérieur or lumineux */}
+            <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/60 to-transparent pointer-events-none" />
+
+            <div className="min-h-14 shrink-0 px-4.5 sm:px-5 flex items-center justify-between border-b border-teal-500/15 bg-gradient-to-r from-[#081b1e]/95 via-[#0b2427]/95 to-[#081b1e]/95 pt-[env(safe-area-inset-top,0px)]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#F7BC5F]/25 to-amber-600/30 border border-[#F7BC5F]/40 flex items-center justify-center text-[#FAD592] shadow-[0_0_12px_rgba(247,188,95,0.25)]">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <h2 className="text-sm font-bold text-white tracking-wide">Rappels &amp; Alertes</h2>
+              </div>
               <button
                 type="button"
                 onClick={() => setNotificationsPanelOpen(false)}
-                className="p-2 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                className="w-8 h-8 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors shrink-0"
                 title="Fermer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4.5 h-4.5" />
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">

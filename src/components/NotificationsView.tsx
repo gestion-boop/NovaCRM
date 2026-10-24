@@ -504,6 +504,15 @@ export const NotificationsView: React.FC<
     await supabase.from('notifications').update({ dismissed_at: new Date().toISOString() }).eq('id', id);
   };
 
+  const dismissAllNotifications = async () => {
+    const ids = visibleNotifications.map((n) => n.id);
+    if (!ids.length) return;
+    const rows = realNotifications.filter((n) => ids.includes(n.id));
+    fermerNotificationsSysteme(rows);
+    setRealNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
+    await supabase.from('notifications').update({ dismissed_at: new Date().toISOString() }).in('id', ids);
+  };
+
   const canSeeAgency = (
     agencyId?: string
   ) => {
@@ -691,63 +700,51 @@ export const NotificationsView: React.FC<
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6 text-white">
-      <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-2xl bg-[#F7BC5F]/20 border border-[#F7BC5F]/30 text-[#FAD592] flex items-center justify-center">
-          <Bell className="w-5 h-5" />
+    <div className="p-4 sm:p-5 max-w-full space-y-4 text-white">
+      {/* Barre de statut KPI & Actions */}
+      <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#07191b]/90 via-[#0d282b]/80 to-[#07191b]/90 border border-teal-500/20 shadow-lg backdrop-blur-xl flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#FAD592] flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(247,188,95,0.2)]">
+            <BellRing className="w-4 h-4 text-[#F7BC5F]" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-white tracking-wide">Alertes actives</span>
+              <span className="px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-[#F7BC5F]/20 text-[#F7BC5F] border border-[#F7BC5F]/35 shadow-sm">
+                {visibleNotifications.length}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 truncate">{activeAgency.name}</p>
+          </div>
         </div>
 
-        <div>
-          <h1 className="text-xl font-bold">
-            Rappels & Alertes
-          </h1>
-
-          <p className="text-xs text-gray-400">
-            Actions et éléments nécessitant votre attention.
-          </p>
-        </div>
+        {visibleNotifications.length > 0 && (
+          <button
+            type="button"
+            onClick={dismissAllNotifications}
+            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+            title="Effacer toutes les alertes de cette liste"
+          >
+            Tout effacer
+          </button>
+        )}
       </div>
 
-      <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
-        <div>
-          <p className="text-[11px] uppercase tracking-wider text-gray-500 font-bold">
-            Alertes actives
-          </p>
-
-          <p className="text-3xl font-black text-[#F7BC5F] mt-1">
-            {
-              visibleNotifications.length
-            }
-          </p>
-        </div>
-
-        <p className="text-xs text-gray-500">
-          {
-            activeAgency.name
-          }
-        </p>
-      </div>
-
-      {/* Mobile Push & PWA Notifications Card — repliée par défaut (#40) */}
-      <div className="rounded-3xl bg-[#07191b] border border-[#144447]/80 shadow-xl overflow-hidden">
+      {/* Mobile Push & PWA Notifications Card — repliée par défaut */}
+      <div className="rounded-2xl bg-[#07191b]/90 border border-[#144447]/80 shadow-md overflow-hidden backdrop-blur-md">
         <button
           type="button"
           onClick={() => setPushCardExpanded((v) => !v)}
-          className="w-full p-4 flex items-center justify-between gap-3 text-left"
+          className="w-full px-3.5 py-2.5 flex items-center justify-between gap-3 text-left transition-colors hover:bg-white/[0.03]"
         >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-[#143c3f] border border-[#1e585c] text-[#F7BC5F] flex items-center justify-center flex-shrink-0">
-              <Smartphone className="w-4 h-4" />
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-[#143c3f] border border-[#1e585c] text-[#F7BC5F] flex items-center justify-center flex-shrink-0">
+              <Smartphone className="w-3.5 h-3.5" />
             </div>
-            <div className="min-w-0">
-              <h2 className="font-bold text-white text-sm truncate">Rappels & Alertes sur mobile</h2>
-            </div>
+            <span className="font-semibold text-slate-200 text-xs truncate">Rappels &amp; Alertes sur mobile</span>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Badge vérifié à chaque connexion/retour sur l'app : vert
-                seulement si la permission ET l'abonnement serveur sont
-                tous les deux actifs (pas juste la permission navigateur). */}
             {pushChecking ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/10">
                 <Loader2 className="w-3 h-3 animate-spin" /> Vérification...
@@ -765,16 +762,16 @@ export const NotificationsView: React.FC<
                 <AlertCircle className="w-3 h-3" /> Non supporté
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
                 <AlertCircle className="w-3 h-3" /> À activer
               </span>
             )}
-            {pushCardExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+            {pushCardExpanded ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
           </div>
         </button>
 
         {pushCardExpanded && (
-          <div className="px-4 pb-4 space-y-3">
+          <div className="px-3.5 pb-3.5 pt-1 space-y-2.5 border-t border-white/5">
             <p className="text-xs text-gray-400">
               Recevez les messages du chat, alertes dossiers et réservations en temps réel sur votre smartphone.
             </p>
@@ -783,7 +780,7 @@ export const NotificationsView: React.FC<
               <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-400" />
                 <span>
-                  <strong>Sur iPhone, les notifications ne fonctionnent que si l'appli est ajoutée à l'écran d'accueil</strong> — même en activant les alertes ici, rien n'arrivera depuis Safari (un onglet ou un favori). Ouvre le menu Partager <span className="whitespace-nowrap">(⬆️)</span> puis « Sur l'écran d'accueil », et lance ensuite Nova CRM depuis cette icône.
+                  <strong>Sur iPhone, les notifications ne fonctionnent que si l'appli est ajoutée à l'écran d'accueil</strong> — même en activant les alertes ici, rien n'arrivera depuis Safari. Ouvre le menu Partager <span className="whitespace-nowrap">(⬆️)</span> puis « Sur l'écran d'accueil », et lance ensuite Nova CRM depuis cette icône.
                 </span>
               </div>
             )}
@@ -792,10 +789,10 @@ export const NotificationsView: React.FC<
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-400" />
                 <span>
-                  <strong>Notifications bloquées pour Nova CRM dans ce navigateur.</strong> Une fois refusée (ou bloquée automatiquement après plusieurs demandes ignorées), la permission ne peut plus être redemandée depuis l'appli — le bouton ci-dessous ne suffira pas tant qu'elle n'est pas réautorisée manuellement :
+                  <strong>Notifications bloquées pour Nova CRM dans ce navigateur.</strong> Une fois refusée, la permission ne peut plus être redemandée depuis l'appli :
                   {isAndroid ? (
                     <>
-                      {' '}sur Android Chrome, touche l'icône <span className="whitespace-nowrap">🔒 / ⓘ</span> à gauche de l'adresse du site (ou Menu ⋮ → Infos sur l'appli/le site), ouvre « Autorisations » → « Notifications » et choisis « Autoriser ». Si le raccourci a été ajouté simplement (pas une vraie installation d'appli), il ne pourra de toute façon jamais afficher de pastille numérotée sur l'icône — c'est une limite de Chrome, pas de Nova CRM.
+                      {' '}sur Android Chrome, touche l'icône <span className="whitespace-nowrap">🔒 / ⓘ</span> à gauche de l'adresse du site, ouvre « Autorisations » → « Notifications » et choisis « Autoriser ».
                     </>
                   ) : (
                     <>
@@ -806,14 +803,14 @@ export const NotificationsView: React.FC<
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
               {!pushSubscribed && pushSupported && (
                 <button
                   onClick={handleEnablePush}
                   disabled={pushBusy}
-                  className="px-4 py-2 bg-[#F7BC5F] hover:bg-[#d4a838] text-slate-950 font-bold text-xs rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-md disabled:opacity-60"
+                  className="px-3.5 py-1.5 bg-[#F7BC5F] hover:bg-[#d4a838] text-slate-950 font-bold text-xs rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-md disabled:opacity-60"
                 >
-                  {pushBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <BellRing className="w-4 h-4" />}
+                  {pushBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BellRing className="w-3.5 h-3.5" />}
                   {pushPermission === 'denied' ? 'Réactiver dans les réglages' : 'Activer les alertes'}
                 </button>
               )}
@@ -822,17 +819,17 @@ export const NotificationsView: React.FC<
                 <button
                   onClick={handleSendTestNotification}
                   disabled={pushBusy}
-                  className="px-3.5 py-2 bg-[#143c3f] hover:bg-[#1e585c] text-white text-xs font-semibold rounded-xl flex items-center gap-2 border border-white/10 transition-all cursor-pointer disabled:opacity-60"
+                  className="px-3 py-1.5 bg-[#143c3f] hover:bg-[#1e585c] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 border border-white/10 transition-all cursor-pointer disabled:opacity-60"
                 >
-                  <Send className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                  <Send className="w-3 h-3 text-[#F7BC5F]" />
                   Tester une alerte
                 </button>
               )}
             </div>
 
             {testFeedback && (
-              <div className="p-3 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/30 text-[#FBE0AE] text-xs flex items-center gap-2 animate-fade-in">
-                <Info className="w-4 h-4 flex-shrink-0 text-[#F7BC5F]" />
+              <div className="p-2.5 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/30 text-[#FBE0AE] text-xs flex items-center gap-2 animate-fade-in">
+                <Info className="w-3.5 h-3.5 flex-shrink-0 text-[#F7BC5F]" />
                 <span>{testFeedback}</span>
               </div>
             )}
@@ -841,24 +838,17 @@ export const NotificationsView: React.FC<
       </div>
 
       {loading ? (
-        <div className="p-14 text-center rounded-3xl bg-white/5 border border-white/10 text-gray-400">
-          <Loader2 className="w-7 h-7 animate-spin mx-auto mb-3" />
-
-          <p className="text-xs">
-            Chargement des alertes...
-          </p>
+        <div className="p-10 text-center rounded-2xl bg-white/[0.02] border border-white/5 text-slate-400 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-6 h-6 animate-spin text-[#F7BC5F]" />
+          <p className="text-xs font-medium">Chargement des alertes...</p>
         </div>
       ) : visibleNotifications.length === 0 ? (
-        <div className="p-14 text-center rounded-3xl bg-white/5 border border-dashed border-white/10">
-          <Bell className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-
-          <p className="text-sm font-semibold text-gray-300">
-            Aucune action en attente.
-          </p>
-
-          <p className="text-xs text-gray-500 mt-1">
-            Tout est à jour pour le moment.
-          </p>
+        <div className="p-10 text-center rounded-2xl bg-white/[0.02] border border-white/5 flex flex-col items-center justify-center gap-2.5">
+          <div className="w-12 h-12 rounded-2xl bg-teal-900/30 border border-teal-700/30 flex items-center justify-center text-teal-400/80">
+            <CheckCircle2 className="w-6 h-6 text-emerald-400/90" />
+          </div>
+          <p className="text-sm font-bold text-white">Aucune alerte active</p>
+          <p className="text-xs text-slate-400 max-w-xs">Toutes vos actions et notifications sont à jour pour le moment.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -869,41 +859,47 @@ export const NotificationsView: React.FC<
   );
 
   function renderNotificationRow(notification: NotificationItem) {
+    const isAppUpdate = notification.rawType === 'app_update';
     return (
       <div
         key={notification.id}
-        className={`w-full rounded-2xl border flex items-stretch gap-1 transition-all hover:-translate-y-0.5 ${
+        className={`group relative w-full rounded-2xl border transition-all duration-200 overflow-hidden shadow-md ${
           notification.priority === 'urgent'
-            ? 'bg-rose-500/10 border-rose-500/30 hover:border-rose-400/50'
+            ? 'bg-rose-950/25 border-rose-500/35 hover:border-rose-400/60'
+            : isAppUpdate
+            ? 'bg-gradient-to-br from-amber-950/30 via-[#0a2327]/85 to-[#061417]/95 border-[#F7BC5F]/40 hover:border-[#F7BC5F]/70 shadow-[0_0_20px_rgba(247,188,95,0.15)]'
             : notification.priority === 'important'
-            ? 'bg-[#F7BC5F]/5 border-[#F7BC5F]/20 hover:border-[#F9C977]/40'
-            : 'bg-white/5 border-white/10 hover:border-[#F7BC5F]/40'
+            ? 'bg-gradient-to-br from-[#F7BC5F]/10 via-[#0a2327]/80 to-[#061417]/95 border-[#F7BC5F]/25 hover:border-[#F7BC5F]/50'
+            : 'bg-[#0a2226]/60 border-teal-500/15 hover:border-teal-500/40 hover:bg-[#0d2a2f]/70'
         }`}
       >
+        {/* Bouton supprimer (croix) en haut à droite */}
         <button
+          onClick={(e) => {
+            e.stopPropagation();
+            void dismissNotification(notification.id);
+          }}
+          title="Supprimer cette alerte"
+          className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+
+        <div
           onClick={() => {
-            // Ticket #20 (nouvelle base) : les notifications liées à un
-            // ticket Support ne doivent pas s'accumuler une fois consultées
-            // — on les supprime directement au lieu de simplement les
-            // marquer lues (elles sont aussi nettoyées à la clôture du
-            // ticket, voir SupportView.tsx / setTicketStatus).
             if (notification.rawType.startsWith('support_ticket')) {
               void dismissNotification(notification.id);
             } else if (notification.rawType.startsWith('camera_reservation')) {
-              // Demande explicite : la notification de réservation caméra
-              // doit rester visible (et cliquable, pour la retrouver) tant
-              // qu'elle n'est pas supprimée à la main via le bouton "X" —
-              // ne pas la marquer lue ici, sinon elle disparaît de ce
-              // panneau (filtré sur is_read=false) dès le premier clic.
+              // Ne pas masquer sur simple clic
             } else {
               void markNotificationRead(notification.id);
             }
             if (notification.contactId && onOpenContact) {
               onOpenContact(notification.contactId, notification.contactTab);
             } else if (
-              notification.navTarget === 'chat'
-              && (notification.messageId || notification.conversationId || notification.channelId)
-              && onOpenMessage
+              notification.navTarget === 'chat' &&
+              (notification.messageId || notification.conversationId || notification.channelId) &&
+              onOpenMessage
             ) {
               onOpenMessage({
                 messageId: notification.messageId,
@@ -916,24 +912,22 @@ export const NotificationsView: React.FC<
               onNavigate(notification.navTarget);
             }
           }}
-          className="flex-1 min-w-0 p-4 text-left flex items-center gap-4"
+          className="p-3.5 pr-9 flex items-start gap-3 cursor-pointer"
         >
-          {/* Ticket #220 : les notifications liées au CRM lui-même (ex.
-              "Mise à jour disponible") affichaient une icône générique
-              (dossier/étincelle) au lieu du vrai logo Nova CRM déjà utilisé
-              partout ailleurs (en-tête, etc.) — même fichier, mêmes
-              proportions, pour une identité visuelle cohérente. */}
-          {notification.rawType === 'app_update' ? (
-            <img
-              src="/nova-mascotte.png"
-              alt="Nova CRM"
-              className="w-10 h-10 rounded-xl shrink-0 object-cover border border-[#F7BC5F]/40 bg-[#0a2528]"
-            />
+          {isAppUpdate ? (
+            <div className="relative shrink-0 mt-0.5">
+              <img
+                src="/nova-mascotte.png"
+                alt="Nova CRM"
+                className="w-9 h-9 rounded-xl shrink-0 object-cover border border-[#F7BC5F]/50 bg-[#0a2528] shadow-[0_0_12px_rgba(247,188,95,0.25)] ring-1 ring-[#F7BC5F]/30"
+              />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-[#07191b] animate-pulse" />
+            </div>
           ) : (() => {
             const { Icon, gradient } = tileFor(notification.type);
             return (
               <div
-                className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-br ${gradient} border border-white/10 shadow-md`}
+                className={`w-9 h-9 rounded-xl shrink-0 mt-0.5 flex items-center justify-center bg-gradient-to-br ${gradient} border border-white/10 shadow-md`}
               >
                 <Icon className="w-4 h-4 text-white" />
               </div>
@@ -941,50 +935,51 @@ export const NotificationsView: React.FC<
           })()}
 
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-bold text-white">{notification.title}</h3>
-
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h3 className="text-xs sm:text-sm font-bold text-white leading-snug">{notification.title}</h3>
               {notification.priority === 'urgent' && (
-                <span className="text-[9px] uppercase tracking-wider font-black text-rose-300 bg-rose-500/15 border border-rose-500/20 px-2 py-0.5 rounded-full">
+                <span className="text-[9px] uppercase tracking-wider font-extrabold text-rose-300 bg-rose-500/15 border border-rose-500/25 px-2 py-0.2 rounded-full">
                   Urgent
+                </span>
+              )}
+              {isAppUpdate && (
+                <span className="text-[9px] uppercase tracking-wider font-extrabold text-[#F7BC5F] bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 px-2 py-0.2 rounded-full">
+                  Système
                 </span>
               )}
             </div>
 
-            <p className="text-xs text-gray-400 mt-1 line-clamp-2">{notification.description}</p>
+            <p className="text-xs text-slate-300/85 mt-1 leading-relaxed line-clamp-2">{notification.description}</p>
 
-            {notification.date && (
-              <p className="text-[10px] text-gray-600 mt-2">{formatDate(notification.date)}</p>
-            )}
+            <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap">
+              {notification.date && (
+                <p className="text-[10px] text-slate-400 flex items-center gap-1 font-medium">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  {formatDate(notification.date)}
+                </p>
+              )}
+
+              {isAppUpdate ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.location.reload();
+                  }}
+                  className="px-3 py-1 rounded-full bg-gradient-to-r from-[#F7BC5F] to-amber-500 hover:from-amber-400 hover:to-yellow-500 text-slate-950 font-black text-xs shadow-[0_0_14px_rgba(247,188,95,0.35)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ml-auto"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Rafraîchir maintenant
+                </button>
+              ) : (
+                <div className="flex items-center gap-1 text-[11px] text-[#F7BC5F] font-semibold opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
+                  <span>Consulter</span>
+                  <MoveRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
+                </div>
+              )}
+            </div>
           </div>
-
-          <MoveRight className="w-4 h-4 text-gray-500 shrink-0" />
-        </button>
-
-        {notification.rawType === 'app_update' && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              window.location.reload();
-            }}
-            title="Rafraîchir la page pour appliquer la mise à jour"
-            className="px-3 shrink-0 text-[#F9C977] hover:text-[#FAD592] hover:bg-[#F7BC5F]/10 transition-colors flex items-center gap-1.5 text-xs font-bold"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Rafraîchir
-          </button>
-        )}
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            void dismissNotification(notification.id);
-          }}
-          title="Supprimer cette notification"
-          className="px-3 shrink-0 text-gray-500 hover:text-rose-300 hover:bg-rose-500/10 rounded-r-2xl transition-colors flex items-center justify-center"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        </div>
       </div>
     );
   }
