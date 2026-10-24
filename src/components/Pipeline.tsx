@@ -306,10 +306,22 @@ const PipelineCardContent: React.FC<{
 // restait quasi aucune zone "libre" pour amorcer un scroll au doigt.
 // `TouchSensor` était pourtant déjà configuré en `delay: 200` (glisser
 // seulement après une pression tenue, pour laisser passer un balayage
-// rapide) — un réglage pensé pour cohabiter avec `touch-action: pan-y`
-// (scroll vertical natif autorisé, laissé au navigateur), pas avec `none`
-// (qui rend ce délai inopérant : le scroll est déjà bloqué dès le premier
-// contact, quoi que décide `TouchSensor` ensuite).
+// rapide) — un réglage pensé pour cohabiter avec un `touch-action` qui
+// laisse le défilement natif au navigateur, pas avec `none` (qui rend ce
+// délai inopérant : le scroll est déjà bloqué dès le premier contact, quoi
+// que décide `TouchSensor` ensuite).
+// Signalé à nouveau (24 octobre, téléphone) : "je ne peux pas scroller vers
+// les colonnes suivantes" — le correctif ci-dessus n'avait autorisé que le
+// défilement VERTICAL (`touch-pan-y`), pas l'horizontal, alors que ce sont
+// les colonnes elles-mêmes qui défilent horizontalement (voir
+// `overflow-x-auto`/`touch-pan-x` sur leur conteneur plus bas) : un doigt
+// posé sur une carte (qui remplit presque toute la colonne) ne pouvait donc
+// jamais déclencher ce défilement latéral, quelle que soit la rapidité du
+// geste. `touch-auto` laisse le navigateur choisir l'axe (vertical OU
+// horizontal, selon le geste et le conteneur défilant rencontré) sans rien
+// retirer à `TouchSensor`, qui continue de détecter un glisser-déposer
+// volontaire (pression tenue 200ms + déplacement) avant qu'un défilement
+// natif n'ait eu le temps de s'engager.
 const PipelineCard = React.memo<{
   deal: Deal;
   contact: Contact | undefined;
@@ -331,7 +343,7 @@ const PipelineCard = React.memo<{
       {...listeners}
       onClick={() => { if (contact && onSelectContact) onSelectContact(contact.id); }}
       style={couleur ? { borderLeft: `5px solid ${couleur}`, backgroundColor: `${couleur}1a` } : undefined}
-      className={`p-4 sm:p-3 rounded-xl bg-[#0b1719] border transition-colors duration-150 touch-pan-y select-none ${
+      className={`p-4 sm:p-3 rounded-xl bg-[#0b1719] border transition-colors duration-150 touch-auto select-none ${
         contact ? 'cursor-pointer' : ''
       } ${
         isDragging
