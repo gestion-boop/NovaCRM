@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { creerAccumulateurDictee } from '@/lib/dictee';
 import { pickVoiceMimeType } from '@/lib/audioRecording';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useSwipeBack } from '@/hooks/useSwipeBack';
 import { AGENCIES, NoteItem, DocItem, Task } from '@/types';
 import TransactionChecklistModal, {
   STAGE_CHECKLISTS,
@@ -263,6 +264,10 @@ export default function ClientProfileView({
   const leadTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isMobileSaisieLead = useIsMobile();
   const HAUTEUR_MAX_SAISIE_LEAD = isMobileSaisieLead ? 220 : 132;
+  // Swipe-back (geste iOS) : balayer depuis le bord gauche revient à l'écran
+  // précédent, uniquement sur mobile. Réutilise `isMobileSaisieLead` comme
+  // condition "enabled" plutôt que de redemander useIsMobile().
+  const swipeBackRef = useSwipeBack<HTMLDivElement>(onBack, isMobileSaisieLead);
   // Demande explicite (24 octobre, maquette validée) : sur téléphone, la
   // grille d'étapes (8 pastilles, souvent 4 visibles seulement + un grand
   // vide en dessous) remplace tout l'écran avant même le contenu utile.
@@ -2247,7 +2252,13 @@ export default function ClientProfileView({
   };
 
   if (!client) return (
-    <div className="p-8 text-white">Client introuvable <button onClick={onBack} className="ml-4 underline text-[#F7BC5F]">Retour</button></div>
+    // Signalé en revue : sans `ref={swipeBackRef}` ici aussi, un chargement à
+    // froid (client pas encore résolu par useContacts()) ferait rater le
+    // branchement des écouteurs tactiles du geste de retour — ce `<div>` et
+    // celui du rendu principal étant du même type à la même position, React
+    // réutilise le même nœud DOM plutôt que d'en remonter un nouveau, donc
+    // les écouteurs posés ici restent attachés même une fois `client` résolu.
+    <div ref={swipeBackRef} className="p-8 text-white">Client introuvable <button onClick={onBack} className="ml-4 underline text-[#F7BC5F]">Retour</button></div>
   );
 
   const agency = AGENCIES.find(a => a.id === client.agencyId);
@@ -2262,7 +2273,7 @@ export default function ClientProfileView({
     // "h-full" ne se calculait pas correctement dans ce contexte, coupant le
     // contenu). Simplifié : ce composant flotte maintenant normalement dans
     // <main>, qui gère le défilement de toute la page — plus de double scroll.
-    <div className="flex flex-col bg-[#051416] animate-fade-in relative">
+    <div ref={swipeBackRef} className="flex flex-col bg-[#051416] animate-fade-in relative">
       {(profileError || profileSuccess) && (
         <div className="px-6 pt-4">
           {profileError && (
@@ -2481,7 +2492,7 @@ export default function ClientProfileView({
             // défilement horizontal à la place : ça tient toujours sur
             // desktop (assez de place, pas de scroll visible) et devient
             // swipeable sur mobile au lieu de s'écraser.
-            <div className="w-full overflow-x-auto -mx-4 px-4 custom-scrollbar">
+            <div data-swipe-back-exclude="true" className="w-full overflow-x-auto -mx-4 px-4 custom-scrollbar">
               <div
                 className="flex items-start relative pb-1"
                 style={{ minWidth: `${Math.max(stages.length * 76, 100)}px` }}
@@ -4471,7 +4482,7 @@ export default function ClientProfileView({
                       </button>
                     )}
                     {expandedQuestionnaireId === q.id && q.answers && (
-                      <pre className="mt-2 p-3 rounded-lg bg-black/40 text-[10px] text-slate-300 overflow-x-auto max-h-64 whitespace-pre-wrap">
+                      <pre data-swipe-back-exclude="true" className="mt-2 p-3 rounded-lg bg-black/40 text-[10px] text-slate-300 overflow-x-auto max-h-64 whitespace-pre-wrap">
                         {JSON.stringify(q.answers, null, 2)}
                       </pre>
                     )}

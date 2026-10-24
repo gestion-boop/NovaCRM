@@ -45,6 +45,7 @@ import {
 } from '@/lib/tuilesPartagees';
 import { lireMasquees } from '@/lib/tuilesMasquees';
 import { supabase } from '@/lib/supabase';
+import { useSwipeBack } from '@/hooks/useSwipeBack';
 
 // Même table de correspondance nom → icône que AccueilGrid.tsx (ICON_MAP) —
 // nécessaire pour rendre correctement une tuile verrouillée par le super
@@ -499,6 +500,11 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   // Dossier verrouillé actuellement ouvert en plein écran (façon dossier
   // iPhone) — null quand aucun n'est ouvert.
   const [openLockedFolder, setOpenLockedFolder] = useState<SpaceDef | null>(null);
+  // Swipe depuis le bord gauche pour refermer le dossier verrouillé plein
+  // écran (voir useSwipeBack) — `enabled` doit changer en même temps que le
+  // bloc <div fixed inset-0 ...> apparaît/disparaît pour que l'effet du hook
+  // retrouve le bon nœud DOM.
+  const swipeBackRef = useSwipeBack<HTMLDivElement>(() => setOpenLockedFolder(null), !!openLockedFolder);
 
   // ── Mes espaces : catalogue complet + config visible/ordre persistée ──
   const ALL_SPACES: SpaceDef[] = useMemo(() => [
@@ -1136,6 +1142,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           d'ici (pas de mode édition dans cette vue). */}
       {openLockedFolder && (
         <div
+          ref={swipeBackRef}
           className="fixed inset-0 z-[75] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 safe-area-top safe-area-bottom"
           onClick={() => setOpenLockedFolder(null)}
         >

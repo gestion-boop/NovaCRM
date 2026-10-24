@@ -24,6 +24,7 @@ import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { AGENCIES } from '@/types';
 import { agencesDisponibles } from '@/lib/agency-logos';
 import { useIsMobile, useIsCoarsePointer } from '@/hooks/use-mobile';
+import { useSwipeBack } from '@/hooks/useSwipeBack';
 import { NOVA_QUICK_REACTIONS, renderEmojiOrNova, isNovaReaction } from '@/lib/novaReactions';
 import { conversationASignaler, memoriserFilOuvert } from '@/lib/alerteChat';
 import {
@@ -3959,6 +3960,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (tab === 'conversations') setActiveConversationId(null);
     else setActiveChannel(null);
   };
+  // Swipe retour (24 octobre) : depuis le bord gauche, revient à la liste si
+  // une conversation/un canal est ouvert, sinon quitte le panneau mobile.
+  const handleSwipeBack = mobileShowingConversation ? goBackToList : onExitMobile;
+  const swipeBackRef = useSwipeBack<HTMLDivElement>(handleSwipeBack, isMobile);
 
   // Signalé (4 septembre, deux captures) : « quand je clique dans le message
   // pour écrire et que j'abaisse le clavier, j'ai un écart tout en bas, ce
@@ -4062,6 +4067,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   return (
     <div
+      ref={swipeBackRef}
       className="h-full flex flex-col bg-[#050f11] text-white"
       style={hauteurVisible ? { height: `${hauteurVisible}px` } : undefined}
     >
