@@ -6,6 +6,7 @@ import {
 import { GmailMessageSummary } from '@/lib/workspace';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { getAvatarColor, getInitial } from './MailMobileList';
+import { useSwipeBack } from '@/hooks/useSwipeBack';
 
 /* ══════════════════════════════════════════════════════════════════════════
    Lecture d'un message — écran mobile façon Gmail
@@ -58,9 +59,10 @@ export const MailMobileReader: React.FC<MailMobileReaderProps> = ({
   const senderTeamMember = TEAM_MEMBERS.find(
     (m) => m.email.toLowerCase() === (mail.from || '').toLowerCase()
   );
+  const swipeBackRef = useSwipeBack<HTMLDivElement>(onBack, true);
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-[#071f21] text-white">
+    <div ref={swipeBackRef} className="flex flex-col h-full min-h-0 bg-[#071f21] text-white">
       {/* ── BARRE D'ACTIONS (haut) ─────────────────────────────────────────
           Des icônes, pas des libellés : quatre boutons tiennent dans la
           largeur de n'importe quel téléphone, alors que « Retour · Répondre ·

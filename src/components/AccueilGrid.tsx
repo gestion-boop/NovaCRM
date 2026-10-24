@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useSwipeBack } from '@/hooks/useSwipeBack';
 // Signalé (14 octobre) : « les tuiles sont encore différentes, ça bouge à
 // chaque fois ». Cause trouvée : le shim ci-dessous (@/contexts/AuthContext,
 // PLURIEL — fait pour le module ImmoSphera 360, voir ce fichier) ne
@@ -2604,6 +2605,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAgency?.id]);
   const activeFolder = openFolderStack.length > 0 ? openFolderStack[openFolderStack.length - 1] : null;
+  const swipeBackRef = useSwipeBack<HTMLDivElement>(() => setOpenFolderStack(openFolderStack.slice(0, -1)), activeFolder !== null);
 
   // Selected tile for palette or options
   const [paletteTileId, setPaletteTileId] = useState<string | null>(null);
@@ -4209,6 +4211,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
             // Sur ordinateur, le voile s'arrête sous la barre du haut : les
             // logos de société restent visibles et cliquables pendant qu'un
             // dossier est ouvert.
+            ref={swipeBackRef}
             className="fixed inset-x-0 bottom-0 top-0 md:top-[calc(4rem+env(safe-area-inset-top,0px))] bg-black/80 backdrop-blur-xl z-50 flex items-center justify-center p-4 sm:p-8"
           >
             <motion.div
@@ -4268,7 +4271,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleTileDragStart} onDragOver={handleTileDragOver} onDragEnd={handleTileDragEnd} onDragCancel={handleTileDragCancel}>
                 {calqueDeplacement}
                 <SortableContext items={(enfantsDossierOuvert || []).map((t) => t.id)} strategy={rectSortingStrategy}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 max-h-[60vh] overflow-y-auto custom-scrollbar p-1">
+              <div data-swipe-back-exclude="true" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 max-h-[60vh] overflow-y-auto custom-scrollbar p-1">
                 {(enfantsDossierOuvert || []).map((subItem) => (
                   <SortableSubTile
                     key={subItem.id}

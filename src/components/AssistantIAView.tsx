@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AGENCIES, Task } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useSwipeBack } from '@/hooks/useSwipeBack';
 import NovaInfoPanel from './NovaInfoPanel';
 // Ticket #283 (KO, "pas des flèches, plutôt un drag and drop") — même
 // mécanisme déjà utilisé pour l'accueil et le pipeline, pour un glisser
@@ -443,6 +444,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   // plus recouvrir le bouton retour, (2) désactiver l'écoute-micro du
   // barge-in sur mobile (voir startBargeInListener).
   const isMobile = useIsMobile();
+  const swipeBackRef = useSwipeBack<HTMLDivElement>(onClose, isMobile);
 
   const [calendarEvents, setCalendarEvents] = useState<Record<string, unknown>[]>([]);
   // Ticket "Paramètres/Nova/Utilisateurs/Annonces" (12/16) : liste des
@@ -2794,6 +2796,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     // dessous, en overflow-y-auto) à défiler EN INTERNE à la place — la
     // barre de saisie reste ainsi toujours ancrée et visible en bas.
     <div
+      ref={swipeBackRef}
       className="relative h-full overflow-hidden flex flex-col items-center justify-between px-3 py-6 sm:p-10 animate-novaai-bg"
       style={hauteurVisible ? { height: `${hauteurVisible}px` } : undefined}
     >
@@ -2880,7 +2883,12 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
               ordinateur. */}
           <DndContext sensors={quickPromptSensors} collisionDetection={closestCenter} onDragEnd={handleQuickPromptDragEnd}>
             <SortableContext items={orderedQuickPrompts.map((p) => p.label)} strategy={rectSortingStrategy}>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
+              {/* Signalé en revue : cette grille est réordonnable au
+                  glisser-déposer (dnd-kit) et commence au même bord que la
+                  zone de déclenchement du geste de retour (swipe-back) —
+                  sans exclusion, glisser une tuile de la 1ère colonne
+                  pourrait aussi fermer tout l'écran Nova. */}
+              <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
                 {orderedQuickPrompts.map((p) => (
                   <SortableQuickPrompt key={p.label} label={p.label} Icon={p.icon} onSelect={() => handleSendMessage(p.prompt)} />
                 ))}
@@ -3339,7 +3347,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                       horizontal s'il y en a plus que la largeur ne peut en
                       montrer d'un coup. */}
                   {m.properties && m.properties.length > 0 && (
-                    <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 custom-scrollbar">
+                    <div data-swipe-back-exclude="true" className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 custom-scrollbar">
                       {m.properties.map((p) => (
                         <button
                           key={p.id}
@@ -3649,7 +3657,11 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           l'état (écoute / réflexion / parole), plus fidèle à un assistant
           vocal qu'une simple icône de micro statique. */}
       {voiceModeActive && (
-        <div className="fixed inset-0 z-[80] bg-[#0a0612] flex flex-col items-center justify-center p-6">
+        // Signalé en revue : ce panneau est un descendant direct du
+        // conteneur suivi par le geste de retour (pas de portail) — sans
+        // exclusion, un swipe ici fermerait tout Nova au lieu de juste
+        // quitter le mode vocal.
+        <div data-swipe-back-exclude="true" className="fixed inset-0 z-[80] bg-[#0a0612] flex flex-col items-center justify-center p-6">
           <style>{`
             @keyframes nova-nebula-breathe { 0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.9; } 50% { transform: scale(1.1) rotate(6deg); opacity: 1; } }
             @keyframes nova-nebula-listen { 0%, 100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.22) rotate(-8deg); } }
@@ -3859,6 +3871,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
 
       {showActionHistory && (
         <div
+          // Signalé en revue : même raison que le mode vocal ci-dessus —
+          // sans exclusion, un swipe ici fermerait tout Nova au lieu de
+          // juste cette modale.
+          data-swipe-back-exclude="true"
           className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4"
           onClick={() => setShowActionHistory(false)}
         >
