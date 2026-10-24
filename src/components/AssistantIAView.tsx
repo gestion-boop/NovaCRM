@@ -1727,7 +1727,19 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         const contactName = typeof args.name === 'string' ? args.name : 'Nouveau Contact';
         const email = typeof args.email === 'string' ? args.email : '';
         const phone = typeof args.phone === 'string' ? args.phone : '';
-        const clientType = typeof args.clientType === 'string' ? args.clientType : 'other';
+        // Signalé (24 octobre, même fiche que la note ci-dessous) : la
+        // fiche affichait "other" au lieu d'un vrai libellé. L'outil parle
+        // en anglais (buyer/seller/investor/other) mais le reste du CRM
+        // (formulaire "+ Nouveau lead", filtres de la liste Clients...)
+        // n'utilise que des libellés français (Acquéreur/Vendeur/
+        // Investisseur) — rien ne les traduisait, "other" partait tel quel
+        // dans `lead_type`. Pas d'équivalent français pour "other" dans le
+        // CRM (pas de case "Autre" dans le formulaire) : on laisse alors le
+        // type vide plutôt que d'inventer un libellé qui n'existe nulle
+        // part ailleurs dans l'app.
+        const CLIENT_TYPE_LABELS: Record<string, string> = { buyer: 'Acquéreur', seller: 'Vendeur', investor: 'Investisseur' };
+        const rawClientType = typeof args.clientType === 'string' ? args.clientType : '';
+        const clientType = CLIENT_TYPE_LABELS[rawClientType] || '';
         // La colonne `temperature` en base est un enum Postgres strict
         // (chaud/tiede/froid) — "Prospect", "Nouveau" etc. le font échouer
         // silencieusement (insert rejeté), d'où les contacts qui
@@ -1743,7 +1755,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           name: contactName,
           email,
           phone,
-          clientType: clientType as 'buyer' | 'seller' | 'investor' | 'other',
+          clientType: clientType || undefined,
           // L'outil de Nova parle en minuscules (chaud/tiede/froid) mais la
           // fiche contact attend les libellés du CRM : sans conversion, le
           // contact créé par Nova portait un statut qui ne correspondait à

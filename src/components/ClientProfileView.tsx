@@ -263,6 +263,14 @@ export default function ClientProfileView({
   const leadTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isMobileSaisieLead = useIsMobile();
   const HAUTEUR_MAX_SAISIE_LEAD = isMobileSaisieLead ? 220 : 132;
+  // Demande explicite (24 octobre, maquette validée) : sur téléphone, la
+  // grille d'étapes (8 pastilles, souvent 4 visibles seulement + un grand
+  // vide en dessous) remplace tout l'écran avant même le contenu utile.
+  // Remplacée par un résumé compact ("Étape X/N" + barre de progression),
+  // déplié vers la grille complète seulement sur demande. Réutilise
+  // `isMobileSaisieLead` (même hook, même résultat) plutôt que d'en
+  // redemander un second.
+  const [pipelineMobileExpanded, setPipelineMobileExpanded] = useState(false);
   useEffect(() => {
     const zone = leadTextareaRef.current;
     if (!zone) return;
@@ -2288,7 +2296,18 @@ export default function ClientProfileView({
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">{client.name}</h1>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 text-xs font-bold">
+                {/* Signalé (24 octobre, capture à l'appui) : ce badge restait
+                    toujours rose, quelle que soit la température réelle du
+                    client — "Tiède" s'affichait en rose au lieu de l'ambre
+                    utilisé juste en dessous (sélecteur Chaud/Tiède/Froid,
+                    CLIENT_TEMP_OPTIONS), incohérent. Même couleur reprise
+                    ici, retrouvée via `statutLead` (la valeur fiable) avec
+                    un repli sur `status` pour les fiches plus anciennes qui
+                    n'auraient que ce champ-là de renseigné. */}
+                <span className={`px-2 py-0.5 rounded-md text-xs font-bold ${
+                  CLIENT_TEMP_OPTIONS.find((o) => o.value === client.statutLead || o.label.toLowerCase() === (client.status || '').toLowerCase())?.activeClass
+                  || 'bg-rose-500/20 text-rose-400 border-rose-500/50'
+                }`}>
                   {client.status}
                 </span>
                 <span className="text-sm text-slate-400">
@@ -2297,54 +2316,64 @@ export default function ClientProfileView({
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 relative flex-wrap">
+          {/* Demande explicite (24 octobre, maquette validée) : sur
+              téléphone, ces boutons en toutes lettres prenaient deux rangées
+              entières avant même le contenu utile. Icônes seules en dessous
+              de `sm:`, texte repris tel quel à partir de cette largeur —
+              rien ne change sur tablette/ordinateur. */}
+          <div className="flex items-center gap-2 max-sm:gap-1.5 relative flex-wrap">
             {completedQuestionnairesCount > 0 && (
               <button
                 onClick={() => setShowQuestionnaireModal(true)}
                 title={`${completedQuestionnairesCount} questionnaire(s) confidentiel(s) rempli(s)`}
-                className="px-3 py-2.5 font-black text-xs rounded-xl flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 transition-all"
+                aria-label={`${completedQuestionnairesCount} questionnaire(s) confidentiel(s) rempli(s)`}
+                className="px-3 py-2.5 max-sm:px-2.5 font-black text-xs rounded-xl flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 transition-all"
               >
-                <CheckCircle className="w-3.5 h-3.5" />
-                Questionnaire validé
+                <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                <span className="max-sm:hidden">Questionnaire validé</span>
               </button>
             )}
             {pendingQuestionnairesCount > 0 && (
               <button
                 onClick={() => setShowQuestionnaireModal(true)}
-                className="px-4 py-2.5 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25"
+                aria-label="Questionnaire"
+                className="px-4 py-2.5 max-sm:px-2.5 font-black text-xs rounded-xl flex items-center gap-2 max-sm:gap-1 shadow-lg hover:scale-[1.02] transition-all bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25"
               >
-                <Eye className="w-4 h-4" />
-                Questionnaire
+                <Eye className="w-4 h-4 shrink-0" />
+                <span className="max-sm:hidden">Questionnaire</span>
                 <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/30 text-[10px]">{pendingQuestionnairesCount}</span>
               </button>
             )}
             <button
               onClick={() => setShowShareModal(true)}
-              className={`px-4 py-2.5 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all ${
+              aria-label={isSharedWithSomeone ? `Partagé (${shares.length})` : 'Partager'}
+              className={`px-4 py-2.5 max-sm:px-2.5 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all ${
                 isSharedWithSomeone
                   ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
                   : 'bg-black/40 border border-[#144447]/60 text-slate-300 hover:bg-black/60'
               }`}
             >
-              <Share2 className="w-4 h-4" />
-              {isSharedWithSomeone ? `Partagé (${shares.length})` : 'Partager'}
+              <Share2 className="w-4 h-4 shrink-0" />
+              <span className="max-sm:hidden">{isSharedWithSomeone ? `Partagé (${shares.length})` : 'Partager'}</span>
             </button>
             {onOpenNova && (
               <button
                 onClick={onOpenNova}
                 title="Demander à Nova d'agir sur cette fiche (note, tâche, rendez-vous...)"
-                className="px-4 py-2.5 bg-gradient-to-br from-[#F7BC5F] to-[#B8863F] hover:brightness-110 text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all"
+                aria-label="Demander à Nova"
+                className="px-4 py-2.5 max-sm:px-2.5 bg-gradient-to-br from-[#F7BC5F] to-[#B8863F] hover:brightness-110 text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all"
               >
-                <img src="/nova-mascotte.png" alt="" className="w-4 h-4 rounded-full object-cover" />
-                Demander à Nova
+                <img src="/nova-mascotte.png" alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />
+                <span className="max-sm:hidden">Demander à Nova</span>
               </button>
             )}
             <button
               onClick={() => setShowActionsMenu((v) => !v)}
-              className="px-5 py-2.5 bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all"
+              aria-label="Actions"
+              className="px-5 py-2.5 max-sm:px-2.5 bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all"
             >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              Actions
+              <Plus className="w-4 h-4 stroke-[3] shrink-0" />
+              <span className="max-sm:hidden">Actions</span>
             </button>
 
             {showActionsMenu && (
@@ -2410,7 +2439,41 @@ export default function ClientProfileView({
             </DropdownMenu>
           </div>
 
-          {stages.length > 0 ? (
+          {/* Résumé compact (téléphone) : "Étape X/N" + barre de progression,
+              à la place de la grille complète — repliée par défaut, un
+              tapotement la déplie en dessous (voir le bouton "Réduire" tout
+              en bas de la grille). Inchangé sur tablette/ordinateur. */}
+          {isMobileSaisieLead && stages.length > 0 && !pipelineMobileExpanded && (
+            <button
+              type="button"
+              onClick={() => setPipelineMobileExpanded(true)}
+              className="w-full text-left"
+            >
+              <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-400">
+                <span className="truncate">{currentPipelineName}</span>
+                <span className="shrink-0">Étape {Math.max(currentStageIndex, 0) + 1}/{stages.length}</span>
+              </div>
+              <p className="mt-1.5 text-base font-extrabold text-white truncate">
+                {stages[Math.max(currentStageIndex, 0)]?.name}
+              </p>
+              <div className="mt-2.5 h-1.5 rounded-full bg-slate-700/40 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[#F7BC5F] transition-all"
+                  style={{ width: `${((Math.max(currentStageIndex, 0) + 1) / stages.length) * 100}%` }}
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-end gap-1 text-[11px] font-bold text-[#F7BC5F]">
+                Voir toutes les étapes
+                <ChevronDown className="w-3.5 h-3.5" />
+              </div>
+            </button>
+          )}
+
+          {stages.length === 0 && (
+            <p className="text-center text-xs text-slate-500 py-2">Aucune étape de pipeline configurée</p>
+          )}
+
+          {stages.length > 0 && (!isMobileSaisieLead || pipelineMobileExpanded) && (
             // Signalé sur mobile : forcer toutes les étapes à tenir dans la
             // largeur de l'écran (w-0 flex-1) écrasait les libellés en 2
             // lignes qui se chevauchaient et devenaient illisibles dès qu'il
@@ -2495,8 +2558,17 @@ export default function ClientProfileView({
                 })}
               </div>
             </div>
-          ) : (
-            <p className="text-center text-xs text-slate-500 py-2">Aucune étape de pipeline configurée</p>
+          )}
+
+          {isMobileSaisieLead && pipelineMobileExpanded && stages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setPipelineMobileExpanded(false)}
+              className="w-full flex items-center justify-center gap-1 text-[11px] font-bold text-[#F7BC5F] py-1"
+            >
+              Réduire
+              <ChevronDown className="w-3.5 h-3.5 rotate-180" />
+            </button>
           )}
 
           {/* Checklist de l'étape active — n'apparaît QUE sur Immosphera /
