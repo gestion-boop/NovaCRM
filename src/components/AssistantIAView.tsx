@@ -1749,7 +1749,13 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           // contact créé par Nova portait un statut qui ne correspondait à
           // aucun filtre de l'écran Clients.
           status: ({ chaud: 'Chaud', tiede: 'Tiède', froid: 'Froid' } as const)[status],
-          notes,
+          // Signalé (24 octobre) : « la note n'a pas été prise en compte » —
+          // ce champ allait dans la colonne `notes`, jamais lue par la fiche
+          // client (elle n'affiche que `comments`, voir useContacts.ts) ni
+          // par le formulaire manuel "+ Nouveau lead" (son champ
+          // "Commentaires" écrit, lui, directement dans `comments`). Nova
+          // écrit maintenant au même endroit que ce formulaire.
+          comments: notes,
           agencyId
         });
         return {
