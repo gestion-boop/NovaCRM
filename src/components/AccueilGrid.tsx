@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Bell, MessageSquare, Calendar, Mail, Users, Headphones, 
@@ -6,7 +6,7 @@ import {
   Home as HomeIcon, Camera, Settings, Plus, GripVertical, 
   Palette, Folder, FolderPlus, ArrowLeft, Check, Trash2, Edit3, X, ChevronRight, LayoutGrid,
   Globe, ExternalLink, Bookmark, Target, Shield, Award, Sparkles, Image as ImageIcon,
-  CheckSquare
+  CheckSquare, Search, SlidersHorizontal, MoreVertical, Clock
 } from 'lucide-react';
 
 interface AccueilGridProps {
@@ -267,7 +267,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   const [newNavTarget, setNewNavTarget] = useState('notes');
   const [newGradient, setNewGradient] = useState(PRESET_GRADIENTS[1].value);
 
-  // Folder rename modal
+  // Search and Category Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'activity' | 'comm' | 'folders'>('all');
+
+  // Accessible Tile Context Menu (Mobile & Desktop)
+  const [activeMenuTileId, setActiveMenuTileId] = useState<string | null>(null);
+
+  // Universal Tile Rename Modal
+  const [renamingTile, setRenamingTile] = useState<{ id: string; title: string } | null>(null);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
 
@@ -495,14 +503,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     setShowAddModal(false);
   };
 
-  // Rename folder
+  // Rename shortcut or folder
   const handleRenameFolder = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!renamingFolderId || !renameTitle.trim()) return;
+    const targetId = renamingTile?.id || renamingFolderId;
+    if (!targetId || !renameTitle.trim()) return;
 
     const renameRecursive = (items: TileItemNode[]): TileItemNode[] => {
       return items.map(item => {
-        if (item.id === renamingFolderId) {
+        if (item.id === targetId) {
           return { ...item, title: renameTitle.trim() };
         }
         if (item.children) {
@@ -513,7 +522,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     };
 
     setTiles(renameRecursive(tiles));
-    setOpenFolderStack(prev => prev.map(f => f.id === renamingFolderId ? { ...f, title: renameTitle.trim() } : f));
+    setOpenFolderStack(prev => prev.map(f => f.id === targetId ? { ...f, title: renameTitle.trim() } : f));
+    setRenamingTile(null);
     setRenamingFolderId(null);
   };
 
@@ -562,225 +572,467 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     }
   };
 
-  const currentDisplayTiles = activeFolder ? (activeFolder.children || []) : tiles;
+  const formattedDate = useMemo(() => {
+    try {
+      const date = new Intl.DateTimeFormat('fr-FR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      }).format(new Date());
+      return date.charAt(0).toUpperCase() + date.slice(1);
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const ACTIVITY_IDS = useMemo(() => new Set([
+    'agenda', 'clients', 'pipeline', 'tableau-de-bord', 'notes', 'documents', 'reserver-camera', 'lodgify', 'folder-business'
+  ]), []);
+
+  const COMM_IDS = useMemo(() => new Set([
+    'chat', 'mail', 'support', 'notifications', 'equipe', 'folder-comm'
+  ]), []);
+
+  const currentDisplayTiles = useMemo(() => {
+    let list = activeFolder ? (activeFolder.children || []) : tiles;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(item => 
+        item.title.toLowerCase().includes(q) ||
+        (item.children && item.children.some(c => c.title.toLowerCase().includes(q)))
+      );
+    } else if (!activeFolder) {
+      if (activeFilter === 'folders') {
+        list = list.filter(item => item.isFolder);
+      } else if (activeFilter === 'activity') {
+        list = list.filter(item => ACTIVITY_IDS.has(item.id) || (item.isFolder && item.children?.some(c => ACTIVITY_IDS.has(c.id))));
+      } else if (activeFilter === 'comm') {
+        list = list.filter(item => COMM_IDS.has(item.id) || (item.isFolder && item.children?.some(c => COMM_IDS.has(c.id))));
+      }
+    }
+    return list;
+  }, [activeFolder, tiles, searchQuery, activeFilter, ACTIVITY_IDS, COMM_IDS]);
 
   return (
-    <div className="min-h-full bg-[#071015] p-6 sm:p-8 flex flex-col justify-between relative overflow-y-auto custom-scrollbar select-none">
+    <div 
+      onClick={() => setActiveMenuTileId(null)}
+      className="min-h-full bg-[#071015] p-4 sm:p-8 flex flex-col justify-between relative overflow-y-auto custom-scrollbar select-none"
+    >
       {/* Dynamic Background Glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-900/10 via-transparent to-transparent pointer-events-none" />
 
-      {/* Top Breadcrumb & Reset Controls */}
-      <div className="max-w-7xl mx-auto w-full mb-6 flex items-center justify-between z-10">
-        <div className="flex items-center gap-2 text-sm text-gray-300">
-          <span 
-            onClick={() => setOpenFolderStack([])}
-            className="cursor-pointer font-bold hover:text-[#E5B842] transition-colors flex items-center gap-1.5"
-          >
-            <LayoutGrid className="w-4 h-4 text-[#E5B842]" />
-            Accueil
-          </span>
-          {openFolderStack.map((folder, idx) => (
-            <React.Fragment key={folder.id}>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
-              <span 
-                onClick={() => setOpenFolderStack(openFolderStack.slice(0, idx + 1))}
-                className={`cursor-pointer font-medium transition-colors ${
-                  idx === openFolderStack.length - 1 ? 'text-[#E5B842] font-semibold' : 'text-gray-300 hover:text-white'
+      <div className="max-w-7xl mx-auto w-full z-10">
+        {/* Welcome Banner & Date Header */}
+        {!activeFolder && (
+          <div className="mb-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-white/[0.08]">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 mb-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>{formattedDate}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block ml-1" />
+                  <span className="text-gray-400 font-normal">Connecté</span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Espace Accueil NovaCRM
+                </h1>
+                <p className="text-xs sm:text-sm text-gray-400 mt-0.5">
+                  Accédez à vos outils, contacts, dossiers et raccourcis en un clic.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  onClick={handleOpenAddModal}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>Ajouter raccourci</span>
+                </button>
+                <button
+                  onClick={handleResetTiles}
+                  className="text-xs text-gray-400 hover:text-gray-200 bg-white/5 hover:bg-white/10 px-3 py-2 rounded-xl border border-white/10 transition-colors"
+                  title="Rétablir l'organisation par défaut"
+                >
+                  Réinitialiser
+                </button>
+              </div>
+            </div>
+
+            {/* Glanceable Activity Stat Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 my-5">
+              <div 
+                onClick={() => onNavigate('agenda')} 
+                className="group p-3 sm:p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-emerald-500/40 transition-all cursor-pointer shadow-sm flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 group-hover:scale-105 transition-transform">
+                    <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </div>
+                  <div className="truncate">
+                    <p className="text-[10px] sm:text-xs text-gray-400 font-medium">Rappels & RDV</p>
+                    <p className="text-xs sm:text-sm font-bold text-white truncate">
+                      {unreadRemindersCount > 0 ? `${unreadRemindersCount} en attente` : 'À jour'}
+                    </p>
+                  </div>
+                </div>
+                {unreadRemindersCount > 0 && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                )}
+              </div>
+
+              <div 
+                onClick={() => onNavigate('chat')} 
+                className="group p-3 sm:p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-cyan-500/40 transition-all cursor-pointer shadow-sm flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0 group-hover:scale-105 transition-transform">
+                    <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </div>
+                  <div className="truncate">
+                    <p className="text-[10px] sm:text-xs text-gray-400 font-medium">Chat Équipe</p>
+                    <p className="text-xs sm:text-sm font-bold text-white truncate">
+                      {unreadMessagesCount > 0 ? `${unreadMessagesCount} non lus` : 'À jour'}
+                    </p>
+                  </div>
+                </div>
+                {unreadMessagesCount > 0 && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+                )}
+              </div>
+
+              <div 
+                onClick={() => onNavigate('notifications')} 
+                className="group p-3 sm:p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-rose-500/40 transition-all cursor-pointer shadow-sm flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0 group-hover:scale-105 transition-transform">
+                    <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </div>
+                  <div className="truncate">
+                    <p className="text-[10px] sm:text-xs text-gray-400 font-medium">Notifications</p>
+                    <p className="text-xs sm:text-sm font-bold text-white truncate">
+                      {unreadNotificationsCount > 0 ? `${unreadNotificationsCount} alertes` : 'Aucune'}
+                    </p>
+                  </div>
+                </div>
+                {unreadNotificationsCount > 0 && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-400 animate-pulse shrink-0" />
+                )}
+              </div>
+
+              <div 
+                onClick={() => onNavigate('assistant-ia')} 
+                className="group p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent hover:from-amber-500/25 border border-amber-500/30 hover:border-amber-400/50 transition-all cursor-pointer shadow-sm flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-110 transition-transform">
+                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </div>
+                  <div className="truncate">
+                    <p className="text-[10px] sm:text-xs text-amber-300/80 font-medium">Nova IA</p>
+                    <p className="text-xs sm:text-sm font-bold text-white truncate">Poser une question</p>
+                  </div>
+                </div>
+                <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full font-semibold shrink-0">
+                  Actif
+                </span>
+              </div>
+            </div>
+
+            {/* Search & Filter Toolbar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Rechercher un raccourci, dossier..."
+                  className="w-full pl-10 pr-9 py-2 bg-white/[0.04] border border-white/10 hover:border-white/20 focus:border-amber-400/60 rounded-xl text-xs text-white placeholder:text-gray-400 focus:outline-none transition-all shadow-inner"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter tabs */}
+              <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/10 self-start sm:self-auto overflow-x-auto">
+                {[
+                  { key: 'all', label: 'Tous' },
+                  { key: 'activity', label: 'Activités' },
+                  { key: 'comm', label: 'Échanges' },
+                  { key: 'folders', label: 'Dossiers' },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveFilter(tab.key as any)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                      activeFilter === tab.key
+                        ? 'bg-amber-400 text-black shadow-sm'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Folder Breadcrumb & Navigation if inside folder */}
+        {activeFolder && (
+          <div className="flex items-center justify-between mb-6 bg-white/[0.03] p-3.5 sm:p-4 rounded-2xl border border-white/10">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setOpenFolderStack([])}
+                className="px-3 py-1.5 rounded-xl bg-amber-400 text-black hover:bg-amber-300 transition-colors flex items-center gap-1.5 text-xs font-bold shadow-md cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Accueil</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <Folder className="w-5 h-5 text-amber-400" />
+                <h2 className="text-base sm:text-lg font-bold text-white">{activeFolder.title}</h2>
+                <span className="text-xs text-gray-400 font-medium">({activeFolder.children?.length || 0} éléments)</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleDissolveFolder(activeFolder.id)}
+                className="px-3 py-1.5 rounded-xl bg-red-500/10 text-red-300 hover:bg-red-500/20 border border-red-500/20 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Extraire le contenu vers l'accueil"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Dissoudre</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Grid View */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 pb-16">
+          {currentDisplayTiles.map((tile, index) => {
+            const Icon = ICON_MAP[tile.iconName] || LayoutGrid;
+            const count = 
+              tile.id === 'rappels' ? (unreadRemindersCount || 0) :
+              tile.id === 'chat' ? (unreadMessagesCount || 0) :
+              tile.id === 'notifications' ? (unreadNotificationsCount || 0) :
+              tile.badgeCount;
+            const isDragTarget = dragOverIndex === index;
+
+            return (
+              <motion.div
+                key={tile.id}
+                layout
+                draggable
+                onDragStart={(e) => handleDragStart(e as unknown as React.DragEvent, index)}
+                onDragOver={(e) => handleDragOver(e as unknown as React.DragEvent, index)}
+                onDrop={(e) => handleDrop(e as unknown as React.DragEvent, index)}
+                onClick={() => {
+                  if (tile.isFolder) {
+                    setOpenFolderStack([...openFolderStack, tile]);
+                  } else if (tile.externalUrl) {
+                    let url = tile.externalUrl.trim();
+                    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                      url = 'https://' + url;
+                    }
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                  } else if (tile.navTarget) {
+                    onNavigate(tile.navTarget);
+                  }
+                }}
+                whileHover={{ scale: 1.025, y: -4 }}
+                whileTap={{ scale: 0.98 }}
+                className={`relative group h-40 sm:h-48 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${tile.gradient} p-3 sm:p-5 flex flex-col items-center justify-between text-center cursor-pointer transition-all duration-200 border border-t-white/35 border-l-white/20 border-r-black/30 border-b-black/50 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.65),inset_0_1px_2px_rgba(255,255,255,0.35)] hover:shadow-[0_20px_35px_-10px_rgba(0,0,0,0.8),inset_0_1px_2px_rgba(255,255,255,0.45)] hover:border-white/50 select-none overflow-hidden ${
+                  draggedIndex === index ? 'opacity-60 scale-105 z-50 ring-2 ring-white/50' : 
+                  isDragTarget ? 'border-amber-400 ring-4 ring-amber-400/30 scale-105 z-40' : 'z-10'
                 }`}
               >
-                {folder.title}
-              </span>
-            </React.Fragment>
-          ))}
-        </div>
+                {/* 3D Glass Specular Reflection */}
+                <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 via-white/5 to-transparent rounded-t-2xl sm:rounded-t-3xl pointer-events-none" />
+                <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/45 to-transparent rounded-b-2xl sm:rounded-b-3xl pointer-events-none" />
 
-        <button
-          onClick={handleResetTiles}
-          className="text-xs text-gray-400 hover:text-gray-200 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 transition-colors"
-        >
-          Réinitialiser l'accueil
-        </button>
-      </div>
-
-      {/* Main Grid View */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 max-w-7xl mx-auto w-full z-10 pb-12">
-        {currentDisplayTiles.map((tile, index) => {
-          const Icon = ICON_MAP[tile.iconName] || LayoutGrid;
-          const count = 
-            tile.id === 'rappels' ? (unreadRemindersCount || 0) :
-            tile.id === 'chat' ? (unreadMessagesCount || 0) :
-            tile.id === 'notifications' ? (unreadNotificationsCount || 0) :
-            tile.badgeCount;
-          const isDragTarget = dragOverIndex === index;
-
-          return (
-            <motion.div
-              key={tile.id}
-              layout
-              draggable
-              onDragStart={(e) => handleDragStart(e as unknown as React.DragEvent, index)}
-              onDragOver={(e) => handleDragOver(e as unknown as React.DragEvent, index)}
-              onDrop={(e) => handleDrop(e as unknown as React.DragEvent, index)}
-              onClick={() => {
-                if (tile.isFolder) {
-                  setOpenFolderStack([...openFolderStack, tile]);
-                } else if (tile.externalUrl) {
-                  let url = tile.externalUrl.trim();
-                  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                    url = 'https://' + url;
-                  }
-                  window.open(url, '_blank', 'noopener,noreferrer');
-                } else if (tile.navTarget) {
-                  onNavigate(tile.navTarget);
-                }
-              }}
-              whileHover={{ scale: 1.03, y: -4 }}
-              whileTap={{ scale: 0.97 }}
-              className={`relative group h-36 sm:h-48 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${tile.gradient} p-3 sm:p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 shadow-[0_12px_28px_-6px_rgba(0,0,0,0.65),inset_0_1.5px_2px_rgba(255,255,255,0.45),inset_0_-3px_8px_rgba(0,0,0,0.5)] border border-t-white/30 border-l-white/20 border-r-black/30 border-b-black/50 overflow-hidden ${
-                draggedIndex === index ? 'opacity-60 scale-105 z-50 ring-2 ring-white/50' : 
-                isDragTarget ? 'border-[#E5B842] ring-4 ring-[#E5B842]/30 scale-105 z-40' : 'hover:border-white/50 hover:shadow-[0_22px_40px_-8px_rgba(255,255,255,0.18),0_15px_30px_-5px_rgba(0,0,0,0.85)] z-10'
-              }`}
-            >
-              {/* 3D Glass Specular Reflection */}
-              <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/30 via-white/10 to-transparent rounded-t-2xl sm:rounded-t-3xl pointer-events-none" />
-              {/* 3D Bottom Bevel Shadow */}
-              <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/50 to-transparent rounded-b-2xl sm:rounded-b-3xl pointer-events-none" />
-
-              {/* Drag Handle top-left */}
-              <div 
-                className="absolute top-2 left-2 sm:top-3 sm:left-3 p-1 rounded-lg text-white/50 hover:text-white cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity z-20"
-                title="Glisser pour déplacer"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <GripVertical className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </div>
-
-              {/* Palette Color & Delete Buttons top-right */}
-              <div className="absolute top-2 right-2 sm:top-3 sm:right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPaletteTileId(tile.id);
-                  }}
-                  className="p-1 rounded-lg bg-black/60 hover:bg-black/90 text-white/80 hover:text-white transition-colors border border-white/10 shadow-md cursor-pointer"
-                  title="Changer la couleur (24 nuances 3D)"
+                {/* Drag Handle top-left */}
+                <div 
+                  className="absolute top-2 left-2 sm:top-3 sm:left-3 p-1 rounded-lg text-white/50 hover:text-white cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                  title="Glisser pour réorganiser"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <Palette className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (window.confirm(`Voulez-vous supprimer le raccourci "${tile.title}" ?`)) {
-                      handleDeleteTile(tile.id);
-                    }
-                  }}
-                  className="p-1 rounded-lg bg-red-900/60 hover:bg-red-700 text-white/80 hover:text-white transition-colors border border-red-500/30 shadow-md cursor-pointer"
-                  title="Supprimer ce raccourci"
-                >
-                  <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                </button>
-              </div>
-
-              {/* iPhone Folder Rendering */}
-              {tile.isFolder ? (
-                <div className="flex flex-col items-center w-full px-1">
-                  {/* Mini 2x2 Grid Preview of contained icons */}
-                  <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-black/30 backdrop-blur-md border border-white/10 p-1 sm:p-2 grid grid-cols-2 gap-1 sm:gap-1.5 items-center justify-center mb-1.5 sm:mb-2 shadow-inner group-hover:scale-105 transition-transform overflow-hidden">
-                    {(tile.children || []).slice(0, 4).map((subItem, i) => {
-                      const SubIcon = ICON_MAP[subItem.iconName] || LayoutGrid;
-                      return (
-                        <div key={i} className="w-3.5 h-3.5 sm:w-5 sm:h-5 rounded bg-white/10 flex items-center justify-center text-white p-0.5 overflow-hidden">
-                          {subItem.imageUrl ? (
-                            <img src={subItem.imageUrl} alt="" className="w-full h-full object-contain" />
-                          ) : (
-                            <SubIcon className="w-2 h-2 sm:w-3 sm:h-3" />
-                          )}
-                        </div>
-                      );
-                    })}
-                    {(!tile.children || tile.children.length === 0) && (
-                      <div className="col-span-2 text-[9px] text-gray-400 italic">Vide</div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-center gap-1 max-w-full">
-                    <Folder className="w-3.5 h-3.5 text-[#E5B842] shrink-0" />
-                    <h3 className="text-white font-bold text-xs sm:text-sm tracking-tight truncate">
-                      {tile.title}
-                    </h3>
-                  </div>
-
-                  <span className="text-[9px] sm:text-[10px] text-gray-300 font-medium mt-0.5 sm:mt-1 bg-black/40 px-1.5 sm:px-2 py-0.5 rounded-full border border-white/10 truncate max-w-full">
-                    {tile.children?.length || 0} dossier(s)
-                  </span>
+                  <GripVertical className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
-              ) : (
-                /* Regular Shortcut Tile Rendering */
-                <div className="flex flex-col items-center w-full px-1">
-                  {tile.imageUrl ? (
-                    <img 
-                      src={tile.imageUrl} 
-                      alt={tile.title} 
-                      className="w-9 h-9 sm:w-12 sm:h-12 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.65)] mb-1 sm:mb-2 group-hover:scale-110 transition-transform duration-300 z-10" 
-                    />
-                  ) : (
-                    <div className="mb-1 sm:mb-2.5 text-white transition-transform duration-300 group-hover:scale-110">
-                      <Icon className="w-6 h-6 sm:w-10 sm:h-10 stroke-[1.5]" />
+
+                {/* Accessible Options Button top-right (touch + desktop) */}
+                <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-30">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveMenuTileId(activeMenuTileId === tile.id ? null : tile.id);
+                    }}
+                    className="p-1.5 rounded-xl bg-black/40 hover:bg-black/70 text-white/80 hover:text-white border border-white/10 shadow-sm transition-all sm:opacity-0 group-hover:opacity-100 cursor-pointer"
+                    title="Options du raccourci"
+                  >
+                    <MoreVertical className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {activeMenuTileId === tile.id && (
+                    <div 
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-0 top-full mt-1.5 w-44 rounded-2xl bg-[#091519] border border-white/15 p-1.5 shadow-2xl z-50 text-left backdrop-blur-xl animate-fade-in"
+                    >
+                      <button
+                        onClick={() => {
+                          setActiveMenuTileId(null);
+                          setPaletteTileId(tile.id);
+                        }}
+                        className="w-full px-3 py-2 rounded-xl text-xs font-medium text-white hover:bg-white/10 flex items-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <Palette className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Changer couleur</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setActiveMenuTileId(null);
+                          setRenamingTile({ id: tile.id, title: tile.title });
+                          setRenameTitle(tile.title);
+                        }}
+                        className="w-full px-3 py-2 rounded-xl text-xs font-medium text-white hover:bg-white/10 flex items-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Renommer</span>
+                      </button>
+
+                      <div className="h-px bg-white/10 my-1" />
+
+                      <button
+                        onClick={() => {
+                          setActiveMenuTileId(null);
+                          if (window.confirm(`Supprimer "${tile.title}" ?`)) {
+                            handleDeleteTile(tile.id);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/20 flex items-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Supprimer</span>
+                      </button>
                     </div>
                   )}
+                </div>
 
-                  <h3 className="text-white font-bold text-xs sm:text-base tracking-tight mb-1 sm:mb-1.5 drop-shadow-sm line-clamp-1 max-w-full z-10">
-                    {tile.title}
-                  </h3>
+                {/* iPhone Folder Rendering */}
+                {tile.isFolder ? (
+                  <div className="flex flex-col items-center justify-center flex-1 w-full px-1">
+                    {/* Mini 2x2 Grid Preview */}
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-black/30 backdrop-blur-md border border-white/15 p-1.5 sm:p-2 grid grid-cols-2 gap-1 sm:gap-1.5 items-center justify-center mb-1.5 shadow-inner group-hover:scale-105 transition-transform overflow-hidden">
+                      {(tile.children || []).slice(0, 4).map((subItem, i) => {
+                        const SubIcon = ICON_MAP[subItem.iconName] || LayoutGrid;
+                        return (
+                          <div key={i} className="w-4 h-4 sm:w-5 sm:h-5 rounded bg-white/10 flex items-center justify-center text-white p-0.5 overflow-hidden">
+                            {subItem.imageUrl ? (
+                              <img src={subItem.imageUrl} alt="" className="w-full h-full object-contain" />
+                            ) : (
+                              <SubIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                            )}
+                          </div>
+                        );
+                      })}
+                      {(!tile.children || tile.children.length === 0) && (
+                        <div className="col-span-2 text-[9px] text-gray-400 italic">Vide</div>
+                      )}
+                    </div>
 
-                  <div className="flex flex-col items-center z-10">
-                    {tile.externalUrl ? (
-                      <div className="bg-amber-500/25 border border-amber-400/50 text-amber-300 font-bold text-[9px] sm:text-[10px] px-2 sm:px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm backdrop-blur-md">
-                        <ExternalLink className="w-2.5 h-2.5" />
-                        <span>Ouvrir Onglet</span>
-                      </div>
-                    ) : count > 0 ? (
-                      <div className="bg-black/60 backdrop-blur-md border border-white/10 text-white font-bold text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 rounded-full shadow-inner">
-                        {count}
+                    <h3 className="text-white font-bold text-xs sm:text-sm tracking-tight truncate max-w-[90%] drop-shadow">
+                      {tile.title}
+                    </h3>
+                    <span className="text-[10px] text-gray-300 font-medium mt-1 bg-black/35 px-2 py-0.5 rounded-full border border-white/10">
+                      {tile.children?.length || 0} dossier(s)
+                    </span>
+                  </div>
+                ) : (
+                  /* Regular Shortcut Tile Rendering */
+                  <div className="flex flex-col items-center justify-center flex-1 w-full px-1">
+                    {tile.imageUrl ? (
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-black/20 backdrop-blur-md border border-white/15 flex items-center justify-center mb-1.5 shadow-inner group-hover:scale-105 transition-all">
+                        <img 
+                          src={tile.imageUrl} 
+                          alt={tile.title} 
+                          className="w-9 h-9 sm:w-10 sm:h-10 object-contain drop-shadow" 
+                        />
                       </div>
                     ) : (
-                      <div className="bg-black/30 backdrop-blur-md border border-white/5 text-gray-300 font-medium text-[9px] sm:text-[10px] px-2 sm:px-2.5 py-0.5 rounded-full">
-                        Accéder
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-black/20 backdrop-blur-md border border-white/15 flex items-center justify-center text-white mb-1.5 shadow-inner group-hover:scale-105 group-hover:bg-black/30 transition-all">
+                        <Icon className="w-6 h-6 sm:w-7 sm:h-7 stroke-[1.75]" />
                       </div>
                     )}
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          );
-        })}
 
-        {/* Plus Button Tile to add Shortcut or Folder */}
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleOpenAddModal}
-          className="h-36 sm:h-48 rounded-2xl sm:rounded-3xl border-2 border-dashed border-gray-700/80 bg-gray-900/30 hover:bg-gray-800/40 text-gray-400 hover:text-white flex flex-col items-center justify-center p-3 sm:p-6 cursor-pointer transition-all duration-200 group hover:border-[#E5B842]"
-        >
-          <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-1.5 sm:mb-3 group-hover:bg-[#E5B842] group-hover:text-black transition-colors shadow-lg">
-            <Plus className="w-4 h-4 sm:w-6 sm:h-6 stroke-[2.5]" />
-          </div>
-          <span className="text-[10px] sm:text-xs font-semibold text-gray-300 group-hover:text-white text-center">
-            {activeFolder ? 'Ajouter dans ce dossier' : 'Ajouter raccourci / dossier'}
-          </span>
-        </motion.div>
+                    <h3 className="text-white font-bold text-xs sm:text-sm tracking-tight drop-shadow truncate max-w-[90%] px-1">
+                      {tile.title}
+                    </h3>
+
+                    <div className="mt-1 flex items-center justify-center">
+                      {tile.externalUrl ? (
+                        <span className="bg-amber-400/20 border border-amber-400/40 text-amber-300 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm backdrop-blur-md">
+                          <ExternalLink className="w-2.5 h-2.5" />
+                          <span>Web</span>
+                        </span>
+                      ) : count > 0 ? (
+                        <span className="bg-rose-500 text-white font-bold text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full shadow-md animate-pulse">
+                          {count}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-white/70 bg-black/25 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10 font-medium">
+                          Ouvrir
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+
+          {/* Plus Button Tile to add Shortcut or Folder */}
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleOpenAddModal}
+            className="h-40 sm:h-48 rounded-2xl sm:rounded-3xl border-2 border-dashed border-gray-700/80 bg-white/[0.02] hover:bg-white/[0.06] text-gray-400 hover:text-white flex flex-col items-center justify-center p-3 sm:p-5 cursor-pointer transition-all duration-200 group hover:border-amber-400"
+          >
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-2 group-hover:bg-amber-400 group-hover:text-black transition-colors shadow-lg">
+              <Plus className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
+            </div>
+            <span className="text-xs font-semibold text-gray-300 group-hover:text-white text-center">
+              {activeFolder ? 'Ajouter dans ce dossier' : 'Nouveau raccourci'}
+            </span>
+          </motion.div>
+        </div>
       </div>
 
       {/* Floating Assistant Button */}
       <div className="fixed bottom-6 right-6 z-40">
         <button
           onClick={() => onNavigate('assistant-ia')}
-          className="w-14 h-14 rounded-full bg-gradient-to-tr from-[#E5B842] to-[#F5D77F] text-black shadow-2xl flex items-center justify-center hover:scale-110 transition-transform active:scale-95 border border-yellow-200/50 p-3"
-          title="Ouvrir Assistant NovaSphere"
+          className="group relative flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 text-black font-bold text-xs shadow-[0_10px_25px_-5px_rgba(229,184,66,0.6)] hover:scale-105 active:scale-95 transition-all border border-amber-200/50 cursor-pointer"
+          title="Ouvrir Assistant Nova AI"
         >
-          <div className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center font-bold text-xs text-black">
-            NS
+          <div className="w-6 h-6 rounded-full bg-black/10 flex items-center justify-center">
+            <Sparkles className="w-3.5 h-3.5 text-black" />
           </div>
+          <span className="hidden sm:inline tracking-wide font-black">Assistant Nova</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping absolute -top-1 -right-1" />
+          <span className="w-2 h-2 rounded-full bg-emerald-500 absolute -top-1 -right-1" />
         </button>
       </div>
 
@@ -1158,15 +1410,24 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         </div>
       )}
 
-      {/* Rename Folder Modal */}
-      {renamingFolderId && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0E1A20] border border-white/15 rounded-2xl max-w-sm w-full p-6 shadow-2xl text-white">
-            <h3 className="text-base font-bold mb-3 text-[#E5B842]">Renommer le dossier</h3>
+      {/* Universal Rename Modal */}
+      {(renamingTile || renamingFolderId) && (
+        <div 
+          className="fixed inset-0 bg-black/75 backdrop-blur-md z-[100] flex items-center justify-center p-4"
+          onClick={() => { setRenamingTile(null); setRenamingFolderId(null); }}
+        >
+          <div 
+            className="bg-[#0E1A20] border border-white/15 rounded-2xl max-w-sm w-full p-6 shadow-2xl text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold mb-3 text-[#E5B842]">
+              {renamingTile ? `Renommer "${renamingTile.title}"` : 'Renommer le dossier'}
+            </h3>
             <form onSubmit={handleRenameFolder} className="space-y-4">
               <input
                 type="text"
                 required
+                autoFocus
                 value={renameTitle}
                 onChange={(e) => setRenameTitle(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-[#E5B842]"
@@ -1174,14 +1435,14 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setRenamingFolderId(null)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-400 bg-white/5"
+                  onClick={() => { setRenamingTile(null); setRenamingFolderId(null); }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg text-xs font-bold text-black bg-[#E5B842]"
+                  className="px-4 py-1.5 rounded-lg text-xs font-bold text-black bg-[#E5B842] hover:bg-[#d4a838] transition-colors"
                 >
                   Enregistrer
                 </button>
