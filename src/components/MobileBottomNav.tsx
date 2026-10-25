@@ -38,24 +38,45 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const lastScrollTopRef = useRef(0);
 
   useEffect(() => {
+    setVisible(true);
+  }, [currentNav]);
+
+  useEffect(() => {
+    if (currentNav === 'accueil') {
+      setVisible(true);
+      return;
+    }
     const scrollEl = document.querySelector('main');
     if (!scrollEl) return;
     lastScrollTopRef.current = scrollEl.scrollTop;
+    let autoShowTimer: ReturnType<typeof setTimeout> | null = null;
+
     const handleScroll = () => {
       const top = scrollEl.scrollTop;
       const delta = top - lastScrollTopRef.current;
-      if (top <= 24) {
+      const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+      const isNearBottom = maxScroll - top < 80;
+
+      if (top <= 32 || isNearBottom) {
         setVisible(true);
-      } else if (delta > 6) {
+      } else if (delta > 15) {
         setVisible(false);
-      } else if (delta < -6) {
+      } else if (delta < -8) {
         setVisible(true);
       }
       lastScrollTopRef.current = top;
+
+      if (autoShowTimer) clearTimeout(autoShowTimer);
+      autoShowTimer = setTimeout(() => {
+        setVisible(true);
+      }, 1400);
     };
     scrollEl.addEventListener('scroll', handleScroll, { passive: true });
-    return () => scrollEl.removeEventListener('scroll', handleScroll);
-  }, []);
+    return () => {
+      scrollEl.removeEventListener('scroll', handleScroll);
+      if (autoShowTimer) clearTimeout(autoShowTimer);
+    };
+  }, [currentNav]);
 
   return (
     <nav

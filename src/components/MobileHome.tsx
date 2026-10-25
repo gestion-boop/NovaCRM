@@ -1231,12 +1231,20 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
   return (
     <div
       ref={setNodeRef}
+      role="button"
+      tabIndex={0}
       {...(editMode ? attributes : {})}
       {...(editMode ? listeners : {})}
-      onPointerDown={onStartPress}
-      onPointerUp={onCancelPress}
-      onPointerLeave={onCancelPress}
+      onPointerDown={editMode ? undefined : onStartPress}
+      onPointerUp={editMode ? undefined : onCancelPress}
+      onPointerLeave={editMode ? undefined : onCancelPress}
       onClick={onActivate}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onActivate();
+        }
+      }}
       style={{
         transform: isDragging
           ? `${CSS.Transform.toString(transform)} scale(1.12)`
@@ -1244,7 +1252,7 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
         transition,
         animationDelay: `${(index % 5) * 40}ms`,
       }}
-      className={`${SPACE_TILE_CLASS} cursor-pointer active:scale-95 rounded-2xl ${
+      className={`${SPACE_TILE_CLASS} cursor-pointer active:scale-95 rounded-2xl touch-manipulation ${
         editMode && !isDragging ? 'animate-jiggle' : ''
       } ${
         isDragging

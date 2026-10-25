@@ -1012,13 +1012,13 @@ function App() {
         <main className={`flex-1 relative z-[1] custom-scrollbar ${
           novaOpen && !isMobile && !isCoarsePointer ? 'overflow-hidden' : 'overflow-y-auto'
         } ${
-          isMobile && currentNav === 'chat'
+          isMobile && (currentNav === 'chat' || currentNav === 'mail')
             ? 'pt-0'
             : isMobile && currentNav !== 'accueil' && !selectedClientProfileId
               ? 'pt-[calc(3.5rem+env(safe-area-inset-top,0px))] md:pt-0'
               : 'pt-[env(safe-area-inset-top,0px)] md:pt-0'
         } ${
-          isMobile && currentNav === 'chat' ? 'pb-0' : 'pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-0'
+          isMobile && (currentNav === 'chat' || currentNav === 'mail') ? 'pb-0' : 'pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-0'
         } ${
           // Signalé (30/08/2026, plusieurs captures) : "en haut ce n'est pas
           // top" — la photo de fond restait visible en bande dans tous les
@@ -1758,31 +1758,33 @@ function App() {
           unreadRemindersCount={unreadRemindersCount}
         />
       )}
-      {/* En-tête mobile unifié pour toutes les sous-vues (titre, retour accueil, action contextuelle) */}
-      {isMobile && currentNav !== 'accueil' && !selectedClientProfileId && !(currentNav === 'chat' || novaOpen) && (
+      {/* En-tête mobile unifié pour les sous-vues (titre, retour accueil, action contextuelle) */}
+      {isMobile && currentNav !== 'accueil' && !selectedClientProfileId && !(currentNav === 'chat' || currentNav === 'mail' || novaOpen) && (
         <MobileHeader
           currentNav={currentNav}
           onBack={() => setCurrentNav('accueil')}
           onOpenAction={
-            currentNav === 'mail'
-              ? (mailReading ? undefined : () => setMailComposeSignal((n) => n + 1))
-              : currentNav === 'agenda'
-                ? () => setAgendaCreateSignal((n) => n + 1)
-                : (currentNav === 'clients' || currentNav === 'pipeline')
-                  ? () => setShowNouveauLead(true)
-                  : currentNav === 'rappels'
-                    ? () => window.dispatchEvent(new CustomEvent('nova-open-new-task'))
-                    : currentNav === 'notes'
-                      ? () => window.dispatchEvent(new CustomEvent('nova-open-new-note'))
-                      : currentNav === 'documents'
-                        ? () => window.dispatchEvent(new CustomEvent('nova-open-new-document'))
-                        : currentNav === 'reserver-camera'
-                          ? () => window.dispatchEvent(new CustomEvent('nova-open-camera-reservation'))
-                          : undefined
+            currentNav === 'agenda'
+              ? () => setAgendaCreateSignal((n) => n + 1)
+              : (currentNav === 'clients' || currentNav === 'pipeline')
+                ? () => setShowNouveauLead(true)
+                : currentNav === 'rappels'
+                  ? () => window.dispatchEvent(new CustomEvent('nova-open-new-task'))
+                  : currentNav === 'notes'
+                    ? () => window.dispatchEvent(new CustomEvent('nova-open-new-note'))
+                    : currentNav === 'documents'
+                      ? () => window.dispatchEvent(new CustomEvent('nova-open-new-document'))
+                      : currentNav === 'reserver-camera'
+                        ? () => window.dispatchEvent(new CustomEvent('nova-open-camera-reservation'))
+                        : undefined
           }
           activeAgency={activeAgency}
           unreadRemindersCount={unreadRemindersCount}
         />
+      )}
+      {/* Bouton « + » pour composer un e-mail sur mobile */}
+      {isMobile && currentNav === 'mail' && !mailReading && !selectedClientProfileId && !(novaOpen) && (
+        <MobileTopPlus onClick={() => setMailComposeSignal((n) => n + 1)} label="Écrire un message" />
       )}
     </div>
   );

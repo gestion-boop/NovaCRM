@@ -53,11 +53,11 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   const logo = activeAgency?.name ? getAgencyLogo(activeAgency.name) : null;
 
   return (
-    <header className="md:hidden fixed top-0 left-0 right-0 z-40 bg-[#07191c]/95 backdrop-blur-2xl border-b border-teal-500/20 shadow-md select-none">
+    <header className="md:hidden fixed top-0 left-0 right-0 z-40 bg-[#07191c]/95 backdrop-blur-2xl border-b border-teal-500/20 shadow-md select-none pt-[env(safe-area-inset-top,0px)]">
       {/* Liseré supérieur doré */}
       <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/60 to-transparent pointer-events-none" />
 
-      <div className="flex items-center justify-between px-3 h-14 pt-[env(safe-area-inset-top,0px)] gap-2">
+      <div className="flex items-center justify-between px-3 h-14 gap-2">
         {/* Bouton Retour Accueil */}
         <button
           type="button"

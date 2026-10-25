@@ -173,16 +173,31 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
           </button>
         </div>
 
-        {/* Barre de recherche mobile */}
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher tâche ou client..."
-            className="w-full bg-[#081e22]/95 border border-teal-500/20 focus:border-[#F7BC5F] rounded-2xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-400 outline-none shadow-sm"
-          />
+        {/* Barre de recherche mobile + bouton rapide */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher tâche ou client..."
+              className="w-full bg-[#081e22]/95 border border-teal-500/20 focus:border-[#F7BC5F] rounded-2xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-400 outline-none shadow-sm"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedContactForNextTask(undefined);
+              setEditingTask(null);
+              setShowTaskModal(true);
+            }}
+            className="h-9 px-3 rounded-2xl bg-gradient-to-r from-[#FAD592] via-[#F9C977] to-[#D9A34E] text-[#1a1230] text-xs font-black flex items-center gap-1.5 shrink-0 shadow-md active:scale-95"
+            title="Nouvelle tâche"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>Tâche</span>
+          </button>
         </div>
       </div>
 
