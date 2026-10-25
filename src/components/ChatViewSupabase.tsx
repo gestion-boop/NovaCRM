@@ -5,6 +5,7 @@ import {
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Mic2, Square, Eye, ArrowLeft, Check, CheckCheck,
   Clock, Camera, Lock, Paperclip, FileText, Loader2, Video as VideoIcon,
+  Bold, Italic, Underline,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -972,17 +973,87 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // cliquables/soulignées, le reste du texte inchangé.
   const URL_REGEX = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
   const IS_URL_REGEX = /^(https?:\/\/|www\.)/;
+
+  // Mise en forme de texte riche dans le chat : support de **gras**, *italique*,
+  // <u>souligné</u> et __souligné__ (avec imbrications récursives).
+  const parseRichContent = (rawText: string, keyPrefix = 'rc'): React.ReactNode[] => {
+    if (!rawText) return [];
+
+    // Recherche de la première balise de formatage complète
+    const match = rawText.match(/(<u>[\s\S]*?<\/u>|\*\*[\s\S]+?\*\*|__[\s\S]+?__|\*[^\s*][\s\S]*?\*|(?<=\s|^)_[^\s_][\s\S]*?_(?=\s|$|[.,!?;:]))/);
+
+    if (!match || match.index === undefined) {
+      return [rawText];
+    }
+
+    const before = rawText.slice(0, match.index);
+    const matchedText = match[0];
+    const after = rawText.slice(match.index + matchedText.length);
+
+    let inner = '';
+    let renderedNode: React.ReactNode = null;
+
+    if (matchedText.startsWith('<u>') && matchedText.endsWith('</u>') && matchedText.length >= 7) {
+      inner = matchedText.slice(3, -4);
+      renderedNode = (
+        <u key={`${keyPrefix}-u`} className="underline underline-offset-2 decoration-current">
+          {parseRichContent(inner, `${keyPrefix}-u`)}
+        </u>
+      );
+    } else if (matchedText.startsWith('__') && matchedText.endsWith('__') && matchedText.length >= 4) {
+      inner = matchedText.slice(2, -2);
+      renderedNode = (
+        <u key={`${keyPrefix}-u`} className="underline underline-offset-2 decoration-current">
+          {parseRichContent(inner, `${keyPrefix}-u`)}
+        </u>
+      );
+    } else if (matchedText.startsWith('**') && matchedText.endsWith('**') && matchedText.length >= 4) {
+      inner = matchedText.slice(2, -2);
+      renderedNode = (
+        <strong key={`${keyPrefix}-b`} className="font-bold">
+          {parseRichContent(inner, `${keyPrefix}-b`)}
+        </strong>
+      );
+    } else if (matchedText.startsWith('*') && matchedText.endsWith('*') && matchedText.length >= 3) {
+      inner = matchedText.slice(1, -1);
+      renderedNode = (
+        <em key={`${keyPrefix}-i`} className="italic">
+          {parseRichContent(inner, `${keyPrefix}-i`)}
+        </em>
+      );
+    } else if (matchedText.startsWith('_') && matchedText.endsWith('_') && matchedText.length >= 3) {
+      inner = matchedText.slice(1, -1);
+      renderedNode = (
+        <em key={`${keyPrefix}-i`} className="italic">
+          {parseRichContent(inner, `${keyPrefix}-i`)}
+        </em>
+      );
+    } else {
+      renderedNode = matchedText;
+    }
+
+    const result: React.ReactNode[] = [];
+    if (before) result.push(before);
+    result.push(renderedNode);
+    if (after) result.push(...parseRichContent(after, `${keyPrefix}-a`));
+
+    return result;
+  };
+
   // Signalé (3 septembre) : dans la bulle jaune de l'expéditeur, un lien
   // jaune sur fond jaune ne se voyait pas en mode sombre. `surJaune` passe
-  // le lien en encre foncée, soulignée et en gras.
+  // le lien en encre foncée, soulignée et en gras. Intègre le parsing du gras,
+  // italique et souligné sur les segments de texte hors URL.
   const linkifyText = (text: string, surJaune = false): React.ReactNode[] => {
     const parts = text.split(URL_REGEX);
-    return parts.map((part, i) => {
-      if (!IS_URL_REGEX.test(part)) return part;
+    return parts.flatMap((part, i) => {
+      if (!IS_URL_REGEX.test(part)) {
+        return parseRichContent(part, `txt-${i}`);
+      }
       const href = part.startsWith('www.') ? `https://${part}` : part;
-      return (
+      return [
         <a
-          key={i}
+          key={`url-${i}`}
           href={href}
           target="_blank"
           rel="noreferrer"
@@ -996,7 +1067,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         >
           {part}
         </a>
-      );
+      ];
     });
   };
 
@@ -2114,6 +2185,193 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (!activeConversationId) { setConvScheduled([]); return; }
     void chargerMessagesProgrammes('conversation_id', activeConversationId).then(setConvScheduled);
   }, [activeConversationId]);
+
+  // ── Formatage de texte riche : Gras, Italique, Souligné sur sélection ──
+  const [formatToolbar, setFormatToolbar] = useState<{
+    target: 'conv' | 'channel' | 'editConv' | 'editChannel';
+    start: number;
+    end: number;
+    selectedText: string;
+  } | null>(null);
+
+  const handleTextSelection = (
+    textarea: HTMLTextAreaElement | null,
+    target: 'conv' | 'channel' | 'editConv' | 'editChannel'
+  ) => {
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    if (start !== end && end > start) {
+      const selectedText = textarea.value.slice(start, end);
+      if (selectedText.trim().length > 0) {
+        setFormatToolbar({
+          target,
+          start,
+          end,
+          selectedText,
+        });
+        return;
+      }
+    }
+    setFormatToolbar((cur) => (cur?.target === target ? null : cur));
+  };
+
+  const applyFormat = (
+    type: 'bold' | 'italic' | 'underline',
+    explicitTarget?: 'conv' | 'channel' | 'editConv' | 'editChannel'
+  ) => {
+    const target = explicitTarget || formatToolbar?.target || (tab === 'conversations' ? 'conv' : 'channel');
+    let textarea: HTMLTextAreaElement | null = null;
+    let currentValue = '';
+    let setValue: (val: string) => void = () => {};
+
+    if (target === 'conv') {
+      textarea = convTextareaRef.current;
+      currentValue = convDraft;
+      setValue = setConvDraft;
+    } else if (target === 'channel') {
+      textarea = channelTextareaRef.current;
+      currentValue = draft;
+      setValue = setDraft;
+    } else if (target === 'editConv') {
+      textarea = document.querySelector('textarea[data-edit-conv="true"]') as HTMLTextAreaElement | null;
+      currentValue = editingConvMsgText;
+      setValue = setEditingConvMsgText;
+    } else if (target === 'editChannel') {
+      textarea = document.querySelector('textarea[data-edit-channel="true"]') as HTMLTextAreaElement | null;
+      currentValue = editingChannelMsgText;
+      setValue = setEditingChannelMsgText;
+    }
+
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const sel = currentValue.slice(start, end);
+
+    let prefix = '';
+    let suffix = '';
+    if (type === 'bold') {
+      prefix = '**';
+      suffix = '**';
+    } else if (type === 'italic') {
+      prefix = '*';
+      suffix = '*';
+    } else if (type === 'underline') {
+      prefix = '<u>';
+      suffix = '</u>';
+    }
+
+    let nextValue = '';
+    let newStart = start;
+    let newEnd = end;
+
+    // Toggle 1 : La sélection commence et finit déjà par ces balises
+    if (sel.startsWith(prefix) && sel.endsWith(suffix) && sel.length >= prefix.length + suffix.length) {
+      const unwrapped = sel.slice(prefix.length, sel.length - suffix.length);
+      nextValue = currentValue.slice(0, start) + unwrapped + currentValue.slice(end);
+      newStart = start;
+      newEnd = start + unwrapped.length;
+    }
+    // Toggle 2 : Les balises encadrent immédiatement la sélection
+    else if (
+      start >= prefix.length &&
+      currentValue.slice(start - prefix.length, start) === prefix &&
+      currentValue.slice(end, end + suffix.length) === suffix
+    ) {
+      nextValue = currentValue.slice(0, start - prefix.length) + sel + currentValue.slice(end + suffix.length);
+      newStart = start - prefix.length;
+      newEnd = newStart + sel.length;
+    }
+    // Application du formatage
+    else {
+      if (sel.length > 0) {
+        const wrapped = `${prefix}${sel}${suffix}`;
+        nextValue = currentValue.slice(0, start) + wrapped + currentValue.slice(end);
+        newStart = start;
+        newEnd = start + wrapped.length;
+      } else {
+        nextValue = currentValue.slice(0, start) + prefix + suffix + currentValue.slice(end);
+        newStart = start + prefix.length;
+        newEnd = newStart;
+      }
+    }
+
+    setValue(nextValue);
+
+    requestAnimationFrame(() => {
+      if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(newStart, newEnd);
+        handleTextSelection(textarea, target);
+      }
+    });
+  };
+
+  const handleSaisieKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+    context: 'conv' | 'channel' | 'editConv' | 'editChannel'
+  ) => {
+    if (e.metaKey || e.ctrlKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'b') {
+        e.preventDefault();
+        applyFormat('bold', context);
+        return;
+      }
+      if (k === 'i') {
+        e.preventDefault();
+        applyFormat('italic', context);
+        return;
+      }
+      if (k === 'u') {
+        e.preventDefault();
+        applyFormat('underline', context);
+        return;
+      }
+    }
+  };
+
+  const renderFormatToolbar = (context: 'conv' | 'channel' | 'editConv' | 'editChannel') => {
+    if (!formatToolbar || formatToolbar.target !== context) return null;
+    return (
+      <div
+        className="absolute bottom-full mb-2 left-2 z-40 flex items-center gap-1 px-1.5 py-1 bg-[#071317]/95 border border-[#F7BC5F]/40 rounded-xl shadow-[0_12px_30px_rgba(0,0,0,0.85),0_0_15px_rgba(247,188,95,0.2)] backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150"
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <span className="text-[10px] font-bold text-slate-400 px-1 hidden sm:inline uppercase tracking-wider">Style</span>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); applyFormat('bold', context); }}
+          className="p-1.5 px-2 rounded-lg hover:bg-white/10 active:scale-95 text-white hover:text-[#F7BC5F] font-black text-xs flex items-center gap-1 transition-all cursor-pointer"
+          title="Mettre en gras (Ctrl+B ou Cmd+B)"
+        >
+          <Bold className="w-3.5 h-3.5 stroke-[2.8]" />
+          <span className="text-[11px] font-black">Gras</span>
+        </button>
+        <div className="w-[1px] h-3.5 bg-white/20" />
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); applyFormat('italic', context); }}
+          className="p-1.5 px-2 rounded-lg hover:bg-white/10 active:scale-95 text-white hover:text-[#F7BC5F] text-xs flex items-center gap-1 transition-all cursor-pointer"
+          title="Mettre en italique (Ctrl+I ou Cmd+I)"
+        >
+          <Italic className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span className="text-[11px] italic">Italique</span>
+        </button>
+        <div className="w-[1px] h-3.5 bg-white/20" />
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); applyFormat('underline', context); }}
+          className="p-1.5 px-2 rounded-lg hover:bg-white/10 active:scale-95 text-white hover:text-[#F7BC5F] text-xs flex items-center gap-1 transition-all cursor-pointer"
+          title="Souligner (Ctrl+U ou Cmd+U)"
+        >
+          <Underline className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span className="text-[11px] underline underline-offset-2">Souligné</span>
+        </button>
+      </div>
+    );
+  };
 
   /**
    * Livraison des messages programmés arrivés à échéance, depuis l'application
@@ -4604,10 +4862,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                 // plus grand [...] qu'il prenne la largeur de
                                 // l'écran » — zone d'édition pleine largeur, texte
                                 // à la même taille que le reste du chat (text-sm).
-                                <div className="flex flex-col gap-2 w-full">
+                                <div className="relative flex flex-col gap-2 w-full">
+                                  {renderFormatToolbar('editConv')}
                                   <textarea
+                                    data-edit-conv="true"
                                     value={editingConvMsgText}
                                     onChange={(e) => setEditingConvMsgText(e.target.value)}
+                                    onSelect={(e) => handleTextSelection(e.currentTarget, 'editConv')}
+                                    onMouseUp={(e) => handleTextSelection(e.currentTarget, 'editConv')}
+                                    onKeyUp={(e) => handleTextSelection(e.currentTarget, 'editConv')}
+                                    onKeyDown={(e) => handleSaisieKeyDown(e, 'editConv')}
                                     className="bg-transparent rounded-lg p-2.5 text-sm text-inherit border border-[#F7BC5F]/40 focus:outline-none resize-none w-full"
                                     rows={4}
                                     autoFocus
@@ -4967,7 +5231,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       toujours ; Maj+Entrée fait un retour à la ligne. Le coin
                       arrondi passe de `rounded-full` à `rounded-3xl` : un
                       arrondi total sur plusieurs lignes rognerait le texte. */}
-                  <div className="flex items-center gap-1.5 bg-[#081b1f] border border-white/15 focus-within:border-[#F7BC5F]/60 rounded-2xl px-2 py-1.5 shadow-inner transition-colors">
+                  <div className="relative flex items-center gap-1.5 bg-[#081b1f] border border-white/15 focus-within:border-[#F7BC5F]/60 rounded-2xl px-2 py-1.5 shadow-inner transition-colors">
+                    {renderFormatToolbar('conv')}
                     {/* Téléphone : un seul « + » à gauche */}
                     <div className="sm:hidden shrink-0">
                       <button
@@ -5111,6 +5376,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       rows={1}
                       value={convDraft}
                       onChange={(e) => setConvDraft(e.target.value)}
+                      onSelect={(e) => handleTextSelection(e.currentTarget, 'conv')}
+                      onMouseUp={(e) => handleTextSelection(e.currentTarget, 'conv')}
+                      onKeyUp={(e) => handleTextSelection(e.currentTarget, 'conv')}
+                      onKeyDown={(e) => handleSaisieKeyDown(e, 'conv')}
                       placeholder="Écrire un message..."
                       disabled={isRecordingConv}
                       className="flex-1 min-w-0 resize-none bg-transparent border-0 px-2 py-1.5 text-sm text-white placeholder-slate-400 leading-relaxed focus:outline-none disabled:opacity-40"
@@ -5313,10 +5582,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             directes ci-dessus — même "format cohérent" des deux
                             côtés du chat. */}
                         {isEditing ? (
-                          <div className="flex flex-col gap-2 w-full">
+                          <div className="relative flex flex-col gap-2 w-full">
+                            {renderFormatToolbar('editChannel')}
                             <textarea
+                              data-edit-channel="true"
                               value={editingChannelMsgText}
                               onChange={(e) => setEditingChannelMsgText(e.target.value)}
+                              onSelect={(e) => handleTextSelection(e.currentTarget, 'editChannel')}
+                              onMouseUp={(e) => handleTextSelection(e.currentTarget, 'editChannel')}
+                              onKeyUp={(e) => handleTextSelection(e.currentTarget, 'editChannel')}
+                              onKeyDown={(e) => handleSaisieKeyDown(e, 'editChannel')}
                               className="bg-transparent rounded-lg p-2.5 text-sm text-inherit border border-[#F7BC5F]/40 focus:outline-none resize-none w-full"
                               rows={4}
                               autoFocus
@@ -5566,7 +5841,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </button>
                   </div>
                 )}
-                <div className="flex items-center gap-1.5 bg-[#081b1f] border border-white/15 focus-within:border-[#F7BC5F]/60 rounded-2xl px-2 py-1.5 shadow-inner transition-colors">
+                <div className="relative flex items-center gap-1.5 bg-[#081b1f] border border-white/15 focus-within:border-[#F7BC5F]/60 rounded-2xl px-2 py-1.5 shadow-inner transition-colors">
+                  {renderFormatToolbar('channel')}
                 <div className="sm:hidden shrink-0">
                   <button
                     type="button"
@@ -5714,6 +5990,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   rows={1}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
+                  onSelect={(e) => handleTextSelection(e.currentTarget, 'channel')}
+                  onMouseUp={(e) => handleTextSelection(e.currentTarget, 'channel')}
+                  onKeyUp={(e) => handleTextSelection(e.currentTarget, 'channel')}
+                  onKeyDown={(e) => handleSaisieKeyDown(e, 'channel')}
                   placeholder="Écrire un message..."
                   className="flex-1 min-w-0 resize-none bg-transparent border-0 px-2 py-1.5 text-sm text-white placeholder-slate-400 leading-relaxed focus:outline-none"
                 />
