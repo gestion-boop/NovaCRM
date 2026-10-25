@@ -1049,7 +1049,10 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const geminiApiKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.VITE_GEMINI_API_KEY;
     const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
     if (!geminiApiKey && !anthropicApiKey) {
       res.status(500).json({ error: 'GEMINI_API_KEY non configurée.' });
@@ -1501,23 +1504,49 @@ ${
     // REPLI CLAUDE (SI ANTHROPIC_API_KEY CONFIGURÉE ET GEMINI EN ÉCHEC)
     // ─────────────────────────────────────────────────────────────────────────
     if (anthropicApiKey) {
+      const candidateClaudeModels = [
+        'claude-haiku-4-5-20251001',
+        'claude-sonnet-4-5-20250929',
+        'claude-sonnet-4-20250514',
+      ];
+      let activeClaudeModel = candidateClaudeModels[0];
+
       const callClaude = async (msgs: any[]) => {
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': anthropicApiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: 'claude-3-5-haiku-20241022',
-            max_tokens: 2048,
-            system: systemPrompt,
-            messages: msgs,
-            tools: activeTools,
-          }),
-        });
-        return r.json().catch(() => ({}));
+        const modelsToTry = [
+          activeClaudeModel,
+          ...candidateClaudeModels.filter((m) => m !== activeClaudeModel),
+        ];
+        let lastData: any = {};
+        for (const model of modelsToTry) {
+          const r = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': anthropicApiKey,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model,
+              max_tokens: 4096,
+              system: systemPrompt,
+              messages: msgs,
+              tools: activeTools,
+            }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!d?.error) {
+            activeClaudeModel = model;
+            return d;
+          }
+          lastData = d;
+          const errType = String(d?.error?.type || '');
+          const errMsg = String(d?.error?.message || '').toLowerCase();
+          if (errType === 'not_found_error' || errMsg.includes('model:')) {
+            continue;
+          }
+          break;
+        }
+        return lastData;
       };
 
       let data = await callClaude(cleaned);
