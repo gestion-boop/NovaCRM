@@ -1,5 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { X, Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, CheckCircle2, User } from 'lucide-react';
+import {
+  X,
+  Calendar as CalendarIcon,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  User,
+  CheckSquare,
+  Phone,
+  RefreshCw,
+  FileText,
+  Mail,
+  Sparkles,
+  AlertCircle,
+  Flag
+} from 'lucide-react';
 import { Contact, Task } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { DEFAULT_APPOINTMENT_TITLES, defaultTaskTitlesFor, taskTitlesKey, lireTitresAgence } from './ParametresView';
@@ -46,6 +62,22 @@ const CONTACT_ORIGINS = [
   'Autre',
 ];
 
+const TASK_TYPES: { id: Task['type']; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'Tâche', label: 'Tâche', icon: CheckSquare },
+  { id: 'Rendez-vous', label: 'RDV', icon: CalendarIcon },
+  { id: 'Appel', label: 'Appel', icon: Phone },
+  { id: 'Relance', label: 'Relance', icon: RefreshCw },
+  { id: 'Document', label: 'Document', icon: FileText },
+  { id: 'Mail' as Task['type'], label: 'Mail', icon: Mail },
+];
+
+const PRIORITIES: { id: 'Urgent' | 'Haute' | 'Moyenne' | 'Basse'; label: string; color: string; badge: string }[] = [
+  { id: 'Urgent', label: 'Urgent', color: 'bg-rose-500', badge: 'text-rose-300 border-rose-500/40 bg-rose-500/15' },
+  { id: 'Haute', label: 'Haute', color: 'bg-orange-500', badge: 'text-orange-300 border-orange-500/40 bg-orange-500/15' },
+  { id: 'Moyenne', label: 'Moyenne', color: 'bg-[#F7BC5F]', badge: 'text-[#F9C977] border-[#F7BC5F]/40 bg-[#F7BC5F]/15' },
+  { id: 'Basse', label: 'Basse', color: 'bg-emerald-500', badge: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/15' },
+];
+
 const TaskModal: React.FC<TaskModalProps> = ({
   onClose,
   onAddTask,
@@ -61,6 +93,9 @@ const TaskModal: React.FC<TaskModalProps> = ({
   const { currentUser, activeAgency } = useAuth();
 
   const [type, setType] = useState<Task['type']>(initialTask?.type || 'Tâche');
+  const [priority, setPriority] = useState<'Urgent' | 'Haute' | 'Moyenne' | 'Basse'>(
+    (initialTask?.priority as 'Urgent' | 'Haute' | 'Moyenne' | 'Basse') || 'Urgent'
+  );
 
   // Les deux listes configurées dans Paramètres > "Titres des tâches et
   // rendez-vous" — on affiche celle qui correspond au Type sélectionné.
@@ -106,7 +141,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
         console.warn('Erreur synchronisation des titres depuis Paramètres :', err);
       }
     })();
-  }, [currentUser]);
+  }, [currentUser, activeAgency]);
 
   const presetLabels = [
     'Sélectionner un label',
@@ -130,7 +165,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
   const [date, setDate] = useState(initialDatePart || todayStr);
   const [time, setTime] = useState(initialTimePart?.slice(0, 5) || '09:00');
   const [contactId, setContactId] = useState(initialTask?.contactId || defaultContactId || '');
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(initialTask?.description || '');
 
   // Calendar month navigation state
   const initialDate = new Date(date || todayStr);
@@ -161,19 +196,22 @@ const TaskModal: React.FC<TaskModalProps> = ({
         await onUpdateTask(initialTask.id, {
           title: finalTitle,
           type,
+          priority,
           dueDate,
           contactId: contactId || undefined,
           contactOrigin: contactOrigin || undefined,
+          description: description.trim() || undefined,
         });
       } else {
         await onAddTask({
           title: finalTitle,
           type,
-          priority: initialTask?.priority || 'Urgent',
+          priority: priority || 'Urgent',
           completed: false,
           dueDate: dueDate,
           contactId: contactId || undefined,
           contactOrigin: contactOrigin || undefined,
+          description: description.trim() || undefined,
         });
       }
       onClose();
@@ -234,12 +272,24 @@ const TaskModal: React.FC<TaskModalProps> = ({
     });
   }
 
+  // Quick date jump helpers
+  const handleQuickDate = (offsetDays: number) => {
+    const target = new Date();
+    target.setDate(target.getDate() + offsetDays);
+    const y = target.getFullYear();
+    const m = String(target.getMonth() + 1).padStart(2, '0');
+    const d = String(target.getDate()).padStart(2, '0');
+    const fullIso = `${y}-${m}-${d}`;
+    setDate(fullIso);
+    setCurrentMonth(new Date(y, target.getMonth(), 1));
+  };
+
   // Helper to format date in French for display
   const formatFrenchDate = (dStr: string) => {
     if (!dStr) return '';
     const [y, m, d] = dStr.split('-');
     if (!y || !m || !d) return dStr;
-    const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+    const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
     return dateObj.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
@@ -247,7 +297,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
     if (!dStr) return '';
     const [y, m, d] = dStr.split('-');
     if (!y || !m || !d) return dStr;
-    const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+    const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
     return dateObj.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   };
 
@@ -262,23 +312,36 @@ const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 overflow-y-auto">
-      <div className="bg-[#061a1d] border border-[#144447] rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden animate-slide-up flex flex-col my-auto max-h-[92vh]">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50 overflow-y-auto animate-in fade-in duration-200">
+      <div className="relative bg-gradient-to-b from-[#081e22]/98 via-[#061719]/98 to-[#041113]/98 border border-teal-500/25 rounded-3xl max-w-4xl w-full shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_35px_rgba(247,188,95,0.08)] overflow-hidden flex flex-col my-auto max-h-[92vh]">
         
+        {/* Golden accent bar top */}
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/80 to-transparent pointer-events-none" />
+
         {/* Modal Top Header */}
-        <div className="p-6 pb-4 border-b border-[#144447]/60 flex items-start justify-between bg-[#07191b] shrink-0">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-              {titleOverride || (isEditing ? 'Modifier la tâche' : 'Planifier la prochaine tâche')}
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-              {subtitleOverride || (isEditing ? 'Mettez à jour les informations de cette tâche' : 'Planifiez la suite pour ce client')}
-            </p>
+        <div className="p-5 sm:p-6 pb-4 sm:pb-5 border-b border-teal-500/20 flex items-center justify-between bg-gradient-to-r from-[#092226]/90 via-[#0b292e]/90 to-[#092226]/90 shrink-0">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/20 to-[#E5A642]/10 border border-[#F7BC5F]/30 flex items-center justify-center shadow-[0_0_20px_rgba(247,188,95,0.15)] shrink-0">
+              <CalendarIcon className="w-5 h-5 text-[#F7BC5F]" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
+                <span>{titleOverride || (isEditing ? 'Modifier la tâche' : 'Planifier la prochaine tâche')}</span>
+                {isEditing && (
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#F7BC5F]/20 text-[#F9C977] border border-[#F7BC5F]/40">
+                    Édition
+                  </span>
+                )}
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5 truncate">
+                {subtitleOverride || (isEditing ? 'Mettez à jour les informations et l’échéance de cette tâche' : 'Organisez le suivi et les rappels pour ce dossier')}
+              </p>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-full bg-black/40 text-slate-400 hover:text-white hover:bg-black/70 transition-colors"
+            className="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-200 border border-white/5 hover:border-rose-500/30 transition-all active:scale-95 cursor-pointer shrink-0"
             title="Fermer"
           >
             <X className="w-5 h-5" />
@@ -286,41 +349,85 @@ const TaskModal: React.FC<TaskModalProps> = ({
         </div>
 
         {/* Scrollable Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
           {/* Grid layout: Left Calendar, Right Form */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
             
             {/* Left Column: Calendar Picker */}
-            <div className="md:col-span-6 bg-[#041214] rounded-2xl p-4 sm:p-5 border border-[#144447]/80 flex flex-col space-y-4">
-              <h3 className="text-sm font-bold text-white flex items-center justify-between">
-                <span>Sélectionner une date</span>
-              </h3>
+            <div className="md:col-span-6 bg-[#041316]/90 rounded-2xl p-4 sm:p-5 border border-teal-500/20 flex flex-col space-y-4 shadow-inner">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#F7BC5F]" />
+                  <h3 className="text-xs font-black uppercase tracking-wider text-teal-200">
+                    Date d'échéance
+                  </h3>
+                </div>
+                <span className="text-[11px] font-semibold text-slate-400">
+                  {formatFrenchDate(date)}
+                </span>
+              </div>
+
+              {/* Quick date chips */}
+              <div className="grid grid-cols-4 gap-1.5 p-1 rounded-xl bg-[#06191c] border border-teal-500/20">
+                {[
+                  { label: "Aujourd'hui", offset: 0 },
+                  { label: "Demain", offset: 1 },
+                  { label: "+2 jours", offset: 2 },
+                  { label: "+1 sem.", offset: 7 },
+                ].map((chip) => {
+                  const target = new Date();
+                  target.setDate(target.getDate() + chip.offset);
+                  const y = target.getFullYear();
+                  const m = String(target.getMonth() + 1).padStart(2, '0');
+                  const d = String(target.getDate()).padStart(2, '0');
+                  const fullIso = `${y}-${m}-${d}`;
+                  const isCurrentChoice = date === fullIso;
+
+                  return (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => handleQuickDate(chip.offset)}
+                      className={`py-1.5 px-1 rounded-lg text-[11px] font-bold transition-all text-center truncate cursor-pointer ${
+                        isCurrentChoice
+                          ? 'bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 shadow-sm'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
 
               {/* Month Navigation */}
-              <div className="flex justify-between items-center bg-[#07191b] px-3 py-2 rounded-xl border border-[#153c3f]">
+              <div className="flex justify-between items-center bg-[#06181b]/90 px-3.5 py-2.5 rounded-xl border border-teal-500/25 shadow-inner">
                 <button
                   type="button"
                   onClick={() => setCurrentMonth(new Date(year, month - 1, 1))}
-                  className="p-1.5 rounded-lg bg-[#F7BC5F] text-black hover:bg-[#d4a83b] transition-transform active:scale-90"
+                  className="p-1.5 rounded-lg bg-teal-500/10 hover:bg-[#F7BC5F]/20 text-[#F7BC5F] border border-teal-500/30 hover:border-[#F7BC5F]/50 transition-all active:scale-90 cursor-pointer"
                   title="Mois précédent"
                 >
-                  <ChevronLeft className="w-4 h-4 stroke-[3]" />
+                  <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
                 </button>
-                <span className="text-[#F7BC5F] font-black text-sm tracking-wide">
-                  {capitalizedMonth}
-                </span>
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className="w-3.5 h-3.5 text-[#F7BC5F]/80" />
+                  <span className="text-[#F7BC5F] font-black text-sm tracking-wide capitalize">
+                    {capitalizedMonth}
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={() => setCurrentMonth(new Date(year, month + 1, 1))}
-                  className="p-1.5 rounded-lg bg-[#F7BC5F] text-black hover:bg-[#d4a83b] transition-transform active:scale-90"
+                  className="p-1.5 rounded-lg bg-teal-500/10 hover:bg-[#F7BC5F]/20 text-[#F7BC5F] border border-teal-500/30 hover:border-[#F7BC5F]/50 transition-all active:scale-90 cursor-pointer"
                   title="Mois suivant"
                 >
-                  <ChevronRight className="w-4 h-4 stroke-[3]" />
+                  <ChevronRight className="w-4 h-4 stroke-[2.5]" />
                 </button>
               </div>
 
               {/* Day Name Headers */}
-              <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-[#F7BC5F] py-1">
+              <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold uppercase tracking-wider text-teal-300/70 py-1">
                 <span>Di</span>
                 <span>Lu</span>
                 <span>Ma</span>
@@ -331,7 +438,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
               </div>
 
               {/* Calendar Grid (6 rows of 7 days) */}
-              <div className="grid grid-cols-7 gap-1 text-center text-xs sm:text-sm">
+              <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-xs sm:text-sm">
                 {gridCells.map((cell, idx) => {
                   const isSelected = cell.fullDate === date;
                   const isToday = cell.fullDate === todayStr;
@@ -346,17 +453,17 @@ const TaskModal: React.FC<TaskModalProps> = ({
                       }}
                       className={`h-9 sm:h-10 rounded-xl flex flex-col items-center justify-center relative transition-all cursor-pointer font-semibold ${
                         isSelected
-                          ? 'bg-[#F7BC5F] text-slate-950 font-black shadow-lg scale-105 z-10'
+                          ? 'bg-gradient-to-br from-[#F7BC5F] via-[#F9C977] to-[#E5A642] text-slate-950 font-black shadow-[0_0_18px_rgba(247,188,95,0.45)] scale-105 z-10 ring-2 ring-[#F7BC5F]/40'
                           : isToday
-                          ? 'border-2 border-[#F7BC5F] text-[#F7BC5F]'
+                          ? 'border-2 border-[#F7BC5F]/80 text-[#FAD592] bg-[#F7BC5F]/10 font-bold hover:bg-[#F7BC5F]/20'
                           : !cell.isCurrentMonth
                           ? 'text-slate-600 hover:text-slate-400 hover:bg-white/5'
-                          : 'text-slate-200 hover:bg-white/10'
+                          : 'text-slate-200 hover:text-white hover:bg-teal-500/15'
                       }`}
                     >
                       <span>{cell.dayNum}</span>
                       {hasTasks && !isSelected && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#F7BC5F] absolute bottom-1" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#F7BC5F] absolute bottom-1 shadow-[0_0_6px_rgba(247,188,95,0.8)]" />
                       )}
                       {hasTasks && isSelected && (
                         <span className="w-1.5 h-1.5 rounded-full bg-slate-950 absolute bottom-1" />
@@ -370,166 +477,252 @@ const TaskModal: React.FC<TaskModalProps> = ({
             {/* Right Column: Task Form */}
             <form onSubmit={handleSubmit} id="task-modal-form" className="md:col-span-6 space-y-4">
               {/* Type * */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-white">Type *</label>
-                <select
-                  value={type}
-                  onChange={(e) => {
-                    const nextType = e.target.value as Task['type'];
-                    setType(nextType);
-                    // Les listes "Tâches" et "Rendez-vous" (Paramètres) sont
-                    // distinctes : on repart d'un label vierge en changeant de type.
-                    const nextList = nextType === 'Rendez-vous' ? appointmentTitlesList : taskTitlesList;
-                    if (!nextList.includes(selectedLabel)) {
-                      setSelectedLabel('Sélectionner un label');
-                    }
-                  }}
-                  className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none"
-                >
-                  <option value="Tâche">Tâche</option>
-                  <option value="Rendez-vous">Rendez-vous</option>
-                  <option value="Appel">Appel</option>
-                  <option value="Relance">Relance</option>
-                  <option value="Document">Document</option>
-                  <option value="Mail">Mail</option>
-                </select>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-teal-200 flex items-center justify-between">
+                  <span>Type d'action *</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Sélection rapide</span>
+                </label>
+                {/* Type quick chips */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                  {TASK_TYPES.map((t) => {
+                    const Icon = t.icon;
+                    const isCurrentType = type === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          const nextType = t.id;
+                          setType(nextType);
+                          const nextList = nextType === 'Rendez-vous' ? appointmentTitlesList : taskTitlesList;
+                          if (!nextList.includes(selectedLabel)) {
+                            setSelectedLabel('Sélectionner un label');
+                          }
+                        }}
+                        className={`px-2 py-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer border ${
+                          isCurrentType
+                            ? 'bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] text-slate-950 border-[#F7BC5F] shadow-[0_0_12px_rgba(247,188,95,0.35)] scale-[1.02]'
+                            : 'bg-[#051518]/90 text-slate-300 border-teal-500/20 hover:border-teal-500/40 hover:text-white hover:bg-teal-500/10'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span className="text-[11px] leading-tight truncate">{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Titre * */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-white">Libellé / Titre de la tâche *</label>
-                <select
-                  value={selectedLabel}
-                  onChange={(e) => {
-                    setSelectedLabel(e.target.value);
-                    if (e.target.value !== 'Sélectionner un label') {
-                      setCustomTitle('');
-                    }
-                  }}
-                  className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none mb-1.5"
-                >
-                  {presetLabels.map((lbl, i) => (
-                    <option key={i} value={lbl}>{lbl}</option>
-                  ))}
-                </select>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-teal-200 flex items-center justify-between">
+                  <span>Libellé / Titre de la tâche *</span>
+                  {selectedLabel !== 'Sélectionner un label' && (
+                    <span className="text-[10px] text-[#F7BC5F] font-semibold">Prédéfini</span>
+                  )}
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedLabel}
+                    onChange={(e) => {
+                      setSelectedLabel(e.target.value);
+                      if (e.target.value !== 'Sélectionner un label') {
+                        setCustomTitle('');
+                      }
+                    }}
+                    className="w-full bg-[#051518]/95 border border-teal-500/30 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-[#F7BC5F] focus:ring-1 focus:ring-[#F7BC5F]/30 appearance-none shadow-inner transition-all pr-9 cursor-pointer"
+                  >
+                    {presetLabels.map((lbl, i) => (
+                      <option key={i} value={lbl} className="bg-[#07191b] text-white py-1">
+                        {lbl}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-3 pointer-events-none text-slate-400">
+                    <ChevronRight className="w-4 h-4 rotate-90" />
+                  </div>
+                </div>
 
                 {selectedLabel === 'Sélectionner un label' && (
-                  <input
-                    type="text"
-                    placeholder="Saisissez un titre personnalisé..."
-                    value={customTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    required={selectedLabel === 'Sélectionner un label'}
-                    className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
-                  />
+                  <div className="relative pt-1 animate-in fade-in duration-150">
+                    <input
+                      type="text"
+                      placeholder="Saisissez un titre personnalisé..."
+                      value={customTitle}
+                      onChange={(e) => setCustomTitle(e.target.value)}
+                      required={selectedLabel === 'Sélectionner un label'}
+                      className="w-full bg-[#051518]/95 border border-[#F7BC5F]/50 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-teal-200/40 focus:outline-none focus:border-[#F7BC5F] focus:ring-2 focus:ring-[#F7BC5F]/20 shadow-inner transition-all"
+                    />
+                  </div>
                 )}
               </div>
 
               {/* Provenance du contact */}
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label className="text-xs font-bold text-[#F9C977] flex items-center justify-between">
                   <span>Provenance du contact</span>
                   <span className="text-[10px] text-slate-400 font-normal">Canal d'acquisition</span>
                 </label>
-                <select
-                  value={contactOrigin}
-                  onChange={(e) => setContactOrigin(e.target.value)}
-                  className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none"
-                >
-                  {CONTACT_ORIGINS.map((orig, i) => (
-                    <option key={i} value={orig}>{orig}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={contactOrigin}
+                    onChange={(e) => setContactOrigin(e.target.value)}
+                    className="w-full bg-[#051518]/95 border border-teal-500/30 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-[#F7BC5F] focus:ring-1 focus:ring-[#F7BC5F]/30 appearance-none shadow-inner transition-all pr-9 cursor-pointer"
+                  >
+                    {CONTACT_ORIGINS.map((orig, i) => (
+                      <option key={i} value={orig} className="bg-[#07191b] text-white py-1">{orig}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-3 pointer-events-none text-slate-400">
+                    <ChevronRight className="w-4 h-4 rotate-90" />
+                  </div>
+                </div>
               </div>
 
               {/* Date * & Heure * */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-white">Date *</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={formatFrenchDate(date)}
-                    onClick={() => {}}
-                    className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] cursor-default font-mono"
-                  />
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-teal-200">Date d'échéance *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      readOnly
+                      value={formatFrenchDate(date)}
+                      className="w-full bg-[#051518]/95 border border-teal-500/30 rounded-xl px-3.5 py-2.5 pr-9 text-sm text-slate-100 focus:outline-none focus:border-[#F7BC5F] cursor-default font-mono shadow-inner"
+                    />
+                    <CalendarIcon className="w-4 h-4 text-[#F7BC5F] absolute right-3 top-3 pointer-events-none" />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-white">Heure *</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-teal-200">Heure *</label>
                   <div className="relative">
                     <input
                       type="time"
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
                       required
-                      className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3.5 py-2.5 pr-9 text-sm text-white focus:outline-none focus:border-[#F7BC5F] font-mono"
+                      className="w-full bg-[#051518]/95 border border-teal-500/30 rounded-xl px-3.5 py-2.5 pr-9 text-sm text-slate-100 focus:outline-none focus:border-[#F7BC5F] font-mono shadow-inner cursor-pointer"
                     />
-                    <Clock className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+                    <Clock className="w-4 h-4 text-[#F7BC5F] absolute right-3 top-3 pointer-events-none" />
                   </div>
+                </div>
+              </div>
+
+              {/* Priorité */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-teal-200 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Flag className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                    Priorité de traitement
+                  </span>
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {PRIORITIES.map((p) => {
+                    const isSelectedPriority = priority === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setPriority(p.id)}
+                        className={`py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border cursor-pointer ${
+                          isSelectedPriority
+                            ? `${p.badge} ring-1 ring-current shadow-sm`
+                            : 'bg-[#051518]/70 border-teal-500/20 text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${p.color}`} />
+                        <span>{p.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Client lié */}
               {contacts && contacts.length > 0 && (
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-white">Client lié</label>
-                  <select
-                    value={contactId}
-                    onChange={(e) => setContactId(e.target.value)}
-                    className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none"
-                  >
-                    <option value="">Aucun client spécifique</option>
-                    {contacts.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-teal-200 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                    <span>Client lié au dossier</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={contactId}
+                      onChange={(e) => setContactId(e.target.value)}
+                      className="w-full bg-[#051518]/95 border border-teal-500/30 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-[#F7BC5F] focus:ring-1 focus:ring-[#F7BC5F]/30 appearance-none shadow-inner transition-all pr-9 cursor-pointer"
+                    >
+                      <option value="" className="bg-[#07191b] text-slate-400">Aucun client spécifique</option>
+                      {contacts.map(c => (
+                        <option key={c.id} value={c.id} className="bg-[#07191b] text-white py-1">{c.name}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-3 pointer-events-none text-slate-400">
+                      <ChevronRight className="w-4 h-4 rotate-90" />
+                    </div>
+                  </div>
                 </div>
               )}
 
               {/* Description */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-white">Description</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-teal-200 flex items-center justify-between">
+                  <span>Description / Notes d'intervention</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Optionnel</span>
+                </label>
                 <textarea
                   rows={3}
-                  placeholder="Détails de la tâche..."
+                  placeholder="Détails de l'intervention, documents à apporter, ordre du jour..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3.5 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] resize-none"
+                  className="w-full bg-[#051518]/95 border border-teal-500/30 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-teal-200/40 focus:outline-none focus:border-[#F7BC5F] focus:ring-1 focus:ring-[#F7BC5F]/30 resize-none shadow-inner transition-all"
                 />
               </div>
             </form>
           </div>
 
           {/* Bottom Panel: Existing Scheduled Tasks & RDVs for Selected Date (Prevents Duplicates) */}
-          <div className="pt-4 border-t border-[#144447]/60 space-y-3">
-            <h3 className="text-sm font-bold text-white flex items-center justify-between">
-              <span>Tâches et RDV du {formatFrenchLongDate(date)}</span>
-              <span className="text-xs text-slate-400 font-normal">
-                ({tasksOnSelectedDate.length} programmée{tasksOnSelectedDate.length > 1 ? 's' : ''})
+          <div className="pt-4 border-t border-teal-500/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-[#F7BC5F]" />
+                <h3 className="text-xs sm:text-sm font-bold text-white">
+                  Tâches et RDV du <span className="text-[#F7BC5F] capitalize">{formatFrenchLongDate(date)}</span>
+                </h3>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-500/15 border border-teal-500/30 text-teal-300">
+                {tasksOnSelectedDate.length} programmée{tasksOnSelectedDate.length > 1 ? 's' : ''}
               </span>
-            </h3>
+            </div>
 
             {tasksOnSelectedDate.length === 0 ? (
-              <div className="p-3.5 rounded-xl bg-[#041214] border border-[#144447]/60 text-xs text-slate-400 flex items-center gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Aucun événement ni tâche prévu pour cette journée. Aucun risque de doublon.</span>
+              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center gap-3">
+                <div className="w-7 h-7 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-emerald-200">Disponibilité complète</p>
+                  <p className="text-[11px] text-emerald-300/80">Aucun rendez-vous ni tâche pour cette journée. Aucun risque de conflit.</p>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-44 overflow-y-auto pr-1">
                 {tasksOnSelectedDate.map(t => {
                   const clientName = getContactName(t.contactId);
-                  const displayTime = t.dueDate && t.dueDate.includes('T') ? t.dueDate.split('T')[1] : '09:00';
+                  const displayTime = t.dueDate && t.dueDate.includes('T') ? t.dueDate.split('T')[1].slice(0, 5) : '09:00';
 
                   return (
                     <div
                       key={t.id}
-                      className="p-3 rounded-xl bg-[#041214] border border-[#144447]/80 flex items-center justify-between gap-2 text-xs"
+                      className="p-3 rounded-xl bg-[#041416]/90 border border-teal-500/25 hover:border-teal-500/40 flex items-center justify-between gap-2.5 text-xs transition-all shadow-sm group"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                          t.type === 'Rendez-vous' ? 'bg-[#F7BC5F]/20 text-[#F7BC5F]' :
-                          t.type === 'Appel' ? 'bg-sky-500/20 text-sky-300' :
-                          'bg-teal-500/20 text-teal-300'
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider shrink-0 border ${
+                          t.type === 'Rendez-vous' ? 'bg-[#F7BC5F]/20 text-[#F7BC5F] border-[#F7BC5F]/40' :
+                          t.type === 'Appel' ? 'bg-sky-500/20 text-sky-300 border-sky-500/40' :
+                          t.type === 'Relance' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' :
+                          t.type === 'Mail' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' :
+                          t.type === 'Document' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' :
+                          'bg-teal-500/20 text-teal-300 border-teal-500/40'
                         }`}>
                           {t.type || 'Tâche'}
                         </span>
@@ -537,15 +730,15 @@ const TaskModal: React.FC<TaskModalProps> = ({
                           <p className="font-semibold text-white truncate">{t.title}</p>
                           {clientName && (
                             <p className="text-[10px] text-slate-400 flex items-center gap-1 truncate">
-                              <User className="w-2.5 h-2.5" />
+                              <User className="w-2.5 h-2.5 text-[#F7BC5F]/70" />
                               <span>{clientName}</span>
                             </p>
                           )}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 text-[#F7BC5F] font-mono text-xs font-bold shrink-0">
-                        <Clock className="w-3 h-3" />
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#06181b] border border-teal-500/20 text-[#F7BC5F] font-mono text-xs font-bold shrink-0">
+                        <Clock className="w-3 h-3 text-[#F7BC5F]/80" />
                         <span>{displayTime}</span>
                       </div>
                     </div>
@@ -557,18 +750,23 @@ const TaskModal: React.FC<TaskModalProps> = ({
         </div>
 
         {/* Modal Bottom Footer Actions */}
-        <div className="p-4 sm:p-5 border-t border-[#144447]/60 bg-[#07191b] flex items-center justify-between gap-3 shrink-0">
+        <div className="p-4 sm:p-5 border-t border-teal-500/20 bg-gradient-to-r from-[#06181b] via-[#071d22] to-[#06181b] flex items-center justify-between gap-3 shrink-0">
           {saveError ? (
-            <p className="text-xs font-semibold text-rose-400 flex-1 flex items-center gap-1.5">
-              <img src="/nova/expressions/nova-attention.png" alt="" className="w-4 h-4 shrink-0" />
-              {saveError}
+            <p className="text-xs font-semibold text-rose-400 flex-1 flex items-center gap-1.5 truncate">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{saveError}</span>
             </p>
-          ) : <span className="flex-1" />}
-          <div className="flex items-center gap-3 shrink-0">
+          ) : (
+            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400">
+              <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
+              <span>Rappel automatique synchronisé</span>
+            </div>
+          )}
+          <div className="flex items-center gap-3 shrink-0 ml-auto">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+              className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-all cursor-pointer"
             >
               Annuler
             </button>
@@ -576,10 +774,19 @@ const TaskModal: React.FC<TaskModalProps> = ({
               type="submit"
               form="task-modal-form"
               disabled={saving}
-              className="px-6 py-2.5 bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950 font-black text-sm rounded-xl flex items-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+              className="px-6 py-2.5 bg-gradient-to-r from-[#F7BC5F] via-[#F9C977] to-[#E5A642] hover:brightness-110 active:scale-95 text-slate-950 font-black text-sm rounded-xl flex items-center gap-2 shadow-[0_0_20px_rgba(247,188,95,0.3)] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait"
             >
-              <CalendarIcon className="w-4 h-4 stroke-[2.5]" />
-              <span>{saving ? 'Enregistrement...' : isEditing ? 'Enregistrer les modifications' : 'Créer la tâche'}</span>
+              {saving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  <span>Enregistrement...</span>
+                </>
+              ) : (
+                <>
+                  <CalendarIcon className="w-4 h-4 stroke-[2.5]" />
+                  <span>{isEditing ? 'Enregistrer les modifications' : 'Créer la tâche'}</span>
+                </>
+              )}
             </button>
           </div>
         </div>
