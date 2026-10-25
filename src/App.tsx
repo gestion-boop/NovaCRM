@@ -512,9 +512,9 @@ function App() {
     // route/rôle sans condition.
     if (window.location.pathname.startsWith('/espace-client')) return;
     if (totalUnread > 0) {
-      document.title = `(${totalUnread}) Nova CRM`;
+      document.title = `(${totalUnread}) NovaCRM`;
     } else {
-      document.title = 'Nova CRM';
+      document.title = 'NovaCRM';
     }
   }, [unreadNotificationsCount, unreadMessagesCount, unreadRemindersCount]);
 

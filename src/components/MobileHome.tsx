@@ -853,7 +853,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
       <div className="flex items-center justify-between pt-1">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <img src={agencyLogo} alt={activeAgency?.name || 'Nova CRM'} className="w-4 h-4 rounded-full object-contain shrink-0" />
+            <img src={agencyLogo} alt={activeAgency?.name || 'NovaCRM'} className="w-4 h-4 rounded-full object-contain shrink-0" />
             <p className="text-[11px] font-black tracking-[0.22em] text-[#F7BC5F] uppercase truncate">
               {visibiliteBureau.novavisio
                 ? 'NovaVisio'
@@ -861,7 +861,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   ? 'ImmoSphera'
                   : visibiliteBureau.conseilsFinances
                     ? 'Conseils Finances'
-                    : activeAgency?.name || 'Nova CRM'}
+                    : activeAgency?.name || 'NovaCRM'}
             </p>
           </div>
           <h1 className="text-2xl font-extrabold text-white truncate">

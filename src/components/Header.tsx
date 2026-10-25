@@ -121,7 +121,7 @@ export const Header: React.FC<
       ? 'ImmoSphera'
       : /conseil/i.test(rawAgencyName)
         ? 'Conseils Finances'
-        : 'Nova CRM';
+        : 'NovaCRM';
   const currentAgencyLogo = agencyLogoByName[normalizeAgencyName(selectedAgencyName || activeAgency?.name)] || agencyLogoByName[normalizeAgencyName(activeAgency?.name)] || '/nova-mascotte.png';
 
   const {
