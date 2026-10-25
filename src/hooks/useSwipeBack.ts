@@ -30,10 +30,27 @@ export function useSwipeBack<T extends HTMLElement>(
   enabled: boolean,
 ) {
   const ref = useRef<T | null>(null);
+  // Signalé en revue (25 octobre, chasse aux bugs) : `onBack` est presque
+  // toujours une fonction fléchée recréée à chaque rendu du composant
+  // appelant (ex. AccueilGrid, ChatViewSupabase, ou simplement parce que
+  // App.tsx se re-rend pour une raison sans rapport). Tant que l'effet
+  // ci-dessous dépendait directement de `onBack`, le moindre re-rendu
+  // PENDANT un geste en cours (minuteur, compteur temps réel, sondage...)
+  // désabonnait puis réabonnait les écouteurs — React recrée alors
+  // `tracking`/`axis`/`startX`/`startY` à leur valeur initiale, mais le
+  // doigt reste posé sur le MÊME nœud DOM : seuls touchmove/touchend
+  // continuent d'arriver (touchstart ne se redéclenche pas), et le nouvel
+  // écouteur les ignore (`!tracking`). Le retour ne se déclenche donc pas,
+  // sans aucun signe visible — un bug intermittent qui semblait aléatoire.
+  // Gardé dans une ref mise à jour à CHAQUE rendu (jamais dans l'effet),
+  // pour que celui-ci n'ait plus besoin de dépendre de la référence de la
+  // fonction elle-même.
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || !enabled || !onBack) return;
+    if (!el || !enabled) return;
 
     let tracking = false;
     let committed = false;
@@ -48,13 +65,19 @@ export function useSwipeBack<T extends HTMLElement>(
     };
 
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) { reset(); return; }
+      // Signalé en revue : remis à zéro AVANT tout retour anticipé —
+      // sans ça, un geste commencé sur un élément retiré du DOM en cours
+      // de route (qui ne reçoit alors ni touchend ni touchcancel, voir le
+      // comportement documenté de Touch.target) pouvait laisser
+      // `tracking` bloqué à `true` ; un toucher totalement différent,
+      // plus tard, loin du bord gauche, déclenchait alors onBack à tort
+      // dès qu'il dépassait la distance de validation.
+      reset();
+      if (e.touches.length !== 1) return;
       const touch = e.touches[0];
       if (touch.clientX > EDGE_ZONE_PX) return;
       if ((e.target as HTMLElement | null)?.closest('[data-swipe-back-exclude]')) return;
       tracking = true;
-      committed = false;
-      axis = null;
       startX = touch.clientX;
       startY = touch.clientY;
     };
@@ -76,7 +99,7 @@ export function useSwipeBack<T extends HTMLElement>(
       if (dx >= COMMIT_DISTANCE_PX) {
         committed = true;
         tracking = false;
-        onBack();
+        onBackRef.current?.();
       }
     };
 
@@ -90,7 +113,7 @@ export function useSwipeBack<T extends HTMLElement>(
       el.removeEventListener('touchend', reset);
       el.removeEventListener('touchcancel', reset);
     };
-  }, [onBack, enabled]);
+  }, [enabled]);
 
   return ref;
 }

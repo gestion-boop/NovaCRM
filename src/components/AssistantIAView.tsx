@@ -1743,7 +1743,19 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       // haut) — si le compte n'est pas connecté, on le dit clairement
       // plutôt que de prétendre avoir créé un rendez-vous qui disparaîtrait
       // au premier rechargement.
-      {
+      //
+      // Signalé en revue (25 octobre, bug CRITIQUE) : ce bloc n'avait
+      // AUCUNE condition — c'était une simple accolade nue qui se
+      // terminait toujours par un `return`, rendant tout le code suivant
+      // (y compris `if (action.toolName === 'send_client_email')`
+      // ci-dessous) définitivement inatteignable. Conséquence réelle :
+      // confirmer l'envoi d'un e-mail depuis Nova tombait dans CE bloc à
+      // la place, créait un faux rendez-vous "Rendez-vous" aujourd'hui à
+      // 9h dans Google Agenda, et n'envoyait jamais l'e-mail — tout en
+      // affichant "réussi". `tsc` le confirmait déjà (code mort détecté
+      // sur le `if` du dessous). C'est très probablement la vraie cause
+      // du bug "l'e-mail depuis Nova ne s'envoie pas" évoqué plus haut.
+      if (action.toolName === 'create_appointment') {
         const title = typeof action.args.title === 'string' ? action.args.title : 'Rendez-vous';
         const date = typeof action.args.date === 'string' ? action.args.date : format(new Date(), 'yyyy-MM-dd');
         const time = typeof action.args.time === 'string' ? action.args.time : '09:00';
@@ -1831,6 +1843,15 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
 
         return { ok: true, label: `E-mail envoyé à ${recipientName} (${recipientEmail}).` };
       }
+
+      // Signalé en revue (25 octobre) : avant le correctif du bloc
+      // create_appointment ci-dessus, ce filet n'était pas nécessaire — un
+      // bloc toujours exécuté garantissait (par accident) un retour sur
+      // tous les chemins. Ajouté ici pour que la fonction retourne bien
+      // une valeur quel que soit action.toolName, y compris si un futur
+      // outil était ajouté au type sans que son traitement ne soit encore
+      // écrit ici.
+      return { ok: false, error: `Action non reconnue : ${action.toolName}.` };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Erreur inattendue.' };
     }
