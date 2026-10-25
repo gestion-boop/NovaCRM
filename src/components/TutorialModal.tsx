@@ -619,7 +619,7 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="relative bg-gradient-to-b from-[#081f23] to-[#051417] border border-[#F7BC5F]/25 rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[88vh] flex flex-col shadow-[0_25px_70px_rgba(0,0,0,0.85)] overflow-hidden text-white"
+        className="tutorial-modal-shell relative bg-gradient-to-b from-[#081f23] to-[#051417] border border-[#F7BC5F]/25 rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[88vh] flex flex-col shadow-[0_25px_70px_rgba(0,0,0,0.85)] overflow-hidden text-white"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Ligne d'accentuation dorée supérieure */}

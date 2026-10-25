@@ -1439,7 +1439,7 @@ function App() {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 12 }}
                     transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                    className="relative w-full max-w-xl h-[min(82vh,640px)] rounded-3xl overflow-hidden shadow-[0_25px_70px_-15px_rgba(0,0,0,0.85)] border border-white/15 bg-[#050d0f]"
+                    className="nova-popup-window relative w-full max-w-xl h-[min(82vh,640px)] rounded-3xl overflow-hidden shadow-[0_25px_70px_-15px_rgba(0,0,0,0.85)] border border-white/15 bg-[#050d0f]"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div

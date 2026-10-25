@@ -1113,7 +1113,18 @@ main[class*="bg-[#071015]/55" i] {
    qui restitue le même rôle — survol, séparation discrète — au lieu de
    disparaître. Les conteneurs à fond coloré (§ bloc généré) réinitialisent
    ces jetons : les tuiles « Mes espaces » gardent donc leur liseré blanc. */
-.light-mode [class*="bg-white/" i] { background-color: var(--nv-wash) !important; }
+/* Voiles blancs très légers (5% à 30%) : inversés en voile assombrissant sur fond clair.
+   Les fonds blancs opaques ou semi-opaques (bg-white/70, bg-white/80, bg-white/90, bg-white/95...)
+   restent des surfaces blanches lumineuses. */
+.light-mode [class*="bg-white/0" i],
+.light-mode [class*="bg-white/1" i],
+.light-mode [class*="bg-white/2" i],
+.light-mode [class*="bg-white/3" i],
+.light-mode [class*="bg-white/5" i]:not([class*="bg-white/50"]):not([class*="bg-white/55"]) { background-color: var(--nv-wash) !important; }
+
+.light-mode [class*="bg-white/7" i],
+.light-mode [class*="bg-white/8" i],
+.light-mode [class*="bg-white/9" i] { background-color: #ffffff !important; }
 .light-mode [class*="border-white/" i] { border-color: var(--nv-hairline) !important; }
 .light-mode [class*="divide-white/" i] > :not([hidden]) ~ :not([hidden]) { border-color: var(--nv-hairline) !important; }
 
@@ -1731,6 +1742,169 @@ textarea[class]:not([class~="bg-transparent"]) {
   -webkit-text-fill-color: transparent !important;
   text-shadow: none !important;
   filter: none !important;
+}
+
+/* ── Mode Jour : Assistant Nova IA (Popup & Bulles de chat) ── */
+.light-mode .nova-popup-window {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 25px 70px -15px rgba(15, 23, 42, 0.25) !important;
+}
+
+.nova-assistant-bubble {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.light-mode .nova-assistant-bubble {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.08) !important;
+}
+
+.light-mode .nova-assistant-bubble * {
+  color: #0f172a !important;
+}
+
+.nova-user-bubble,
+.light-mode .nova-user-bubble {
+  background-image: linear-gradient(135deg, #F7BC5F 0%, #f59e0b 100%) !important;
+  color: #020617 !important;
+  box-shadow: 0 6px 18px -2px rgba(245, 158, 11, 0.35) !important;
+}
+
+.nova-user-bubble *,
+.light-mode .nova-user-bubble * {
+  color: #020617 !important;
+}
+
+/* ── Mode Jour : Académie & Tutoriel Interactif ── */
+.light-mode .tutorial-modal-shell {
+  background-image: none !important;
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 25px 70px rgba(15, 23, 42, 0.2) !important;
+}
+
+.light-mode .tutorial-modal-shell > div:first-child {
+  background-image: linear-gradient(to right, transparent, #F7BC5F, transparent) !important;
+}
+
+.light-mode .tutorial-modal-shell > div:nth-child(2) {
+  background-color: #ffffff !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.light-mode .tutorial-modal-shell h2 {
+  color: #0f172a !important;
+}
+
+.light-mode .tutorial-modal-shell p {
+  color: #64748b !important;
+}
+
+.light-mode .tutorial-modal-shell [class*="bg-black/30" i] {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-mode .tutorial-modal-shell [class*="bg-black/30" i] button:not([class*="bg-[#F7BC5F]"]) {
+  color: #475569 !important;
+}
+
+.light-mode .tutorial-modal-shell [class*="bg-black/30" i] button:not([class*="bg-[#F7BC5F]"]):hover {
+  color: #0f172a !important;
+  background-color: rgba(247, 188, 95, 0.12) !important;
+}
+
+.light-mode .tutorial-modal-shell button[class*="bg-white/"] {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+.light-mode .tutorial-modal-shell button[class*="bg-white/"]:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.light-mode .tutorial-modal-shell input {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light-mode .tutorial-modal-shell input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-5 button:not([class*="bg-[#F7BC5F]"]) {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-5 button:not([class*="bg-[#F7BC5F]"]):hover {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-5 button h4 {
+  color: #0f172a !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-5 button p {
+  color: #64748b !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-5 button[class*="bg-[#F7BC5F]/15"] {
+  background-color: rgba(247, 188, 95, 0.18) !important;
+  border-color: rgba(247, 188, 95, 0.6) !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-5 button[class*="bg-[#F7BC5F]/15"] h4 {
+  color: #0f172a !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-5 button[class*="bg-[#F7BC5F]/15"] p {
+  color: #475569 !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-7 {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-7 h3,
+.light-mode .tutorial-modal-shell .md\:col-span-7 h4 {
+  color: #0f172a !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-7 p {
+  color: #475569 !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-7 span[class*="bg-[#F7BC5F]/15"] {
+  background-color: rgba(247, 188, 95, 0.22) !important;
+  color: var(--ink-gold, #8a6417) !important;
+  border-color: rgba(247, 188, 95, 0.5) !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-7 [class*="bg-white/"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-mode .tutorial-modal-shell .md\:col-span-7 [class*="bg-white/"] p,
+.light-mode .tutorial-modal-shell .md\:col-span-7 [class*="bg-white/"] span {
+  color: #0f172a !important;
+}
+
+.light-mode .tutorial-modal-shell button.bg-slate-700,
+.light-mode .tutorial-modal-shell button[class*="bg-[#0b1719]"],
+.light-mode .tutorial-modal-shell [class*="border-t"] button:last-child {
+  background-color: #0284c7 !important;
+  color: #ffffff !important;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

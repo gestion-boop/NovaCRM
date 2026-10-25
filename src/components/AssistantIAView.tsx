@@ -3363,10 +3363,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                     à l'étroit (75% sur desktop) — élargi. */}
                 <div className="space-y-1.5 max-w-[92%] sm:max-w-[85%]">
                   <div
-                    className={`p-4 sm:p-5 rounded-3xl text-xs sm:text-sm leading-relaxed ${
+                    className={`nova-message-bubble p-4 sm:p-5 rounded-3xl text-xs sm:text-sm leading-relaxed ${
                       isUser
-                        ? 'bg-gradient-to-r from-[#F7BC5F] via-[#F9C977] to-[#E5A642] text-slate-950 font-bold rounded-tr-none shadow-[0_10px_25px_-5px_rgba(247,188,95,0.35)]'
-                        : 'bg-white/95 backdrop-blur-xl text-[#1a1230] border border-white/80 rounded-tl-none shadow-[0_15px_35px_-5px_rgba(0,0,0,0.12),0_0_15px_rgba(247,188,95,0.05)]'
+                        ? 'nova-user-bubble bg-gradient-to-r from-[#F7BC5F] via-[#F9C977] to-[#E5A642] text-slate-950 font-bold rounded-tr-none shadow-[0_10px_25px_-5px_rgba(247,188,95,0.35)]'
+                        : 'nova-assistant-bubble bg-white/95 backdrop-blur-xl text-[#1a1230] border border-white/80 rounded-tl-none shadow-[0_15px_35px_-5px_rgba(0,0,0,0.12),0_0_15px_rgba(247,188,95,0.05)]'
                     }`}
                   >
                     <div className="markdown-body">
