@@ -419,7 +419,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         const bootstrapBody = await bootstrapRes.json().catch(() => ({}));
         if (!bootstrapRes.ok) {
-          throw new Error(bootstrapBody?.error || `Erreur HTTP ${bootstrapRes.status}`);
+          // Signalé en revue (25 octobre, sécurité) : le statut HTTP est
+          // conservé sur l'erreur pour que le `catch` ci-dessous puisse
+          // distinguer un refus EXPLICITE du serveur (401/403 : compte
+          // désactivé, stagiaire expiré, jamais invité) d'une vraie panne
+          // réseau — seul ce second cas doit reprendre le profil en cache.
+          const bootstrapError = new Error(bootstrapBody?.error || `Erreur HTTP ${bootstrapRes.status}`);
+          (bootstrapError as Error & { status?: number }).status = bootstrapRes.status;
+          throw bootstrapError;
         }
 
         const profileRow = bootstrapBody.profile;
@@ -484,6 +491,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAuthLoading(false);
       } catch (error: unknown) {
         console.error('[AuthContext] Erreur de vérification Supabase :', error);
+        // Signalé en revue (25 octobre, sécurité) : avant ce contrôle, un
+        // refus EXPLICITE (401/403 — compte désactivé pendant que l'onglet
+        // était fermé, stagiaire dont l'accès vient d'expirer, compte jamais
+        // invité) atterrissait ici exactement comme une panne réseau, et
+        // reprenait le profil en cache local SANS jamais révoquer la
+        // session : l'utilisateur gardait l'accès à l'interface et aux
+        // données jusqu'à expiration du JWT (environ 1h). Seule une vraie
+        // erreur réseau (fetch qui échoue, 5xx, réponse illisible) doit
+        // encore reprendre le cache ci-dessous.
+        const bootstrapStatus = (error as { status?: number } | null)?.status;
+        if (bootstrapStatus === 401 || bootstrapStatus === 403) {
+          await supabase.auth.signOut().catch(() => {});
+          clearProfileLocalCache();
+          setCurrentUser(null);
+          setUserProfile(null);
+          setAccessDenied(true);
+          setAuthLoading(false);
+          return;
+        }
         if (cachedLocal && cachedLocal.active) {
           setCurrentUser(appUser);
           setUserProfile(cachedLocal);

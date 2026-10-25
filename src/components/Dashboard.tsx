@@ -11,6 +11,7 @@ import { useContacts, matchesAgency } from '@/hooks/useContacts';
 import { useDeals } from '@/hooks/useDeals';
 import { useAssignableUsers } from '@/hooks/useAssignableUsers';
 import { useTasks } from '@/hooks/useTasks';
+import { SYLVAIN_UID, MELANIE_UID } from '@/lib/pipelinesAcces';
 
 // Recharts applique ces réglages en style INLINE sur l'info-bulle : aucune
 // règle CSS de thème ne peut les atteindre. Elles restaient donc noires, avec
@@ -187,12 +188,17 @@ export default function Dashboard({
   const estConseilsFinances = /conseils?\s*finances?/i.test(activeAgency?.name || '');
   // « Tout ce qui est CA à venir agence ou CA agence doit être vu que par
   // Sylvain Grazia et Mélanie, c'est tout » (5 septembre). Sur Conseils
-  // Finances, la direction est donc reconnue à son nom ou à son adresse,
-  // pas à son rôle : Mélanie n'est pas super admin, et un super admin d'une
-  // autre société n'a pas à voir ces chiffres. Ailleurs, rien ne change :
-  // le rôle super admin décide, comme avant.
-  const identite = `${userProfile?.displayName || currentUser?.displayName || ''} ${userProfile?.email || currentUser?.email || ''}`;
-  const estDirectionCF = /grazia|melanie|gestion@immosphera\.fr/i.test(identite);
+  // Finances, la direction est donc reconnue nommément (pas à son rôle :
+  // Mélanie n'est pas super admin, et un super admin d'une autre société n'a
+  // pas à voir ces chiffres). Ailleurs, rien ne change : le rôle super admin
+  // décide, comme avant.
+  // Signalé en revue (25 octobre, sécurité) : une regex sur le nom affiché +
+  // l'e-mail (/grazia|melanie|.../i) matchait n'importe quel compte dont le
+  // nom ou l'adresse CONTIENT l'un de ces mots — un homonyme, ou simplement
+  // quelqu'un ayant écrit "Melanie" quelque part dans son profil, obtenait
+  // la vue direction. Identifiants stables (UID), comme pour le reste de la
+  // règle Transactions (src/lib/pipelinesAcces.ts).
+  const estDirectionCF = currentUser?.uid === SYLVAIN_UID || currentUser?.uid === MELANIE_UID;
   const voitChiffresAgence = estConseilsFinances ? estDirectionCF : isSuperAdmin;
   // Signalé le 7 octobre : « ne compte pas les clients qui n'appartiennent
   // pas à l'utilisateur [...] laetitia a 95 clients, alors qu'elle a moins
@@ -220,9 +226,28 @@ export default function Dashboard({
     : estNovavisio ? 'pipeline principal' : 'Transaction V2';
   const dansPipelineVise = parPipelinePrincipal ? `dans le ${nomPipelineVise}` : 'dans Transaction V2';
 
-  const chiffreAffairesAgence = useMemo(() => {
+  // Signalé en revue (25 octobre, fiabilité) : ce calcul était fait UNE
+  // SEULE fois avec les règles de l'agence active. Sur « Toutes les
+  // sociétés », `estConseilsFinances`/`estNovavisio` valent alors tous les
+  // deux faux (le nom de l'agence active, vide ou "Toutes les sociétés", ne
+  // matche ni l'un ni l'autre), donc seule la branche Immosphera
+  // (« Transaction V2 ») s'appliquait : les dossiers Conseils Finances et
+  // Novavisio étaient exclus du total et retombaient à leur BUDGET dans
+  // `horsPipelineMontant`, malgré le commentaire plus haut affirmant un
+  // calcul "par agence puis sommé" qui n'existait pas réellement.
+  // Extrait en fonction paramétrée par agence : appelée une fois pour
+  // l'agence active (comportement inchangé), ou une fois par agence réelle
+  // (Conseils Finances, Novavisio, Immosphera) puis sommée pour « Toutes les
+  // sociétés », afin que CHAQUE agence applique vraiment sa propre règle.
+  const calculerCaPourAgence = (
+    agencyIdCible: string,
+    estCF: boolean,
+    estNova: boolean,
+    parPipelinePrincipalLocal: boolean,
+    voitChiffresLocal: boolean
+  ) => {
     const pipelinesAgence = pipelinesData.filter((p) =>
-      matchesAgency((p as { agency_id?: string }).agency_id || '', activeAgency.id)
+      matchesAgency((p as { agency_id?: string }).agency_id || '', agencyIdCible)
     );
     // « C'est le pipeline Novavisio principal » : on le reconnaît d'abord à
     // son nom (« principal », « principale »), sinon à l'indicateur « par
@@ -234,7 +259,7 @@ export default function Dashboard({
         ? parLeNom
         : pipelinesAgence.filter((p) => (p as { is_default?: boolean }).is_default);
     const pipelinesVises = new Set(
-      (parPipelinePrincipal
+      (parPipelinePrincipalLocal
         ? // Le « principal » = celui marqué par défaut ; si aucun ne l'est,
           // on prend tous ceux de l'agence plutôt que de ne rien compter.
           (principalNovavisio.length > 0 ? principalNovavisio : pipelinesAgence)
@@ -272,13 +297,13 @@ export default function Dashboard({
     // fonction ; ma comparaison brute écartait donc en silence les fiches
     // ImmoSphera les plus anciennes — c'est ce qui a fait disparaître les
     // 53 000 € signalés le 1er septembre.
-    const perimetreAgence = allDeals.filter((d) => matchesAgency(d.agencyId, activeAgency.id));
+    const perimetreAgence = allDeals.filter((d) => matchesAgency(d.agencyId, agencyIdCible));
     // « Le HT doit être en haut de la colonne, visible par Mélanie et Sylvain.
     // Le hors taxe des conseillers pourra être vu par seulement chaque
     // conseiller personnellement. » Le cercle « CA à venir » est visible par
     // tout le monde : un conseiller n'y voit donc que ses propres affaires.
     // (La tuile dorée, elle, n'est affichée qu'aux super admins.)
-    const perimetre = voitChiffresAgence
+    const perimetre = voitChiffresLocal
       ? perimetreAgence
       : perimetreAgence.filter((d) => d.advisorId && d.advisorId === currentUser?.uid);
 
@@ -425,13 +450,18 @@ export default function Dashboard({
       // archivées sans honoraires comptaient donc leur budget (213 000 €
       // pour un crédit, 2 500 € un peu partout) comme chiffre d'affaires.
       // Ici, seuls des honoraires agence réellement saisis comptent.
-      const montant = estConseilsFinances
-        ? Number(d.commissionAgenceHt) || 0
-        : Number(d.amount) || 0;
+      // Signalé en revue (25 octobre, sécurité/fiabilité) : ce correctif
+      // n'avait été appliqué qu'à Conseils Finances. Pour Immosphera,
+      // Novavisio et la vue consolidée, `d.amount` (useDeals.ts) retombe
+      // sur le même repli budget — une affaire archivée et signée sans
+      // commission saisie comptait donc son budget en CA, dans le CA à
+      // venir agence, dans parConseiller et dans l'objectif annuel.
+      // `commissionAgenceHt` n'a, lui, jamais ce repli (undefined si vide).
+      const montant = Number(d.commissionAgenceHt) || 0;
       // Demandé le 6 septembre : mêmes sources que commissionParConseiller /
       // comBanqueParConseiller plus bas, mais gardées par dossier pour le
       // tableau détaillé de chaque case CA par courtier.
-      const commissionLigne = estConseilsFinances
+      const commissionLigne = estCF
         ? Number(d.honorairesCourtier) || 0
         : Number(d.advisorCommissionTtc) || 0;
       // Corrigé le 6 septembre : « il faut uniquement comptabiliser la
@@ -441,7 +471,7 @@ export default function Dashboard({
       // plus bas) ; comBanqueCourtier est la part du COURTIER (utilisée
       // pour sa case), un montant différent, pas le même divisé après coup.
       const comBanqueAgenceLigne = Number(d.comBanque) || 0;
-      const comBanqueLigne = estConseilsFinances
+      const comBanqueLigne = estCF
         ? Number(d.comBanqueCourtier) || 0
         : Number(d.comBanque) || 0;
       const pipelineReel = (d.stageId && pipelineParEtape.get(d.stageId)) || d.pipelineId;
@@ -451,7 +481,7 @@ export default function Dashboard({
       // Un dossier ARCHIVÉ compte donc toujours sur Conseils Finances — le
       // filtre pipeline/étape ne s'applique plus qu'aux dossiers encore
       // vivants (CA à venir), où il garde tout son sens.
-      const archiveHorsRegles = estConseilsFinances && Boolean(d.archivedAt);
+      const archiveHorsRegles = estCF && Boolean(d.archivedAt);
       if (!archiveHorsRegles && !dansPipelineViseFlag) {
         if (d.archivedAt && montant > 0) { horsPipelineMontant += montant; horsPipelineNb += 1; }
         return;
@@ -462,14 +492,14 @@ export default function Dashboard({
       // « Le CA de l'agence se compte à partir de À facturer » : toute étape
       // de facturation compte donc — « À facturer », « Envoi facture »,
       // « À régler »... — et rien avant.
-      if (estNovavisio && !d.archivedAt) {
+      if (estNova && !d.archivedAt) {
         const etape = sansAccents(d.stage || '');
         if (!etape.includes('factur') && !etape.includes('regler')) return;
       }
       // Conseils Finances : un dossier vivant ne compte qu'à partir de
       // l'étape Accord banque / Rendez-vous (le CA à venir). Un dossier
       // archivé, lui, compte toujours (archiveHorsRegles ci-dessus).
-      if (estConseilsFinances && !archiveHorsRegles) {
+      if (estCF && !archiveHorsRegles) {
         const seuil = seuilDepart.get(pipelineReel);
         const position = positionEtape.get(`${pipelineReel}::${d.stage}`);
         if (seuil === undefined || position === undefined || position < seuil) return;
@@ -480,8 +510,8 @@ export default function Dashboard({
       // voir le commentaire sur seuilDepartMandat/seuilDepartOffre plus haut.
       // Un dossier archivé et signé continue de compter en réalisé quelle
       // que soit l'étape (voir plus bas), comme pour les autres agences.
-      if (!estNovavisio && !estConseilsFinances && !d.archivedAt && pipelineReel) {
-        const seuilImmo = voitChiffresAgence
+      if (!estNova && !estCF && !d.archivedAt && pipelineReel) {
+        const seuilImmo = voitChiffresLocal
           ? seuilDepartOffre.get(pipelineReel)
           : seuilDepartMandat.get(pipelineReel);
         if (seuilImmo !== undefined) {
@@ -559,7 +589,7 @@ export default function Dashboard({
           // par taux, modifiable), pas de la commission saisie à
           // l'archivage — celle-ci reste réservée à Novavisio (« Commission
           // Natacha »).
-          const commission = estConseilsFinances
+          const commission = estCF
             ? Number(d.honorairesCourtier) || 0
             : Number(d.advisorCommissionTtc) || 0;
           if (commission > 0) {
@@ -600,7 +630,67 @@ export default function Dashboard({
         (a, b) => Number(b.archive) - Number(a.archive) || b.montant - a.montant || a.nom.localeCompare(b.nom, 'fr')
       ),
     };
-  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, voitChiffresAgence, currentUser?.uid, estNovavisio, estConseilsFinances, parPipelinePrincipal]);
+  };
+
+  // Fusionne une Map par clé (conseiller) en additionnant les montants de
+  // chaque agence — utilisé uniquement pour « Toutes les sociétés » ci-dessous.
+  const fusionnerMapsMontants = (maps: Map<string, number>[]) => {
+    const fusion = new Map<string, number>();
+    maps.forEach((m) => m.forEach((valeur, cle) => fusion.set(cle, (fusion.get(cle) || 0) + valeur)));
+    return fusion;
+  };
+
+  const chiffreAffairesAgence = useMemo(() => {
+    if (activeAgency.id !== 'all') {
+      return calculerCaPourAgence(activeAgency.id, estConseilsFinances, estNovavisio, parPipelinePrincipal, voitChiffresAgence);
+    }
+    // Voir le commentaire au-dessus de calculerCaPourAgence : chaque agence
+    // réelle applique sa propre règle (son propre seuil de départ, son
+    // propre pipeline visé, sa propre visibilité direction), puis les
+    // résultats sont additionnés — au lieu d'appliquer la seule règle
+    // Immosphera à tout le monde.
+    const resultats = AGENCIES.filter((agence) => agence.id !== 'all').map((agence) => {
+      const estCFAgence = /conseils?\s*finances?/i.test(agence.name);
+      const estNovaAgence = /novavisio/i.test(agence.name);
+      const parPipelinePrincipalAgence = estCFAgence || estNovaAgence;
+      const voitChiffresAgenceLocal = estCFAgence ? estDirectionCF : isSuperAdmin;
+      return calculerCaPourAgence(agence.id, estCFAgence, estNovaAgence, parPipelinePrincipalAgence, voitChiffresAgenceLocal);
+    });
+    const parEtapeAVenirFusion = new Map<string, number>();
+    resultats.forEach((r) => r.repartitionAVenir.forEach(({ name, value }) => {
+      parEtapeAVenirFusion.set(name, (parEtapeAVenirFusion.get(name) || 0) + value);
+    }));
+    return {
+      total: resultats.reduce((s, r) => s + r.total, 0),
+      comBanqueTotal: resultats.reduce((s, r) => s + r.comBanqueTotal, 0),
+      comptees: resultats.reduce((s, r) => s + r.comptees, 0),
+      aVenir: resultats.reduce((s, r) => s + r.aVenir, 0),
+      comptessAVenir: resultats.reduce((s, r) => s + r.comptessAVenir, 0),
+      sansMontant: resultats.reduce((s, r) => s + r.sansMontant, 0),
+      pipelineTrouve: resultats.some((r) => r.pipelineTrouve),
+      dansLePipeline: resultats.reduce((s, r) => s + r.dansLePipeline, 0),
+      horsEtape: resultats.reduce((s, r) => s + r.horsEtape, 0),
+      nomsConnus: resultats.flatMap((r) => r.nomsConnus).slice(0, 6),
+      repartitionAVenir: Array.from(parEtapeAVenirFusion.entries())
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value),
+      horsPipelineMontant: resultats.reduce((s, r) => s + r.horsPipelineMontant, 0),
+      horsPipelineNb: resultats.reduce((s, r) => s + r.horsPipelineNb, 0),
+      devis: resultats.reduce((s, r) => s + r.devis, 0),
+      devisNb: resultats.reduce((s, r) => s + r.devisNb, 0),
+      recurrence: resultats.reduce((s, r) => s + r.recurrence, 0),
+      recurrenceNb: resultats.reduce((s, r) => s + r.recurrenceNb, 0),
+      parConseiller: fusionnerMapsMontants(resultats.map((r) => r.parConseiller)),
+      commissionParConseiller: fusionnerMapsMontants(resultats.map((r) => r.commissionParConseiller)),
+      parConseillerAnnee: fusionnerMapsMontants(resultats.map((r) => r.parConseillerAnnee)),
+      parConseillerAVenir: fusionnerMapsMontants(resultats.map((r) => r.parConseillerAVenir)),
+      comBanqueParConseiller: fusionnerMapsMontants(resultats.map((r) => r.comBanqueParConseiller)),
+      lignes: resultats
+        .flatMap((r) => r.lignes)
+        .sort((a, b) => Number(b.archive) - Number(a.archive) || b.montant - a.montant || a.nom.localeCompare(b.nom, 'fr')),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allDeals, activeAgency.id, pipelinesData, stagesWithPosition, voitChiffresAgence, currentUser?.uid, estNovavisio, estConseilsFinances, parPipelinePrincipal, estDirectionCF, isSuperAdmin]);
 
   // Signalé le 7 octobre : « ils ne doivent voir que le chiffre de leur
   // productivité pas celui de l'agence ». "Dossiers actifs" n'était filtré
@@ -692,17 +782,6 @@ export default function Dashboard({
       .sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'));
   }, [collaborateurs, chiffreAffairesAgence]);
 
-  // Demandé le 6 septembre : « dans le CA de l'agence, il faut que tu
-  // additionnes le chiffre d'affaires réalisé par les courtiers, et non pas
-  // l'encours » — le total de la case « Chiffre d'affaires de l'agence »
-  // doit correspondre exactement à la somme des cases CA par courtier
-  // (archivé + commission + commission Banque de chacun), pas à un calcul
-  // séparé sur l'ensemble des dossiers de l'agence qui pourrait diverger
-  // (ex. dossier archivé et signé mais sans courtier attribué).
-  const caRealiseCourtiers = useMemo(
-    () => caParCourtier.reduce((somme, c) => somme + c.total, 0),
-    [caParCourtier]
-  );
   const commissionRealiseeCourtiers = useMemo(
     () => caParCourtier.reduce((somme, c) => somme + c.commission, 0),
     [caParCourtier]
@@ -1244,18 +1323,21 @@ export default function Dashboard({
               {/* Demandé le 6 septembre : « le chiffre d'affaires de l'agence
                   doit être uniquement les chiffres qui ont été comptabilisés
                   du moment qu'on a archivé la fiche du client et que nous
-                  avons mis signé, pas avant » — et « il faut que tu
-                  additionnes le chiffre d'affaires réalisé par les
-                  courtiers, et non pas l'encours ». Ce total est donc
-                  exactement la somme des cases CA par courtier
-                  (caRealiseCourtiers), jamais l'encours (CA à venir),
-                  affiché à part (case dédiée, et en info ci-dessous). */}
+                  avons mis signé, pas avant » — jamais l'encours (CA à
+                  venir), affiché à part (case dédiée, et en info ci-dessous).
+                  Signalé en revue puis confirmé (25 octobre) : la demande du
+                  6 septembre faisait en réalité afficher ici la somme des
+                  RÉTROCESSIONS versées aux courtiers (caRealiseCourtiers =
+                  honoraires_courtier + com_banque_courtier), explicitement
+                  SANS les honoraires de l'agence elle-même (chiffreAffaires-
+                  Agence.total, qui les exclut) — alors que le libellé de la
+                  tuile dit « Chiffre d'affaires de l'agence ». Un dossier
+                  archivé avec 10 000 € d'honoraires agence et 2 000 € versés
+                  au courtier affichait donc 2 000 € ici. Même calcul que les
+                  autres agences désormais : les honoraires agence réellement
+                  comptabilisés (chiffreAffairesAgence.total). */}
               <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
-                {formatCurrency(
-                  estConseilsFinances
-                    ? caRealiseCourtiers
-                    : chiffreAffairesAgence.total
-                )}
+                {formatCurrency(chiffreAffairesAgence.total)}
               </div>
               {/* Une tuile qui affiche zéro sans dire pourquoi fait perdre une
                   soirée. Elle explique donc ce qu'elle a trouvé, et où ça

@@ -288,6 +288,17 @@ export default async function handler(req: any, res: any) {
       );
     }
 
+    // Signalé en revue (25 octobre, sécurité) : la date de fin d'accès d'un
+    // stagiaire (user_roles.expires_at) n'était jusqu'ici comparée qu'au
+    // moment de la CONNEXION côté client (AuthContext). Cette route, qui
+    // répond à CHAQUE chargement de l'app, ne refusait jamais le rôle
+    // 'intern' une fois la date dépassée : un stagiaire qui bloque cette
+    // requête dans les devtools garde son profil en cache côté client
+    // indéfiniment, sans que le serveur ne le bannisse jamais lui-même.
+    if (role === 'intern' && internEndsAt && new Date(internEndsAt) < new Date()) {
+      throw new Error('Accès refusé : la période de votre accès stagiaire est terminée.');
+    }
+
     if (!profile) {
       const { data: created } = await supabaseAdmin
         .from('profiles')
