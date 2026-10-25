@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Calendar as CalendarIcon,
@@ -311,15 +312,23 @@ const TaskModal: React.FC<TaskModalProps> = ({
     return c ? c.name : null;
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50 overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative bg-gradient-to-b from-[#081e22]/98 via-[#061719]/98 to-[#041113]/98 border border-teal-500/25 rounded-3xl max-w-4xl w-full shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_35px_rgba(247,188,95,0.08)] overflow-hidden flex flex-col my-auto max-h-[92vh]">
+  // Signalé (25 octobre, téléphone) : la fenêtre était coincée ENTRE la barre
+  // du haut et la barre de navigation du bas — son en-tête passait dessous et
+  // les boutons Annuler / Enregistrer étaient cachés par « Accueil · Menu ».
+  // Cause : rendue dans la page, un ancêtre (flou/transform) capturait le
+  // `fixed`. Portail direct dans <body> + plein écran sur mobile, avec les
+  // marges de sécurité iOS (encoche en haut, barre d'accueil en bas).
+  return createPortal(
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-stretch sm:items-center justify-center p-0 sm:p-5 z-[1000] overflow-y-auto animate-in fade-in duration-200">
+      <div className="relative bg-gradient-to-b from-[#081e22]/98 via-[#061719]/98 to-[#041113]/98 border-0 sm:border border-teal-500/25 rounded-none sm:rounded-3xl max-w-4xl w-full shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_35px_rgba(247,188,95,0.08)] overflow-hidden flex flex-col sm:my-auto h-[100dvh] sm:h-auto sm:max-h-[92vh]">
         
         {/* Golden accent bar top */}
         <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/80 to-transparent pointer-events-none" />
 
         {/* Modal Top Header */}
-        <div className="p-5 sm:p-6 pb-4 sm:pb-5 border-b border-teal-500/20 flex items-center justify-between bg-gradient-to-r from-[#092226]/90 via-[#0b292e]/90 to-[#092226]/90 shrink-0">
+        <div
+          className="p-4 sm:p-6 pb-3 sm:pb-5 border-b border-teal-500/20 flex items-center justify-between bg-gradient-to-r from-[#092226]/90 via-[#0b292e]/90 to-[#092226]/90 shrink-0 pt-[calc(1rem+env(safe-area-inset-top,0px))] sm:pt-6"
+        >
           <div className="flex items-center gap-3.5 min-w-0">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/20 to-[#E5A642]/10 border border-[#F7BC5F]/30 flex items-center justify-center shadow-[0_0_20px_rgba(247,188,95,0.15)] shrink-0">
               <CalendarIcon className="w-5 h-5 text-[#F7BC5F]" />
@@ -349,7 +358,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
         </div>
 
         {/* Scrollable Content Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto overscroll-contain space-y-6 flex-1 min-h-0">
           {/* Grid layout: Left Calendar, Right Form */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
             
@@ -370,10 +379,10 @@ const TaskModal: React.FC<TaskModalProps> = ({
               {/* Quick date chips */}
               <div className="grid grid-cols-4 gap-1.5 p-1 rounded-xl bg-[#06191c] border border-teal-500/20">
                 {[
-                  { label: "Aujourd'hui", offset: 0 },
-                  { label: "Demain", offset: 1 },
-                  { label: "+2 jours", offset: 2 },
-                  { label: "+1 sem.", offset: 7 },
+                  { label: "Aujourd'hui", court: "Auj.", offset: 0 },
+                  { label: "Demain", court: "Demain", offset: 1 },
+                  { label: "+2 jours", court: "+2 j", offset: 2 },
+                  { label: "+1 sem.", court: "+1 sem.", offset: 7 },
                 ].map((chip) => {
                   const target = new Date();
                   target.setDate(target.getDate() + chip.offset);
@@ -388,13 +397,14 @@ const TaskModal: React.FC<TaskModalProps> = ({
                       key={chip.label}
                       type="button"
                       onClick={() => handleQuickDate(chip.offset)}
-                      className={`py-1.5 px-1 rounded-lg text-[11px] font-bold transition-all text-center truncate cursor-pointer ${
+                      className={`py-1.5 px-1 rounded-lg text-[11px] font-bold transition-all text-center whitespace-nowrap cursor-pointer ${
                         isCurrentChoice
                           ? 'bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 shadow-sm'
                           : 'text-slate-300 hover:text-white hover:bg-white/5'
                       }`}
                     >
-                      {chip.label}
+                      <span className="sm:hidden">{chip.court}</span>
+                      <span className="hidden sm:inline">{chip.label}</span>
                     </button>
                   );
                 })}
@@ -750,7 +760,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
         </div>
 
         {/* Modal Bottom Footer Actions */}
-        <div className="p-4 sm:p-5 border-t border-teal-500/20 bg-gradient-to-r from-[#06181b] via-[#071d22] to-[#06181b] flex items-center justify-between gap-3 shrink-0">
+        <div className="p-3 sm:p-5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-5 border-t border-teal-500/20 bg-gradient-to-r from-[#06181b] via-[#071d22] to-[#06181b] flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 shrink-0">
           {saveError ? (
             <p className="text-xs font-semibold text-rose-400 flex-1 flex items-center gap-1.5 truncate">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
@@ -762,11 +772,11 @@ const TaskModal: React.FC<TaskModalProps> = ({
               <span>Rappel automatique synchronisé</span>
             </div>
           )}
-          <div className="flex items-center gap-3 shrink-0 ml-auto">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto w-full sm:w-auto">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-all cursor-pointer"
+              className="flex-1 sm:flex-none px-4 sm:px-5 py-3 sm:py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:text-white bg-white/5 sm:bg-transparent hover:bg-white/5 border border-white/10 sm:border-transparent hover:border-white/10 transition-all cursor-pointer"
             >
               Annuler
             </button>
@@ -774,7 +784,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
               type="submit"
               form="task-modal-form"
               disabled={saving}
-              className="px-6 py-2.5 bg-gradient-to-r from-[#F7BC5F] via-[#F9C977] to-[#E5A642] hover:brightness-110 active:scale-95 text-slate-950 font-black text-sm rounded-xl flex items-center gap-2 shadow-[0_0_20px_rgba(247,188,95,0.3)] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+              className="flex-[2] sm:flex-none justify-center px-4 sm:px-6 py-3 sm:py-2.5 bg-gradient-to-r from-[#F7BC5F] via-[#F9C977] to-[#E5A642] hover:brightness-110 active:scale-95 text-slate-950 font-black text-sm rounded-xl flex items-center gap-2 whitespace-nowrap shadow-[0_0_20px_rgba(247,188,95,0.3)] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait"
             >
               {saving ? (
                 <>
@@ -784,7 +794,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
               ) : (
                 <>
                   <CalendarIcon className="w-4 h-4 stroke-[2.5]" />
-                  <span>{isEditing ? 'Enregistrer les modifications' : 'Créer la tâche'}</span>
+                  <span className="sm:hidden">{isEditing ? 'Enregistrer' : 'Créer la tâche'}</span>
+                  <span className="hidden sm:inline">{isEditing ? 'Enregistrer les modifications' : 'Créer la tâche'}</span>
                 </>
               )}
             </button>
@@ -792,7 +803,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
