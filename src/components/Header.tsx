@@ -7,6 +7,7 @@ import {
   Loader2,
   Maximize,
   Menu as MenuIcon,
+  Mic,
   Minimize,
   Moon,
   Plus,
@@ -37,6 +38,7 @@ import { TEAM_MEMBERS } from '@/data/teamMembers';
 
 interface HeaderProps {
   onOpenNouveauLead: () => void;
+  onOpenClientDictation?: () => void;
   onOpenSqlImport?: () => void;
   onOpenTutorial: () => void;
   onOpenCameraReservation?: () => void;
@@ -70,6 +72,7 @@ export const Header: React.FC<
   HeaderProps
 > = ({
   onOpenNouveauLead,
+  onOpenClientDictation,
   onOpenSqlImport,
   onOpenTutorial,
   onOpenCameraReservation,
@@ -327,6 +330,17 @@ export const Header: React.FC<
 
       {/* OUTILS HEADER */}
       <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        {onOpenClientDictation && (
+          <button
+            onClick={onOpenClientDictation}
+            title="Dicter une note vocale directement dans une fiche client"
+            className="bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 text-rose-200 hover:text-white font-semibold text-xs px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all active:scale-95 shrink-0 cursor-pointer"
+          >
+            <Mic className="w-3.5 h-3.5 text-rose-400" />
+            <span className="hidden lg:inline">Dictée client</span>
+          </button>
+        )}
+
         <button
           data-tour="header-nouveau-lead"
           onClick={onOpenNouveauLead}

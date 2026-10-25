@@ -10,7 +10,7 @@ import {
   Bell, MessageSquare, Users, GitFork, FileText, Mail, BarChart2,
   Headphones, Calendar, FileEdit, UserPlus, Folder, Plus, X,
   ChevronDown, ChevronUp, ChevronRight, Megaphone, Camera, Lock, Zap, Home as HomeIcon, Globe,
-  ExternalLink, Bookmark, Target, Shield, Award, Sparkles, CheckSquare, Image as ImageIcon, MapPin, Settings,
+  ExternalLink, Bookmark, Target, Shield, Award, Sparkles, CheckSquare, Image as ImageIcon, MapPin, Settings, Mic,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
@@ -69,6 +69,7 @@ interface MobileHomeProps {
   onOpenNotifications?: () => void;
   // Le « + » crée un lead. Il vit dans l'en-tête, plus dans la barre du bas.
   onOpenNouveauLead?: () => void;
+  onOpenClientDictation?: () => void;
 }
 
 const AGENCY_LOGO_BY_NAME: Record<string, string> = {
@@ -194,6 +195,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   unreadNotificationsCount = 0,
   onOpenNotifications,
   onOpenNouveauLead,
+  onOpenClientDictation,
 }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
 
@@ -868,6 +870,17 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {onOpenClientDictation && (
+            <button
+              type="button"
+              onClick={onOpenClientDictation}
+              title="Dicter une note vocale dans une fiche client"
+              aria-label="Dicter dans une fiche client"
+              className="w-11 h-11 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 flex items-center justify-center shadow-[0_0_15px_rgba(244,63,94,0.25)] active:scale-95 transition-all cursor-pointer"
+            >
+              <Mic className="w-5 h-5" />
+            </button>
+          )}
           {onOpenNouveauLead && (
             <button
               type="button"

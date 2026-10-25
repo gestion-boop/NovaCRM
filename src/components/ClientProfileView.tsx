@@ -18,7 +18,7 @@ import TransactionChecklistModal, {
 import { ClipboardList } from 'lucide-react';
 import { couleurEtapeNovavisio, estAgenceNovavisio } from '@/lib/couleursNovavisio';
 import { clicMailCrm } from '@/lib/composerMail';
-import { ChevronLeft, ChevronDown, Plus, Mail, Phone, Calendar, User, UserCheck, UserPlus, Pencil, Trash2, CheckCircle, Circle, FileEdit, Save, Clock, Check, CheckCheck, Mic, MicOff, Square, Pin, GripVertical, MessageSquare, X, FileText, Upload, Download, Folder, Eye, Lock, Share2, Send, UserX, Smile, Image as ImageIcon, Video as VideoIcon, Paperclip, ClipboardCheck, Landmark, Archive, ArchiveRestore, Copy, Loader2, ShieldCheck, Flame, Sun, Snowflake, MoreVertical } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, Mail, Phone, Calendar, User, UserCheck, UserPlus, Pencil, Trash2, CheckCircle, Circle, FileEdit, Save, Clock, Check, CheckCheck, Mic, MicOff, Square, Pin, GripVertical, MessageSquare, X, FileText, Upload, Download, Folder, Eye, Lock, Share2, Send, UserX, Smile, Image as ImageIcon, Video as VideoIcon, Paperclip, ClipboardCheck, Landmark, Archive, ArchiveRestore, Copy, Loader2, ShieldCheck, Flame, Sun, Snowflake, MoreVertical, Sparkles } from 'lucide-react';
 
 // Sélecteur Chaud/Tiède/Froid de la fiche client — même logique que la
 // liste Clients (Clients.tsx) : l'icône reste affichée en permanence,
@@ -196,8 +196,8 @@ export default function ClientProfileView({
   // Demande explicite : "intégrer Nova dans la fiche du client" — ouvre
   // Nova (App.tsx lui transmet déjà currentClientId dès qu'une fiche est
   // affichée, donc Nova résout tout de suite le bon dossier sans qu'on ait
-  // à répéter le nom).
-  onOpenNova?: () => void;
+  // à répéter le nom). Peut aussi recevoir un prompt initial ou pré-rempli.
+  onOpenNova?: (options?: { prefill?: string; initialPrompt?: string }) => void;
 }) {
   const [showHalo, setShowHalo] = useState(false);
   useEffect(() => {
@@ -707,6 +707,20 @@ export default function ClientProfileView({
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = React.useRef<any>(null);
   const dicteeRef = React.useRef<((results: any) => string) | null>(null);
+
+  // Dictée vocale rapide directement sur l'interface principale de la fiche client
+  const [quickDictationOpen, setQuickDictationOpen] = useState(false);
+  const [quickDictationText, setQuickDictationText] = useState('');
+  const [quickDictationListening, setQuickDictationListening] = useState(false);
+  const [quickDictationSaving, setQuickDictationSaving] = useState(false);
+  const quickRecognitionRef = React.useRef<any>(null);
+  const quickDicteeAccRef = React.useRef<((results: any) => string) | null>(null);
+
+  // Dictée vocale directe dans le bloc "Commentaire" de la fiche client
+  const [isDictatingComment, setIsDictatingComment] = useState(false);
+  const commentRecognitionRef = React.useRef<any>(null);
+  const commentDicteeAccRef = React.useRef<((results: any) => string) | null>(null);
+  const latestContactCommentsRef = React.useRef('');
 
   // Documents tab states
   const [clientDocs, setClientDocs] = useState<ClientDocItem[]>([]);
@@ -2224,6 +2238,201 @@ export default function ClientProfileView({
     }
   };
 
+  useEffect(() => {
+    latestContactCommentsRef.current = contactComments;
+  }, [contactComments]);
+
+  useEffect(() => {
+    const onDictationSaved = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.clientId === clientId) {
+        void loadNotes();
+      }
+    };
+    window.addEventListener('nova:client-dictation-saved', onDictationSaved);
+    return () => window.removeEventListener('nova:client-dictation-saved', onDictationSaved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  // ── Dictée vocale directe dans le bloc "Commentaire" de la fiche ──
+  const toggleCommentDictation = () => {
+    const SpeechRecognitionApi = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionApi) {
+      toast.error("La reconnaissance vocale n'est pas disponible sur ce navigateur (utilisez Chrome ou Safari).");
+      return;
+    }
+
+    if (isDictatingComment) {
+      if (commentRecognitionRef.current) {
+        try { commentRecognitionRef.current.stop(); } catch { /* ignore */ }
+      }
+      setIsDictatingComment(false);
+      // Enregistre automatiquement le commentaire dicté dans la fiche
+      if (client) {
+        void updateContact.mutateAsync({
+          id: client.id,
+          updates: { comments: latestContactCommentsRef.current },
+        }).then(() => {
+          setSavedCommentsSuccess(true);
+          setTimeout(() => setSavedCommentsSuccess(false), 2500);
+          toast.success('Commentaire vocal enregistré dans la fiche.');
+        });
+      }
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognitionApi();
+      recognition.lang = 'fr-FR';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      commentDicteeAccRef.current = creerAccumulateurDictee(contactComments.trim());
+      recognition.onresult = (event: any) => {
+        if (commentDicteeAccRef.current) {
+          const next = commentDicteeAccRef.current(event.results);
+          latestContactCommentsRef.current = next;
+          setContactComments(next);
+        }
+      };
+      recognition.onerror = () => setIsDictatingComment(false);
+      recognition.onend = () => {
+        setIsDictatingComment(false);
+        if (client && latestContactCommentsRef.current.trim()) {
+          void updateContact.mutateAsync({
+            id: client.id,
+            updates: { comments: latestContactCommentsRef.current },
+          }).then(() => {
+            setSavedCommentsSuccess(true);
+            setTimeout(() => setSavedCommentsSuccess(false), 2500);
+          });
+        }
+      };
+      recognition.start();
+      commentRecognitionRef.current = recognition;
+      setIsDictatingComment(true);
+    } catch {
+      setIsDictatingComment(false);
+    }
+  };
+
+  // ── Dictée vocale express dans le bandeau Copilote Nova de la fiche ──
+  const stopQuickDictation = () => {
+    if (quickRecognitionRef.current) {
+      try {
+        quickRecognitionRef.current.onend = null;
+        quickRecognitionRef.current.stop();
+      } catch { /* ignore */ }
+      quickRecognitionRef.current = null;
+    }
+    setQuickDictationListening(false);
+  };
+
+  const toggleQuickDictation = (forceStart = false) => {
+    const SpeechRecognitionApi = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionApi) {
+      toast.error("La reconnaissance vocale n'est pas disponible sur ce navigateur.");
+      return;
+    }
+
+    if (quickDictationListening && !forceStart) {
+      stopQuickDictation();
+      return;
+    }
+
+    setQuickDictationOpen(true);
+    try {
+      if (quickRecognitionRef.current) {
+        try { quickRecognitionRef.current.stop(); } catch { /* ignore */ }
+      }
+      const recognition = new SpeechRecognitionApi();
+      recognition.lang = 'fr-FR';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      quickDicteeAccRef.current = creerAccumulateurDictee(quickDictationText.trim());
+      recognition.onresult = (event: any) => {
+        if (quickDicteeAccRef.current) {
+          setQuickDictationText(quickDicteeAccRef.current(event.results));
+        }
+      };
+      recognition.onerror = () => setQuickDictationListening(false);
+      recognition.onend = () => setQuickDictationListening(false);
+      recognition.start();
+      quickRecognitionRef.current = recognition;
+      setQuickDictationListening(true);
+    } catch {
+      setQuickDictationListening(false);
+    }
+  };
+
+  const saveQuickDictationAsNote = async () => {
+    if (!client || !currentUser || !quickDictationText.trim()) return;
+    stopQuickDictation();
+    setQuickDictationSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const title = `Dictée vocale du ${new Date().toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`;
+      const body = `**${title}**\n${quickDictationText.trim()}`;
+      const { error: sbErr } = await supabase.from('comments').insert({
+        lead_id: client.id,
+        body,
+        user_id: currentUser.uid,
+        created_at: now,
+        updated_at: now,
+        is_shared: false,
+      } as any);
+      if (sbErr) throw sbErr;
+      setQuickDictationText('');
+      setQuickDictationOpen(false);
+      setActiveTab('notes');
+      toast.success('Note vocale enregistrée dans la fiche client.');
+      await loadNotes();
+    } catch {
+      toast.error("Impossible d'enregistrer la note vocale.");
+    } finally {
+      setQuickDictationSaving(false);
+    }
+  };
+
+  const saveQuickDictationAsComment = async () => {
+    if (!client || !quickDictationText.trim()) return;
+    stopQuickDictation();
+    setQuickDictationSaving(true);
+    try {
+      const stamp = new Date().toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const existing = contactComments.trim();
+      const next = existing
+        ? `${existing}\n[${stamp}] ${quickDictationText.trim()}`
+        : quickDictationText.trim();
+      setContactComments(next);
+      latestContactCommentsRef.current = next;
+      await updateContact.mutateAsync({
+        id: client.id,
+        updates: { comments: next },
+      });
+      setQuickDictationText('');
+      setQuickDictationOpen(false);
+      setSavedCommentsSuccess(true);
+      setTimeout(() => setSavedCommentsSuccess(false), 2500);
+      toast.success('Dictée ajoutée au commentaire de la fiche client.');
+    } catch {
+      toast.error("Impossible d'enregistrer le commentaire.");
+    } finally {
+      setQuickDictationSaving(false);
+    }
+  };
+
   const handleDeleteNote = async (noteId: string) => {
     const note = clientNotes.find((item) => item.id === noteId);
 
@@ -2378,15 +2587,29 @@ export default function ClientProfileView({
               <Share2 className="w-4 h-4 shrink-0" />
               <span className="max-sm:hidden">{isSharedWithSomeone ? `Partagé (${shares.length})` : 'Partager'}</span>
             </button>
+            <button
+              onClick={() => toggleQuickDictation()}
+              title="Dicter une note ou un commentaire directement dans cette fiche"
+              aria-label="Dicter dans la fiche"
+              className={`px-3.5 py-2.5 max-sm:px-2.5 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-lg hover:scale-[1.02] transition-all cursor-pointer ${
+                quickDictationListening
+                  ? 'bg-rose-600 text-white animate-pulse shadow-[0_0_20px_rgba(225,29,72,0.5)]'
+                  : 'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300'
+              }`}
+            >
+              {quickDictationListening ? <Square className="w-3.5 h-3.5 fill-current shrink-0" /> : <Mic className="w-4 h-4 shrink-0" />}
+              <span>{quickDictationListening ? 'Écoute…' : 'Dicter'}</span>
+            </button>
             {onOpenNova && (
               <button
-                onClick={onOpenNova}
+                onClick={() => onOpenNova()}
                 title="Demander à Nova d'agir sur cette fiche (note, tâche, rendez-vous...)"
                 aria-label="Demander à Nova"
-                className="px-4 py-2.5 max-sm:px-2.5 bg-gradient-to-br from-[#F7BC5F] to-[#B8863F] hover:brightness-110 text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all"
+                className="px-4 py-2.5 max-sm:px-3 bg-gradient-to-br from-[#F7BC5F] to-[#B8863F] hover:brightness-110 text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-[0_0_20px_rgba(247,188,95,0.3)] hover:scale-[1.02] transition-all cursor-pointer"
               >
                 <img src="/nova-mascotte.png" alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />
-                <span className="max-sm:hidden">Demander à Nova</span>
+                <span>Nova</span>
+                <span className="max-sm:hidden">IA</span>
               </button>
             )}
             <button
@@ -2820,31 +3043,57 @@ export default function ClientProfileView({
 
             {/* Ticket #109 : "Notes générales / Remarques client" retirées du
                 sous-onglet Notes — commentaire libre directement ici, sur la
-                fiche, éditable et enregistrable sur place. */}
+                fiche, éditable et enregistrable sur place + dictée vocale directe. */}
             <div className="pt-4 border-t border-[#143c3f]/50 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Commentaire</span>
-                <button
-                  onClick={handleSaveComments}
-                  className="text-[10px] font-bold text-[#F7BC5F] hover:text-[#e5ab4c] flex items-center gap-1 cursor-pointer"
-                >
-                  {savedCommentsSuccess ? (
-                    <>
-                      <Check className="w-3 h-3 stroke-[3]" /> Enregistré
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-3 h-3" /> Enregistrer
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={toggleCommentDictation}
+                    title={isDictatingComment ? 'Arrêter et enregistrer la dictée' : 'Dicter directement dans le commentaire'}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
+                      isDictatingComment
+                        ? 'bg-rose-600 text-white animate-pulse'
+                        : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30'
+                    }`}
+                  >
+                    {isDictatingComment ? (
+                      <>
+                        <Square className="w-2.5 h-2.5 fill-current" />
+                        <span>Arrêter</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-3 h-3" />
+                        <span>Dicter</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleSaveComments}
+                    className="text-[10px] font-bold text-[#F7BC5F] hover:text-[#e5ab4c] flex items-center gap-1 cursor-pointer"
+                  >
+                    {savedCommentsSuccess ? (
+                      <>
+                        <Check className="w-3 h-3 stroke-[3]" /> Enregistré
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3 h-3" /> Enregistrer
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
               <textarea
                 rows={3}
                 value={contactComments}
                 onChange={(e) => setContactComments(e.target.value)}
-                placeholder="Éléments clés, situation, souhaits particuliers..."
-                className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F] placeholder-slate-600 resize-none leading-relaxed"
+                placeholder={isDictatingComment ? 'Parlez maintenant, vos mots sont retranscrits et enregistrés dans la fiche...' : 'Éléments clés, situation, souhaits particuliers...'}
+                className={`w-full bg-[#030d0f] border rounded-xl p-2.5 text-xs text-white focus:outline-none placeholder-slate-600 resize-none leading-relaxed transition-colors ${
+                  isDictatingComment ? 'border-rose-500/60 ring-2 ring-rose-500/20' : 'border-[#153c3f] focus:border-[#F7BC5F]'
+                }`}
               />
             </div>
 
@@ -3045,6 +3294,202 @@ export default function ClientProfileView({
 
         {/* Right Column - Tabs & Content */}
         <div className="lg:col-span-2 bg-[#07191c]/90 border border-white/10 rounded-2xl flex flex-col shadow-xl backdrop-blur-xl overflow-hidden">
+          {/* Barre d'actions rapides Copilote Nova IA & Dictée Vocale directe dans la fiche */}
+          <div className="p-3 sm:px-5 sm:py-3.5 bg-gradient-to-r from-[#F7BC5F]/15 via-[#0b2529] to-[#07191c] border-b border-[#F7BC5F]/25 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#F7BC5F] to-[#B8863F] p-0.5 shadow-[0_0_15px_rgba(247,188,95,0.35)] shrink-0">
+                  <img src="/nova-mascotte.png" alt="Nova" className="w-full h-full rounded-[10px] object-cover" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs sm:text-sm font-extrabold text-white truncate">
+                      Copilote Nova & Dictée vocale
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#F7BC5F]/20 text-[#F7BC5F] border border-[#F7BC5F]/35 hidden sm:inline">
+                      Gain de temps
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    Dictez une note ou lancez une action IA reliée à {client.name}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (quickDictationOpen && !quickDictationListening) {
+                      setQuickDictationOpen(false);
+                    } else {
+                      toggleQuickDictation();
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                    quickDictationListening
+                      ? 'bg-rose-600 text-white animate-pulse shadow-[0_0_20px_rgba(225,29,72,0.5)]'
+                      : quickDictationOpen
+                      ? 'bg-rose-500/25 border border-rose-500/50 text-rose-200'
+                      : 'bg-gradient-to-r from-rose-500 to-red-600 hover:brightness-110 text-white'
+                  }`}
+                >
+                  {quickDictationListening ? (
+                    <>
+                      <Square className="w-3 h-3 fill-current" />
+                      <span>Arrêter l’écoute</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="w-3.5 h-3.5" />
+                      <span>Dicter dans la fiche</span>
+                    </>
+                  )}
+                </button>
+
+                {onOpenNova && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenNova({
+                          initialPrompt: `Fais-moi une synthèse complète du dossier de ${client.name} (situation, profil, historique et points clés).`,
+                        })
+                      }
+                      className="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-[#F7BC5F]/20 border border-white/10 hover:border-[#F7BC5F]/40 text-xs font-bold text-slate-200 hover:text-[#F7BC5F] flex items-center gap-1 transition-all cursor-pointer"
+                      title="Générer une synthèse complète du dossier avec Nova"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                      <span>Synthèse</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenNova({
+                          prefill: `Crée une tâche de suivi pour ${client.name} : `,
+                        })
+                      }
+                      className="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-[#F7BC5F]/20 border border-white/10 hover:border-[#F7BC5F]/40 text-xs font-bold text-slate-200 hover:text-[#F7BC5F] flex items-center gap-1 transition-all cursor-pointer"
+                      title="Créer une tâche via Nova"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>+ Tâche IA</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenNova({
+                          initialPrompt: `Planifie un rendez-vous avec ${client.name}`,
+                        })
+                      }
+                      className="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-[#F7BC5F]/20 border border-white/10 hover:border-[#F7BC5F]/40 text-xs font-bold text-slate-200 hover:text-[#F7BC5F] flex items-center gap-1 transition-all cursor-pointer"
+                      title="Planifier un RDV avec Nova"
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                      <span>+ RDV IA</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onOpenNova()}
+                      className="px-3 py-1.5 rounded-xl bg-[#F7BC5F] hover:bg-[#f9c977] text-slate-950 text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    >
+                      <img src="/nova-mascotte.png" alt="" className="w-3.5 h-3.5 rounded-full object-cover" />
+                      <span>Ouvrir Nova</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Tiroir de dictée vocale express directement dans la fiche */}
+            {quickDictationOpen && (
+              <div className="p-3.5 rounded-2xl bg-black/45 border border-[#F7BC5F]/35 space-y-2.5 animate-fade-in">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-white">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full ${
+                        quickDictationListening ? 'bg-rose-500 animate-ping' : 'bg-[#F7BC5F]'
+                      }`}
+                    />
+                    <span>
+                      {quickDictationListening
+                        ? `Écoute vocale en cours pour ${client.name}…`
+                        : `Dictée vocale prête à être enregistrée dans la fiche de ${client.name}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleQuickDictation()}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                        quickDictationListening
+                          ? 'bg-rose-600 text-white'
+                          : 'bg-white/10 hover:bg-white/15 text-slate-200'
+                      }`}
+                    >
+                      {quickDictationListening ? (
+                        <>
+                          <Square className="w-3 h-3 fill-current" /> Pause
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="w-3 h-3" /> Reprendre micro
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stopQuickDictation();
+                        setQuickDictationOpen(false);
+                      }}
+                      className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
+                      title="Fermer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  rows={3}
+                  value={quickDictationText}
+                  onChange={(e) => setQuickDictationText(e.target.value)}
+                  placeholder="Parlez au micro ou tapez votre texte ici..."
+                  className="w-full p-3 rounded-xl bg-[#030d0f] border border-white/15 focus:border-[#F7BC5F] text-xs sm:text-sm text-white placeholder-slate-500 outline-none resize-y leading-relaxed"
+                />
+
+                <div className="flex items-center justify-end gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={quickDictationSaving || !quickDictationText.trim()}
+                    onClick={() => void saveQuickDictationAsComment()}
+                    className="px-3 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-40 transition-all cursor-pointer"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                    <span>Ajouter au Commentaire de la fiche</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={quickDictationSaving || !quickDictationText.trim()}
+                    onClick={() => void saveQuickDictationAsNote()}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#F7BC5F] hover:bg-[#f9c977] text-slate-950 text-xs font-extrabold flex items-center gap-1.5 disabled:opacity-40 shadow-sm transition-all cursor-pointer"
+                  >
+                    {quickDictationSaving ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <FileEdit className="w-3.5 h-3.5" />
+                    )}
+                    <span>Enregistrer dans les Notes du client</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Tabs (30/08/2026, demande explicite : "effet hover et halo lors
               de la sélection aussi") — halo doré au survol de tout onglet,
               et légère lueur permanente sur l'onglet actif (déjà surligné

@@ -25,6 +25,7 @@ const Clients = lazy(() => import('./components/leads/Clients'));
 const Pipeline = lazy(() => import('./components/Pipeline'));
 const ComptabiliteView = lazy(() => import('./components/ComptabiliteView'));
 import NouveauLeadModal from './components/NouveauLeadModal';
+import QuickClientDictationModal from './components/QuickClientDictationModal';
 import TutorialModal from './components/TutorialModal';
 import ProductTour, { TourStep } from './components/ProductTour';
 import SqlImportModal from './components/SqlImportModal';
@@ -257,7 +258,11 @@ function App() {
     setNovaPrefillPrompt(`Concernant le dossier "${dealTitle}" : `);
     setNovaPopupOpen(true);
   };
-  const openNovaPopup = () => setNovaPopupOpen(true);
+  const openNovaPopup = (options?: { prefill?: string; initialPrompt?: string }) => {
+    if (options?.prefill !== undefined) setNovaPrefillPrompt(options.prefill);
+    if (options?.initialPrompt !== undefined) setNovaAIPrompt(options.initialPrompt);
+    setNovaPopupOpen(true);
+  };
   // Demande explicite : une recherche immobilière depuis Nova IA (accueil ou
   // ailleurs) ouvre directement Immosphera360 avec les biens trouvés,
   // au lieu de rester dans le chat. Ces ids sont transmis en "graine" au
@@ -498,6 +503,7 @@ function App() {
 
   // Modals state
   const [showNouveauLead, setShowNouveauLead] = useState(false);
+  const [showQuickClientDictation, setShowQuickClientDictation] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   // Ticket #49 : visite guidée interactive (spotlight sur les vrais
   // éléments), lancée depuis l'onglet Guide du tutoriel.
@@ -911,6 +917,7 @@ function App() {
       {/* Top Header Bar */}
       <Header
         onOpenNouveauLead={() => setShowNouveauLead(true)}
+        onOpenClientDictation={() => setShowQuickClientDictation(true)}
         onOpenSqlImport={() => setShowSqlImport(true)}
         onOpenTutorial={() => setShowTutorial(true)}
         onOpenCameraReservation={() => setShowCameraModal(true)}
@@ -1133,6 +1140,7 @@ function App() {
                     unreadNotificationsCount={unreadMobileNotificationsCount}
                     onOpenNotifications={() => setNotificationsPanelOpen((open) => !open)}
                     onOpenNouveauLead={() => setShowNouveauLead(true)}
+                    onOpenClientDictation={() => setShowQuickClientDictation(true)}
                   />
                 ) : (
                   <AccueilGrid
@@ -1440,6 +1448,8 @@ function App() {
                   <EcranErrorBoundary resetKey="nova-popup" plein>
                   <AssistantIAView
                     currentClientId={selectedClientProfileId}
+                    initialPrompt={novaAIPrompt}
+                    onInitialPromptConsumed={() => setNovaAIPrompt(null)}
                     prefillPrompt={novaPrefillPrompt}
                     onPrefillPromptConsumed={() => setNovaPrefillPrompt(null)}
                     onOpenContact={(contactId) => {
@@ -1743,10 +1753,18 @@ function App() {
         onClose={() => setShowCameraModal(false)}
       />
 
+      {/* Dictée vocale rapide vers une fiche client depuis l'interface principale */}
+      <QuickClientDictationModal
+        isOpen={showQuickClientDictation}
+        onClose={() => setShowQuickClientDictation(false)}
+        initialClientId={selectedClientProfileId}
+        onOpenClientProfile={(clientId) => openClientProfile(clientId)}
+      />
+
       {/* Mobile Bottom Navigation Bar — masquée sur mobile pendant le chat et
           pendant Nova IA (demande explicite) pour leur laisser tout l'écran ;
           chacun a son propre bouton retour intégré pour en ressortir. */}
-      {!(isMobile && (currentNav === 'chat' || novaOpen)) && (
+      {!(isMobile && (currentNav === 'chat' || novaOpen || novaPopupOpen)) && (
         <MobileBottomNav
           currentNav={currentNav}
           onNavigate={(nav) => {

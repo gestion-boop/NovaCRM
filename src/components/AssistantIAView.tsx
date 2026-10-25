@@ -4,6 +4,7 @@ import { AGENCIES, Task } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSwipeBack } from '@/hooks/useSwipeBack';
 import NovaInfoPanel from './NovaInfoPanel';
+import QuickClientDictationModal from './QuickClientDictationModal';
 // Ticket #283 (KO, "pas des flèches, plutôt un drag and drop") — même
 // mécanisme déjà utilisé pour l'accueil et le pipeline, pour un glisser
 // cohérent avec le reste du CRM.
@@ -574,7 +575,10 @@ const NEBULA_SPARKS = Array.from({ length: 16 }, (_, i) => {
 export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt, onInitialPromptConsumed, onFoundProperties, onClose, onOpenContact, currentClientId, prefillPrompt, onPrefillPromptConsumed, autoVoiceMode, onAutoVoiceModeConsumed, startFresh = true }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const { allContacts = [], addContact } = useContacts();
-  const activeClient = currentClientId ? allContacts.find((c) => c.id === currentClientId) : null;
+  const [selectedClientOverrideId, setSelectedClientOverrideId] = useState<string | null>(null);
+  const [showQuickClientDictation, setShowQuickClientDictation] = useState(false);
+  const effectiveClientId = currentClientId || selectedClientOverrideId;
+  const activeClient = effectiveClientId ? allContacts.find((c) => c.id === effectiveClientId) : null;
   const { tasks = [], addTask, updateTask } = useTasks();
   const { deals = [] } = useDeals();
   // Réutilisé plus bas : (1) compacter l'en-tête Nova sur mobile pour ne
@@ -662,8 +666,8 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   // effet plutôt que du useState initial car `allContacts` peut ne pas
   // encore être chargé au tout premier rendu.
   useEffect(() => {
-    if (!currentClientId) return;
-    const client = allContacts.find((c) => c.id === currentClientId);
+    if (!effectiveClientId) return;
+    const client = allContacts.find((c) => c.id === effectiveClientId);
     if (!client) return;
     setMessages((prev) => {
       if (prev.length !== 1 || prev[0].id !== 'welcome-1') return prev; // conversation déjà en cours ou restaurée, on n'y touche pas
@@ -675,7 +679,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       ];
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentClientId, allContacts.length]);
+  }, [effectiveClientId, allContacts.length]);
 
   // Demande explicite : "mémoire de conversation" — Nova oubliait tout dès
   // que la conversation était fermée ou la page rechargée (état purement en
@@ -1996,7 +2000,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         const dueDate = typeof args.dueDate === 'string' ? args.dueDate : format(new Date(), 'yyyy-MM-dd');
         const priority = typeof args.priority === 'string' ? args.priority : 'Moyenne';
         const taskType = typeof args.type === 'string' ? args.type : 'Tâche';
-        const contactId = typeof args.contactId === 'string' ? args.contactId : undefined;
+        const contactId = typeof args.contactId === 'string' && args.contactId ? args.contactId : (effectiveClientId || undefined);
 
         await addTask.mutateAsync({
           title,
@@ -2074,7 +2078,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         const title = typeof args.title === 'string' ? args.title : 'Note de suivi';
         const content = typeof args.content === 'string' ? args.content : '';
         const contactName = typeof args.contactName === 'string' ? args.contactName : '';
-        const rawContactId = typeof args.contactId === 'string' ? args.contactId : '';
+        const rawContactId = typeof args.contactId === 'string' && args.contactId ? args.contactId : (effectiveClientId || '');
         // Ne fait confiance à l'id renvoyé par Nova que s'il correspond
         // réellement à un contact connu du CRM (ou au contact créé dans ce
         // même lot d'actions, qui n'est pas encore dans `allContacts`).
@@ -2486,7 +2490,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
               userProfile?.role === 'super_admin' || userProfile?.role === 'admin'
                 ? AGENCIES.map((a) => ({ id: a.id, name: a.name }))
                 : [],
-            currentClientId: currentClientId || undefined,
+            currentClientId: effectiveClientId || undefined,
             userLocation,
             stats: {
               totalContacts: allContacts.length,
@@ -3248,49 +3252,71 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           )}
 
           {activeClient ? (
-            <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 w-full">
-              {getClientQuickPrompts(activeClient.name).map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => {
-                    if (p.isPrefill) {
-                      setPromptInput(p.prompt);
-                      if (promptTextareaRef.current) {
-                        promptTextareaRef.current.focus();
-                        autoResizePrompt();
-                      }
-                    } else {
-                      handleSendMessage(p.prompt);
-                    }
-                  }}
-                  className="w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-white/80 hover:bg-white border border-white/90 shadow-sm hover:shadow text-left flex items-center gap-2.5 sm:gap-3 text-[#1a1230] text-xs sm:text-sm font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
-                >
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color}`}>
-                    <p.icon className="w-4 h-4" />
-                  </div>
-                  <span className="truncate leading-tight font-bold">{p.label}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
-              {QUICK_PROMPTS.map((p) => {
-                const Icon = p.icon;
-                return (
+            <div data-swipe-back-exclude="true" className="w-full space-y-2.5">
+              <button
+                type="button"
+                onClick={() => setShowQuickClientDictation(true)}
+                className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:brightness-110 text-white shadow-lg flex items-center justify-center gap-2.5 text-xs sm:text-sm font-extrabold transition-all cursor-pointer active:scale-[0.99]"
+              >
+                <Mic className="w-4 h-4 shrink-0" />
+                <span>Dicter une note directe dans la fiche de {activeClient.name}</span>
+              </button>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 w-full">
+                {getClientQuickPrompts(activeClient.name).map((p) => (
                   <button
                     key={p.label}
                     type="button"
-                    onClick={() => handleSendMessage(p.prompt)}
-                    className="w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-white/80 hover:bg-white border border-white/90 shadow-sm hover:shadow text-left flex items-center gap-2.5 sm:gap-3 text-[#1a1230] text-xs sm:text-sm font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
+                    onClick={() => {
+                      if (p.isPrefill) {
+                        setPromptInput(p.prompt);
+                        if (promptTextareaRef.current) {
+                          promptTextareaRef.current.focus();
+                          autoResizePrompt();
+                        }
+                      } else {
+                        handleSendMessage(p.prompt);
+                      }
+                    }}
+                    className="w-full px-2.5 py-2.5 sm:px-3.5 sm:py-3 rounded-2xl bg-white/85 hover:bg-white border border-white/90 shadow-sm hover:shadow text-left flex items-center gap-2 sm:gap-2.5 text-[#1a1230] text-[11px] sm:text-xs font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
                   >
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color || 'bg-[#F7BC5F]/20 text-[#B8863F] border-[#F7BC5F]/30'}`}>
-                      <Icon className="w-4 h-4" />
+                    <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color}`}>
+                      <p.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </div>
-                    <span className="leading-tight font-bold">{p.label}</span>
+                    <span className="leading-snug font-bold">{p.label}</span>
                   </button>
-                );
-              })}
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div data-swipe-back-exclude="true" className="w-full space-y-2.5">
+              <button
+                type="button"
+                onClick={() => setShowQuickClientDictation(true)}
+                className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-[#F7BC5F] via-[#F9C977] to-[#e6a642] hover:brightness-105 text-slate-950 border border-white/60 shadow-md flex items-center justify-center gap-2.5 text-xs sm:text-sm font-extrabold transition-all cursor-pointer active:scale-[0.99]"
+              >
+                <div className="w-7 h-7 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <Mic className="w-4 h-4" />
+                </div>
+                <span>Dicter une note vocale → Enregistrer dans une fiche client</span>
+              </button>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
+                {QUICK_PROMPTS.map((p) => {
+                  const Icon = p.icon;
+                  return (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => handleSendMessage(p.prompt)}
+                      className="w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-white/80 hover:bg-white border border-white/90 shadow-sm hover:shadow text-left flex items-center gap-2.5 sm:gap-3 text-[#1a1230] text-xs sm:text-sm font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
+                    >
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color || 'bg-[#F7BC5F]/20 text-[#B8863F] border-[#F7BC5F]/30'}`}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <span className="leading-tight font-bold">{p.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -3982,6 +4008,13 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       )}
 
       {wallpaperDrawer}
+
+      <QuickClientDictationModal
+        isOpen={showQuickClientDictation}
+        onClose={() => setShowQuickClientDictation(false)}
+        initialClientId={effectiveClientId}
+        onOpenClientProfile={onOpenContact}
+      />
 
       {/* Ticket #61 : fiche détail d'un bien Immosphera360, ouverte en
           interne avec bouton retour — au lieu de partir sur l'annonce
