@@ -251,6 +251,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [activeChannel, setActiveChannel] = useState<ChatChannel | null>(null);
   const [messages, setMessages] = useState<ChatMessageRow[]>([]);
+  const [hauteurVisible, setHauteurVisible] = useState<number | null>(null);
+  const [clavierOuvert, setClavierOuvert] = useState(false);
   // Vrai seulement tant que le canal affiché n'a encore aucune ligne en
   // mémoire : on montre alors une attente, pas le texte « aucun message ».
   const [canalFilEnChargement, setCanalFilEnChargement] = useState(false);
@@ -4061,12 +4063,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   // uniquement quand le chat est à l'écran ; ailleurs, `h-full` reprend la
   // main comme avant (précédent identique dans AssistantIAView.tsx pour la
   // fenêtre de Nova, déjà en production).
-  const [hauteurVisible, setHauteurVisible] = useState<number | null>(null);
   // Clavier ouvert : le rembourrage bas de la barre de saisie, calé sur la
   // zone sûre de l'écran (barre gestuelle), n'a plus lieu d'être — c'est le
   // clavier qui occupe cette place. Sans ça, le composeur flotterait une
   // cinquantaine de pixels au-dessus des touches.
-  const [clavierOuvert, setClavierOuvert] = useState(false);
   const rembourrageBarre = clavierOuvert ? { paddingBottom: '0.75rem' } : undefined;
   // Signalé (10 septembre, Sylvain Grazia, iPhone) : « j'ai un espace tout
   // en bas, ce n'est pas figé au niveau du remplissage de l'écran ».
@@ -4174,23 +4174,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       {/* Tabs — masqués sur mobile une fois une conversation ouverte, pour
           laisser toute la place au panneau de discussion. */}
       {(!isMobile || !mobileShowingConversation) && (
-      /* Bug nº 3 (consigne du 1er septembre) : sur téléphone, les trois
-         onglets plus le bouton « Nouveau » dépassaient la largeur de l'écran.
-         Marges resserrées sur mobile uniquement, et la rangée peut défiler
-         si elle reste trop large. Rien ne change sur ordinateur. */
-      /* 3 septembre (capture iPhone de Christophe) : la rangée défilait, le
-         troisième onglet « Partagés » restait caché derrière « Nouveau » et
-         rien n'était aligné. Sur téléphone, les trois onglets se partagent
-         maintenant la largeur à parts égales, sur une seule ligne, et
-         « Nouveau » devient un simple « + » rond à droite. Ordinateur
-         inchangé. */
-      <div className={`flex items-center justify-between gap-2 ${isMobile ? 'px-3' : 'px-4'} py-3 border-b border-teal-500/20 bg-[#071317]/80 backdrop-blur-xl shrink-0 shadow-sm`}>
-        <div className={isMobile ? 'flex-1 min-w-0 grid grid-cols-3 gap-1.5' : 'flex items-center min-w-0 overflow-x-auto custom-scrollbar gap-2'}>
+      <div className={`flex items-center justify-between gap-3 ${isMobile ? 'px-3' : 'px-5'} py-2.5 border-b border-white/10 bg-[#061417]/90 backdrop-blur-xl shrink-0`}>
+        <div className={isMobile ? 'flex-1 min-w-0 grid grid-cols-3 gap-1 bg-[#040d0f] p-1 rounded-xl border border-white/10' : 'flex items-center min-w-0 bg-[#040d0f] p-1 rounded-xl border border-white/10 gap-1'}>
           {TABS.map((t) => {
-            // Demandé : "un compteur sur conversation" — total des messages
-            // non lus toutes conversations confondues, affiché directement
-            // sur l'onglet (même source que les pastilles par conversation
-            // et le badge global du menu, pour rester cohérent partout).
             const tabUnread = t.id === 'conversations'
               ? Object.values(unreadByConversation).reduce((sum, n) => sum + n, 0)
               : t.id === 'projets'
@@ -4200,17 +4186,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`${isMobile ? 'w-full min-w-0 justify-center px-1.5 gap-1 text-[13px]' : 'shrink-0 px-4 gap-2 text-sm'} py-2 rounded-2xl font-bold flex items-center transition-all ${
+                className={`${isMobile ? 'w-full min-w-0 justify-center px-1.5 gap-1 text-xs' : 'shrink-0 px-3.5 gap-2 text-xs'} py-1.5 rounded-lg font-bold flex items-center transition-all cursor-pointer ${
                   tab === t.id
-                    ? 'bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 shadow-[0_0_15px_rgba(247,188,95,0.35)]'
-                    : 'text-teal-200/80 hover:text-white hover:bg-white/5 border border-transparent hover:border-teal-500/20'
+                    ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <t.icon className="w-4 h-4 shrink-0" />
+                <t.icon className="w-3.5 h-3.5 shrink-0" />
                 <span className="truncate">{t.label}</span>
                 {tabUnread > 0 && (
                   <span className={`min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-black flex items-center justify-center ${
-                    tab === t.id ? 'bg-slate-950 text-[#F7BC5F]' : 'bg-[#F7BC5F] text-slate-950 shadow-sm'
+                    tab === t.id ? 'bg-slate-950 text-[#F7BC5F]' : 'bg-[#F7BC5F] text-slate-950'
                   }`}>
                     {tabUnread > 9 ? '9+' : tabUnread}
                   </span>
@@ -4220,19 +4206,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           })}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {/* "Documents" épinglé — super admins uniquement (5 octobre) :
-              accès global, recherchable, à toutes les pièces jointes
-              envoyées dans la messagerie (conversations + canaux), pour
-              retrouver un document sans se souvenir de la conversation où
-              il a été envoyé. */}
           {isSuperAdmin && (
             <button
               onClick={ouvrirDocuments}
               aria-label="Documents"
               title="Tous les documents envoyés dans la messagerie"
-              className={`shrink-0 ${isMobile ? 'w-10 h-10 rounded-full justify-center' : 'px-3.5 py-2 rounded-2xl gap-1.5'} text-sm font-bold bg-[#092226]/85 text-teal-200 hover:text-white hover:bg-[#0c2e33] flex items-center border border-teal-500/30 shadow-md transition-all active:scale-95`}
+              className={`shrink-0 ${isMobile ? 'w-9 h-9 rounded-xl justify-center' : 'px-3 py-1.5 rounded-xl gap-1.5'} text-xs font-semibold bg-white/5 text-slate-200 hover:text-white hover:bg-white/10 flex items-center border border-white/10 transition-all cursor-pointer`}
             >
-              <FileText className={isMobile ? 'w-4 h-4' : 'w-4 h-4'} />
+              <FileText className="w-3.5 h-3.5" />
               {!isMobile && 'Documents'}
             </button>
           )}
@@ -4241,10 +4222,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               onClick={() => { setShowNewConvModal(true); ensureProfilesLoaded(); }}
               aria-label="Nouvelle conversation"
               title="Nouvelle conversation"
-              className={`shrink-0 ${isMobile ? 'w-10 h-10 rounded-full justify-center' : 'px-4 py-2 rounded-2xl gap-1.5'} text-sm font-bold bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 hover:brightness-110 flex items-center shadow-[0_0_15px_rgba(247,188,95,0.3)] transition-all active:scale-95`}
+              className={`shrink-0 ${isMobile ? 'w-9 h-9 rounded-xl justify-center' : 'px-3.5 py-1.5 rounded-xl gap-1.5'} text-xs font-bold bg-[#F7BC5F] text-slate-950 hover:brightness-110 flex items-center shadow-sm transition-all active:scale-95 cursor-pointer`}
             >
-              <Plus className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
-              {!isMobile && 'Nouveau'}
+              <Plus className="w-4 h-4" />
+              {!isMobile && 'Nouveau message'}
             </button>
           )}
         </div>
@@ -4254,45 +4235,50 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       <div className="flex-1 flex min-h-0">
         {/* Folder tree */}
         {tab === 'projets' && (!isMobile || !activeChannel) && (
-          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-teal-500/20 bg-[#061517]/60 backdrop-blur-xl overflow-y-auto custom-scrollbar p-3 sm:p-3.5 space-y-2.5`}>
-            <div className="flex items-center justify-between px-1 mb-1">
-              <span className="text-xs font-bold text-teal-400 uppercase tracking-wider">Projets</span>
+          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-white/10 bg-[#061417]/70 overflow-y-auto custom-scrollbar p-3 space-y-1.5`}>
+            <div className="flex items-center justify-between px-2 py-1 mb-1">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Dossiers & Canaux</span>
               {isAdmin && (
                 <button
                   type="button"
                   onClick={() => { setProjectError(null); setShowAddProject(true); void ensureProfilesLoaded(); }}
                   title="Créer un dossier de projet"
-                  className="w-7 h-7 rounded-xl bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] hover:brightness-110 text-slate-950 flex items-center justify-center shrink-0 shadow-md transition-all active:scale-95"
+                  className="w-6 h-6 rounded-lg bg-[#F7BC5F]/20 hover:bg-[#F7BC5F] text-[#F7BC5F] hover:text-slate-950 flex items-center justify-center shrink-0 transition-all cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
             {projects.map((project, pi) => {
-              // Espace commun "3 Entités" : agency_id null → mis en évidence par un cadre jaune
               const isSpecialGroup = project.agency_id === null;
+              const isOpen = Boolean(expanded[project.id]);
               return (
-              // Ticket (nouvelle base, signalé) : texte plus grand + séparateurs
-              // entre les projets sur mobile.
               <React.Fragment key={project.id}>
-              {isMobile && pi > 0 && <div className="h-px bg-teal-500/15 mx-1 my-1" />}
+              {isMobile && pi > 0 && <div className="h-px bg-white/5 mx-1 my-1" />}
               <div className="space-y-1">
                 <div
-                  className={`w-full flex items-center gap-1 rounded-2xl transition-all shadow-sm ${
+                  className={`w-full flex items-center gap-1 rounded-xl transition-all ${
                     isSpecialGroup
-                      ? 'bg-gradient-to-r from-[#0c252a]/95 via-[#11333a]/90 to-[#0c252a]/95 border border-[#F7BC5F]/60 ring-1 ring-[#F7BC5F]/30 shadow-[0_0_15px_rgba(247,188,95,0.15)]'
-                      : 'bg-[#081e22]/85 hover:bg-[#0c272c] border border-teal-500/25 hover:border-teal-500/50'
+                      ? 'bg-[#F7BC5F]/10 border border-[#F7BC5F]/40'
+                      : isOpen
+                      ? 'bg-white/[0.06] border border-white/10'
+                      : 'hover:bg-white/[0.04] border border-transparent'
                   }`}
                 >
                   <button
                     onClick={() => setExpanded((p) => ({ ...p, [project.id]: !p[project.id] }))}
-                    className={`flex-1 flex items-center justify-between min-w-0 font-bold ${isMobile ? 'px-3 py-3.5 text-base' : 'px-3.5 py-2.5 text-sm'}`}
+                    className={`flex-1 flex items-center justify-between min-w-0 font-semibold cursor-pointer ${isMobile ? 'px-3 py-3 text-sm' : 'px-2.5 py-2 text-xs'}`}
                   >
                     <span className="flex items-center gap-2 truncate">
-                      {isSpecialGroup ? (
-                        <Crown className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+                      {isOpen ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       ) : (
-                        <Folder className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      )}
+                      {isSpecialGroup ? (
+                        <Crown className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
+                      ) : (
+                        <Folder className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
                       )}
                       <span className="text-white truncate">{project.name}</span>
                     </span>
@@ -4302,27 +4288,27 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           .filter((c) => !c.parent_channel_id)
                           .reduce((sum, c) => sum + unreadCanalRecursif(c.id), 0);
                         return projetUnread > 0 ? (
-                          <span className="min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-[#F7BC5F] text-slate-950 shadow-sm">
+                          <span className="min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-[#F7BC5F] text-slate-950">
                             {projetUnread > 9 ? '9+' : projetUnread}
                           </span>
                         ) : null;
                       })()}
-                      <span className="text-[10px] text-teal-300/60 font-medium">
-                        {(channelsByProject[project.id] || []).length} canaux
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {(channelsByProject[project.id] || []).length}
                       </span>
                     </span>
                   </button>
                   <button
                     onClick={() => openMembersModal(project.id)}
-                    className="p-1.5 mr-1.5 rounded-xl text-slate-400 hover:text-[#F7BC5F] hover:bg-white/5 shrink-0 transition-colors"
+                    className="p-1.5 mr-1 rounded-lg text-slate-400 hover:text-[#F7BC5F] hover:bg-white/5 shrink-0 transition-colors cursor-pointer"
                     title="Gérer les membres"
                   >
                     <Users className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                {expanded[project.id] && (
-                  <div className="pl-3 space-y-1">
+                {isOpen && (
+                  <div className="ml-3.5 pl-2.5 border-l border-white/10 space-y-0.5">
                     {(() => {
                       const racines = (channelsByProject[project.id] || []).filter((c) => !c.parent_channel_id);
                       return racines.map((c, i) => renderCanal(c, racines, i));
@@ -4330,14 +4316,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
                     {isSuperAdmin && (
                       newChannelFor === project.id ? (
-                        <div className="flex items-center gap-1 px-1">
+                        <div className="flex items-center gap-1 px-1 py-1">
                           <input
                             autoFocus
                             value={newChannelName}
                             onChange={(e) => setNewChannelName(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && addChannel(project.id)}
                             placeholder="Nom du canal"
-                            className="flex-1 bg-[#030d0f] border border-[#153c3f] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                            className="flex-1 bg-[#030d0f] border border-white/15 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
                           />
                           <button onClick={() => addChannel(project.id)} className="p-1 text-[#F7BC5F]"><Plus className="w-3.5 h-3.5" /></button>
                           <button onClick={() => setNewChannelFor(null)} className="p-1 text-slate-500"><X className="w-3.5 h-3.5" /></button>
@@ -4345,9 +4331,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       ) : (
                         <button
                           onClick={() => setNewChannelFor(project.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-500 hover:text-[#F7BC5F] hover:bg-white/5"
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 hover:text-[#F7BC5F] hover:bg-white/5 cursor-pointer"
                         >
-                          <FolderPlus className="w-3 h-3" /> Ajouter un canal
+                          <FolderPlus className="w-3 h-3" /> Nouveau canal
                         </button>
                       )
                     )}
@@ -4362,42 +4348,38 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
         {/* Conversations list */}
         {tab === 'conversations' && (!isMobile || !activeConversationId) && (
-          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-teal-500/20 bg-[#061517]/60 backdrop-blur-xl overflow-y-auto custom-scrollbar p-3 sm:p-3.5 space-y-2`}>
-            <div className="relative mb-1">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-teal-400/60" />
+          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-white/10 bg-[#061417]/70 overflow-y-auto custom-scrollbar p-3 space-y-1.5`}>
+            <div className="relative mb-2">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={convSearch}
                 onChange={(e) => setConvSearch(e.target.value)}
-                placeholder="Rechercher..."
-                className="w-full bg-[#081e22]/90 border border-teal-500/30 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-teal-200/40 focus:outline-none focus:border-[#F7BC5F]/70 shadow-inner"
+                placeholder="Rechercher une discussion..."
+                className="w-full bg-white/[0.04] border border-white/10 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-[#F7BC5F]/60 transition-colors"
               />
             </div>
             {conversationsLoading ? (
               <p className="text-xs text-slate-500 text-center py-6">Chargement…</p>
             ) : filteredConversations.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-6">Aucune conversation. Cliquez sur "Nouveau" pour en démarrer une.</p>
+              <p className="text-xs text-slate-500 text-center py-6">Aucune conversation. Cliquez sur « Nouveau message » pour démarrer.</p>
             ) : (
               filteredConversations.map((c, i) => {
                 const unread = unreadByConversation[c.id] || 0;
+                const isSelected = activeConversationId === c.id;
                 return (
-                // Ticket #225 : refonte visuelle — avatar plus grand, nom
-                // plus lisible, vrai aperçu du dernier message + heure au
-                // lieu de "Groupe"/"Message direct" fixe, plus d'espace
-                // entre les entrées. Comportement d'envoi/permissions/
-                // pièces jointes/notifications inchangé (uniquement l'affichage).
                 <React.Fragment key={c.id}>
-                  {isMobile && i > 0 && <div className="h-px bg-teal-500/15 mx-2" />}
+                  {isMobile && i > 0 && <div className="h-px bg-white/5 mx-2" />}
                   <button
                     onClick={() => openConversation(c.id)}
-                    className={`w-full flex items-center gap-3 rounded-2xl border text-left transition-all ${
-                      isMobile ? 'px-3.5 py-3' : 'px-3 py-2.5'
+                    className={`w-full flex items-center gap-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      isMobile ? 'px-3 py-2.5' : 'px-2.5 py-2'
                     } ${
-                      activeConversationId === c.id
-                        ? 'bg-gradient-to-r from-[#F7BC5F]/20 via-[#F7BC5F]/10 to-transparent border-[#F7BC5F]/50 shadow-[0_4px_16px_rgba(247,188,95,0.12)]'
-                        : 'bg-[#081e22]/70 border-teal-500/20 hover:border-teal-500/40 hover:bg-[#0c272c]'
+                      isSelected
+                        ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40'
+                        : 'bg-transparent border-transparent hover:bg-white/[0.05]'
                     }`}
                   >
-                    <div className={`rounded-2xl bg-[#092226] border border-teal-500/30 flex items-center justify-center font-bold shrink-0 overflow-hidden text-sm shadow-sm ${isMobile ? 'w-12 h-12' : 'w-10 h-10'} ${activeConversationId === c.id ? 'text-[#F7BC5F] border-[#F7BC5F]/50' : 'text-slate-300'}`}>
+                    <div className={`rounded-full bg-[#0b2226] border flex items-center justify-center font-bold shrink-0 overflow-hidden text-xs ${isMobile ? 'w-11 h-11' : 'w-9 h-9'} ${isSelected ? 'text-[#F7BC5F] border-[#F7BC5F]/50' : 'text-slate-200 border-white/10'}`}>
                       {conversationAvatarUrl(c) ? (
                         <img src={conversationAvatarUrl(c)!} alt="" className="w-full h-full object-cover" />
                       ) : (
@@ -4406,21 +4388,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-2">
-                        <p className={`font-bold truncate ${isMobile ? 'text-base' : 'text-sm'} ${activeConversationId === c.id ? 'text-[#FAD592]' : 'text-white'}`}>
+                        <p className={`font-semibold truncate ${isMobile ? 'text-sm' : 'text-xs'} ${isSelected ? 'text-[#FAD592]' : unread > 0 ? 'text-white font-bold' : 'text-slate-100'}`}>
                           {conversationLabel(c)}
                         </p>
                         {conversationTime(c.id) && (
-                          <span className={`shrink-0 text-[10px] ${unread > 0 ? 'text-[#F7BC5F] font-bold' : 'text-teal-400/60'}`}>
+                          <span className={`shrink-0 text-[10px] ${unread > 0 ? 'text-[#F7BC5F] font-bold' : 'text-slate-400'}`}>
                             {conversationTime(c.id)}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <p className={`truncate ${isMobile ? 'text-sm' : 'text-xs'} ${unread > 0 ? 'text-teal-100 font-semibold' : 'text-teal-200/50'}`}>
+                        <p className={`truncate text-xs ${unread > 0 ? 'text-slate-200 font-medium' : 'text-slate-400'}`}>
                           {lastMessagePreview(c.id)}
                         </p>
                         {unread > 0 && (
-                          <span className="shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 text-[10px] font-black flex items-center justify-center shadow-sm">
+                          <span className="shrink-0 min-w-[1.15rem] h-[1.15rem] px-1 rounded-full bg-[#F7BC5F] text-slate-950 text-[10px] font-black flex items-center justify-center">
                             {unread > 9 ? '9+' : unread}
                           </span>
                         )}
@@ -4907,356 +4889,275 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       toujours ; Maj+Entrée fait un retour à la ligne. Le coin
                       arrondi passe de `rounded-full` à `rounded-3xl` : un
                       arrondi total sur plusieurs lignes rognerait le texte. */}
-                  <textarea
-                    ref={convTextareaRef}
-                    rows={1}
-                    value={convDraft}
-                    onChange={(e) => setConvDraft(e.target.value)}
-                    // Demande explicite (23 septembre) : Entrée ne doit
-                    // qu'aller à la ligne, ordinateur comme téléphone —
-                    // seul le bouton d'envoi envoie. Avant, Entrée envoyait
-                    // sur ordinateur (Maj+Entrée pour la ligne) ; ce
-                    // comportement spécifique au clavier physique est
-                    // retiré, le textarea garde son insertion de retour à
-                    // la ligne par défaut, plus rien à intercepter ici.
-                    placeholder="Écrire un message..."
-                    disabled={isRecordingConv}
-                    className="w-full resize-none bg-[#081e22]/90 border border-teal-500/30 rounded-3xl px-5 max-sm:px-3 py-2.5 text-sm text-white placeholder-teal-200/40 leading-relaxed focus:outline-none focus:border-[#F7BC5F]/70 shadow-inner disabled:opacity-40"
-                  />
-
-                  {/* Signalé (17/09/2026) : le bouton flottant de dictée
-                      ajouté au-dessus de la barre débordait sur le dernier
-                      message (position `absolute`/`bottom-full` mal vue à
-                      l'usage réel). Remis à sa place naturelle, DANS la
-                      rangée de boutons, colonne centrale. `grid-cols-3`
-                      (colonnes égales) devient `grid-cols-[auto_1fr_auto]` :
-                      les colonnes gauche/droite prennent exactement la
-                      largeur de leur contenu et collent aux bords, la
-                      colonne centrale (1fr) absorbe tout l'espace restant —
-                      le bouton Envoyer colle donc au bord droit réel de
-                      l'écran, plus au bord d'un simple tiers de grille. */}
-                  <div className="grid grid-cols-[auto_1fr_auto] items-center">
-                    <div className="flex items-center gap-2 justify-self-start">
-                      {/* Téléphone : un seul « + » à la place des trois
-                          boutons, qui ouvre la liste des options. Les trois
-                          boutons restent dans le document (leurs sélecteurs
-                          emoji/Nova s'y ancrent) mais sont masqués sous le
-                          format tablette — sur ordinateur, rien ne change. */}
-                      <div className="sm:hidden">
-                        <button
-                          type="button"
-                          onClick={() => setShowConvPlus((v) => !v)}
-                          disabled={uploadingConvMedia || isRecordingConv}
-                          className="w-11 h-11 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
-                          title="Ajouter"
-                          aria-label="Ajouter une photo, un émoji ou un Novadji"
-                        >
-                          <Plus className="w-6 h-6 sm:w-5 sm:h-5" />
-                        </button>
-                        {/* Demandé (4 septembre) : « quand on appuie sur le
-                            Plus, une animation pour la fenêtre qui monte vers
-                            le haut, qui prenne toute la largeur du téléphone ».
-                            La liste devient donc une feuille qui glisse depuis
-                            le bas de l'écran, bord à bord, avec un voile
-                            derrière qui la referme d'un appui.
-                            Portail vers document.body : même raison que la
-                            visionneuse de photos plus bas — un `position:
-                            fixed` imbriqué dans un ancêtre animé perd son
-                            repère (la fenêtre) et se recale sur cet ancêtre.
-                            Les entrées gardent exactement leurs classes
-                            d'avant : seul le cadre change. */}
-                        {showConvPlus && createPortal(
-                          <div className="fixed inset-0 z-[70] flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Ajouter à votre message">
+                  <div className="flex items-center gap-1.5 bg-[#081b1f] border border-white/15 focus-within:border-[#F7BC5F]/60 rounded-2xl px-2 py-1.5 shadow-inner transition-colors">
+                    {/* Téléphone : un seul « + » à gauche */}
+                    <div className="sm:hidden shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShowConvPlus((v) => !v)}
+                        disabled={uploadingConvMedia || isRecordingConv}
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                        title="Ajouter"
+                        aria-label="Ajouter une photo, un émoji ou un Novadji"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
+                      {showConvPlus && createPortal(
+                        <div className="fixed inset-0 z-[70] flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Ajouter à votre message">
+                          <button
+                            type="button"
+                            aria-label="Fermer"
+                            onClick={() => fermerFeuille(() => setShowConvPlus(false))}
+                            className={`absolute inset-0 bg-black/60 backdrop-blur-sm duration-200 ${feuilleQuitte ? 'animate-out fade-out-0 fill-mode-forwards' : 'animate-in fade-in-0'}`}
+                          />
+                          <div className={`relative bg-[#0b1c1e] border-t border-white/20 rounded-t-3xl p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-xl ease-out ${feuilleQuitte ? 'animate-out slide-out-to-bottom-full fill-mode-forwards duration-200' : 'animate-in slide-in-from-bottom-full duration-300'}`}>
+                            <div className="mx-auto mt-1 mb-2 h-1 w-10 rounded-full bg-white/20" />
                             <button
                               type="button"
-                              aria-label="Fermer"
-                              onClick={() => fermerFeuille(() => setShowConvPlus(false))}
-                              className={`absolute inset-0 bg-black/60 backdrop-blur-sm duration-200 ${feuilleQuitte ? 'animate-out fade-out-0 fill-mode-forwards' : 'animate-in fade-in-0'}`}
-                            />
-                            <div className={`relative bg-[#0b1c1e] border-t border-white/20 rounded-t-3xl p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-xl ease-out ${feuilleQuitte ? 'animate-out slide-out-to-bottom-full fill-mode-forwards duration-200' : 'animate-in slide-in-from-bottom-full duration-300'}`}>
-                              <div className="mx-auto mt-1 mb-2 h-1 w-10 rounded-full bg-white/20" />
-                              <button
-                                type="button"
-                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convCameraInputRef.current?.click(); }}
-                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                              >
-                                <Camera className="w-5 h-5 text-[#F7BC5F]" /> Prendre une photo
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convImageInputRef.current?.click(); }}
-                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                              >
-                                <ImageIcon className="w-5 h-5 text-[#F7BC5F]" /> Photo de la galerie
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convFileInputRef.current?.click(); }}
-                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                              >
-                                <Paperclip className="w-5 h-5 text-[#F7BC5F]" /> Document (PDF)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convVideoInputRef.current?.click(); }}
-                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                              >
-                                <VideoIcon className="w-5 h-5 text-[#F7BC5F]" /> Vidéo (150 Mo max)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvEmoji(true); }}
-                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                              >
-                                <Smile className="w-5 h-5 text-[#F7BC5F]" /> Émoticônes
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvNovaPicker(true); }}
-                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                              >
-                                <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
-                              </button>
-                              {/* Demande explicite (11 septembre) : ajouter la
-                                  dictée vocale et l'envoi différé dans le menu
-                                  "+" mobile — "comme les vrais téléphones
-                                  portables". Uniquement mobile : sur
-                                  ordinateur les deux ont déjà leur propre
-                                  icône dans la barre, qui a la place. */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  fermerFeuille(() => setShowConvPlus(false));
-                                  toggleDictee(isListeningConv, setIsListeningConv, recognitionConvRef, convDraft, setConvDraft);
-                                }}
-                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                              >
-                                <Mic2 className={`w-5 h-5 ${isListeningConv ? 'text-rose-400 animate-pulse' : 'text-[#F7BC5F]'}`} />
-                                {isListeningConv ? 'Dictée en cours... (toucher pour arrêter)' : 'Dictée vocale'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvSchedule(true); }}
-                                className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
-                              >
-                                <Clock className="w-5 h-5 text-[#F7BC5F]" /> Envoi différé
-                              </button>
-                              {/* Message vocal : retiré d'ici (17/09/2026) —
-                                  redondant depuis que son bouton dédié (voir
-                                  la rangée juste en dessous) est visible sur
-                                  mobile aussi, plus seulement sur ordinateur. */}
-                            </div>
-                          </div>,
-                          document.body
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => convImageInputRef.current?.click()}
-                        disabled={uploadingConvMedia || isRecordingConv}
-                        className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
-                        title="Envoyer une image"
-                      >
-                        <ImageIcon className="w-5 h-5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => convFileInputRef.current?.click()}
-                        disabled={uploadingConvMedia || isRecordingConv}
-                        className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
-                        title="Envoyer un PDF"
-                      >
-                        <Paperclip className="w-5 h-5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => convVideoInputRef.current?.click()}
-                        disabled={uploadingConvMedia || isRecordingConv}
-                        className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
-                        title="Envoyer une vidéo (150 Mo max)"
-                      >
-                        <VideoIcon className="w-5 h-5" />
-                      </button>
-                      <div className="sm:relative" ref={convEmojiRef}>
-                        <button
-                          type="button"
-                          onClick={() => setShowConvEmoji((v) => !v)}
-                          className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-                          title="Emoji"
-                        >
-                          <Smile className="w-5 h-5" />
-                        </button>
-                        {showConvEmoji && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center max-w-[min(440px,calc(100vw-1.5rem))] max-sm:max-w-none max-h-[340px] overflow-y-auto custom-scrollbar">
-                            {QUICK_EMOJIS.map((e) => (
-                              <button
-                                key={e}
-                                type="button"
-                                onClick={() => setConvDraft((v) => v + e)}
-                                className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}
-                              >
-                                {e}
-                              </button>
-                            ))}
+                              onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convCameraInputRef.current?.click(); }}
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                            >
+                              <Camera className="w-5 h-5 text-[#F7BC5F]" /> Prendre une photo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convImageInputRef.current?.click(); }}
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                            >
+                              <ImageIcon className="w-5 h-5 text-[#F7BC5F]" /> Photo de la galerie
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convFileInputRef.current?.click(); }}
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                            >
+                              <Paperclip className="w-5 h-5 text-[#F7BC5F]" /> Document (PDF)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { fermerFeuille(() => setShowConvPlus(false)); convVideoInputRef.current?.click(); }}
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                            >
+                              <VideoIcon className="w-5 h-5 text-[#F7BC5F]" /> Vidéo (150 Mo max)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvEmoji(true); }}
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                            >
+                              <Smile className="w-5 h-5 text-[#F7BC5F]" /> Émoticônes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvNovaPicker(true); }}
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                            >
+                              <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                fermerFeuille(() => setShowConvPlus(false));
+                                toggleDictee(isListeningConv, setIsListeningConv, recognitionConvRef, convDraft, setConvDraft);
+                              }}
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                            >
+                              <Mic2 className={`w-5 h-5 ${isListeningConv ? 'text-rose-400 animate-pulse' : 'text-[#F7BC5F]'}`} />
+                              {isListeningConv ? 'Dictée en cours... (toucher pour arrêter)' : 'Dictée vocale'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { fermerFeuille(() => setShowConvPlus(false)); setShowConvSchedule(true); }}
+                              className="w-full flex items-center gap-3.5 px-3.5 py-3.5 rounded-xl text-[15px] text-slate-200 hover:bg-white/10"
+                            >
+                              <Clock className="w-5 h-5 text-[#F7BC5F]" /> Envoi différé
+                            </button>
                           </div>
-                        )}
-                      </div>
-                      <div className="sm:relative" ref={convNovaPickerRef}>
-                        <button
-                          type="button"
-                          onClick={() => setShowConvNovaPicker((v) => !v)}
-                          className="w-10 h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-                          title="Envoyer une mascotte Nova"
-                        >
-                          <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-6 h-6 object-contain" />
-                        </button>
-                        {showConvNovaPicker && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center">
-                            {NOVA_QUICK_REACTIONS.map((src) => (
-                              <button
-                                key={src}
-                                type="button"
-                                onClick={() => { setShowConvNovaPicker(false); void insertConvMessage('image', src); }}
-                                className="w-20 h-20 hover:scale-110 transition-transform rounded-xl hover:bg-white/10 p-1.5"
-                              >
-                                <img src={src} alt="Nova" className="w-full h-full object-contain" />
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                        </div>,
+                        document.body
+                      )}
                     </div>
 
-                    {/* Demandé (17/09/2026) : « je veux que ça soit un
-                        enregistrement audio comme dans le "+", [...] qu'on
-                        puisse avant de l'envoyer le réécouter ou l'annuler »
-                        — revenu sur la demande du 11 septembre qui l'avait
-                        masqué sur mobile (déplacé dans le menu "+", voir
-                        "Message vocal" plus haut, retiré du menu puisqu'il
-                        a maintenant sa place ici) : visible partout
-                        (mobile ET ordinateur), même bouton, même
-                        comportement. La réécoute/annulation avant envoi
-                        existaient déjà (voir plus haut le bloc
-                        `convVocalPret`) — rien à ajouter de ce côté. */}
+                    {/* Outils rapides sur ordinateur */}
+                    <div className="sm:relative shrink-0" ref={convEmojiRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowConvEmoji((v) => !v)}
+                        className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                        title="Emoji"
+                      >
+                        <Smile className="w-4 h-4" />
+                      </button>
+                      {showConvEmoji && (
+                        <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center max-w-[min(440px,calc(100vw-1.5rem))] max-sm:max-w-none max-h-[340px] overflow-y-auto custom-scrollbar">
+                          {QUICK_EMOJIS.map((e) => (
+                            <button
+                              key={e}
+                              type="button"
+                              onClick={() => setConvDraft((v) => v + e)}
+                              className={`${isMobile || isCoarsePointer ? 'text-4xl p-2' : 'text-3xl p-2'} leading-none hover:scale-110 transition-transform rounded-xl hover:bg-white/10`}
+                            >
+                              {e}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="sm:relative shrink-0" ref={convNovaPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowConvNovaPicker((v) => !v)}
+                        className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                        title="Envoyer une mascotte Nova"
+                      >
+                        <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-5 h-5 object-contain" />
+                      </button>
+                      {showConvNovaPicker && (
+                        <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center">
+                          {NOVA_QUICK_REACTIONS.map((src) => (
+                            <button
+                              key={src}
+                              type="button"
+                              onClick={() => { setShowConvNovaPicker(false); void insertConvMessage('image', src); }}
+                              className="w-20 h-20 hover:scale-110 transition-transform rounded-xl hover:bg-white/10 p-1.5"
+                            >
+                              <img src={src} alt="Nova" className="w-full h-full object-contain" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <textarea
+                      ref={convTextareaRef}
+                      rows={1}
+                      value={convDraft}
+                      onChange={(e) => setConvDraft(e.target.value)}
+                      placeholder="Écrire un message..."
+                      disabled={isRecordingConv}
+                      className="flex-1 min-w-0 resize-none bg-transparent border-0 px-2 py-1.5 text-sm text-white placeholder-slate-400 leading-relaxed focus:outline-none disabled:opacity-40"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => convImageInputRef.current?.click()}
+                      disabled={uploadingConvMedia || isRecordingConv}
+                      className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
+                      title="Envoyer une image"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => convFileInputRef.current?.click()}
+                      disabled={uploadingConvMedia || isRecordingConv}
+                      className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
+                      title="Envoyer un PDF"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => convVideoInputRef.current?.click()}
+                      disabled={uploadingConvMedia || isRecordingConv}
+                      className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
+                      title="Envoyer une vidéo (150 Mo max)"
+                    >
+                      <VideoIcon className="w-4 h-4" />
+                    </button>
+
+                    <div className="relative shrink-0" ref={convScheduleRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowConvSchedule((v) => !v)}
+                        className="relative w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                        title="Programmer l'envoi"
+                      >
+                        <Clock className="w-4 h-4" />
+                        {convScheduled.length > 0 && (
+                          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#F7BC5F] text-slate-950 text-[10px] font-bold flex items-center justify-center">
+                            {convScheduled.length}
+                          </span>
+                        )}
+                      </button>
+                      {showConvSchedule && (
+                        <div className="absolute z-20 bottom-full mb-2 right-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-72 space-y-3">
+                          {convScheduled.length > 0 && (
+                            <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+                              <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmés</p>
+                              {convScheduled.map((m) => (
+                                <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg px-2 py-1.5">
+                                  <span className="truncate flex-1" title={m.body}>{formaterEcheance(m.scheduled_at)} — {m.body}</span>
+                                  <button type="button" onClick={() => void annulerMessageProgramme(m.id, 'conversation')} className="text-slate-400 hover:text-white shrink-0" title="Annuler">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmer ce message</p>
+                            <div className="flex gap-2">
+                              <input
+                                type="date"
+                                value={convScheduleDate}
+                                onChange={(e) => setConvScheduleDate(e.target.value)}
+                                min={new Date().toISOString().slice(0, 10)}
+                                className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                              />
+                              <input
+                                type="time"
+                                value={convScheduleTime}
+                                onChange={(e) => setConvScheduleTime(e.target.value)}
+                                className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void programmerMessageConversation()}
+                              disabled={!convDraft.trim()}
+                              className="w-full py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-semibold"
+                            >
+                              Programmer
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <button
                       type="button"
                       onClick={() => (isRecordingConv ? void handleStopRecordingConv(false) : void handleStartRecordingConv())}
                       disabled={uploadingConvMedia || !!convVocalPret}
-                      className="justify-self-center flex w-14 h-14 sm:w-12 sm:h-12 rounded-full items-center justify-center shadow-lg shadow-rose-500/30 transition-transform hover:scale-105 disabled:opacity-40 bg-rose-500/90 hover:bg-rose-500 text-white"
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all disabled:opacity-40 ${
+                        isRecordingConv
+                          ? 'bg-rose-500 text-white animate-pulse'
+                          : 'bg-rose-500/15 text-rose-400 hover:bg-rose-500 hover:text-white'
+                      }`}
                       title="Message vocal"
                     >
-                      <Mic className="w-6 h-6 sm:w-5 sm:h-5" />
+                      <Mic className="w-4 h-4" />
                     </button>
 
-                    <div className="flex items-center gap-2 justify-self-end">
-                      {/* Envoi différé — placé à côté du bouton d'envoi plutôt
-                          que dans le groupe emoji/nova/image ci-dessus :
-                          signalé (4 septembre) que ce groupe, déjà tassé,
-                          débordait sur le micro en mobile (icônes superposées)
-                          une fois un 4e bouton ajouté — grille à trois
-                          colonnes ÉGALES (voir plus haut), qui ne laisse
-                          aucune marge pour grandir. Ce groupe-ci n'avait
-                          jusqu'ici qu'un seul bouton (Envoyer) : il a la place.
-                          Voir le commentaire détaillé sur les états
-                          showConvSchedule/convScheduled plus haut. */}
-                      {/* Demande explicite (11 septembre) : « j'ai toujours
-                          les icônes sur la droite, il faut que tu les
-                          enlèves » — l'horloge ci-dessous, maintenant
-                          accessible depuis le menu "+" (voir plus haut),
-                          restait EN PLUS affichée dans cette rangée sur
-                          mobile, redondante et grignotant l'espace de
-                          saisie. Le BOUTON est masqué sur mobile (visible
-                          sur ordinateur, pas de menu "+" là-bas — voir
-                          "pas desktop, car on a la place") ; le popup, lui,
-                          doit rester dans le DOM sur mobile (ouvert
-                          directement depuis le menu "+"), donc c'est le
-                          bouton seul qui porte `hidden sm:flex`, pas le
-                          conteneur. */}
-                      <div className="relative" ref={convScheduleRef}>
-                        <button
-                          type="button"
-                          onClick={() => setShowConvSchedule((v) => !v)}
-                          className="relative w-11 h-11 sm:w-10 sm:h-10 rounded-full hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-                          title="Programmer l'envoi"
-                        >
-                          <Clock className="w-6 h-6 sm:w-5 sm:h-5" />
-                          {convScheduled.length > 0 && (
-                            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#F7BC5F] text-slate-950 text-[10px] font-bold flex items-center justify-center">
-                              {convScheduled.length}
-                            </span>
-                          )}
-                        </button>
-                        {showConvSchedule && (
-                          <div className="absolute z-20 bottom-full mb-2 right-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-72 space-y-3">
-                            {convScheduled.length > 0 && (
-                              <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
-                                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmés</p>
-                                {convScheduled.map((m) => (
-                                  <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg px-2 py-1.5">
-                                    <span className="truncate flex-1" title={m.body}>{formaterEcheance(m.scheduled_at)} — {m.body}</span>
-                                    <button type="button" onClick={() => void annulerMessageProgramme(m.id, 'conversation')} className="text-slate-400 hover:text-white shrink-0" title="Annuler">
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <div className="space-y-2">
-                              <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmer ce message</p>
-                              <div className="flex gap-2">
-                                <input
-                                  type="date"
-                                  value={convScheduleDate}
-                                  onChange={(e) => setConvScheduleDate(e.target.value)}
-                                  min={new Date().toISOString().slice(0, 10)}
-                                  className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                                />
-                                <input
-                                  type="time"
-                                  value={convScheduleTime}
-                                  onChange={(e) => setConvScheduleTime(e.target.value)}
-                                  className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => void programmerMessageConversation()}
-                                disabled={!convDraft.trim()}
-                                className="w-full py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-semibold"
-                              >
-                                Programmer
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={sendConvMessage}
-                        // Audit (10 septembre) : le bouton restait grisé tant
-                        // qu'aucun texte n'était tapé, MÊME avec un vocal en
-                        // attente de réécoute — on peut désormais l'envoyer
-                        // depuis ici (voir le commentaire dans
-                        // sendConvMessage), le bouton doit donc rester actif
-                        // dans ce cas.
-                        disabled={(!convDraft.trim() && !convVocalPret) || isRecordingConv}
-                        className="w-11 h-11 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] hover:brightness-110 active:scale-95 disabled:opacity-30 text-slate-950 shadow-md transition-all"
-                      >
-                        <Send className="w-5 h-5 sm:w-4 sm:h-4" />
-                      </button>
-                    </div>
+                    <button
+                      onClick={sendConvMessage}
+                      disabled={(!convDraft.trim() && !convVocalPret) || isRecordingConv}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F7BC5F] hover:bg-[#f9c978] active:scale-95 disabled:opacity-30 text-slate-950 shadow-sm transition-all shrink-0"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center p-6">
-                <div className="relative text-center bg-gradient-to-br from-[#081f23]/90 via-[#0a272c]/90 to-[#061517]/95 border border-teal-500/30 rounded-3xl p-10 sm:p-12 max-w-md backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7),0_0_35px_rgba(247,188,95,0.08)] overflow-hidden">
-                  <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
-                  <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/20 via-[#F7BC5F]/10 to-transparent border border-[#F7BC5F]/40 flex items-center justify-center mx-auto mb-5 shadow-[0_0_24px_rgba(247,188,95,0.25)]">
-                    <MessageSquare className="w-7 h-7 text-[#FAD592]" />
+                <div className="text-center max-w-sm">
+                  <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mx-auto mb-3.5">
+                    <MessageSquare className="w-5 h-5 text-[#F7BC5F]" />
                   </div>
-                  <h3 className="text-lg sm:text-xl font-bold text-white tracking-wide mb-2">Aucune conversation sélectionnée</h3>
-                  <p className="text-sm text-teal-200/70 leading-relaxed max-w-xs mx-auto">
-                    Choisissez une conversation dans la liste à gauche, ou cliquez sur « Nouveau » pour démarrer un échange.
+                  <h3 className="text-base font-bold text-white mb-1">Sélectionnez une discussion</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Choisissez un échange dans la colonne de gauche ou cliquez sur « Message » pour démarrer une conversation.
                   </p>
                 </div>
               </div>
@@ -5586,28 +5487,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </button>
                   </div>
                 )}
-                <div className="flex items-center gap-2">
-                {/* Ticket #10 (nouvelle base) : le composer des canaux d'équipe
-                    n'avait aucun accès emoji — ajout d'un picker au même
-                    endroit et avec la même palette élargie que côté messages
-                    directs. */}
-                {/* Téléphone : le « + » remplace les trois boutons (émoji,
-                    Nova, photo) et libère la largeur de la barre de saisie.
-                    Sur ordinateur il disparaît, les trois boutons reprennent
-                    leur place d'origine. */}
-                <div className="sm:hidden">
+                <div className="flex items-center gap-1.5 bg-[#081b1f] border border-white/15 focus-within:border-[#F7BC5F]/60 rounded-2xl px-2 py-1.5 shadow-inner transition-colors">
+                <div className="sm:hidden shrink-0">
                   <button
                     type="button"
                     onClick={() => setShowChannelPlus((v) => !v)}
                     disabled={uploadingChannelMedia || isRecordingChannel}
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                    className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
                     title="Ajouter"
                     aria-label="Ajouter une photo, un émoji ou un Novadji"
                   >
                     <Plus className="w-5 h-5" />
                   </button>
-                  {/* Même feuille que côté conversation directe — voir le
-                      commentaire détaillé là-bas. */}
                   {showChannelPlus && createPortal(
                     <div className="fixed inset-0 z-[70] flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Ajouter à votre message">
                       <button
@@ -5660,8 +5551,6 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         >
                           <img src={NOVA_QUICK_REACTIONS[0]} alt="" className="w-5 h-5 object-contain" /> Novadji
                         </button>
-                        {/* Même ajout que côté conversations directes — voir
-                            le commentaire détaillé plus haut. */}
                         <button
                           type="button"
                           onClick={() => {
@@ -5680,8 +5569,6 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         >
                           <Clock className="w-5 h-5 text-[#F7BC5F]" /> Envoi différé
                         </button>
-                        {/* Message vocal (11 septembre, répété) : retiré de
-                            la rangée sur mobile, déplacé ici. */}
                         <button
                           type="button"
                           onClick={() => { fermerFeuille(() => setShowChannelPlus(false)); void handleStartRecordingChannel(); }}
@@ -5695,14 +5582,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     document.body
                   )}
                 </div>
-                <div className="sm:relative" ref={channelEmojiRef}>
+                <div className="sm:relative shrink-0" ref={channelEmojiRef}>
                   <button
                     type="button"
                     onClick={() => setShowChannelEmoji((v) => !v)}
-                    className="w-10 h-10 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                    className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                     title="Emoji"
                   >
-                    <Smile className="w-5 h-5" />
+                    <Smile className="w-4 h-4" />
                   </button>
                   {showChannelEmoji && (
                     <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center max-w-[min(440px,calc(100vw-1.5rem))] max-sm:max-w-none max-h-[340px] overflow-y-auto custom-scrollbar">
@@ -5719,14 +5606,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </div>
                   )}
                 </div>
-                <div className="sm:relative" ref={channelNovaPickerRef}>
+                <div className="sm:relative shrink-0" ref={channelNovaPickerRef}>
                   <button
                     type="button"
                     onClick={() => setShowChannelNovaPicker((v) => !v)}
-                    className="w-10 h-10 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                    className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                     title="Envoyer une mascotte Nova"
                   >
-                    <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-6 h-6 object-contain" />
+                    <img src="/nova/expressions/nova-neutre.png" alt="Nova" className="w-5 h-5 object-contain" />
                   </button>
                   {showChannelNovaPicker && (
                     <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-3 gap-2.5 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center">
@@ -5743,32 +5630,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </div>
                   )}
                 </div>
-                {/* Voir commentaire équivalent côté conversations directes
-                    plus haut — même correctif de liseré. */}
                 <textarea
                   ref={channelTextareaRef}
                   rows={1}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  // Voir commentaire équivalent côté conversations directes
-                  // (23 septembre) : Entrée n'envoie plus nulle part, ni
-                  // ordinateur ni téléphone — seul le bouton d'envoi envoie.
                   placeholder="Écrire un message..."
-                  /* `min-w-0` : signalé (4 septembre, capture du canal « Comm
-                     générale » sur téléphone) — le bouton d'envoi, le micro et
-                     l'horloge étaient absents de l'écran. Un champ de saisie
-                     est un élément flex qui, par défaut, refuse de descendre
-                     sous sa largeur naturelle (une vingtaine de caractères) :
-                     sur un écran étroit, la rangée débordait et poussait les
-                     trois derniers boutons hors du cadre, sans barre de
-                     défilement pour les rattraper. Avec `min-w-0`, le champ
-                     accepte de rétrécir et tous les boutons restent visibles.
-                     Sur ordinateur, rien ne change : la place ne manquait pas. */
-                  className="flex-1 min-w-0 resize-none bg-[#081e22]/90 border border-teal-500/30 rounded-2xl px-4 max-sm:px-2.5 py-2.5 text-sm text-white placeholder-teal-200/40 leading-relaxed focus:outline-none focus:border-[#F7BC5F]/70 shadow-inner"
+                  className="flex-1 min-w-0 resize-none bg-transparent border-0 px-2 py-1.5 text-sm text-white placeholder-slate-400 leading-relaxed focus:outline-none"
                 />
-                {/* Image et vocal dans les canaux (31/08/2026) — les
-                    conversations directes les avaient depuis toujours, les
-                    canaux de projet non. Même comportement, même rendu. */}
                 <input
                   ref={channelImageInputRef}
                   type="file"
@@ -5803,7 +5672,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   onClick={() => channelImageInputRef.current?.click()}
                   disabled={uploadingChannelMedia || isRecordingChannel}
                   title="Envoyer une image"
-                  className="p-2.5 rounded-xl hidden sm:block text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                  className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
                 >
                   <ImageIcon className="w-4 h-4" />
                 </button>
@@ -5812,7 +5681,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   onClick={() => channelFileInputRef.current?.click()}
                   disabled={uploadingChannelMedia || isRecordingChannel}
                   title="Envoyer un PDF"
-                  className="p-2.5 rounded-xl hidden sm:block text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                  className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
                 >
                   <Paperclip className="w-4 h-4" />
                 </button>
@@ -5821,61 +5690,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   onClick={() => channelVideoInputRef.current?.click()}
                   disabled={uploadingChannelMedia || isRecordingChannel}
                   title="Envoyer une vidéo (150 Mo max)"
-                  className="p-2.5 rounded-xl hidden sm:block text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
+                  className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
                 >
                   <VideoIcon className="w-4 h-4" />
                 </button>
-                {isRecordingChannel ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void handleStopRecordingChannel(true)}
-                      title="Annuler"
-                      className="p-2.5 rounded-xl text-slate-300 hover:bg-white/10"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleStopRecordingChannel(false)}
-                      title={`Arrêter et réécouter (${recordingChannelSeconds}s)`}
-                      className="p-2.5 rounded-xl bg-rose-500 text-white"
-                    >
-                      <Square className="w-4 h-4 fill-current" />
-                    </button>
-                  </>
-                ) : (
-                  // Même correctif que côté conversations directes (11
-                  // septembre, répété) : retiré de la rangée sur mobile,
-                  // déplacé dans le menu "+".
-                  <button
-                    type="button"
-                    onClick={() => void handleStartRecordingChannel()}
-                    disabled={uploadingChannelMedia || !!channelVocalPret}
-                    title="Message vocal"
-                    className="hidden sm:flex p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
-                  >
-                    <Mic className="w-4 h-4" />
-                  </button>
-                )}
-                {/* Envoi différé — placé juste avant le bouton d'envoi
-                    plutôt qu'entre les icônes emoji/Nova et le champ de
-                    saisie, pour rester cohérent avec la conversation
-                    directe (voir le correctif du 4 septembre là-bas : un
-                    groupe déjà tassé débordait sur le micro en mobile).
-                    Ici la rangée est en flex (le champ de saisie absorbe
-                    l'espace restant), donc pas de superposition possible,
-                    mais autant garder le même emplacement des deux côtés.
-                    Voir le commentaire détaillé sur les états
-                    showChannelSchedule/channelScheduled plus haut. */}
-                {/* Même correctif que côté conversations directes (11
-                    septembre) : bouton masqué sur mobile (accessible depuis
-                    le menu "+"), popup laissé dans le DOM. */}
-                <div className="relative" ref={channelScheduleRef}>
+                <div className="relative shrink-0" ref={channelScheduleRef}>
                   <button
                     type="button"
                     onClick={() => setShowChannelSchedule((v) => !v)}
-                    className="relative p-2.5 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+                    className="relative w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
                     title="Programmer l'envoi"
                   >
                     <Clock className="w-4 h-4" />
@@ -5929,16 +5752,40 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </div>
                   )}
                 </div>
+                {isRecordingChannel ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleStopRecordingChannel(true)}
+                      title="Annuler"
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-300 hover:bg-white/10 shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleStopRecordingChannel(false)}
+                      title={`Arrêter et réécouter (${recordingChannelSeconds}s)`}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center bg-rose-500 text-white shrink-0"
+                    >
+                      <Square className="w-4 h-4 fill-current" />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleStartRecordingChannel()}
+                    disabled={uploadingChannelMedia || !!channelVocalPret}
+                    title="Message vocal"
+                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-rose-500/15 text-rose-400 hover:bg-rose-500 hover:text-white transition-all disabled:opacity-40 shrink-0"
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   onClick={sendMessage}
-                  // Audit (10 septembre) : ce bouton n'avait AUCUN garde-fou
-                  // `disabled`, contrairement à son équivalent en conversation
-                  // directe — un tap dessus sans texte tapé (le cas normal
-                  // juste après un enregistrement vocal) invoquait sendMessage
-                  // qui ne faisait rien de visible. Même logique désormais que
-                  // le composeur direct : actif si texte OU vocal en attente.
                   disabled={(!draft.trim() && !channelVocalPret) || isRecordingChannel}
-                  className="p-2.5 rounded-xl bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] hover:brightness-110 active:scale-95 disabled:opacity-30 text-slate-950 shadow-md transition-all"
+                  className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F7BC5F] hover:bg-[#f9c978] active:scale-95 disabled:opacity-30 text-slate-950 shadow-sm transition-all shrink-0"
                 >
                   <Send className="w-4 h-4" />
                 </button>
@@ -5947,13 +5794,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center p-6">
-              <div className="relative text-center bg-gradient-to-br from-[#081f23]/90 via-[#0a272c]/90 to-[#061517]/95 border border-teal-500/30 rounded-3xl p-10 sm:p-12 max-w-md backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7),0_0_35px_rgba(247,188,95,0.08)] overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
-                <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/20 via-[#F7BC5F]/10 to-transparent border border-[#F7BC5F]/40 flex items-center justify-center mx-auto mb-5 shadow-[0_0_24px_rgba(247,188,95,0.25)]">
-                  <Folder className="w-7 h-7 text-[#FAD592]" />
+              <div className="text-center max-w-sm">
+                <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mx-auto mb-3.5">
+                  <Folder className="w-5 h-5 text-[#F7BC5F]" />
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold text-white tracking-wide mb-2">Aucun canal sélectionné</h3>
-                <p className="text-sm text-teal-200/70 leading-relaxed max-w-xs mx-auto">
+                <h3 className="text-base font-bold text-white mb-1">Sélectionnez un canal</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
                   Choisissez un canal de projet dans la colonne de gauche pour consulter ou participer aux échanges.
                 </p>
               </div>

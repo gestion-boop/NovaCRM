@@ -579,7 +579,7 @@ main[class*="bg-[#071015]/55" i] {
    dire s'il est périmé — à lancer après avoir ajouté un écran. */
 /* @generated:theme-surfaces:start — ne pas éditer à la main, voir scripts/theme-surfaces.mjs */
 /* ── Fonds sombres écrits en dur dans les composants → jeton de surface ──
-   65 teintes recensées automatiquement dans src/ (voir
+   68 teintes recensées automatiquement dans src/ (voir
    scripts/theme-surfaces.mjs). Le sélecteur ne cite PAS la valeur finale :
    il pose un jeton, redéfini une seule fois par thème plus haut dans ce
    fichier. Une même liste sert donc au mode nuit et au mode jour. */
@@ -587,6 +587,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#030d0f" i],
 [class*="bg-[#031112" i],
 [class*="bg-[#031113" i],
+[class*="bg-[#040d0f" i],
 [class*="bg-[#041316" i],
 [class*="bg-[#041416" i],
 [class*="bg-[#050c0f" i],
@@ -596,7 +597,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#051416" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
-[class*="bg-[#061517" i],
+[class*="bg-[#061417" i],
 [class*="bg-[#061719" i],
 [class*="bg-[#06181b" i],
 [class*="bg-[#06191c" i],
@@ -608,6 +609,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#07191c" i],
 [class*="bg-[#071f21" i],
 [class*="bg-[#081b1e" i],
+[class*="bg-[#081b1f" i],
 [class*="bg-[#081e22" i],
 [class*="bg-[#09151c" i],
 [class*="bg-[#092226" i],
@@ -621,6 +623,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0b171f" i],
 [class*="bg-[#0b1c1e" i],
 [class*="bg-[#0b2125" i],
+[class*="bg-[#0b2226" i],
 [class*="bg-[#0b2427" i],
 [class*="bg-[#0b292b" i],
 [class*="bg-[#0c2628" i],
@@ -672,6 +675,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#030d0f" i],
 [class*="bg-[#031112" i],
 [class*="bg-[#031113" i],
+[class*="bg-[#040d0f" i],
 [class*="bg-[#041316" i],
 [class*="bg-[#041416" i],
 [class*="bg-[#050c0f" i],
@@ -681,7 +685,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#051416" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
-[class*="bg-[#061517" i],
+[class*="bg-[#061417" i],
 [class*="bg-[#061719" i],
 [class*="bg-[#06181b" i],
 [class*="bg-[#06191c" i],
@@ -694,6 +698,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#071f21" i],
 [class*="bg-[#081318" i],
 [class*="bg-[#081b1e" i],
+[class*="bg-[#081b1f" i],
 [class*="bg-[#081e22" i],
 [class*="bg-[#09151c" i],
 [class*="bg-[#092226" i],
@@ -707,6 +712,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0b171f" i],
 [class*="bg-[#0b1c1e" i],
 [class*="bg-[#0b2125" i],
+[class*="bg-[#0b2226" i],
 [class*="bg-[#0b2427" i],
 [class*="bg-[#0b292b" i],
 [class*="bg-[#0c2628" i],
@@ -739,6 +745,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#030d0f" i],
 [class*="bg-[#031112" i],
 [class*="bg-[#031113" i],
+[class*="bg-[#040d0f" i],
 [class*="bg-[#041316" i],
 [class*="bg-[#041416" i],
 [class*="bg-[#050c0f" i],
@@ -748,7 +755,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#051416" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
-[class*="bg-[#061517" i],
+[class*="bg-[#061417" i],
 [class*="bg-[#061719" i],
 [class*="bg-[#06181b" i],
 [class*="bg-[#06191c" i],
@@ -762,6 +769,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#071f21" i],
 [class*="bg-[#081318" i],
 [class*="bg-[#081b1e" i],
+[class*="bg-[#081b1f" i],
 [class*="bg-[#081e22" i],
 [class*="bg-[#09151c" i],
 [class*="bg-[#092226" i],
@@ -775,6 +783,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0b171f" i],
 [class*="bg-[#0b1c1e" i],
 [class*="bg-[#0b2125" i],
+[class*="bg-[#0b2226" i],
 [class*="bg-[#0b2427" i],
 [class*="bg-[#0b292b" i],
 [class*="bg-[#0c2628" i],
@@ -809,7 +818,6 @@ main[class*="bg-[#071015]/55" i] {
    distinguer la variante) : le survol se retrouvait peint de la même
    couleur que le repos, donc sans effet visible nulle part dans l'appli.
    Rétabli ici, dans les deux thèmes. */
-[class*="hover:bg-[#0c272c" i]:hover,
 [class*="hover:bg-[#0c2e32" i]:hover,
 [class*="hover:bg-[#0c2e33" i]:hover,
 [class*="hover:bg-[#0d2a2f" i]:hover,
