@@ -831,7 +831,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     // Celle-ci, toujours visible en haut de l'accueil mobile, est désormais
     // le seul accès à la messagerie depuis cet écran.
     { id: 'mail', label: 'Mails', count: unreadMailCount, icon: Mail, nav: 'mail-unread', gradient: 'from-[#1E3A8A] via-[#1E293B] to-[#0F172A]' },
-    { id: 'agenda', label: 'Rendez-vous', count: todaysEvents || 0, icon: Calendar, nav: 'agenda', gradient: 'from-[#059669] via-[#047857] to-[#064E3B]' },
+    { id: 'agenda', label: 'Agenda', count: todaysEvents || 0, icon: Calendar, nav: 'agenda', gradient: 'from-[#059669] via-[#047857] to-[#064E3B]' },
   ];
   const gesteDuMoment = texteProchainGeste({
     maintenant: now,
@@ -855,11 +855,14 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             {greeting} <span className="text-[#F7BC5F]">{firstName}</span>
           </h1>
           <div className="flex items-center gap-2 mt-0.5">
-            <p className="text-xs text-slate-400 capitalize">{dateLabel}</p>
+            <p className="text-xs text-slate-400 capitalize whitespace-nowrap">{dateLabel}</p>
             {weather && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[11px] text-teal-200 font-semibold shadow-xs">
+              <span
+                title={weatherMeta(weather.code).label}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[11px] text-teal-200 font-semibold shadow-xs whitespace-nowrap shrink-0"
+              >
                 <WeatherIcon className="w-3 h-3 text-[#F7BC5F]" />
-                <span>{weather.temp}°C · {weatherMeta(weather.code).label}</span>
+                <span>{weather.temp}°C</span>
               </span>
             )}
           </div>
@@ -922,35 +925,25 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
               whileTap={{ scale: 0.92 }}
               className="flex flex-col items-center gap-1.5 cursor-pointer group"
             >
-              <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center relative shadow-[0_6px_16px_-4px_rgba(0,0,0,0.5)] border border-white/10 group-hover:border-white/20 transition-all overflow-hidden`}>
-                <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
-                <item.icon className="w-5 h-5 text-white drop-shadow-sm" />
+              {/* La pastille est posée HORS de la boîte de l'icône : celle-ci
+                  a un overflow-hidden (reflet) qui coupait le chiffre. */}
+              <div className="relative">
+                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center relative shadow-[0_6px_16px_-4px_rgba(0,0,0,0.5)] border border-white/10 group-hover:border-white/20 transition-all overflow-hidden`}>
+                  <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+                  <item.icon className="w-5 h-5 text-white drop-shadow-sm" />
+                </div>
                 {item.count > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-black min-w-5 h-5 px-1 rounded-full flex items-center justify-center ring-2 ring-[#071317] shadow-xs">
+                  <span className="absolute -top-1.5 -right-1.5 z-10 bg-rose-500 text-white text-[10px] font-black min-w-5 h-5 px-1 rounded-full flex items-center justify-center ring-2 ring-[#071317] shadow-xs">
                     {item.count > 9 ? '9+' : item.count}
                   </span>
                 )}
               </div>
-              <span className="nv-texte-icone text-[11px] font-bold text-slate-200 text-center truncate w-full group-hover:text-white transition-colors">{item.label}</span>
+              <span className="nv-texte-icone text-[11px] font-bold text-slate-200 text-center whitespace-nowrap w-full group-hover:text-white transition-colors">{item.label}</span>
             </motion.button>
           ))}
         </div>
-        {gesteDuMoment && (
-          <button
-            type="button"
-            onClick={() => onNavigate(gesteDuMoment.nav)}
-            className="mt-3 w-full p-2.5 rounded-xl bg-gradient-to-r from-[#F7BC5F]/15 via-[#F7BC5F]/10 to-transparent border border-[#F7BC5F]/30 flex items-center justify-between text-xs font-bold text-slate-100 hover:text-white transition-all active:scale-[0.98] cursor-pointer group"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-[#F7BC5F] animate-pulse shrink-0 shadow-[0_0_6px_rgba(247,188,95,0.8)]" />
-              <span className="truncate">{gesteDuMoment.texte}</span>
-            </div>
-            <div className="flex items-center gap-1 text-[#F7BC5F] text-[11px] font-black shrink-0 pl-2">
-              <span>Ouvrir</span>
-              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-            </div>
-          </button>
-        )}
+        {/* Bandeau « 3 mails non lus · Ouvrir » retiré (demande explicite) :
+            il doublait les pastilles du dock et son texte était coupé. */}
       </div>
 
       {/* Mes espaces */}
