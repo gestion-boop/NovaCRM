@@ -2238,6 +2238,8 @@ export default function ClientProfileView({
     }
   };
 
+  const [mobileDetailsExpanded, setMobileDetailsExpanded] = useState(false);
+
   useEffect(() => {
     latestContactCommentsRef.current = contactComments;
   }, [contactComments]);
@@ -2518,107 +2520,107 @@ export default function ClientProfileView({
           reste du contenu. Le bouton retour n'a plus besoin de rester
           visible en permanence : le geste de retour au doigt (bord gauche)
           fonctionne depuis n'importe quelle position de défilement. */}
-      <div className="relative z-30 bg-gradient-to-b from-[#0a1e22]/90 to-[#07191b]/95 border-b border-white/10 p-4 sm:p-6 flex flex-col gap-4 sm:gap-6 backdrop-blur-xl">
+      {/* En-tête unifié de la fiche client (Identité, Coordonnées, Attribution, Commentaire & Pipeline) */}
+      <div className={`relative z-30 bg-gradient-to-b from-[#0a1e22]/95 to-[#07191b]/95 border-b border-white/10 p-4 sm:p-6 flex flex-col gap-4 backdrop-blur-xl ${showHalo ? 'target-halo-bounce' : ''}`}>
+        {/* Ligne 1 : Identité client, température interactive & Actions principales */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-4 min-w-0">
-            <button onClick={onBack} className="p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-300 hover:text-white transition-all shrink-0 cursor-pointer shadow-sm active:scale-95">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <button
+              onClick={onBack}
+              title="Retour"
+              className="p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-300 hover:text-white transition-all shrink-0 cursor-pointer shadow-sm active:scale-95"
+            >
               <ChevronLeft className="w-5 h-5" />
             </button>
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-[#F7BC5F] via-[#FAD592] to-[#D49635] flex items-center justify-center text-slate-950 font-black text-base sm:text-lg shadow-[0_0_20px_rgba(247,188,95,0.3)] shrink-0">
+              {client.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+            </div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">{client.name}</h1>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {/* Signalé (24 octobre, capture à l'appui) : ce badge restait
-                    toujours rose, quelle que soit la température réelle du
-                    client — "Tiède" s'affichait en rose au lieu de l'ambre
-                    utilisé juste en dessous (sélecteur Chaud/Tiède/Froid,
-                    CLIENT_TEMP_OPTIONS), incohérent. Même couleur reprise
-                    ici, retrouvée via `statutLead` (la valeur fiable) avec
-                    un repli sur `status` pour les fiches plus anciennes qui
-                    n'auraient que ce champ-là de renseigné. */}
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-black tracking-wide border shadow-sm ${
-                  CLIENT_TEMP_OPTIONS.find((o) => o.value === client.statutLead || o.label.toLowerCase() === (client.status || '').toLowerCase())?.activeClass
-                  || 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-[0_0_10px_rgba(244,63,94,0.3)]'
-                }`}>
-                  {client.status}
-                </span>
-                <span className="text-sm text-slate-400">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">{client.name}</h1>
+                {client.type && (
+                  <span className="px-2.5 py-0.5 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/40 text-[#FAD592] text-[11px] font-extrabold">
+                    {client.type}
+                  </span>
+                )}
+                {completedQuestionnairesCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowQuestionnaireModal(true)}
+                    title="Questionnaire confidentiel rempli et reçu"
+                    className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold uppercase tracking-wide cursor-pointer flex items-center gap-1"
+                  >
+                    <CheckCircle className="w-3 h-3" />
+                    <span>Questionnaire validé</span>
+                  </button>
+                ) : pendingQuestionnairesCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowQuestionnaireModal(true)}
+                    title="Questionnaire confidentiel envoyé, en attente de réponse"
+                    className="px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/40 text-orange-300 text-[10px] font-bold uppercase tracking-wide cursor-pointer flex items-center gap-1"
+                  >
+                    <Eye className="w-3 h-3" />
+                    <span>Questionnaire ({pendingQuestionnairesCount})</span>
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
+                {/* Sélecteur unique et interactif de température (Chaud / Tiède / Froid) */}
+                <div className="inline-flex items-center gap-1 rounded-full bg-black/35 border border-white/10 p-0.5">
+                  {CLIENT_TEMP_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    const isActive =
+                      client.statutLead === opt.value ||
+                      (!client.statutLead && opt.label.toLowerCase() === (client.status || '').toLowerCase());
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        title={`Température : ${opt.label}`}
+                        onClick={() => void handleSetClientTemperature(opt.value)}
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 border transition-all cursor-pointer ${
+                          isActive
+                            ? opt.activeClass
+                            : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/5'
+                        }`}
+                      >
+                        <Icon className="w-3 h-3" />
+                        <span className={isActive ? 'inline' : 'hidden sm:inline'}>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="text-xs text-slate-400">
                   Créé le {new Date(client.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </span>
               </div>
             </div>
           </div>
-          {/* Demande explicite (24 octobre, maquette validée) : sur
-              téléphone, ces boutons en toutes lettres prenaient deux rangées
-              entières avant même le contenu utile. Icônes seules en dessous
-              de `sm:`, texte repris tel quel à partir de cette largeur —
-              rien ne change sur tablette/ordinateur. */}
-          <div className="flex items-center gap-2 max-sm:gap-1.5 relative z-40 flex-wrap">
-            {completedQuestionnairesCount > 0 && (
-              <button
-                onClick={() => setShowQuestionnaireModal(true)}
-                title={`${completedQuestionnairesCount} questionnaire(s) confidentiel(s) rempli(s)`}
-                aria-label={`${completedQuestionnairesCount} questionnaire(s) confidentiel(s) rempli(s)`}
-                className="px-3 py-2.5 max-sm:px-2.5 font-black text-xs rounded-xl flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 transition-all"
-              >
-                <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                <span className="max-sm:hidden">Questionnaire validé</span>
-              </button>
-            )}
-            {pendingQuestionnairesCount > 0 && (
-              <button
-                onClick={() => setShowQuestionnaireModal(true)}
-                aria-label="Questionnaire"
-                className="px-4 py-2.5 max-sm:px-2.5 font-black text-xs rounded-xl flex items-center gap-2 max-sm:gap-1 shadow-lg hover:scale-[1.02] transition-all bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25"
-              >
-                <Eye className="w-4 h-4 shrink-0" />
-                <span className="max-sm:hidden">Questionnaire</span>
-                <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/30 text-[10px]">{pendingQuestionnairesCount}</span>
-              </button>
-            )}
+
+          {/* Boutons d'actions d'en-tête (sans doublons Nova/Dicter qui sont dans le cadre Copilote) */}
+          <div className="flex items-center gap-2 relative z-40 flex-wrap">
             <button
               onClick={() => setShowShareModal(true)}
               aria-label={isSharedWithSomeone ? `Partagé (${shares.length})` : 'Partager'}
-              className={`px-4 py-2.5 max-sm:px-2.5 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all ${
+              className={`px-4 py-2.5 max-sm:px-3 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all cursor-pointer ${
                 isSharedWithSomeone
                   ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
-                  : 'bg-black/40 border border-[#144447]/60 text-slate-300 hover:bg-black/60'
+                  : 'bg-black/40 border border-[#144447]/60 text-slate-200 hover:bg-black/60'
               }`}
             >
               <Share2 className="w-4 h-4 shrink-0" />
-              <span className="max-sm:hidden">{isSharedWithSomeone ? `Partagé (${shares.length})` : 'Partager'}</span>
+              <span>{isSharedWithSomeone ? `Partagé (${shares.length})` : 'Partager'}</span>
             </button>
-            <button
-              onClick={() => toggleQuickDictation()}
-              title="Dicter une note ou un commentaire directement dans cette fiche"
-              aria-label="Dicter dans la fiche"
-              className={`px-3.5 py-2.5 max-sm:px-2.5 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-lg hover:scale-[1.02] transition-all cursor-pointer ${
-                quickDictationListening
-                  ? 'bg-rose-600 text-white animate-pulse shadow-[0_0_20px_rgba(225,29,72,0.5)]'
-                  : 'bg-black/40 border border-[#F7BC5F]/40 text-[#FAD592] hover:bg-black/60'
-              }`}
-            >
-              {quickDictationListening ? <Square className="w-3.5 h-3.5 fill-current shrink-0" /> : <Mic className="w-4 h-4 text-[#F7BC5F] shrink-0" />}
-              <span>{quickDictationListening ? 'Écoute…' : 'Dicter'}</span>
-            </button>
-            {onOpenNova && (
-              <button
-                onClick={() => onOpenNova()}
-                title="Demander à Nova d'agir sur cette fiche (note, tâche, rendez-vous...)"
-                aria-label="Demander à Nova"
-                className="px-4 py-2.5 max-sm:px-3 bg-gradient-to-br from-[#F7BC5F] to-[#B8863F] hover:brightness-110 text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-[0_0_20px_rgba(247,188,95,0.3)] hover:scale-[1.02] transition-all cursor-pointer"
-              >
-                <img src="/nova-mascotte.png" alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />
-                <span>Nova</span>
-                <span className="max-sm:hidden">IA</span>
-              </button>
-            )}
             <button
               onClick={() => setShowActionsMenu((v) => !v)}
               aria-label="Actions"
-              className="px-5 py-2.5 max-sm:px-2.5 bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] transition-all"
+              className="px-4 py-2.5 max-sm:px-3 bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4 stroke-[3] shrink-0" />
-              <span className="max-sm:hidden">Actions</span>
+              <span>Actions</span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-80" />
             </button>
 
             {showActionsMenu && (
@@ -2648,6 +2650,278 @@ export default function ClientProfileView({
                 </div>
               </>
             )}
+          </div>
+        </div>
+
+        {/* Barre rapide Mobile : Coordonnées en 1 clic + Montant + bouton Déplier les détails */}
+        <div className="flex lg:hidden flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/[0.08]">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            {client.phone && (
+              <a
+                href={`tel:${String(client.phone).replace(/[^+\d]/g, '')}`}
+                className="px-2.5 py-1.5 rounded-xl bg-black/35 border border-[#144447] text-xs font-bold text-[#F9C977] flex items-center gap-1.5"
+              >
+                <Phone className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                <span>{client.phone}</span>
+              </a>
+            )}
+            {client.email && (
+              <a
+                href={`mailto:${client.email}`}
+                onClick={clicMailCrm(client.email)}
+                className="px-2.5 py-1.5 rounded-xl bg-black/35 border border-[#144447] text-xs font-bold text-[#F9C977] flex items-center gap-1.5 max-w-[210px] truncate"
+              >
+                <Mail className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
+                <span className="truncate">{client.email}</span>
+              </a>
+            )}
+            <span className="px-2.5 py-1.5 rounded-xl bg-[#F7BC5F]/15 border border-[#F7BC5F]/35 text-xs font-black text-[#FAD592]">
+              {activeDeal ? formatCurrency(activeDeal.amount) : '0 €'} · Honoraires
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileDetailsExpanded((v) => !v)}
+            className="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-xs font-bold text-slate-200 flex items-center gap-1.5"
+          >
+            <span>{mobileDetailsExpanded ? 'Masquer infos & mémo' : 'Infos & Commentaire'}</span>
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${mobileDetailsExpanded ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+
+        {/* Bandeau horizontal synthétique PC (et tiroir dépliable sur mobile) : remplace l'ancienne colonne de gauche */}
+        <div className={`${mobileDetailsExpanded ? 'grid' : 'hidden lg:grid'} grid-cols-1 lg:grid-cols-12 gap-3.5 pt-1`}>
+          {/* Carte 1 : Coordonnées & Honoraires / Patrimoine (4 col) */}
+          <div className="lg:col-span-4 rounded-2xl bg-[#07191c]/90 border border-white/10 p-3.5 flex flex-col justify-between gap-3">
+            <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-white/[0.06]">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Montant Estimé</span>
+                <div className="text-xl sm:text-2xl font-black text-[#FAD592] leading-tight mt-0.5">
+                  {activeDeal ? formatCurrency(activeDeal.amount) : '0 €'}
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-[#F7BC5F]/15 text-[#FAD592] border border-[#F7BC5F]/35 uppercase tracking-wider">
+                Honoraires
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="flex items-center gap-2 min-w-0 p-2 rounded-xl bg-black/25 border border-white/[0.05]">
+                <Mail className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
+                {client.email ? (
+                  <a
+                    href={`mailto:${client.email}`}
+                    onClick={clicMailCrm(client.email)}
+                    title={client.email}
+                    className="text-[#F9C977] hover:text-[#FAD592] underline underline-offset-2 truncate font-medium"
+                  >
+                    {client.email}
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Aucun e-mail</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 min-w-0 p-2 rounded-xl bg-black/25 border border-white/[0.05]">
+                <Phone className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
+                {client.phone ? (
+                  <a
+                    href={`tel:${String(client.phone).replace(/[^+\d]/g, '')}`}
+                    className="text-[#F9C977] hover:text-[#FAD592] underline underline-offset-2 truncate font-medium"
+                  >
+                    {client.phone}
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Aucun téléphone</span>
+                )}
+              </div>
+            </div>
+
+            {(client.revenus || client.apport || client.credits || client.contractType || client.projectType) && (
+              <div className="flex flex-wrap gap-1.5 pt-1 border-t border-white/[0.06] text-[11px]">
+                {client.revenus ? (
+                  <span className="px-2 py-0.5 rounded-md bg-black/30 border border-white/10 text-slate-300">
+                    Revenus : <strong className="text-white">{formatCurrency(client.revenus)}</strong>
+                  </span>
+                ) : null}
+                {client.apport ? (
+                  <span className="px-2 py-0.5 rounded-md bg-black/30 border border-white/10 text-slate-300">
+                    Apport : <strong className="text-white">{formatCurrency(client.apport)}</strong>
+                  </span>
+                ) : null}
+                {client.credits ? (
+                  <span className="px-2 py-0.5 rounded-md bg-black/30 border border-white/10 text-slate-300">
+                    Crédits : <strong className="text-white">{formatCurrency(client.credits)}/m</strong>
+                  </span>
+                ) : null}
+                {client.contractType ? (
+                  <span className="px-2 py-0.5 rounded-md bg-black/30 border border-white/10 text-slate-300">
+                    Contrat : <strong className="text-white">{client.contractType}</strong>
+                  </span>
+                ) : null}
+                {client.projectType ? (
+                  <span className="px-2 py-0.5 rounded-md bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F9C977] font-semibold">
+                    {client.projectType}
+                  </span>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          {/* Carte 2 : Structure, Agent attribué & Liens / Consentement (4 col) */}
+          <div className="lg:col-span-4 rounded-2xl bg-[#07191c]/90 border border-white/10 p-3.5 flex flex-col justify-between gap-2.5">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Structure & Attribution</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Structure / Agence</label>
+                <select
+                  value={AGENCIES.find(a => matchesAgency(client.agencyId, a.id) && a.id !== 'all')?.id || AGENCIES[0].id}
+                  onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { agencyId: e.target.value } })}
+                  className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                >
+                  {AGENCIES.filter(a => a.id !== 'all').map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Utilisateur / Agent Lié</label>
+                <select
+                  value={client.assignedTo || ''}
+                  onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { assignedTo: e.target.value } })}
+                  className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                >
+                  <option value="">— Non attribué —</option>
+                  {assignableUsers.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {estConciergerie && (
+              <div>
+                <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Apporteur d'affaires</label>
+                <select
+                  value={client.referrerId || ''}
+                  onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { referrerId: e.target.value || null } })}
+                  className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                >
+                  <option value="">Aucun</option>
+                  {apporteursDisponibles.filter(a => a.active).map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}{a.agencyName ? ` (${a.agencyName})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {estTransactionsV2 && (
+              <div>
+                <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Fiche liée (Vendeur/Acquéreur)</label>
+                <select
+                  value={client.linkedLeadId || ''}
+                  onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { linkedLeadId: e.target.value || null } })}
+                  className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                >
+                  <option value="">Aucune</option>
+                  {fichesLiablesTransactionsV2.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {ficheLieePrincipale && (
+                    <button
+                      type="button"
+                      onClick={() => onSelectContact?.(ficheLieePrincipale.id)}
+                      className="text-[10px] text-[#F7BC5F] hover:underline"
+                    >
+                      → Voir {ficheLieePrincipale.name}
+                    </button>
+                  )}
+                  {fichesLieesInverse.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => onSelectContact?.(c.id)}
+                      className="text-[10px] text-[#F7BC5F] hover:underline"
+                    >
+                      → Lié : {c.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {isImmosphera && (
+              <div className="pt-2 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Consentement :</span>
+                  {hasConsent ? (
+                    <ConsentStatusBadge record={displayedConsent} size="sm" />
+                  ) : (
+                    <span className="text-slate-500 text-[11px]">Non envoyé</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {hasConsent && submittedConsentCount > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setConsentViewOpen(true)}
+                        className="px-2 py-1 rounded-lg bg-black/30 border border-white/10 text-[10px] font-bold text-slate-200 hover:bg-black/50"
+                      >
+                        Voir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadConsentPdf}
+                        disabled={consentPdfDownloading}
+                        className="p-1 rounded-lg bg-black/30 border border-white/10 text-slate-200 hover:bg-black/50"
+                        title="Télécharger le PDF"
+                      >
+                        {consentPdfDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { setConsentSendEmail(client.email || ''); setConsentSendError(null); setShowSendConsentModal(true); }}
+                    className="px-2 py-1 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/35 text-[10px] font-bold text-[#F7BC5F] hover:bg-[#F7BC5F]/25 flex items-center gap-1"
+                  >
+                    <Send className="w-2.5 h-2.5" /> Envoyer
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Carte 3 : Mémo / Commentaire général de la fiche (4 col) — unique, sans doublon */}
+          <div className="lg:col-span-4 rounded-2xl bg-[#07191c]/90 border border-white/10 p-3.5 flex flex-col justify-between gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Commentaire général</span>
+              <button
+                onClick={handleSaveComments}
+                className="text-[11px] font-bold text-[#F7BC5F] hover:text-[#FAD592] flex items-center gap-1 cursor-pointer"
+              >
+                {savedCommentsSuccess ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 stroke-[3]" /> Enregistré
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" /> Enregistrer
+                  </>
+                )}
+              </button>
+            </div>
+            <textarea
+              rows={3}
+              value={contactComments}
+              onChange={(e) => setContactComments(e.target.value)}
+              placeholder="Éléments clés du dossier, situation, souhaits particuliers..."
+              className="w-full bg-[#030d0f] border border-[#153c3f] focus:border-[#F7BC5F] rounded-xl p-2.5 text-xs text-white focus:outline-none placeholder-slate-500 resize-none leading-relaxed transition-colors"
+            />
           </div>
         </div>
 
@@ -2893,407 +3167,9 @@ export default function ClientProfileView({
         />
       )}
 
-      <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Details */}
-        <div className="lg:col-span-1 space-y-6">
-          {/* Card */}
-          <div className={`bg-[#07191c]/90 border border-white/10 rounded-2xl p-6 shadow-xl relative overflow-hidden backdrop-blur-xl transition-all duration-200 hover:border-[#F7BC5F]/30 hover:shadow-[0_10px_35px_-10px_rgba(0,0,0,0.5),0_0_20px_2px_rgba(247,188,95,0.12)] ${showHalo ? 'target-halo-bounce' : ''}`}>
-            <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-[#F7BC5F] via-amber-400 to-[#F7BC5F]/50" />
-            
-            <div className="flex items-start gap-4 mb-6">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#F7BC5F] via-[#FAD592] to-[#D49635] flex items-center justify-center text-slate-950 font-black text-xl shadow-[0_0_20px_rgba(247,188,95,0.35)] shrink-0">
-                {client.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-xl font-bold text-white leading-tight">{client.name}</h2>
-                  {/* Ticket #110 : badge questionnaire confidentiel — orange
-                      tant qu'en attente, vert dès qu'un envoi est rempli. */}
-                  {completedQuestionnairesCount > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowQuestionnaireModal(true)}
-                      title="Questionnaire confidentiel rempli et reçu"
-                      className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[9px] font-bold uppercase tracking-wide cursor-pointer"
-                    >
-                      Questionnaire rempli
-                    </button>
-                  ) : pendingQuestionnairesCount > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowQuestionnaireModal(true)}
-                      title="Questionnaire confidentiel envoyé, en attente de réponse"
-                      className="px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/40 text-orange-400 text-[9px] font-bold uppercase tracking-wide cursor-pointer"
-                    >
-                      Questionnaire envoyé
-                    </button>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1 rounded-full bg-white/5 border border-white/10 p-0.5">
-                    {CLIENT_TEMP_OPTIONS.map((opt) => {
-                      const Icon = opt.icon;
-                      const isActive = client.statutLead === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          title={opt.label}
-                          onClick={() => void handleSetClientTemperature(opt.value)}
-                          className={`w-6 h-6 rounded-full flex items-center justify-center border transition-colors ${
-                            isActive ? opt.activeClass : 'text-gray-500 border-transparent hover:text-gray-300 hover:bg-white/5'
-                          }`}
-                        >
-                          <Icon className="w-3.5 h-3.5" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <span className="px-2 py-0.5 rounded-md border border-[#F7BC5F]/40 text-[#F7BC5F] text-[10px] font-bold">{client.type}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Consentement au démarchage téléphonique — Immosphera
-                uniquement. Demande explicite (16 septembre) : positionné
-                juste sous l'en-tête (avatar/nom/température/type), au lieu
-                d'après "Coordonnées" plus bas. */}
-            {isImmosphera && (
-              <div className="pt-4 border-t border-[#143c3f]/50 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Consentement</span>
-                  <button
-                    onClick={() => { setConsentSendEmail(client.email || ''); setConsentSendError(null); setShowSendConsentModal(true); }}
-                    className="text-[10px] font-bold text-[#F7BC5F] hover:text-[#e5ab4c] flex items-center gap-1"
-                  >
-                    <Send className="w-3 h-3" /> Envoyer
-                  </button>
-                </div>
-                {!hasConsent && (
-                  <p className="text-sm text-slate-400">Aucun consentement envoyé pour ce client.</p>
-                )}
-                {hasConsent && <ConsentStatusBadge record={displayedConsent} size="md" />}
-                {latestSignedConsent ? (
-                  <div className="space-y-1 text-sm text-slate-300">
-                    <p>
-                      <span className="text-slate-500">Signé le : </span>
-                      <span className="font-semibold text-white">{formatFr(consentSignedDate)}</span>
-                    </p>
-                    <p>
-                      <span className="text-slate-500">Valable jusqu'au : </span>
-                      <span className={cn('font-semibold', consentExpired ? 'text-rose-400' : 'text-white')}>
-                        {formatFr(consentExpiryDate)}
-                      </span>
-                    </p>
-                    <p>
-                      <span className="text-slate-500">Réalisé par : </span>
-                      <span className="font-semibold text-white">
-                        {(latestSignedConsent.created_by && consentSenders[latestSignedConsent.created_by]?.name) ??
-                          latestSignedConsent.snapshot?.broker_name ??
-                          '—'}
-                      </span>
-                    </p>
-                    {consentExpired && (
-                      <p className="text-xs text-rose-400">
-                        Consentement expiré : un nouveau consentement doit être réalisé.
-                      </p>
-                    )}
-                    {submittedConsentCount > 1 && (
-                      <p className="text-xs text-slate-500">
-                        {submittedConsentCount} consentements dans l'historique.
-                      </p>
-                    )}
-                  </div>
-                ) : hasConsent ? (
-                  <p className="text-sm text-slate-400">Consentement envoyé, en attente de signature du client.</p>
-                ) : null}
-                {hasConsent && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setConsentViewOpen(true)}
-                      disabled={submittedConsentCount === 0}
-                      className="flex-1 px-3 py-2 rounded-xl border border-[#144447]/60 bg-black/20 text-xs font-bold text-slate-200 flex items-center justify-center gap-2 hover:bg-black/30 disabled:opacity-40"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" /> Voir le questionnaire
-                    </button>
-                    <button
-                      onClick={handleDownloadConsentPdf}
-                      disabled={submittedConsentCount === 0 || consentPdfDownloading}
-                      title="Télécharger le PDF"
-                      className="px-3 py-2 rounded-xl border border-[#144447]/60 bg-black/20 text-xs font-bold text-slate-200 flex items-center justify-center gap-2 hover:bg-black/30 disabled:opacity-40"
-                    >
-                      {consentPdfDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="pt-4 border-t border-white/[0.08]">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Montant Estimé</span>
-              <div className="mt-1.5 p-3 rounded-xl bg-gradient-to-r from-emerald-500/10 via-[#F7BC5F]/10 to-transparent border border-[#F7BC5F]/30 flex items-center justify-between">
-                <div className="text-2xl sm:text-3xl font-black text-[#FAD592] drop-shadow-sm">
-                  {activeDeal ? formatCurrency(activeDeal.amount) : '0 €'}
-                </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#F7BC5F]/20 text-[#FAD592] border border-[#F7BC5F]/40 uppercase tracking-wider">
-                  Honoraires
-                </span>
-              </div>
-            </div>
-
-            {/* Ticket #109 : "Notes générales / Remarques client" retirées du
-                sous-onglet Notes — commentaire libre directement ici, sur la
-                fiche, éditable et enregistrable sur place + dictée vocale directe. */}
-            <div className="pt-4 border-t border-[#143c3f]/50 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Commentaire</span>
-                <div className="flex items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={toggleCommentDictation}
-                    title={isDictatingComment ? 'Arrêter et enregistrer la dictée' : 'Dicter directement dans le commentaire'}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
-                      isDictatingComment
-                        ? 'bg-rose-600 text-white animate-pulse'
-                        : 'bg-[#143c3f]/40 hover:bg-[#143c3f]/70 text-[#FAD592] border border-[#F7BC5F]/35'
-                    }`}
-                  >
-                    {isDictatingComment ? (
-                      <>
-                        <Square className="w-2.5 h-2.5 fill-current" />
-                        <span>Arrêter</span>
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-3 h-3 text-[#F7BC5F]" />
-                        <span>Dicter</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={handleSaveComments}
-                    className="text-[10px] font-bold text-[#F7BC5F] hover:text-[#e5ab4c] flex items-center gap-1 cursor-pointer"
-                  >
-                    {savedCommentsSuccess ? (
-                      <>
-                        <Check className="w-3 h-3 stroke-[3]" /> Enregistré
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-3 h-3" /> Enregistrer
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-              <textarea
-                rows={3}
-                value={contactComments}
-                onChange={(e) => setContactComments(e.target.value)}
-                placeholder={isDictatingComment ? 'Parlez maintenant, vos mots sont retranscrits et enregistrés dans la fiche...' : 'Éléments clés, situation, souhaits particuliers...'}
-                className={`w-full bg-[#030d0f] border rounded-xl p-2.5 text-xs text-white focus:outline-none placeholder-slate-600 resize-none leading-relaxed transition-colors ${
-                  isDictatingComment ? 'border-rose-500/60 ring-2 ring-rose-500/20' : 'border-[#153c3f] focus:border-[#F7BC5F]'
-                }`}
-              />
-            </div>
-
-            <div className="pt-4 border-t border-[#143c3f]/50 space-y-4">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Coordonnées</span>
-              <div className="space-y-3">
-                {/* Demande (3 septembre) : e-mail et téléphone cliquables et
-                    surlignés — un clic ouvre la messagerie ou lance l'appel
-                    (sur téléphone) au lieu d'obliger à recopier. */}
-                <div className="flex items-center gap-3 text-sm text-slate-300 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-[#143c3f]/40 flex items-center justify-center text-[#F7BC5F] shrink-0">
-                    <Mail className="w-4 h-4" />
-                  </div>
-                  {client.email ? (
-                    <a
-                      href={`mailto:${client.email}`}
-                      onClick={clicMailCrm(client.email)}
-                      title="Écrire depuis la boîte Mail du CRM"
-                      className="text-[#F9C977] underline underline-offset-2 decoration-[#F9C977]/60 hover:text-[#FAD592] hover:decoration-[#FAD592] break-all"
-                    >
-                      {client.email}
-                    </a>
-                  ) : (
-                    <span className="text-slate-500">—</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 text-sm text-slate-300 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-[#143c3f]/40 flex items-center justify-center text-[#F7BC5F] shrink-0">
-                    <Phone className="w-4 h-4" />
-                  </div>
-                  {client.phone ? (
-                    <a
-                      href={`tel:${String(client.phone).replace(/[^+\d]/g, '')}`}
-                      title="Appeler"
-                      className="text-[#F9C977] underline underline-offset-2 decoration-[#F9C977]/60 hover:text-[#FAD592] hover:decoration-[#FAD592]"
-                    >
-                      {client.phone}
-                    </a>
-                  ) : (
-                    <span className="text-slate-500">—</span>
-                  )}
-                </div>
-                {client.type && (
-                  <div className="flex items-center gap-3 text-sm text-slate-300">
-                    <div className="w-8 h-8 rounded-full bg-[#143c3f]/40 flex items-center justify-center text-[#F7BC5F]">
-                      <UserCheck className="w-4 h-4" />
-                    </div>
-                    {client.type}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-[#143c3f]/50 space-y-3">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Structure & Agent Lié</span>
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Structure / Agence</label>
-                  <select
-                    value={AGENCIES.find(a => matchesAgency(client.agencyId, a.id) && a.id !== 'all')?.id || AGENCIES[0].id}
-                    onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { agencyId: e.target.value } })}
-                    className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                  >
-                    {AGENCIES.filter(a => a.id !== 'all').map(a => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Utilisateur / Agent Lié</label>
-                  <select
-                    // Signalé : « cela reste au premier qui est mis ». La
-                    // valeur affichée passait par getAssignedUser(), qui
-                    // retombe sur TEAM_MEMBERS[0] (Sylvain Grazia) dès que
-                    // l'identifiant n'est pas dans la liste figée — donc
-                    // pour tout collaborateur réel. Le champ ne reflétait
-                    // jamais l'attribution enregistrée et revenait au
-                    // premier nom après chaque changement. On lit
-                    // directement la valeur stockée.
-                    value={client.assignedTo || ''}
-                    onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { assignedTo: e.target.value } })}
-                    className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                  >
-                    <option value="">— Non attribué —</option>
-                    {assignableUsers.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-                {/* Apporteur d'affaires (agent immobilier référent, 6
-                    septembre) : uniquement sur les fiches Conciergerie,
-                    pour le classement par référent. */}
-                {estConciergerie && (
-                  <div>
-                    <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Apporteur d'affaires (agent immobilier)</label>
-                    <select
-                      value={client.referrerId || ''}
-                      onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { referrerId: e.target.value || null } })}
-                      className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                    >
-                      <option value="">Aucun</option>
-                      {apporteursDisponibles.filter(a => a.active).map(a => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}{a.agencyName ? ` (${a.agencyName})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                {/* Lien Vendeur ↔ Acquéreur (7 septembre) : facultatif,
-                    limité aux fiches ImmoSphera du pipeline Transactions
-                    V2 — l'agent choisit de lier ou non. */}
-                {estTransactionsV2 && (
-                  <div>
-                    <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Fiche liée (Vendeur/Acquéreur)</label>
-                    <select
-                      value={client.linkedLeadId || ''}
-                      onChange={(e) => updateContact.mutateAsync({ id: client.id, updates: { linkedLeadId: e.target.value || null } })}
-                      className="w-full bg-[#030d0f] border border-[#153c3f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
-                    >
-                      <option value="">Aucune</option>
-                      {fichesLiablesTransactionsV2.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                    {ficheLieePrincipale && (
-                      <button
-                        type="button"
-                        onClick={() => onSelectContact?.(ficheLieePrincipale.id)}
-                        className="mt-1.5 text-[10px] text-[#F7BC5F] hover:underline flex items-center gap-1"
-                      >
-                        → Voir la fiche de {ficheLieePrincipale.name}
-                      </button>
-                    )}
-                    {fichesLieesInverse.length > 0 && (
-                      <div className="mt-1.5 space-y-1">
-                        {fichesLieesInverse.map(c => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => onSelectContact?.(c.id)}
-                            className="block text-[10px] text-[#F7BC5F] hover:underline"
-                          >
-                            → Fiche liée : {c.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {(client.revenus || client.apport || client.projectType) ? (
-              <div className="pt-4 border-t border-[#143c3f]/50 space-y-2">
-                <span className="text-[10px] uppercase font-bold text-[#F9C977] tracking-wider">Données Patrimoniales</span>
-                <div className="grid grid-cols-2 gap-2 text-xs bg-black/30 p-3 rounded-xl border border-[#143c3f]">
-                  {client.revenus ? (
-                    <div>
-                      <span className="text-slate-400 text-[10px] block">Revenus annuels</span>
-                      <span className="font-bold text-white">{formatCurrency(client.revenus)}</span>
-                    </div>
-                  ) : null}
-                  {client.apport ? (
-                    <div>
-                      <span className="text-slate-400 text-[10px] block">Apport personnel</span>
-                      <span className="font-bold text-white">{formatCurrency(client.apport)}</span>
-                    </div>
-                  ) : null}
-                  {client.credits ? (
-                    <div>
-                      <span className="text-slate-400 text-[10px] block">Encours crédits</span>
-                      <span className="font-bold text-white">{formatCurrency(client.credits)}/m</span>
-                    </div>
-                  ) : null}
-                  {client.contractType ? (
-                    <div>
-                      <span className="text-slate-400 text-[10px] block">Contrat</span>
-                      <span className="font-bold text-white">{client.contractType}</span>
-                    </div>
-                  ) : null}
-                  {client.projectType ? (
-                    <div className="col-span-2 mt-1">
-                      <span className="text-slate-400 text-[10px] block">Projet d'acquisition</span>
-                      <span className="font-bold text-[#F9C977]">{client.projectType}</span>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="pt-4 border-t border-[#143c3f]/50 space-y-2">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Commentaires</span>
-              <p className="text-sm text-slate-300">{client.comments || 'Aucun commentaire'}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column - Tabs & Content */}
-        <div className="lg:col-span-2 bg-[#07191c]/90 border border-white/10 rounded-2xl flex flex-col shadow-xl backdrop-blur-xl overflow-hidden">
+      <div className="p-4 sm:p-6">
+        {/* Espace principal pleine largeur : Copilote Nova & Onglets d'activité */}
+        <div className={`w-full bg-[#07191c]/90 border border-white/10 rounded-2xl flex flex-col shadow-xl backdrop-blur-xl overflow-hidden ${showHalo ? 'target-halo-bounce' : ''}`}>
           {/* Barre d'actions rapides Copilote Nova IA & Dictée Vocale directe dans la fiche */}
           <div className="p-3 sm:px-5 sm:py-3.5 bg-gradient-to-r from-[#F7BC5F]/15 via-[#0b2529] to-[#07191c] border-b border-[#F7BC5F]/25 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2.5">
