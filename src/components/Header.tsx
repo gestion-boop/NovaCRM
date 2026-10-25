@@ -334,9 +334,9 @@ export const Header: React.FC<
           <button
             onClick={onOpenClientDictation}
             title="Dicter une note vocale directement dans une fiche client"
-            className="bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 text-rose-200 hover:text-white font-semibold text-xs px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all active:scale-95 shrink-0 cursor-pointer"
+            className="bg-white/5 hover:bg-white/10 border border-[#F7BC5F]/35 text-[#FAD592] hover:text-white font-semibold text-xs px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all active:scale-95 shrink-0 cursor-pointer"
           >
-            <Mic className="w-3.5 h-3.5 text-rose-400" />
+            <Mic className="w-3.5 h-3.5 text-[#F7BC5F]" />
             <span className="hidden lg:inline">Dictée client</span>
           </button>
         )}

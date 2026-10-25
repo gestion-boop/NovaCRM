@@ -551,6 +551,7 @@ interface AssistantIAViewProps {
   // `!novaExpandedFromPopup`) : ce n'est pas une nouvelle ouverture, juste
   // un changement de taille de la même conversation en cours.
   startFresh?: boolean;
+  isPopup?: boolean;
 }
 
 // Mode vocal (nébuleuse, voir plus bas) : positions/tailles/couleurs des
@@ -572,7 +573,7 @@ const NEBULA_SPARKS = Array.from({ length: 16 }, (_, i) => {
   };
 });
 
-export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt, onInitialPromptConsumed, onFoundProperties, onClose, onOpenContact, currentClientId, prefillPrompt, onPrefillPromptConsumed, autoVoiceMode, onAutoVoiceModeConsumed, startFresh = true }) => {
+export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt, onInitialPromptConsumed, onFoundProperties, onClose, onOpenContact, currentClientId, prefillPrompt, onPrefillPromptConsumed, autoVoiceMode, onAutoVoiceModeConsumed, startFresh = true, isPopup = false }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const { allContacts = [], addContact } = useContacts();
   const [selectedClientOverrideId, setSelectedClientOverrideId] = useState<string | null>(null);
@@ -3142,7 +3143,9 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     // barre de saisie reste ainsi toujours ancrée et visible en bas.
     <div
       ref={swipeBackRef}
-      className="relative h-full overflow-hidden flex flex-col items-center justify-between px-3 py-6 sm:p-10 animate-novaai-bg"
+      className={`relative h-full overflow-hidden flex flex-col items-center justify-between animate-novaai-bg ${
+        isPopup ? 'px-4 pt-14 pb-4 sm:px-6 sm:pt-14 sm:pb-5' : 'px-3 pt-16 pb-6 sm:px-10 sm:pt-16 sm:pb-8'
+      }`}
       style={hauteurVisible ? { height: `${hauteurVisible}px` } : undefined}
     >
       {/* Couche du fond d'écran choisi, posée par-dessus le dégradé par
@@ -3181,8 +3184,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           mobile (Nova IA s'affiche en plein écran, sans la barre d'app qui
           gère habituellement cette zone) — padding de sécurité iOS ajouté. */}
       <div
-        className="absolute right-2 sm:right-6 z-20 flex items-center gap-1 sm:gap-1.5 p-1 rounded-2xl bg-white/75 hover:bg-white/95 backdrop-blur-md border border-white/90 shadow-md transition-all"
-        style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
+        className={`absolute z-20 flex items-center gap-1 sm:gap-1.5 p-1 rounded-2xl bg-white/85 hover:bg-white/95 backdrop-blur-md border border-white/90 shadow-md transition-all ${
+          isPopup ? 'right-3 top-3' : 'right-2 sm:right-6'
+        }`}
+        style={isPopup ? undefined : { top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
       >
         {/* Signalé : "supprime le bouton Nova en haut car on l'a en bas" —
             ce bouton faisait doublon avec celui de la barre de saisie
@@ -3226,99 +3231,106 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       <div className="novaai-dots" aria-hidden="true" />
 
       {!hasConversation ? (
-        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar flex flex-col items-center justify-center text-center gap-5 sm:gap-6 z-10 w-full max-w-2xl px-2">
-          <span className="text-xs font-black uppercase tracking-[0.3em] text-[#1a1230]/60">Nova</span>
-          <NovaMascotte taille={130} />
-          {activeClient ? (
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#F7BC5F]/25 border border-[#F7BC5F]/40 text-slate-900 text-xs font-black shadow-sm">
-                <User className="w-3.5 h-3.5 text-[#B8863F]" />
-                <span>Fiche client · {activeClient.name}</span>
-                {activeClient.clientType && (
-                  <span className="opacity-75 font-semibold">({activeClient.clientType})</span>
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col items-center z-10 w-full max-w-2xl px-1">
+          {(() => {
+            const darkWallpaperActive = Boolean(novaWallpaper) && novaWallpaperOpacity > 35;
+            return (
+              <div className={`my-auto flex flex-col items-center text-center w-full ${isPopup ? 'gap-3 py-1' : 'gap-4 sm:gap-5 py-2'}`}>
+                {!isPopup && (
+                  <span className={`text-xs font-black uppercase tracking-[0.3em] ${darkWallpaperActive ? 'text-white/80 drop-shadow' : 'text-[#1a1230]/60'}`}>
+                    Nova
+                  </span>
+                )}
+                <NovaMascotte taille={isPopup ? 78 : 115} />
+                {activeClient ? (
+                  <div className="space-y-1.5">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/95 border border-[#F7BC5F] text-[#1a1230] text-xs font-black shadow-md">
+                      <User className="w-3.5 h-3.5 text-[#B8863F]" />
+                      <span>Fiche client · {activeClient.name}</span>
+                      {activeClient.clientType && (
+                        <span className="opacity-75 font-semibold">({activeClient.clientType})</span>
+                      )}
+                    </div>
+                    <h1
+                      className={`${isPopup ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} font-black tracking-tight ${
+                        darkWallpaperActive
+                          ? 'text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]'
+                          : 'text-[#1a1230]'
+                      }`}
+                    >
+                      Que souhaitez-vous faire sur ce dossier ?
+                    </h1>
+                    <p
+                      className={`text-xs max-w-md mx-auto ${
+                        darkWallpaperActive
+                          ? 'text-white/90 drop-shadow-[0_1px_8px_rgba(0,0,0,0.85)]'
+                          : 'text-[#1a1230]/75'
+                      }`}
+                    >
+                      Toutes les notes, tâches, rendez-vous et actions seront automatiquement reliés à la fiche de <strong>{activeClient.name}</strong>.
+                    </p>
+                  </div>
+                ) : (
+                  <h1
+                    className={`text-3xl sm:text-4xl font-black tracking-tight ${
+                      darkWallpaperActive
+                        ? 'text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]'
+                        : 'text-[#1a1230]'
+                    }`}
+                  >
+                    Comment ça va, {firstName} ?
+                  </h1>
+                )}
+
+                {activeClient ? (
+                  <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
+                    {getClientQuickPrompts(activeClient.name).map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => {
+                          if (p.isPrefill) {
+                            setPromptInput(p.prompt);
+                            if (promptTextareaRef.current) {
+                              promptTextareaRef.current.focus();
+                              autoResizePrompt();
+                            }
+                          } else {
+                            handleSendMessage(p.prompt);
+                          }
+                        }}
+                        className="w-full px-2.5 py-2.5 sm:px-3 sm:py-2.5 rounded-2xl bg-white/95 hover:bg-white border border-white shadow-md hover:shadow-lg text-left flex items-center gap-2 text-[#1a1230] text-[11px] sm:text-xs font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
+                      >
+                        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color}`}>
+                          <p.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        </div>
+                        <span className="leading-snug font-bold">{p.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
+                    {QUICK_PROMPTS.map((p) => {
+                      const Icon = p.icon;
+                      return (
+                        <button
+                          key={p.label}
+                          type="button"
+                          onClick={() => handleSendMessage(p.prompt)}
+                          className="w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-white/90 hover:bg-white border border-white shadow-md hover:shadow-lg text-left flex items-center gap-2.5 sm:gap-3 text-[#1a1230] text-xs sm:text-sm font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
+                        >
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color || 'bg-[#F7BC5F]/20 text-[#B8863F] border-[#F7BC5F]/30'}`}>
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <span className="leading-tight font-bold">{p.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-[#1a1230] tracking-tight">
-                Que souhaitez-vous faire sur ce dossier ?
-              </h1>
-              <p className="text-xs sm:text-sm text-[#1a1230]/75 max-w-md mx-auto">
-                Toutes les notes, tâches, rendez-vous et actions seront automatiquement reliés à la fiche de <strong>{activeClient.name}</strong>.
-              </p>
-            </div>
-          ) : (
-            <h1 className="text-3xl sm:text-4xl font-black text-[#1a1230] tracking-tight">
-              Comment ça va, {firstName} ?
-            </h1>
-          )}
-
-          {activeClient ? (
-            <div data-swipe-back-exclude="true" className="w-full space-y-2.5">
-              <button
-                type="button"
-                onClick={() => setShowQuickClientDictation(true)}
-                className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:brightness-110 text-white shadow-lg flex items-center justify-center gap-2.5 text-xs sm:text-sm font-extrabold transition-all cursor-pointer active:scale-[0.99]"
-              >
-                <Mic className="w-4 h-4 shrink-0" />
-                <span>Dicter une note directe dans la fiche de {activeClient.name}</span>
-              </button>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 w-full">
-                {getClientQuickPrompts(activeClient.name).map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => {
-                      if (p.isPrefill) {
-                        setPromptInput(p.prompt);
-                        if (promptTextareaRef.current) {
-                          promptTextareaRef.current.focus();
-                          autoResizePrompt();
-                        }
-                      } else {
-                        handleSendMessage(p.prompt);
-                      }
-                    }}
-                    className="w-full px-2.5 py-2.5 sm:px-3.5 sm:py-3 rounded-2xl bg-white/85 hover:bg-white border border-white/90 shadow-sm hover:shadow text-left flex items-center gap-2 sm:gap-2.5 text-[#1a1230] text-[11px] sm:text-xs font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
-                  >
-                    <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color}`}>
-                      <p.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    </div>
-                    <span className="leading-snug font-bold">{p.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div data-swipe-back-exclude="true" className="w-full space-y-2.5">
-              <button
-                type="button"
-                onClick={() => setShowQuickClientDictation(true)}
-                className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-[#F7BC5F] via-[#F9C977] to-[#e6a642] hover:brightness-105 text-slate-950 border border-white/60 shadow-md flex items-center justify-center gap-2.5 text-xs sm:text-sm font-extrabold transition-all cursor-pointer active:scale-[0.99]"
-              >
-                <div className="w-7 h-7 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                  <Mic className="w-4 h-4" />
-                </div>
-                <span>Dicter une note vocale → Enregistrer dans une fiche client</span>
-              </button>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
-                {QUICK_PROMPTS.map((p) => {
-                  const Icon = p.icon;
-                  return (
-                    <button
-                      key={p.label}
-                      type="button"
-                      onClick={() => handleSendMessage(p.prompt)}
-                      className="w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-white/80 hover:bg-white border border-white/90 shadow-sm hover:shadow text-left flex items-center gap-2.5 sm:gap-3 text-[#1a1230] text-xs sm:text-sm font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
-                    >
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color || 'bg-[#F7BC5F]/20 text-[#B8863F] border-[#F7BC5F]/30'}`}>
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <span className="leading-tight font-bold">{p.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       ) : (
         <div ref={messagesScrollRef} className="flex-1 min-h-0 z-10 w-full max-w-3xl mx-auto overflow-y-auto custom-scrollbar py-4 space-y-4">
@@ -3977,8 +3989,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           onClick={demarrerDicteeAgent}
           title={dicteeAgent ? 'Envoyer maintenant' : 'Dicter une note ou une action'}
           aria-label={dicteeAgent ? 'Envoyer maintenant' : 'Dicter une note ou une action'}
-          className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-white shadow-md transition-all active:scale-95 cursor-pointer mb-0.5 ${
-            dicteeAgent ? 'bg-rose-600 animate-pulse' : 'bg-gradient-to-br from-rose-500 to-red-600 hover:brightness-110'
+          className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-all active:scale-95 cursor-pointer mb-0.5 ${
+            dicteeAgent
+              ? 'bg-rose-600 text-white animate-pulse shadow-md'
+              : 'bg-black/5 hover:bg-black/10 text-[#1a1230]'
           }`}
         >
           {dicteeAgent ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-4 h-4" />}

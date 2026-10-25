@@ -2594,10 +2594,10 @@ export default function ClientProfileView({
               className={`px-3.5 py-2.5 max-sm:px-2.5 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-lg hover:scale-[1.02] transition-all cursor-pointer ${
                 quickDictationListening
                   ? 'bg-rose-600 text-white animate-pulse shadow-[0_0_20px_rgba(225,29,72,0.5)]'
-                  : 'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300'
+                  : 'bg-black/40 border border-[#F7BC5F]/40 text-[#FAD592] hover:bg-black/60'
               }`}
             >
-              {quickDictationListening ? <Square className="w-3.5 h-3.5 fill-current shrink-0" /> : <Mic className="w-4 h-4 shrink-0" />}
+              {quickDictationListening ? <Square className="w-3.5 h-3.5 fill-current shrink-0" /> : <Mic className="w-4 h-4 text-[#F7BC5F] shrink-0" />}
               <span>{quickDictationListening ? 'Écoute…' : 'Dicter'}</span>
             </button>
             {onOpenNova && (
@@ -3055,7 +3055,7 @@ export default function ClientProfileView({
                     className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
                       isDictatingComment
                         ? 'bg-rose-600 text-white animate-pulse'
-                        : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30'
+                        : 'bg-[#143c3f]/40 hover:bg-[#143c3f]/70 text-[#FAD592] border border-[#F7BC5F]/35'
                     }`}
                   >
                     {isDictatingComment ? (
@@ -3065,7 +3065,7 @@ export default function ClientProfileView({
                       </>
                     ) : (
                       <>
-                        <Mic className="w-3 h-3" />
+                        <Mic className="w-3 h-3 text-[#F7BC5F]" />
                         <span>Dicter</span>
                       </>
                     )}
@@ -3330,8 +3330,8 @@ export default function ClientProfileView({
                     quickDictationListening
                       ? 'bg-rose-600 text-white animate-pulse shadow-[0_0_20px_rgba(225,29,72,0.5)]'
                       : quickDictationOpen
-                      ? 'bg-rose-500/25 border border-rose-500/50 text-rose-200'
-                      : 'bg-gradient-to-r from-rose-500 to-red-600 hover:brightness-110 text-white'
+                      ? 'bg-[#F7BC5F]/25 border border-[#F7BC5F]/60 text-[#FAD592]'
+                      : 'bg-[#F7BC5F]/15 hover:bg-[#F7BC5F]/25 border border-[#F7BC5F]/45 text-[#FAD592]'
                   }`}
                 >
                   {quickDictationListening ? (
@@ -3341,7 +3341,7 @@ export default function ClientProfileView({
                     </>
                   ) : (
                     <>
-                      <Mic className="w-3.5 h-3.5" />
+                      <Mic className="w-3.5 h-3.5 text-[#F7BC5F]" />
                       <span>Dicter dans la fiche</span>
                     </>
                   )}

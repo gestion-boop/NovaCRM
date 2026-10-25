@@ -1399,69 +1399,74 @@ function App() {
               plein écran (même thread persisté en base, voir
               AssistantIAView.tsx) — fermer puis rouvrir (popup ou plein
               écran) retrouve la même conversation. */}
-          <AnimatePresence>
-            {novaPopupOpen && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="fixed inset-0 z-[75] bg-black/25 flex items-center justify-center p-4"
-                onClick={() => setNovaPopupOpen(false)}
-              >
+          {/* Mini-popup Nova contextuelle (depuis une fiche client / le
+              Pipeline) : fenêtre flottante sur l'écran en cours, avec bouton
+              pour basculer en plein écran si la demande s'allonge. Partage
+              le même fil persisté en base que le plein écran (voir
+              AssistantIAView.tsx) — fermer puis rouvrir (popup ou plein
+              écran) retrouve la même conversation. Rendue via createPortal
+              dans document.body pour ne jamais être coupée par le Header. */}
+          {createPortal(
+            <AnimatePresence>
+              {novaPopupOpen && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: 12 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: 12 }}
-                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                  // Signalé : "la fenêtre est mal calibrée" — les boutons
-                  // internes de Nova (historique/effacer/onglets Discussion-
-                  // Fonds d'écran), pensés pour un plein écran large, se
-                  // chevauchaient avec mes boutons fermer/agrandir dans une
-                  // popup trop étroite (max-w-md, 448px) : élargie pour
-                  // laisser assez de place aux deux groupes de boutons côte
-                  // à côte, comme en plein écran.
-                  className="relative w-full max-w-xl h-[80vh] max-h-[720px] rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-[#050d0f]"
-                  onClick={(e) => e.stopPropagation()}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="fixed inset-0 z-[200] bg-black/55 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5"
+                  onClick={() => setNovaPopupOpen(false)}
                 >
-                  <div
-                    className="absolute z-30 flex items-center gap-1.5 p-1 rounded-full bg-white/80 hover:bg-white backdrop-blur-md border border-white/90 shadow-md transition-all"
-                    style={{ top: 'calc(0.75rem + env(safe-area-inset-top, 0px))', left: '0.75rem' }}
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 12 }}
+                    transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                    className="relative w-full max-w-xl h-[min(82vh,640px)] rounded-3xl overflow-hidden shadow-[0_25px_70px_-15px_rgba(0,0,0,0.85)] border border-white/15 bg-[#050d0f]"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <button
-                      type="button"
-                      onClick={() => setNovaPopupOpen(false)}
-                      title="Fermer"
-                      className="w-7 h-7 rounded-full bg-black/5 hover:bg-rose-500/20 text-[#1a1230] hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                    <div
+                      className="absolute top-3 left-3 z-30 flex items-center gap-1.5 p-1 rounded-full bg-white/85 hover:bg-white backdrop-blur-md border border-white/90 shadow-md transition-all"
                     >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setNovaPopupOpen(false); setNovaExpandedFromPopup(true); setNovaOpen(true); }}
-                      title="Agrandir en plein écran"
-                      className="w-7 h-7 rounded-full bg-black/5 hover:bg-black/10 text-[#1a1230] flex items-center justify-center transition-colors cursor-pointer"
-                    >
-                      <Maximize2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <EcranErrorBoundary resetKey="nova-popup" plein>
-                  <AssistantIAView
-                    currentClientId={selectedClientProfileId}
-                    initialPrompt={novaAIPrompt}
-                    onInitialPromptConsumed={() => setNovaAIPrompt(null)}
-                    prefillPrompt={novaPrefillPrompt}
-                    onPrefillPromptConsumed={() => setNovaPrefillPrompt(null)}
-                    onOpenContact={(contactId) => {
-                      openClientProfile(contactId);
-                      setNovaPopupOpen(false);
-                    }}
-                  />
-                  </EcranErrorBoundary>
+                      <button
+                        type="button"
+                        onClick={() => setNovaPopupOpen(false)}
+                        title="Fermer"
+                        className="w-7 h-7 rounded-full bg-black/5 hover:bg-rose-500/20 text-[#1a1230] hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setNovaPopupOpen(false); setNovaExpandedFromPopup(true); setNovaOpen(true); }}
+                        title="Agrandir en plein écran"
+                        className="w-7 h-7 rounded-full bg-black/5 hover:bg-black/10 text-[#1a1230] flex items-center justify-center transition-colors cursor-pointer"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <EcranErrorBoundary resetKey="nova-popup" plein>
+                      <Suspense fallback={<ChargementEcran />}>
+                        <AssistantIAView
+                          isPopup
+                          currentClientId={selectedClientProfileId}
+                          initialPrompt={novaAIPrompt}
+                          onInitialPromptConsumed={() => setNovaAIPrompt(null)}
+                          prefillPrompt={novaPrefillPrompt}
+                          onPrefillPromptConsumed={() => setNovaPrefillPrompt(null)}
+                          onOpenContact={(contactId) => {
+                            openClientProfile(contactId);
+                            setNovaPopupOpen(false);
+                          }}
+                        />
+                      </Suspense>
+                    </EcranErrorBoundary>
+                  </motion.div>
                 </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              )}
+            </AnimatePresence>,
+            document.body
+          )}
 
           {/* Nova IA en superposition de l'interface principale (ticket #1:
               rester sur la même interface, que ce soit via le clic sur

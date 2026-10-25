@@ -876,9 +876,9 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
               onClick={onOpenClientDictation}
               title="Dicter une note vocale dans une fiche client"
               aria-label="Dicter dans une fiche client"
-              className="w-11 h-11 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 flex items-center justify-center shadow-[0_0_15px_rgba(244,63,94,0.25)] active:scale-95 transition-all cursor-pointer"
+              className="w-11 h-11 rounded-full bg-[#081e22]/90 border border-[#F7BC5F]/40 text-[#FAD592] hover:bg-[#F7BC5F]/15 flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer"
             >
-              <Mic className="w-5 h-5" />
+              <Mic className="w-5 h-5 text-[#F7BC5F]" />
             </button>
           )}
           {onOpenNouveauLead && (
