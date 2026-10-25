@@ -1552,11 +1552,11 @@ html.agency-novavisio:not(.light-mode) .nv-activity-shell {
   box-shadow: 0 20px 50px -12px rgba(2, 10, 22, 0.85), 0 0 28px -8px rgba(34, 211, 238, 0.16) !important;
 }
 
-/* Boutons d'action principaux, pastilles actives & avatars initiales en dégradé Logo NovaVisio */
+/* Boutons d'action principaux, pastilles actives & avatars initiales en dégradé Logo NovaVisio (hors textes bg-clip-text et liserés fins) */
 html.agency-novavisio .bg-\[\#F7BC5F\],
 html.agency-novavisio .hover\:bg-\[\#F7BC5F\]:hover,
-html.agency-novavisio [class*="from-[#FDE047]" i],
-html.agency-novavisio [class*="from-[#F7BC5F]" i]:not([class*="/1"]):not([class*="/2"]):not([class*="/3"]) {
+html.agency-novavisio [class*="from-[#FDE047]" i]:not(.bg-clip-text):not(.pointer-events-none),
+html.agency-novavisio [class*="from-[#F7BC5F]" i]:not([class*="/1"]):not([class*="/2"]):not([class*="/3"]):not(.bg-clip-text):not(.pointer-events-none) {
   background-image: linear-gradient(135deg, #1FA2B8 0%, #1B7D8F 46%, #264C8A 100%) !important;
   background-color: #1B7D8F !important;
   color: #ffffff !important;
@@ -1564,13 +1564,80 @@ html.agency-novavisio [class*="from-[#F7BC5F]" i]:not([class*="/1"]):not([class*
   box-shadow: 0 6px 20px -4px rgba(27, 125, 143, 0.5) !important;
 }
 
-/* Textes et icônes d'accentuation harmonisés avec le Cyan-Bleu du logo */
+/* Textes en dégradé (bg-clip-text) sur NovaVisio : Blanc → Cyan → Bleu Azur (zéro jaune) */
+html.agency-novavisio .bg-clip-text {
+  background-image: linear-gradient(90deg, #ffffff 0%, #67e8f9 52%, #60a5fa 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+}
+
+/* Liserés lumineux supérieurs (pointer-events-none) : Cyan → Teal → Bleu Cobalt (zéro jaune) */
+html.agency-novavisio .pointer-events-none[class*="via-[#F7BC5F]" i],
+html.agency-novavisio .pointer-events-none[class*="from-[#FDE047]" i] {
+  background-image: linear-gradient(90deg, #38bdf8 0%, #1b7d8f 50%, rgba(38, 76, 138, 0.15) 100%) !important;
+}
+
+/* Suppression totale du Noir et de l'Anthracite (#2b2b2b, bg-black/*, #030d0f) sur NovaVisio au profit de dégradés Teal-Cobalt */
+html.agency-novavisio:not(.light-mode) [class*="bg-[#2b2b2b" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-black/" i]:not([class*="fixed"]):not([class*="inset-0"]),
+html.agency-novavisio:not(.light-mode) [class*="bg-[#030d0f" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-[#050d0f" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-slate-9" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-gray-9" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-zinc-9" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-neutral-9" i] {
+  background-color: rgba(9, 38, 58, 0.85) !important;
+  background-image: linear-gradient(135deg, rgba(21, 94, 117, 0.34) 0%, rgba(10, 37, 64, 0.88) 55%, rgba(30, 58, 110, 0.42) 100%) !important;
+  border-color: rgba(56, 189, 248, 0.25) !important;
+}
+
+/* Suppression de tous les fonds, bordures et halos jaunes/dorés sur NovaVisio */
+html.agency-novavisio:not(.light-mode) [class*="bg-[#F7BC5F]/" i],
+html.agency-novavisio:not(.light-mode) [class*="from-[#F7BC5F]/" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-amber-500/" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-yellow-500/" i] {
+  background-color: rgba(27, 125, 143, 0.24) !important;
+  background-image: linear-gradient(135deg, rgba(27, 125, 143, 0.32) 0%, rgba(38, 76, 138, 0.28) 100%) !important;
+}
+
+html.agency-novavisio [class*="border-[#F7BC5F" i],
+html.agency-novavisio [class*="border-[#FDE047" i],
+html.agency-novavisio [class*="border-amber-" i],
+html.agency-novavisio [class*="border-yellow-" i] {
+  border-color: rgba(56, 189, 248, 0.38) !important;
+}
+
+html.agency-novavisio [class*="ring-[#F7BC5F" i],
+html.agency-novavisio [class*="ring-[#FDE047" i] {
+  --tw-ring-color: rgba(56, 189, 248, 0.55) !important;
+}
+
+/* Textes et icônes d'accentuation harmonisés avec le Cyan-Bleu du logo (zéro jaune) */
 html.agency-novavisio:not(.light-mode) [class*="text-[#f7bc5f" i],
 html.agency-novavisio:not(.light-mode) [class*="text-[#f9c977" i],
 html.agency-novavisio:not(.light-mode) [class*="text-[#fad592" i],
 html.agency-novavisio:not(.light-mode) [class*="text-[#fde68a" i],
-html.agency-novavisio:not(.light-mode) [class*="text-[#fde047" i] {
+html.agency-novavisio:not(.light-mode) [class*="text-[#fde047" i],
+html.agency-novavisio:not(.light-mode) [class*="text-[#fef08a" i],
+html.agency-novavisio:not(.light-mode) [class*="text-[#e5ab4c" i],
+html.agency-novavisio:not(.light-mode) [class*="text-[#c9a463" i] {
   color: #67e8f9 !important;
+}
+
+html.agency-novavisio [class*="fill-[#f7bc5f" i],
+html.agency-novavisio [class*="fill-[#f9c977" i] {
+  fill: #38bdf8 !important;
+}
+
+html.agency-novavisio:not(.light-mode) .pipeline-track {
+  background-color: rgba(56, 189, 248, 0.28) !important;
+}
+html.agency-novavisio:not(.light-mode) .pipeline-dot-bg {
+  background-color: #082336 !important;
+}
+html.agency-novavisio:not(.light-mode) .pipeline-dot-border-inactive {
+  border-color: rgba(56, 189, 248, 0.45) !important;
 }
 
 /* Mode Jour NovaVisio : dégradés Perle, Eau & Bleu Cobalt doux */

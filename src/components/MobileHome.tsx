@@ -852,7 +852,14 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
       {/* En-tête */}
       <div className="flex items-center justify-between pt-1">
         <div className="min-w-0">
-          <p className="text-[11px] font-black tracking-[0.25em] text-[#F7BC5F] uppercase">Nova CRM</p>
+          <div className="flex items-center gap-1.5">
+            {visibiliteBureau.novavisio && (
+              <img src={agencyLogo} alt="NovaVisio" className="w-4 h-4 rounded-full object-contain shrink-0" />
+            )}
+            <p className="text-[11px] font-black tracking-[0.25em] text-[#F7BC5F] uppercase">
+              {visibiliteBureau.novavisio ? 'NovaVisio' : 'Nova CRM'}
+            </p>
+          </div>
           <h1 className="text-2xl font-extrabold text-white truncate">
             {greeting} <span className="text-[#F7BC5F]">{firstName}</span>
           </h1>
