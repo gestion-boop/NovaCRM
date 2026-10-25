@@ -3892,15 +3892,6 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               );
             })}
           </div>
-          {gesteDuMoment && (
-            <button
-              type="button"
-              onClick={() => navigateToTile(gesteDuMoment.nav)}
-              className="mt-2 text-center text-xs sm:text-sm font-medium text-slate-300 hover:text-[#F7BC5F] transition-colors truncate"
-            >
-              {gesteDuMoment.texte}
-            </button>
-          )}
         </div>
       )}
 
