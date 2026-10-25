@@ -365,6 +365,73 @@ const SortableQuickPrompt: React.FC<{
   );
 };
 
+const renderSummaryItem = (item: string, index: number) => {
+  // Pattern 1: Contact avec gras markdown: **Nom Contact** — Titre tâche — Date
+  const contactMatch = item.match(/^\*\*([^*]+)\*\*\s*—\s*(.+?)\s*—\s*(.+)$/);
+  if (contactMatch) {
+    const [, contactName, taskTitle, datePart] = contactMatch;
+    return (
+      <div
+        key={index}
+        className="p-3 sm:p-3.5 rounded-xl bg-white/85 hover:bg-white border border-emerald-500/25 hover:border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs transition-all group"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-[#F7BC5F]/25 text-[#88540d] border border-[#F7BC5F]/40 shrink-0 shadow-xs flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5 text-[#B8863F]" />
+            <span>{contactName}</span>
+          </span>
+          <span className="font-semibold text-slate-900 text-sm truncate">
+            {taskTitle}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-800 text-xs font-bold shrink-0 self-start sm:self-auto border border-emerald-500/20">
+          <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+          <span className="capitalize">{datePart}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Pattern 2: Titre — Date / Heure
+  const titleDateMatch = item.match(/^(.+?)\s*—\s*(.+)$/);
+  if (titleDateMatch) {
+    const [, mainTitle, dateOrDetail] = titleDateMatch;
+    const cleanTitle = mainTitle.replace(/\*\*/g, '');
+    const isAppointment = dateOrDetail.includes('à') || dateOrDetail.includes(':');
+    return (
+      <div
+        key={index}
+        className="p-3 sm:p-3.5 rounded-xl bg-white/85 hover:bg-white border border-emerald-500/25 hover:border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs transition-all group"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className={`px-2 py-0.5 rounded-lg text-[11px] font-black uppercase tracking-wider shrink-0 border ${
+            isAppointment ? 'bg-sky-500/15 text-sky-800 border-sky-500/30' : 'bg-teal-500/15 text-teal-800 border-teal-500/30'
+          }`}>
+            {isAppointment ? 'RDV' : 'Action'}
+          </span>
+          <span className="font-semibold text-slate-900 text-sm truncate">
+            {cleanTitle}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-800 text-xs font-bold shrink-0 self-start sm:self-auto border border-emerald-500/20">
+          {isAppointment ? <Clock className="w-3.5 h-3.5 text-sky-600" /> : <Calendar className="w-3.5 h-3.5 text-teal-600" />}
+          <span>{dateOrDetail}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback: Rendu Markdown propre sans astérisques bruts
+  return (
+    <div key={index} className="p-2.5 rounded-xl bg-white/70 border border-emerald-500/15 text-sm text-emerald-950 flex items-start gap-2">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2 shrink-0" />
+      <div className="min-w-0 flex-1 font-medium">
+        <Markdown>{item}</Markdown>
+      </div>
+    </div>
+  );
+};
+
 const SummaryDetails: React.FC<{ details: string }> = ({ details }) => {
   const sections: { header: string; items: string[] }[] = [];
   let current: { header: string; items: string[] } | null = null;
@@ -384,26 +451,46 @@ const SummaryDetails: React.FC<{ details: string }> = ({ details }) => {
     return <p className="mt-0.5 text-sm sm:text-base text-emerald-800/90 whitespace-pre-line leading-relaxed">{details}</p>;
   }
   return (
-    // Ticket #284 : "comme un ovale, encadrement, qui sépare" les grandes
-    // sections (tâches / rendez-vous) — chacune dans son propre cadre
-    // arrondi, plutôt qu'un simple espacement vertical entre elles.
-    // Texte encore agrandi sur ordinateur (sm:text-base).
-    <div className="mt-2 space-y-2.5">
-      {sections.map((sec, si) => (
-        <div key={si} className="rounded-2xl border border-emerald-300/70 bg-white/40 px-3 py-2.5 sm:px-4 sm:py-3">
-          <p className="text-sm sm:text-base font-bold text-emerald-950">{sec.header}</p>
-          {sec.items.length > 0 && (
-            <ul className="mt-1.5 space-y-1.5">
-              {sec.items.map((item, ii) => (
-                <li key={ii} className="text-sm sm:text-base text-emerald-800/90 leading-snug flex items-start gap-2">
-                  <span className="text-emerald-500 leading-snug">•</span>
-                  <span className="min-w-0">{item}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ))}
+    <div className="mt-2.5 space-y-3">
+      {sections.map((sec, si) => {
+        const isTasks = sec.header.includes('📋') || sec.header.toLowerCase().includes('tâche');
+        const isAppointments = sec.header.includes('📅') || sec.header.toLowerCase().includes('rendez-vous');
+        const isOverdue = sec.header.includes('⚠️') || sec.header.toLowerCase().includes('retard');
+
+        const cleanHeader = sec.header.replace(/^[📋📅⚠️✅]\s*/, '');
+
+        return (
+          <div key={si} className="rounded-2xl border border-emerald-500/25 bg-white/75 backdrop-blur-md p-3.5 sm:p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-emerald-500/15">
+              <div className="flex items-center gap-2">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${
+                  isOverdue ? 'bg-rose-500/15 text-rose-700 border-rose-500/30' :
+                  isAppointments ? 'bg-sky-500/15 text-sky-700 border-sky-500/30' :
+                  'bg-teal-500/15 text-teal-700 border-teal-500/30'
+                }`}>
+                  {isOverdue ? <AlertCircle className="w-4 h-4" /> :
+                   isAppointments ? <Calendar className="w-4 h-4" /> :
+                   <CheckSquare className="w-4 h-4" />}
+                </div>
+                <span className="text-sm font-black text-slate-900 tracking-tight">
+                  {cleanHeader}
+                </span>
+              </div>
+              {sec.items.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 text-xs font-black">
+                  {sec.items.length}
+                </span>
+              )}
+            </div>
+
+            {sec.items.length > 0 && (
+              <div className="space-y-2">
+                {sec.items.map((item, ii) => renderSummaryItem(item, ii))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -2886,7 +2973,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           mobile (Nova IA s'affiche en plein écran, sans la barre d'app qui
           gère habituellement cette zone) — padding de sécurité iOS ajouté. */}
       <div
-        className="absolute right-2 sm:right-6 z-20 flex items-center gap-1 sm:gap-2"
+        className="absolute right-2 sm:right-6 z-20 flex items-center gap-1 sm:gap-1.5 p-1 rounded-2xl bg-white/75 hover:bg-white/95 backdrop-blur-md border border-white/90 shadow-md transition-all"
         style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
       >
         {/* Signalé : "supprime le bouton Nova en haut car on l'a en bas" —
@@ -2898,7 +2985,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           type="button"
           onClick={() => void openActionHistory()}
           title="Historique des actions de Nova"
-          className="w-9 h-9 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors"
+          className="w-8 h-8 rounded-xl bg-black/5 hover:bg-black/10 text-[#1a1230] flex items-center justify-center transition-colors cursor-pointer"
         >
           <Clock className="w-4 h-4" />
         </button>
@@ -2907,7 +2994,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
             type="button"
             onClick={handleClearHistory}
             title="Effacer l'historique"
-            className="w-9 h-9 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-xl bg-black/5 hover:bg-rose-500/20 text-[#1a1230] hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -2919,7 +3006,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
             onClick={onClose}
             title="Fermer Nova IA"
             aria-label="Fermer Nova IA"
-            className="w-9 h-9 rounded-full bg-white/80 hover:bg-white border border-white/90 shadow-sm text-[#1a1230] flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ml-1"
+            className="w-8 h-8 rounded-xl bg-black/5 hover:bg-rose-500/20 text-[#1a1230] hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer ml-0.5"
           >
             <X className="w-4 h-4" />
           </button>
@@ -3025,10 +3112,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                     à l'étroit (75% sur desktop) — élargi. */}
                 <div className="space-y-1.5 max-w-[92%] sm:max-w-[85%]">
                   <div
-                    className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${
+                    className={`p-4 sm:p-5 rounded-3xl text-xs sm:text-sm leading-relaxed ${
                       isUser
-                        ? 'bg-[#F7BC5F] text-slate-950 font-medium rounded-tr-none shadow-lg'
-                        : 'bg-white/85 text-[#1a1230] border border-white/70 rounded-tl-none shadow-md'
+                        ? 'bg-gradient-to-r from-[#F7BC5F] via-[#F9C977] to-[#E5A642] text-slate-950 font-bold rounded-tr-none shadow-[0_10px_25px_-5px_rgba(247,188,95,0.35)]'
+                        : 'bg-white/95 backdrop-blur-xl text-[#1a1230] border border-white/80 rounded-tl-none shadow-[0_15px_35px_-5px_rgba(0,0,0,0.12),0_0_15px_rgba(247,188,95,0.05)]'
                     }`}
                   >
                     <div className="markdown-body">
@@ -3069,49 +3156,50 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                         (📋 tâches / 📅 rendez-vous) mises en forme en vraie
                         liste au lieu d'un unique bloc de texte compact. */}
                     {m.actionsExecuted && m.actionsExecuted.length > 0 && (
-                      <div className="mt-3.5 pt-3.5 border-t border-black/10 space-y-2.5">
-                        <div className="text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Actions CRM Exécutées en direct :</span>
+                      <div className="mt-4 pt-3.5 border-t border-black/10 space-y-3">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 text-xs font-black uppercase tracking-wider shadow-xs">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>Actions CRM exécutées en direct</span>
                         </div>
                         {m.actionsExecuted.map((act, i) => (
                           <div
                             key={i}
-                            className="p-3.5 sm:p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-sm sm:text-base flex items-start gap-3"
+                            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-white/95 to-emerald-50/70 border border-emerald-500/25 text-emerald-950 text-sm sm:text-base flex items-start gap-3.5 shadow-sm"
                           >
-                            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
                               {act.type === 'contact' && <UserPlus className="w-4 h-4" />}
                               {act.type === 'task' && <CheckSquare className="w-4 h-4" />}
                               {act.type === 'note' && <FileText className="w-4 h-4" />}
                               {act.type === 'appointment' && <Calendar className="w-4 h-4" />}
                               {act.type === 'drive_search' && <FileText className="w-4 h-4" />}
-                              {act.type === 'summary' && <Sparkles className="w-4 h-4" />}
+                              {act.type === 'summary' && <Sparkles className="w-4 h-4 text-[#B8863F]" />}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="font-bold text-emerald-950 text-sm sm:text-base">{act.title}</p>
+                              <p className="font-black text-slate-900 text-base tracking-tight">{act.title}</p>
                               {act.type === 'summary' ? (
                                 <SummaryDetails details={act.details} />
                               ) : (
-                                <p className="mt-0.5 text-sm text-emerald-800/90 whitespace-pre-line leading-relaxed">{act.details}</p>
+                                <p className="mt-1 text-sm text-emerald-900/90 whitespace-pre-line leading-relaxed font-medium">{act.details}</p>
                               )}
                               {act.contactId && onOpenContact && (
                                 <button
                                   type="button"
                                   onClick={() => onOpenContact(act.contactId!)}
-                                  className="mt-2 inline-flex items-center gap-1 text-sm font-bold text-emerald-700 hover:text-emerald-900 underline underline-offset-2"
+                                  className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-bold text-emerald-900 transition-all cursor-pointer"
                                 >
-                                  Voir la fiche du client <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Voir la fiche du client</span>
+                                  <ExternalLink className="w-3.5 h-3.5" />
                                 </button>
                               )}
                               {act.driveFiles && act.driveFiles.length > 0 && (
-                                <div className="mt-2 space-y-1.5">
+                                <div className="mt-2.5 space-y-1.5">
                                   {act.driveFiles.map((f) => (
                                     <a
                                       key={f.id}
                                       href={f.webViewLink || '#'}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="flex items-center gap-2 p-2 rounded-lg bg-white/70 hover:bg-white text-emerald-900 text-sm truncate transition-colors"
+                                      className="flex items-center gap-2 p-2.5 rounded-xl bg-white/85 hover:bg-white border border-emerald-500/20 text-emerald-900 text-sm truncate transition-colors shadow-xs"
                                     >
                                       {f.iconLink ? (
                                         <img src={f.iconLink} alt="" className="w-4 h-4 shrink-0" />
@@ -3133,10 +3221,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                     {/* Actions échouées — ticket #7/#8 : affichées clairement
                         avec la raison précise, jamais passées sous silence. */}
                     {m.actionsFailed && m.actionsFailed.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-black/10 space-y-2">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-rose-700 flex items-center gap-1">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          <span>Actions échouées :</span>
+                      <div className="mt-4 pt-3.5 border-t border-black/10 space-y-2.5">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-900 text-xs font-black uppercase tracking-wider shadow-xs">
+                          <AlertCircle className="w-4 h-4 text-rose-600" />
+                          <span>Actions non exécutées</span>
                         </div>
                         {m.actionsFailed.map((fail, i) => (
                           <div
@@ -3571,13 +3659,13 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         // peu contrasté. border-black/15 reste discret mais délimite
         // vraiment la barre, dans les deux thèmes (cette carte reste
         // volontairement blanche quel que soit le mode, inchangé).
-        className="z-10 w-full max-w-xl flex items-end gap-2 bg-white/90 backdrop-blur rounded-3xl shadow-xl border border-black/15 px-2 py-2"
+        className="z-10 w-full max-w-xl flex items-end gap-2 bg-white/95 backdrop-blur-xl rounded-full shadow-[0_15px_40px_-10px_rgba(0,0,0,0.18),0_0_20px_rgba(247,188,95,0.1)] border border-white/90 px-3 py-2 transition-all ring-1 ring-black/5 focus-within:ring-2 focus-within:ring-[#F7BC5F]/70"
       >
         <button
           type="button"
           title="Suggestions"
           onClick={() => setPromptInput('')}
-          className="w-9 h-9 shrink-0 rounded-full bg-black/5 hover:bg-black/10 text-[#1a1230] flex items-center justify-center transition-colors mb-0.5"
+          className="w-9 h-9 shrink-0 rounded-full bg-black/5 hover:bg-black/10 text-[#1a1230] flex items-center justify-center transition-colors mb-0.5 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
         </button>
@@ -3628,7 +3716,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           type="submit"
           title="Envoyer"
           disabled={!promptInput.trim()}
-          className="w-9 h-9 shrink-0 rounded-full bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-40 disabled:cursor-default text-slate-950 flex items-center justify-center shadow-md transition-colors mb-0.5"
+          className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-default text-slate-950 flex items-center justify-center shadow-md transition-all cursor-pointer mb-0.5"
         >
           <Send className="w-4 h-4" />
         </button>
