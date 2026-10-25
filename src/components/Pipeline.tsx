@@ -354,14 +354,15 @@ const PipelineCard = React.memo<{
       {...listeners}
       onClick={() => { if (contact && onSelectContact) onSelectContact(contact.id); }}
       style={couleur ? { borderLeft: `4px solid ${couleur}`, backgroundColor: `${couleur}15` } : undefined}
-      className={`group p-3.5 rounded-2xl bg-gradient-to-b from-white/[0.06] via-white/[0.02] to-black/40 border transition-all duration-200 touch-auto select-none backdrop-blur-md shadow-md ${
+      className={`group relative p-3.5 rounded-2xl bg-gradient-to-b from-white/[0.07] via-white/[0.02] to-black/60 border transition-all duration-200 touch-auto select-none backdrop-blur-md shadow-md overflow-hidden ${
         contact ? 'cursor-pointer hover:-translate-y-0.5' : ''
       } ${
         isDragging
           ? 'opacity-0'
-          : 'border-white/10 hover:border-[#F7BC5F]/50 hover:shadow-[0_8px_25px_-5px_rgba(0,0,0,0.5),0_0_15px_rgba(247,188,95,0.15)]'
+          : 'border-white/10 hover:border-[#F7BC5F]/60 hover:shadow-[0_10px_30px_-5px_rgba(0,0,0,0.7),0_0_20px_rgba(247,188,95,0.18)]'
       }`}
     >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/10 to-transparent group-hover:via-[#F7BC5F]/50 transition-all" />
       <PipelineCardContent deal={deal} contact={contact} taskStatus={taskStatus} onDelete={onDelete} onOpenChecklist={onOpenChecklist} onOpenNova={onOpenNova} />
     </div>
   );
@@ -1947,23 +1948,22 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
   return (
     <div className="p-6 space-y-5 text-white">
-      {/* Signalé (30/08/2026) : titre + sous-titre directement sur l'image
-          de fond personnalisée, sans fond — illisible par endroits. Les
-          colonnes du kanban plus bas ont déjà leur propre fond opaque, donc
-          seul ce bandeau d'en-tête a besoin d'un fond, même principe que le
-          panneau Chat équipe (bg-[#050f11], blanc en mode jour). */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#050f11] rounded-2xl p-4">
-        <div>
-          <h1 className="text-xl font-bold">
-            Pipeline • {currentAgency?.name}
+      {/* Signalé (30/08/2026) : bandeau d'en-tête Pipeline avec le design unifié Noir & Or / Novavisio */}
+      <div className="relative nv-card-hero rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 overflow-hidden backdrop-blur-xl">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F] to-transparent opacity-85" />
+        <div className="relative z-10">
+          <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            <span>Pipeline</span>
+            <span className="text-[#F7BC5F]/70 font-light">·</span>
+            <span className="text-white/90">{currentAgency?.name}</span>
           </h1>
 
-          <p className="text-xs text-gray-400 mt-1">
-            Configuration indépendante de cette société.
+          <p className="text-xs text-slate-400 mt-1">
+            Configuration et flux d'affaires de cette société.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="relative z-10 flex flex-wrap items-center gap-2">
           <select
             value={
               activePipelineId
@@ -1975,7 +1975,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                 event.target.value
               )
             }
-            className="px-3 py-2 rounded-xl bg-[#0b1719] border border-white/10 text-xs text-white"
+            className="px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-white font-medium hover:border-[#F7BC5F]/50 shadow-inner transition-colors outline-none cursor-pointer"
           >
             {pipelines.map(
               (pipeline) => (
@@ -1986,6 +1986,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                   value={
                     pipeline.id
                   }
+                  className="bg-[#0b1719] text-white"
                 >
                   {
                     pipeline.name
@@ -1999,10 +2000,10 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
             onClick={setPipelineAsDefault}
             disabled={isActivePipelineDefault}
             title={isActivePipelineDefault ? 'Ce pipeline est déjà votre pipeline par défaut' : 'Définir comme pipeline par défaut'}
-            className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all ${
               isActivePipelineDefault
-                ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F] cursor-default'
-                : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white cursor-pointer'
+                ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F] cursor-default shadow-sm'
+                : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 hover:text-white cursor-pointer active:scale-95'
             }`}
           >
             <Star className={`w-3.5 h-3.5 ${isActivePipelineDefault ? 'fill-[#F7BC5F]' : ''}`} />
@@ -2020,7 +2021,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                   true
                 );
               }}
-              className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs flex items-center gap-1.5"
+              className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-200 hover:text-white hover:bg-white/10 hover:border-white/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
             >
               <Pencil className="w-3.5 h-3.5" />
               Renommer pipeline
@@ -2037,10 +2038,10 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                   ? 'Déverrouiller : son créateur pourra de nouveau le renommer ou le supprimer'
                   : "Verrouiller : personne d'autre ne pourra le renommer ni le supprimer"
               }
-              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all ${
                 activePipeline.verrouille
-                  ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F] hover:bg-[#F7BC5F]/25 cursor-pointer'
-                  : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white cursor-pointer'
+                  ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F] hover:bg-[#F7BC5F]/25 cursor-pointer shadow-sm'
+                  : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 hover:text-white cursor-pointer active:scale-95'
               }`}
             >
               <Shield className={`w-3.5 h-3.5 ${activePipeline.verrouille ? 'fill-[#F7BC5F]/40' : ''}`} />
@@ -2058,9 +2059,9 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                   true
                 );
               }}
-              className="px-3 py-2 rounded-xl bg-[#F7BC5F] text-black text-xs font-bold flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-[#E5A642] text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               Nouveau pipeline
             </button>
           )}
@@ -2072,7 +2073,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                   true
                 )
               }
-              className="px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-1.5"
+              className="px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 hover:bg-rose-500/20 text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Supprimer pipeline
@@ -2082,7 +2083,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           {/* Un pipeline qu'on ne peut pas modifier : on dit pourquoi, plutôt
               que de laisser chercher des boutons absents. */}
           {activePipeline && !peutRenommerOuSupprimerPipeline(activePipeline) && (
-            <span className="px-3 py-2 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 text-[#F9C977] text-xs flex items-center gap-1.5">
+            <span className="px-3 py-2 rounded-xl bg-[#F7BC5F]/10 border border-[#F7BC5F]/25 text-[#F9C977] text-xs font-semibold flex items-center gap-1.5 shadow-sm">
               <Shield className="w-3.5 h-3.5" />
               {estPipelineTransactions(versDroit(activePipeline)!)
                 ? 'Pipeline Transactions verrouillé'
@@ -2129,7 +2130,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           autoScroll={false}
         >
           {/* Sélecteur d'étape rapide pour mobile */}
-          <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-2 -mx-1 px-1 custom-scrollbar snap-x mb-2">
+          <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-2.5 -mx-1 px-1 custom-scrollbar snap-x mb-2">
             {activePipeline.stages.map((stage, idx) => {
               const stageDeals = dealsByStage.get(stage) || EMPTY_DEALS;
               const accentColor =
@@ -2143,11 +2144,11 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
                     const el = document.getElementById(`pipeline-stage-${stage}`);
                     el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#081e22]/95 border border-teal-500/20 text-slate-200 text-xs font-bold whitespace-nowrap shrink-0 snap-start active:scale-95 shadow-sm"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full nv-bento-dark border border-white/10 hover:border-[#F7BC5F]/40 text-slate-200 text-xs font-bold whitespace-nowrap shrink-0 snap-start active:scale-95 shadow-sm transition-all"
                 >
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />
+                  <span className="w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px_currentColor]" style={{ backgroundColor: accentColor, color: accentColor }} />
                   <span className="truncate max-w-[120px]">{stage}</span>
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/10 text-white font-black">
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/10 border border-white/15 text-white font-black shadow-inner">
                     {stageDeals.length}
                   </span>
                 </button>

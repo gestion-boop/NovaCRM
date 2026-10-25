@@ -4174,8 +4174,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       {/* Tabs — masqués sur mobile une fois une conversation ouverte, pour
           laisser toute la place au panneau de discussion. */}
       {(!isMobile || !mobileShowingConversation) && (
-      <div className={`flex items-center justify-between gap-3 ${isMobile ? 'px-3' : 'px-5'} py-2.5 border-b border-white/10 bg-[#061417]/90 backdrop-blur-xl shrink-0`}>
-        <div className={isMobile ? 'flex-1 min-w-0 grid grid-cols-3 gap-1 bg-[#040d0f] p-1 rounded-xl border border-white/10' : 'flex items-center min-w-0 bg-[#040d0f] p-1 rounded-xl border border-white/10 gap-1'}>
+      <div className={`relative nv-client-hero flex items-center justify-between gap-3 ${isMobile ? 'px-3' : 'px-5'} py-2.5 border-b border-white/10 shrink-0 overflow-hidden backdrop-blur-xl`}>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F] to-transparent opacity-85" />
+        <div className={isMobile ? 'relative z-10 flex-1 min-w-0 grid grid-cols-3 gap-1 bg-black/50 p-1 rounded-xl border border-white/10 shadow-inner' : 'relative z-10 flex items-center min-w-0 bg-black/50 p-1 rounded-xl border border-white/10 gap-1 shadow-inner'}>
           {TABS.map((t) => {
             const tabUnread = t.id === 'conversations'
               ? Object.values(unreadByConversation).reduce((sum, n) => sum + n, 0)
@@ -4188,7 +4189,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 onClick={() => setTab(t.id)}
                 className={`${isMobile ? 'w-full min-w-0 justify-center px-1.5 gap-1 text-xs' : 'shrink-0 px-3.5 gap-2 text-xs'} py-1.5 rounded-lg font-bold flex items-center transition-all cursor-pointer ${
                   tab === t.id
-                    ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
+                    ? 'bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-[#E5A642] text-slate-950 shadow-md font-black'
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -4205,7 +4206,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             );
           })}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="relative z-10 flex items-center gap-2 shrink-0">
           {isSuperAdmin && (
             <button
               onClick={ouvrirDocuments}
@@ -4222,9 +4223,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               onClick={() => { setShowNewConvModal(true); ensureProfilesLoaded(); }}
               aria-label="Nouvelle conversation"
               title="Nouvelle conversation"
-              className={`shrink-0 ${isMobile ? 'w-9 h-9 rounded-xl justify-center' : 'px-3.5 py-1.5 rounded-xl gap-1.5'} text-xs font-bold bg-[#F7BC5F] text-slate-950 hover:brightness-110 flex items-center shadow-sm transition-all active:scale-95 cursor-pointer`}
+              className={`shrink-0 ${isMobile ? 'w-9 h-9 rounded-xl justify-center' : 'px-3.5 py-1.5 rounded-xl gap-1.5'} text-xs font-black bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-[#E5A642] text-slate-950 hover:brightness-110 flex items-center shadow-md transition-all active:scale-95 cursor-pointer`}
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 stroke-[2.5]" />
               {!isMobile && 'Nouveau message'}
             </button>
           )}
@@ -4235,7 +4236,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       <div className="flex-1 flex min-h-0">
         {/* Folder tree */}
         {tab === 'projets' && (!isMobile || !activeChannel) && (
-          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-white/10 bg-[#061417]/70 overflow-y-auto custom-scrollbar p-3 space-y-1.5`}>
+          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-white/10 bg-black/35 backdrop-blur-md overflow-y-auto custom-scrollbar p-3 space-y-1.5`}>
             <div className="flex items-center justify-between px-2 py-1 mb-1">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Dossiers & Canaux</span>
               {isAdmin && (
@@ -4348,7 +4349,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
         {/* Conversations list */}
         {tab === 'conversations' && (!isMobile || !activeConversationId) && (
-          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-white/10 bg-[#061417]/70 overflow-y-auto custom-scrollbar p-3 space-y-1.5`}>
+          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-white/10 bg-black/35 backdrop-blur-md overflow-y-auto custom-scrollbar p-3 space-y-1.5`}>
             <div className="relative mb-2">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -4427,7 +4428,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     sans jamais reprendre ce padding — il se retrouvait sous
                     l'encoche/la barre de statut, invisible et inatteignable
                     sur mobile. */}
-                <div className={`px-5 py-3.5 border-b border-teal-500/20 bg-[#071317]/85 backdrop-blur-md shadow-sm flex items-center gap-2.5 ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
+                <div className={`relative nv-client-hero px-5 py-3.5 border-b border-white/10 shadow-sm flex items-center gap-2.5 overflow-hidden backdrop-blur-xl ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/60 to-transparent" />
                   {isMobile && (
                     <button onClick={goBackToList} aria-label="Revenir à la liste" className="p-3 -ml-2 mr-0.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
                       <ArrowLeft className="w-5 h-5" />
@@ -5152,8 +5154,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             ) : (
               <div className="flex-1 flex items-center justify-center p-6">
                 <div className="text-center max-w-sm">
-                  <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mx-auto mb-3.5">
-                    <MessageSquare className="w-5 h-5 text-[#F7BC5F]" />
+                  <div className="w-12 h-12 rounded-2xl nv-bento-gold border border-[#F7BC5F]/40 flex items-center justify-center mx-auto mb-3.5 shadow-md">
+                    <MessageSquare className="w-5 h-5 text-[#FAD592]" />
                   </div>
                   <h3 className="text-base font-bold text-white mb-1">Sélectionnez une discussion</h3>
                   <p className="text-xs text-slate-400 leading-relaxed">
@@ -5164,7 +5166,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             )
           ) : activeChannel ? (
             <>
-              <div className={`px-5 py-3.5 border-b border-teal-500/20 bg-[#071317]/85 backdrop-blur-md shadow-sm flex items-center gap-2.5 ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
+              <div className={`relative nv-client-hero px-5 py-3.5 border-b border-white/10 shadow-sm flex items-center gap-2.5 overflow-hidden backdrop-blur-xl ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/60 to-transparent" />
                 {isMobile && (
                   <button onClick={goBackToList} aria-label="Revenir à la liste" className="p-3 -ml-2 mr-0.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
                     <ArrowLeft className="w-5 h-5" />

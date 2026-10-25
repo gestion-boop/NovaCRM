@@ -627,17 +627,18 @@ export const SupportView: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 text-white">
-      {/* Signalé (30/08/2026, capture à l'appui) : "mets un fond car on ne
-          voit pas les textes" — même correctif que les autres pages
-          (Notes/Documents/Caméra/Agenda). */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#0a1e20]/95 border border-white/10 rounded-2xl p-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-500/20 border border-slate-500/30 text-slate-300 flex items-center justify-center font-bold">
+      {/* Signalé (30/08/2026, capture à l'appui) : bandeau d'en-tête Support avec le design unifié Noir & Or / Novavisio */}
+      <div className="relative nv-card-hero rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 overflow-hidden backdrop-blur-xl">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F] to-transparent opacity-85" />
+        <div className="relative z-10 flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl nv-bento-gold border border-[#F7BC5F]/40 text-[#FAD592] flex items-center justify-center font-bold shadow-sm">
             <LifeBuoy className="w-5 h-5 text-[#F9C977]" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">Support</h1>
-            <p className="text-xs text-gray-400">
+            <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+              <span>Support & Assistance</span>
+            </h1>
+            <p className="text-xs text-slate-400 mt-0.5">
               {showArchived
                 ? 'Tickets archivés.'
                 : isAdmin ? 'Tous les tickets — déplacez-les vers "En cours" puis "Terminé".' : 'Vos demandes d\'assistance et leur suivi.'}
@@ -645,14 +646,14 @@ export const SupportView: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="relative z-10 flex items-center gap-2 shrink-0">
           {isSylvain && (
             <a
               href="https://test.nova360.space"
               target="_blank"
               rel="noopener noreferrer"
               title="Ouvrir la version Test pour vérifier les correctifs de Nova avant de valider"
-              className="text-xs font-semibold px-3.5 py-2 rounded-xl border bg-purple-500/15 border-purple-500/30 text-purple-300 hover:bg-purple-500/25 flex items-center gap-1.5 transition-all"
+              className="text-xs font-semibold px-3.5 py-2 rounded-xl border bg-purple-500/15 border-purple-500/30 text-purple-300 hover:bg-purple-500/25 flex items-center gap-1.5 transition-all shadow-sm"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               Version Test
@@ -660,19 +661,17 @@ export const SupportView: React.FC = () => {
           )}
           <button
             onClick={() => setShowCreate(true)}
-            className="bg-[#F7BC5F] hover:bg-[#d9ab38] text-black font-semibold text-xs px-4 py-2 rounded-xl flex items-center gap-2"
+            className="bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-[#E5A642] text-slate-950 font-black text-xs px-4 py-2 rounded-xl flex items-center gap-2 shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>Ouvrir un ticket</span>
           </button>
-          {/* Ticket #112 : dossier d'archive discret, tout à droite — plus
-              une colonne ni un bouton texte au même niveau que les actions
-              principales, juste une icône repliée qui bascule la vue. */}
+          {/* Ticket #112 : dossier d'archive discret, tout à droite */}
           <button
             onClick={() => setShowArchived((v) => !v)}
             title={showArchived ? 'Voir les tickets actifs' : 'Tickets archivés'}
-            className={`p-2 rounded-xl border transition-all ${
-              showArchived ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F]' : 'bg-white/5 border-white/10 text-gray-500 hover:text-gray-300 hover:bg-white/10'
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${
+              showArchived ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 text-[#F7BC5F] shadow-sm' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
             }`}
           >
             <Archive className="w-3.5 h-3.5" />
@@ -714,13 +713,17 @@ export const SupportView: React.FC = () => {
                 setDraggedTicketId(null);
                 if (ticket) void setTicketStatus(ticket, col.value);
               }}
-              className={`bg-[#0a1e20]/95 border rounded-2xl p-3 space-y-2 min-h-[200px] transition-colors ${
-                dragOverColumn === col.value ? 'border-[#F7BC5F]/60 bg-[#F7BC5F]/20' : 'border-white/10'
+              className={`nv-bento-dark border rounded-2xl p-3.5 space-y-2.5 min-h-[220px] transition-all shadow-md relative overflow-hidden ${
+                dragOverColumn === col.value ? 'border-[#F7BC5F] ring-2 ring-[#F7BC5F]/40 bg-[#F7BC5F]/20' : 'border-white/10'
               }`}
             >
-              <div className="flex items-center justify-between px-1 pb-1">
-                <h3 className="text-xs font-bold text-white">{col.label}</h3>
-                <span className="text-[10px] text-gray-500">{ticketsByStatus(col.value).length}</span>
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/50 to-transparent" />
+              <div className="flex items-center justify-between px-1 pb-1.5 border-b border-white/[0.08]">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#F7BC5F] shadow-[0_0_8px_rgba(247,188,95,0.7)]" />
+                  <h3 className="text-xs font-bold text-white tracking-wide">{col.label}</h3>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/10">{ticketsByStatus(col.value).length}</span>
               </div>
               {ticketsByStatus(col.value).map((ticket) => {
                 const pMeta = priorityMeta(ticket.priority);
@@ -737,24 +740,25 @@ export const SupportView: React.FC = () => {
                       setDragOverColumn(null);
                     }}
                     onClick={() => setSelectedTicketId(ticket.id)}
-                    className={`relative w-full text-left p-3 rounded-xl bg-[#0b1719] border border-white/10 hover:border-[#F7BC5F]/40 transition-all cursor-grab active:cursor-grabbing ${
+                    className={`group relative w-full text-left p-3.5 rounded-xl bg-gradient-to-b from-white/[0.07] via-white/[0.02] to-black/60 border border-white/10 hover:border-[#F7BC5F]/50 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.6),0_0_16px_rgba(247,188,95,0.14)] transition-all cursor-grab active:cursor-grabbing backdrop-blur-md overflow-hidden ${
                       draggedTicketId === ticket.id ? 'opacity-40' : ''
                     }`}
                   >
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/10 to-transparent group-hover:via-[#F7BC5F]/40 transition-all" />
                     <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
                       <span className={`text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${pMeta.classes}`}>
                         {pMeta.label}
                       </span>
-                      <span className="text-[9px] text-gray-500">{categoryLabel(ticket.category)}</span>
+                      <span className="text-[9px] text-gray-400 font-medium">{categoryLabel(ticket.category)}</span>
                       {ticket.attachments.length > 0 && (
-                        <span className="text-[9px] text-gray-500 flex items-center gap-0.5"><Paperclip className="w-2.5 h-2.5" />{ticket.attachments.length}</span>
+                        <span className="text-[9px] text-gray-400 flex items-center gap-0.5"><Paperclip className="w-2.5 h-2.5" />{ticket.attachments.length}</span>
                       )}
                       {!!messageCounts[ticket.id] && (
-                        <span className="text-[9px] text-gray-500 flex items-center gap-0.5"><MessageCircle className="w-2.5 h-2.5" />{messageCounts[ticket.id]}</span>
+                        <span className="text-[9px] text-gray-400 flex items-center gap-0.5"><MessageCircle className="w-2.5 h-2.5" />{messageCounts[ticket.id]}</span>
                       )}
                     </div>
-                    <h4 className="text-xs font-bold text-white">{ticket.title}</h4>
-                    <p className="text-[10px] text-gray-500 mt-1">{ticket.createdByName || 'Utilisateur'}</p>
+                    <h4 className="text-xs font-bold text-white group-hover:text-[#FAD592] transition-colors leading-snug">{ticket.title}</h4>
+                    <p className="text-[10px] text-gray-400 mt-1">{ticket.createdByName || 'Utilisateur'}</p>
 
                     {col.value !== 'ferme' && (
                       <div
@@ -763,7 +767,7 @@ export const SupportView: React.FC = () => {
                           e.stopPropagation();
                           void advanceStatus(ticket);
                         }}
-                        className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-[#F7BC5F] hover:underline"
+                        className="mt-2.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#F7BC5F] hover:underline"
                       >
                         {col.value === 'ouvert' ? 'Passer en cours' : 'Terminer'}
                         <ArrowRight className="w-3 h-3" />
@@ -784,18 +788,19 @@ export const SupportView: React.FC = () => {
               <button
                 key={ticket.id}
                 onClick={() => setSelectedTicketId(ticket.id)}
-                className="w-full text-left p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-[#F7BC5F]/40 transition-all"
+                className="group relative w-full text-left p-4 sm:p-5 nv-bento-dark border border-white/10 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-[#F7BC5F]/50 hover:shadow-[0_10px_30px_-5px_rgba(0,0,0,0.6),0_0_18px_rgba(247,188,95,0.12)] transition-all overflow-hidden"
               >
-                <div>
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/40 to-transparent" />
+                <div className="relative z-10">
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/35 shadow-sm">
                       {statusLabel(ticket.status)}
                     </span>
                     <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${pMeta.classes}`}>{pMeta.label}</span>
                     <span className="text-[10px] text-gray-400">Ouvert le {new Date(ticket.createdAt).toLocaleDateString('fr-FR')}</span>
                   </div>
-                  <h3 className="font-bold text-white text-sm">{ticket.title}</h3>
-                  <p className="text-xs text-gray-400 mt-1 line-clamp-2">{ticket.description}</p>
+                  <h3 className="font-bold text-white group-hover:text-[#FAD592] transition-colors text-sm">{ticket.title}</h3>
+                  <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">{ticket.description}</p>
                 </div>
               </button>
             );

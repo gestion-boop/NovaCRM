@@ -1549,8 +1549,8 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start min-w-0 w-full">
         <div className="space-y-5 min-w-0 w-full">
           {/* Formulaire de composition d'annonce */}
-          <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] via-white/[0.02] to-transparent backdrop-blur-xl p-4 sm:p-6 space-y-4 shadow-[0_10px_35px_rgba(0,0,0,0.35)] relative overflow-hidden min-w-0 w-full">
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#F7BC5F]/40 to-transparent pointer-events-none" />
+          <div className="rounded-2xl nv-activity-shell p-4 sm:p-6 space-y-4 shadow-xl relative overflow-hidden min-w-0 w-full backdrop-blur-xl">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F] to-transparent opacity-85" />
 
             <div className="flex items-center justify-between pb-2 border-b border-white/[0.08] min-w-0 gap-2 flex-wrap">
               <div className="flex items-center gap-2 min-w-0">
@@ -1908,7 +1908,8 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
         </div>
 
         {/* Panneau historique des annonces */}
-        <div className={`rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-4 sm:p-5 space-y-3 shadow-[0_8px_30px_rgba(0,0,0,0.25)] min-w-0 w-full ${showPastAnnouncements ? 'lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto custom-scrollbar' : ''}`}>
+        <div className={`rounded-2xl nv-bento-dark p-4 sm:p-5 space-y-3.5 shadow-xl min-w-0 w-full relative overflow-hidden backdrop-blur-xl ${showPastAnnouncements ? 'lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto custom-scrollbar' : ''}`}>
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/50 to-transparent" />
             <button
               type="button"
               onClick={() => setShowPastAnnouncements((v) => !v)}
@@ -1954,7 +1955,8 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
                   const readers = announcementReaders[a.id] || [];
                   const isOpen = expandedAnnouncementId === a.id;
                   return (
-                    <div key={a.id} className="rounded-xl border border-white/10 bg-black/40 hover:border-white/20 transition-all overflow-hidden shadow-sm">
+                    <div key={a.id} className="group/item relative rounded-xl border border-white/10 bg-black/50 hover:border-[#F7BC5F]/40 transition-all overflow-hidden shadow-sm">
+                      <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent group-hover/item:via-[#F7BC5F]/40 transition-all" />
                       <div className="w-full flex items-center gap-2 px-3.5 py-3">
                         <button
                           type="button"

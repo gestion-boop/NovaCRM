@@ -579,7 +579,7 @@ main[class*="bg-[#071015]/55" i] {
    dire s'il est périmé — à lancer après avoir ajouté un écran. */
 /* @generated:theme-surfaces:start — ne pas éditer à la main, voir scripts/theme-surfaces.mjs */
 /* ── Fonds sombres écrits en dur dans les composants → jeton de surface ──
-   70 teintes recensées automatiquement dans src/ (voir
+   68 teintes recensées automatiquement dans src/ (voir
    scripts/theme-surfaces.mjs). Le sélecteur ne cite PAS la valeur finale :
    il pose un jeton, redéfini une seule fois par thème plus haut dans ce
    fichier. Une même liste sert donc au mode nuit et au mode jour. */
@@ -587,7 +587,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#030d0f" i],
 [class*="bg-[#031112" i],
 [class*="bg-[#031113" i],
-[class*="bg-[#040d0f" i],
 [class*="bg-[#041316" i],
 [class*="bg-[#041416" i],
 [class*="bg-[#050c0f" i],
@@ -598,7 +597,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#051417" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
-[class*="bg-[#061417" i],
 [class*="bg-[#061719" i],
 [class*="bg-[#06181b" i],
 [class*="bg-[#06191c" i],
@@ -677,7 +675,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#030d0f" i],
 [class*="bg-[#031112" i],
 [class*="bg-[#031113" i],
-[class*="bg-[#040d0f" i],
 [class*="bg-[#041316" i],
 [class*="bg-[#041416" i],
 [class*="bg-[#050c0f" i],
@@ -688,7 +685,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#051417" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
-[class*="bg-[#061417" i],
 [class*="bg-[#061719" i],
 [class*="bg-[#06181b" i],
 [class*="bg-[#06191c" i],
@@ -749,7 +745,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#030d0f" i],
 [class*="bg-[#031112" i],
 [class*="bg-[#031113" i],
-[class*="bg-[#040d0f" i],
 [class*="bg-[#041316" i],
 [class*="bg-[#041416" i],
 [class*="bg-[#050c0f" i],
@@ -760,7 +755,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#051417" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
-[class*="bg-[#061417" i],
 [class*="bg-[#061719" i],
 [class*="bg-[#06181b" i],
 [class*="bg-[#06191c" i],
@@ -1380,13 +1374,22 @@ textarea[class]:not([class~="bg-transparent"]) {
    supprimé) pour rester utilisable partout où l'écran Nova IA s'ouvre. */
 @keyframes novaRainbowSpin { to { transform: rotate(360deg); } }
 
-/* ── 10. Surfaces dégradées Noir & Or / Jaune (Mode Sombre — Fiche Client) ── */
+/* ── 10. Surfaces dégradées Noir & Or / Jaune (Mode Sombre — Fiche Client, Pipelines, Support, Annonce, Chat) ── */
 :root:not(.light-mode) .nv-client-hero {
   background:
     radial-gradient(ellipse 65% 120% at 8% -10%, rgba(247, 188, 95, 0.22) 0%, rgba(250, 204, 21, 0.08) 42%, transparent 72%),
     radial-gradient(ellipse 50% 90% at 92% 0%, rgba(247, 188, 95, 0.14) 0%, transparent 65%),
     linear-gradient(180deg, #08090b 0%, #050709 60%, #090805 100%) !important;
   border-bottom: 1px solid rgba(247, 188, 95, 0.28) !important;
+}
+
+:root:not(.light-mode) .nv-card-hero {
+  background:
+    radial-gradient(ellipse 65% 120% at 8% -10%, rgba(247, 188, 95, 0.22) 0%, rgba(250, 204, 21, 0.08) 42%, transparent 72%),
+    radial-gradient(ellipse 50% 90% at 92% 0%, rgba(247, 188, 95, 0.14) 0%, transparent 65%),
+    linear-gradient(180deg, #08090b 0%, #050709 60%, #090805 100%) !important;
+  border: 1px solid rgba(247, 188, 95, 0.28) !important;
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.8), 0 0 24px -6px rgba(247, 188, 95, 0.12);
 }
 
 :root:not(.light-mode) .nv-bento-gold {
@@ -1431,6 +1434,7 @@ textarea[class]:not([class~="bg-transparent"]) {
 }
 
 .light-mode .nv-client-hero,
+.light-mode .nv-card-hero,
 .light-mode .nv-bento-gold,
 .light-mode .nv-bento-dark,
 .light-mode .nv-activity-shell {
@@ -1512,13 +1516,22 @@ html.agency-novavisio:not(.light-mode) .dash-card:hover {
   box-shadow: 0 12px 32px -8px rgba(3, 12, 26, 0.8), 0 0 0 1px rgba(56, 189, 248, 0.48), 0 0 26px rgba(27, 125, 143, 0.35) !important;
 }
 
-/* Fiche Client en mode NovaVisio : dégradés Teal-Cyan & Bleu Cobalt du logo */
+/* Fiche Client, Pipelines, Support, Annonces, Chat en mode NovaVisio : dégradés Teal-Cyan & Bleu Cobalt du logo */
 html.agency-novavisio:not(.light-mode) .nv-client-hero {
   background:
     radial-gradient(ellipse 65% 120% at 8% -10%, rgba(34, 211, 238, 0.26) 0%, rgba(38, 76, 138, 0.16) 45%, transparent 75%),
     radial-gradient(ellipse 50% 90% at 92% 0%, rgba(38, 76, 138, 0.28) 0%, transparent 65%),
     linear-gradient(180deg, #071e2f 0%, #061828 58%, #0b1c36 100%) !important;
   border-bottom: 1px solid rgba(56, 189, 248, 0.32) !important;
+}
+
+html.agency-novavisio:not(.light-mode) .nv-card-hero {
+  background:
+    radial-gradient(ellipse 65% 120% at 8% -10%, rgba(34, 211, 238, 0.26) 0%, rgba(38, 76, 138, 0.16) 45%, transparent 75%),
+    radial-gradient(ellipse 50% 90% at 92% 0%, rgba(38, 76, 138, 0.28) 0%, transparent 65%),
+    linear-gradient(180deg, #071e2f 0%, #061828 58%, #0b1c36 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.32) !important;
+  box-shadow: 0 16px 40px -10px rgba(2, 10, 22, 0.8), 0 0 24px -6px rgba(34, 211, 238, 0.14) !important;
 }
 
 html.agency-novavisio:not(.light-mode) .nv-bento-gold {
