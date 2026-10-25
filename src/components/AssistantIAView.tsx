@@ -704,6 +704,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   // l'API, voir plus bas). "Effacer" ne fait donc plus qu'un ménage visuel :
   // Nova continue de savoir tout ce qui a été dit, même après un effacement.
   const novaFullHistoryRef = useRef<{ sender: 'user' | 'ai'; text: string }[]>([]);
+  // Messages persistés avant que novaThreadIdRef ne soit résolu (voir
+  // persistNovaMessage et l'effet de chargement de l'historique) — écrits
+  // en base dès que le fil est prêt, au lieu d'être perdus silencieusement.
+  const pendingPersistQueueRef = useRef<{ role: 'user' | 'assistant'; content: string }[]>([]);
   useEffect(() => {
     if (!currentUser?.uid || novaHistoryLoadedRef.current) return;
     novaHistoryLoadedRef.current = true;
@@ -728,15 +732,47 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         }
         if (!threadId) return;
         novaThreadIdRef.current = threadId;
+        // Signalé en revue (25 octobre) : si un message initial (barre
+        // NovaAI de l'accueil) a été envoyé avant que ce fil ne soit résolu
+        // (toujours le cas, ces 2-3 allers-retours Supabase prenant plus de
+        // temps que l'appel à handleSendMessage qui suit immédiatement le
+        // montage), persistNovaMessage ci-dessous l'a mis en file d'attente
+        // faute de threadId — on l'écrit maintenant pour de bon.
+        if (pendingPersistQueueRef.current.length > 0 && currentUser?.uid) {
+          const enAttente = pendingPersistQueueRef.current;
+          pendingPersistQueueRef.current = [];
+          enAttente.forEach(({ role, content }) => {
+            supabase
+              .from('assistant_messages' as any)
+              .insert({ thread_id: threadId, user_id: currentUser.uid, role, content } as any)
+              .then(() => {}, (err: any) => console.warn('Erreur sauvegarde message Nova (file) :', err));
+          });
+          supabase
+            .from('assistant_threads' as any)
+            .update({ last_message_at: new Date().toISOString() } as any)
+            .eq('id', threadId)
+            .then(() => {}, () => {});
+        }
 
+        // Signalé en revue (25 octobre) : triait les 200 PLUS ANCIENS
+        // messages du fil (ascending: true + limit), jamais les plus
+        // récents — dès qu'un fil dépasse 200 messages (environ 100
+        // échanges, vite atteint sur un fil continu par utilisateur),
+        // ouvrir Nova (ex: depuis la mini-popup agrandie en plein écran)
+        // affichait une conversation vieille de plusieurs semaines au lieu
+        // de la conversation en cours. Trié en ordre décroissant pour
+        // obtenir les 200 plus récents, puis remis en ordre chronologique
+        // juste en dessous.
         const { data: history } = await supabase
           .from('assistant_messages' as any)
           .select('role, content, created_at')
           .eq('thread_id', threadId)
-          .order('created_at', { ascending: true })
+          .order('created_at', { ascending: false })
           .limit(200);
 
-        const restored = ((history || []) as any[]).map((m, i) => ({
+        const historyChronologique = ((history || []) as any[]).slice().reverse();
+
+        const restored = historyChronologique.map((m, i) => ({
           id: `hist-${i}-${m.created_at}`,
           sender: (m.role === 'user' ? 'user' : 'ai') as 'user' | 'ai',
           text: m.content as string,
@@ -750,7 +786,20 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         // n'est désormais chargé dans la mémoire envoyée à l'IA que si on
         // N'est PAS en ouverture fraîche. L'historique reste en base
         // (assistant_messages n'est pas touché, juste pas relu ici).
-        novaFullHistoryRef.current = startFresh ? [] : restored.map((m) => ({ sender: m.sender, text: m.text }));
+        // Signalé en revue (25 octobre) : ceci ÉCRASAIT novaFullHistoryRef
+        // au lieu de le compléter — si un message initial (barre NovaAI de
+        // l'accueil) avait déjà été envoyé pendant que cet effet chargeait
+        // (toujours le cas, handleSendMessage se déclenche dès le montage,
+        // avant la fin de ces 2-3 allers-retours Supabase), persistNovaMessage
+        // l'avait déjà ajouté au ref ; cette ligne le remplaçait purement et
+        // simplement par l'historique restauré (qui ne le contient pas
+        // encore), effaçant le premier message de la mémoire de Nova sans
+        // qu'il soit jamais enregistré en base. Fusionné au lieu d'écraser :
+        // l'historique restauré vient AVANT (plus ancien), ce qui est déjà
+        // dans le ref (ajouté entre-temps) reste APRÈS.
+        novaFullHistoryRef.current = startFresh
+          ? novaFullHistoryRef.current
+          : [...restored.map((m) => ({ sender: m.sender, text: m.text })), ...novaFullHistoryRef.current];
 
         // Historique restauré = on remplace le message d'accueil générique
         // (déjà présent dans une session précédente, sinon ce serait un
@@ -774,7 +823,17 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
 
   const persistNovaMessage = (role: 'user' | 'assistant', content: string) => {
     novaFullHistoryRef.current = [...novaFullHistoryRef.current, { sender: role === 'user' ? 'user' : 'ai', text: content }];
-    if (!currentUser?.uid || !novaThreadIdRef.current || !content.trim()) return;
+    if (!currentUser?.uid || !content.trim()) return;
+    if (!novaThreadIdRef.current) {
+      // Signalé en revue (25 octobre) : jusqu'ici, l'insert était
+      // simplement sauté en silence si appelé avant que le fil ne soit
+      // résolu (cas du tout premier message, envoyé depuis la barre
+      // NovaAI de l'accueil avant la fin du chargement/création du fil) —
+      // mis en file pour être écrit dès que novaThreadIdRef se résout (voir
+      // l'effet de chargement de l'historique plus haut).
+      pendingPersistQueueRef.current.push({ role, content });
+      return;
+    }
     const threadId = novaThreadIdRef.current;
     supabase
       .from('assistant_messages' as any)
@@ -1972,6 +2031,12 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           : 'tiede';
         const notes = typeof args.notes === 'string' ? args.notes : '';
         const agencyId = typeof args.agencyId === 'string' ? args.agencyId : activeAgency.id;
+        // Signalé en revue (25 octobre) : la carte de confirmation affichait
+        // encore la valeur brute de l'enum ('tiede', sans accent) alors que
+        // la fiche elle-même affiche désormais le libellé converti
+        // ci-dessous ('Tiède') — calculé une seule fois, réutilisé pour
+        // l'enregistrement ET pour le texte affiché.
+        const statusLabel = ({ chaud: 'Chaud', tiede: 'Tiède', froid: 'Froid' } as const)[status];
 
         const createdContact = await addContact.mutateAsync({
           name: contactName,
@@ -1982,7 +2047,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           // fiche contact attend les libellés du CRM : sans conversion, le
           // contact créé par Nova portait un statut qui ne correspondait à
           // aucun filtre de l'écran Clients.
-          status: ({ chaud: 'Chaud', tiede: 'Tiède', froid: 'Froid' } as const)[status],
+          status: statusLabel,
           // Signalé (24 octobre) : « la note n'a pas été prise en compte » —
           // ce champ allait dans la colonne `notes`, jamais lue par la fiche
           // client (elle n'affiche que `comments`, voir useContacts.ts) ni
@@ -2011,7 +2076,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           action: {
             type: 'contact',
             title: `Contact créé : ${contactName}`,
-            details: `Tél: ${phone || 'N/C'} • Email: ${email || 'N/C'} • Statut: ${status}${notes.trim() ? ` • Note: ${notes.trim()}` : ''}`,
+            details: `Tél: ${phone || 'N/C'} • Email: ${email || 'N/C'} • Statut: ${statusLabel}${notes.trim() ? ` • Note: ${notes.trim()}` : ''}`,
             contactId: createdContact?.id,
           }
         };
@@ -2474,7 +2539,14 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           // novaFullHistoryRef (pas `messages`, ce qui est affiché à l'écran)
           // — pour que Nova tienne compte de tout l'historique même après
           // un "Effacer l'historique" purement visuel (voir handleClearHistory).
-          messages: novaFullHistoryRef.current,
+          // Signalé en revue (25 octobre) : persistNovaMessage('user', ...),
+          // juste au-dessus, a déjà ajouté CE message en dernière position
+          // du ref — l'envoyer tel quel ET dans `prompt` faisait recevoir le
+          // même texte deux fois côté serveur (qui pousse aussi `prompt`
+          // comme tour "user", agent.ts ligne ~1061). `.slice(0, -1)` retire
+          // ce doublon : `messages` ne porte que l'historique ANTÉRIEUR à ce
+          // tour, `prompt` reste l'unique porteur du tour en cours.
+          messages: novaFullHistoryRef.current.slice(0, -1),
           context: {
             currentDate: format(new Date(), 'yyyy-MM-dd HH:mm'),
             // Signalé : "Nova ne peut pas me donner les tâches de lundi" —
