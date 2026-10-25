@@ -57,14 +57,23 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
       const isNearBottom = maxScroll - top < 80;
 
+      // Signalé en revue (25 octobre) : `lastScrollTopRef` était réassigné à
+      // CHAQUE événement scroll, même quand aucun des seuils n'était
+      // franchi — un défilement lent (un événement par image, donc par ex.
+      // ~2-3px à 60Hz) ne faisait alors jamais franchir le seuil, les petits
+      // écarts ne s'additionnant jamais. On ne déplace maintenant l'ancre
+      // que lorsqu'un seuil est vraiment franchi (ou tout en haut/bas), pour
+      // que les écarts dans le même sens se cumulent entre deux mises à jour.
       if (top <= 32 || isNearBottom) {
         setVisible(true);
+        lastScrollTopRef.current = top;
       } else if (delta > 15) {
         setVisible(false);
+        lastScrollTopRef.current = top;
       } else if (delta < -8) {
         setVisible(true);
+        lastScrollTopRef.current = top;
       }
-      lastScrollTopRef.current = top;
 
       if (autoShowTimer) clearTimeout(autoShowTimer);
       autoShowTimer = setTimeout(() => {

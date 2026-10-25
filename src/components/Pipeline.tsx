@@ -13,7 +13,7 @@ import {
   DragOverlay,
   DragStartEvent,
   DragEndEvent,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
@@ -761,8 +761,17 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
   // Ticket #114/#116 (suivi) : glisser-déposer @dnd-kit — mêmes réglages de
   // capteurs que les tuiles de l'accueil (distance de 8px avant activation à
   // la souris, léger délai au toucher pour ne pas voler le scroll tactile).
+  // Signalé en revue (25 octobre) : le navigateur envoie toujours
+  // `pointerdown` avant `touchstart` sur un écran tactile, et l'activateur de
+  // PointerSensor accepte tout pointeur principal sans regarder
+  // `pointerType` — c'est donc TOUJOURS PointerSensor qui prenait la main
+  // sur un toucher, et le `delay`/`tolerance` de TouchSensor ci-dessous
+  // n'avait jamais d'effet. MouseSensor n'écoute, lui, que les événements
+  // souris : le toucher revient à TouchSensor, et son délai de 200ms
+  // s'applique enfin (appelle aussi preventDefault sur touchmove une fois
+  // activé, ce qui annule le scroll natif concurrent).
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
   );
   const [activeDragDeal, setActiveDragDeal] = useState<Deal | null>(null);
@@ -1436,9 +1445,12 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
       const name =
         newStageName.trim();
 
+      // Signalé en revue (25 octobre) : sensible à la casse ici alors que le
+      // rapprochement par nom dans updatePipelineConfig ne l'est pas —
+      // « en cours » passait donc à côté d'une colonne « En cours » existante.
       if (
-        activePipeline.stages.includes(
-          name
+        activePipeline.stages.some(
+          (stage) => stage.trim().toLowerCase() === name.toLowerCase()
         )
       ) {
         setError(
@@ -1502,6 +1514,21 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
       }
 
       const newName = renameStageValue.trim();
+
+      // Signalé en revue (25 octobre) : sans ce contrôle, renommer une
+      // colonne avec le nom d'une autre colonne du même pipeline créait deux
+      // étapes identiques (clés React en double, deux droppables de même id,
+      // dossiers mélangés) — et `updatePipelineConfig` rapprochant déjà les
+      // lignes par nom insensible à la casse, la ligne orpheline héritait du
+      // nom en double en base aussi. Même règle qu'à l'ajout ci-dessus.
+      if (
+        activePipeline.stages.some(
+          (stage) => stage !== stageToRename && stage.trim().toLowerCase() === newName.toLowerCase()
+        )
+      ) {
+        setError('Cette colonne existe déjà.');
+        return;
+      }
 
       try {
         setError(null);
@@ -1713,6 +1740,13 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     if (event.active.data.current?.type === 'card') {
       const deal = agencyDeals.find((d) => d.id === String(event.active.id));
       setActiveDragDeal(deal || null);
+    } else {
+      // Signalé en revue (25 octobre) : sans ce `else`, démarrer le
+      // déplacement d'une COLONNE pendant qu'un `activeDragDeal` d'un
+      // glisser de carte précédent (annulé, voir onDragCancel ci-dessous)
+      // traînait encore, affichait le clone flottant de cet ancien dossier
+      // par-dessus le déplacement de la colonne.
+      setActiveDragDeal(null);
     }
   };
 
@@ -2119,6 +2153,13 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           collisionDetection={detecterColonneDeDepot}
           onDragStart={handlePipelineDragStart}
           onDragEnd={(event) => void handlePipelineDragEnd(event)}
+          // Signalé en revue (25 octobre) : dnd-kit appelle onDragCancel (pas
+          // onDragEnd) sur Échap, un redimensionnement, un passage de l'onglet
+          // en arrière-plan, ou un pointercancel — ce dernier cas est devenu
+          // fréquent au toucher. `activeDragDeal` restait alors à son ancienne
+          // valeur et continuait de s'afficher comme clone flottant lors d'un
+          // déplacement ultérieur.
+          onDragCancel={() => setActiveDragDeal(null)}
           // Ticket #114 (suivi) : la ligne des colonnes a un scroll-snap
           // CSS (pour le swipe mobile entre colonnes, ticket #93) — le
           // défilement automatique par défaut de dnd-kit essayait de
@@ -2163,7 +2204,18 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
               // snap-x/snap-mandatory fait que chaque swipe se bloque
               // proprement sur une colonne entière, centrée à l'écran
               // (snap-center sur chaque colonne ci-dessous).
-              className="flex gap-3 sm:gap-4 overflow-x-auto pb-6 -webkit-overflow-scrolling-touch touch-pan-x snap-x snap-mandatory scroll-px-4"
+              // Signalé en revue (25 octobre) : à partir de `sm:`, les
+              // colonnes passent en `sm:overflow-visible` (ligne ~444) — ce
+              // ne sont plus des conteneurs de scroll, donc le touch-action
+              // EFFECTIF d'une carte devient l'intersection avec le premier
+              // ancêtre qui en a un, ici cette rangée. `touch-pan-x` y
+              // interdisait alors tout défilement vertical de la page dès
+              // que le doigt touchait le kanban sur tablette. `sm:touch-auto`
+              // rend la main au navigateur à partir de ce palier (vertical OU
+              // horizontal selon le geste), sans toucher au comportement
+              // mobile voulu ci-dessus (colonnes elles-mêmes défilantes en
+              // dessous de 640px, qui réinitialisent l'héritage).
+              className="flex gap-3 sm:gap-4 overflow-x-auto pb-6 -webkit-overflow-scrolling-touch touch-pan-x sm:touch-auto snap-x snap-mandatory scroll-px-4"
             >
               {activePipeline.stages.map((stage, stageIndex) => {
                 const stageDeals = dealsByStage.get(stage) || EMPTY_DEALS;
