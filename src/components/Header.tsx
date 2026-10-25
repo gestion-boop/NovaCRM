@@ -114,7 +114,14 @@ export const Header: React.FC<
   };
 
   const normalizeAgencyName = (value?: string) => (value || '').trim().toLowerCase();
-  const estNovavisio = /novavisio/i.test(selectedAgencyName || activeAgency?.name || '');
+  const rawAgencyName = selectedAgencyName || activeAgency?.name || '';
+  const activeAgencyLabel = /novavisio/i.test(rawAgencyName)
+    ? 'NovaVisio'
+    : /immosphera/i.test(rawAgencyName)
+      ? 'ImmoSphera'
+      : /conseil/i.test(rawAgencyName)
+        ? 'Conseils Finances'
+        : 'Nova CRM';
   const currentAgencyLogo = agencyLogoByName[normalizeAgencyName(selectedAgencyName || activeAgency?.name)] || agencyLogoByName[normalizeAgencyName(activeAgency?.name)] || '/nova-mascotte.png';
 
   const {
@@ -211,8 +218,8 @@ export const Header: React.FC<
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <img
             data-tour="header-logo"
-            src={estNovavisio ? currentAgencyLogo : '/nova-mascotte.png'}
-            alt={estNovavisio ? 'NovaVisio Logo' : 'Nova CRM Logo'}
+            src={currentAgencyLogo}
+            alt={activeAgencyLabel}
             className="w-7 h-7 sm:w-9 sm:h-9 rounded-full object-contain border border-[#F7BC5F]/40 shadow-md shrink-0 bg-[#0a2528]"
             referrerPolicy="no-referrer"
             onError={(e) => {
@@ -222,8 +229,8 @@ export const Header: React.FC<
             }}
           />
 
-          <span className="text-white font-bold text-sm sm:text-xl tracking-tight hidden sm:inline-block">
-            {estNovavisio ? 'NovaVisio' : 'Nova CRM'}
+          <span className="text-white font-bold text-sm sm:text-xl tracking-tight hidden sm:inline-block whitespace-nowrap">
+            {activeAgencyLabel}
           </span>
         </div>
 

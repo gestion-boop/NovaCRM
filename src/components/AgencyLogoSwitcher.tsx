@@ -31,9 +31,16 @@ const AgencyLogoSwitcher: React.FC<Props> = ({ agencies, selectedId, onSelect, s
     >
       {agenciesAffichees.map((agency) => {
         const active = agency.id === selectedId;
-        const libelle = agency.id === 'all' ? 'Toutes les sociétés' : agency.name;
         const isNovavisio = /novavisio/i.test(agency.name);
+        const isImmosphera = /immosphera/i.test(agency.name);
+        const nomComplet = isNovavisio
+          ? 'NovaVisio'
+          : isImmosphera
+            ? 'ImmoSphera'
+            : agency.name;
+        const libelle = agency.id === 'all' ? 'Toutes les sociétés' : nomComplet;
         const iconDim = size === 'sm' ? 'w-6 h-6' : size === 'lg' ? 'w-9 h-9' : 'w-7 h-7 sm:w-8 sm:h-8';
+        const activeHeight = size === 'sm' ? 'h-8' : size === 'lg' ? 'h-12' : 'h-9 sm:h-10';
         return (
           <button
             key={agency.id}
@@ -43,23 +50,29 @@ const AgencyLogoSwitcher: React.FC<Props> = ({ agencies, selectedId, onSelect, s
             title={libelle}
             aria-label={libelle}
             onClick={() => onSelect(agency)}
-            className={`${isNovavisio ? 'px-2 py-1 gap-1.5 h-9 sm:h-10' : dim} shrink-0 rounded-lg flex items-center justify-center p-1 transition-all cursor-pointer ${
+            className={`${active ? `px-2.5 py-1 gap-1.5 ${activeHeight}` : dim} shrink-0 rounded-lg flex items-center justify-center p-1 transition-all cursor-pointer ${
               active
                 ? isNovavisio
                   ? 'bg-gradient-to-r from-[#1B7D8F]/45 to-[#264C8A]/55 ring-2 ring-[#38BDF8] opacity-100 shadow-[0_0_14px_rgba(34,211,238,0.35)]'
-                  : 'bg-[#F7BC5F]/25 ring-2 ring-[#F7BC5F] opacity-100'
+                  : 'bg-[#F7BC5F]/25 ring-2 ring-[#F7BC5F] opacity-100 shadow-[0_0_14px_rgba(247,188,95,0.25)]'
                 : 'bg-white/15 opacity-95 hover:opacity-100 hover:bg-white/25'
             }`}
           >
             <img
               src={getAgencyLogo(agency.id === 'all' ? null : agency.name)}
               alt=""
-              className={`${isNovavisio ? iconDim : 'w-full h-full'} object-contain shrink-0`}
+              className={`${active ? iconDim : 'w-full h-full'} object-contain shrink-0`}
               draggable={false}
             />
-            {isNovavisio && (
-              <span className="text-[11px] sm:text-xs font-extrabold tracking-tight bg-gradient-to-r from-white via-[#67E8F9] to-[#93C5FD] bg-clip-text text-transparent pr-0.5">
-                NovaVisio
+            {active && (
+              <span
+                className={`text-[11px] sm:text-xs font-extrabold tracking-tight whitespace-nowrap pr-0.5 ${
+                  isNovavisio
+                    ? 'bg-gradient-to-r from-white via-[#67E8F9] to-[#93C5FD] bg-clip-text text-transparent'
+                    : 'bg-gradient-to-r from-white via-[#FEF08A] to-[#F7BC5F] bg-clip-text text-transparent'
+                }`}
+              >
+                {nomComplet}
               </span>
             )}
           </button>
