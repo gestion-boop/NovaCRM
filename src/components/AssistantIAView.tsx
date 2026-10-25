@@ -3333,7 +3333,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           })()}
         </div>
       ) : (
-        <div ref={messagesScrollRef} className="flex-1 min-h-0 z-10 w-full max-w-3xl mx-auto overflow-y-auto custom-scrollbar py-4 space-y-4">
+        <div ref={messagesScrollRef} className="flex-1 min-h-0 z-10 w-full max-w-3xl mx-auto overflow-y-auto no-scrollbar py-3 px-1 space-y-4">
           {messages.map((m) => {
             const isUser = m.sender === 'user';
 

@@ -2518,7 +2518,7 @@ export default function ClientProfileView({
           reste du contenu. Le bouton retour n'a plus besoin de rester
           visible en permanence : le geste de retour au doigt (bord gauche)
           fonctionne depuis n'importe quelle position de défilement. */}
-      <div className="bg-gradient-to-b from-[#0a1e22]/90 to-[#07191b]/95 border-b border-white/10 p-4 sm:p-6 flex flex-col gap-4 sm:gap-6 backdrop-blur-xl">
+      <div className="relative z-30 bg-gradient-to-b from-[#0a1e22]/90 to-[#07191b]/95 border-b border-white/10 p-4 sm:p-6 flex flex-col gap-4 sm:gap-6 backdrop-blur-xl">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <button onClick={onBack} className="p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-300 hover:text-white transition-all shrink-0 cursor-pointer shadow-sm active:scale-95">
@@ -2552,7 +2552,7 @@ export default function ClientProfileView({
               entières avant même le contenu utile. Icônes seules en dessous
               de `sm:`, texte repris tel quel à partir de cette largeur —
               rien ne change sur tablette/ordinateur. */}
-          <div className="flex items-center gap-2 max-sm:gap-1.5 relative flex-wrap">
+          <div className="flex items-center gap-2 max-sm:gap-1.5 relative z-40 flex-wrap">
             {completedQuestionnairesCount > 0 && (
               <button
                 onClick={() => setShowQuestionnaireModal(true)}
@@ -2623,8 +2623,8 @@ export default function ClientProfileView({
 
             {showActionsMenu && (
               <>
-                <div className="fixed inset-0 z-30" onClick={() => setShowActionsMenu(false)} />
-                <div className="absolute right-0 top-full mt-2 w-64 bg-[#0a1e20] border border-[#144447]/60 rounded-2xl shadow-2xl z-40 py-2 overflow-hidden">
+                <div className="fixed inset-0 z-40" onClick={() => setShowActionsMenu(false)} />
+                <div className="absolute right-0 top-full mt-2 w-64 bg-[#081b1e]/98 backdrop-blur-xl border border-[#F7BC5F]/30 rounded-2xl shadow-[0_24px_60px_rgba(0,0,0,0.85)] z-50 py-1.5 overflow-hidden divide-y divide-white/[0.04]">
                   {[
                     ...(estConseilsFinances ? [{ icon: ClipboardCheck, label: 'Questionnaire confidentiel', action: () => setShowQuestionnaireModal(true) }] : []),
                     { icon: Landmark, label: 'Parcours Crédit', action: () => setShowParcoursCredit(true) },
@@ -2639,10 +2639,10 @@ export default function ClientProfileView({
                     <button
                       key={item.label}
                       onClick={() => { item.action(); setShowActionsMenu(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-200 hover:bg-white/5 hover:text-white text-left"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:bg-[#F7BC5F]/15 hover:text-[#FAD592] text-left transition-colors cursor-pointer"
                     >
-                      <item.icon className="w-4 h-4 text-[#F9C977]" />
-                      {item.label}
+                      <item.icon className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+                      <span>{item.label}</span>
                     </button>
                   ))}
                 </div>

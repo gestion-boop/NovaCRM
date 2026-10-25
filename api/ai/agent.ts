@@ -1065,6 +1065,123 @@ export default async function handler(req: any, res: any) {
     const isNovaSuperAssistant = authedUser?.id === NOVA_SUPER_ASSISTANT_USER_ID;
     const currentUserId = authedUser?.id || null;
 
+    // ── Enrichissement automatique du dossier client ciblé (fiche ouverte ou client cité dans le prompt) ──
+    let clientDossierPromptBlock = '';
+    try {
+      const targetIds = new Set<string>();
+      const rawCurrentId = typeof (context as any)?.currentClientId === 'string' ? (context as any).currentClientId.trim() : '';
+      if (rawCurrentId) targetIds.add(rawCurrentId);
+
+      const normalizeStr = (s: string) =>
+        String(s || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim();
+
+      const normalizedPrompt = normalizeStr(String(prompt || ''));
+      const contextContacts = Array.isArray((context as any)?.contacts) ? (context as any).contacts : [];
+      if (normalizedPrompt && contextContacts.length > 0) {
+        for (const c of contextContacts) {
+          const cName = normalizeStr(c?.name || '');
+          if (cName && cName.length >= 3 && normalizedPrompt.includes(cName) && c?.id) {
+            targetIds.add(String(c.id));
+            if (targetIds.size >= 2) break;
+          }
+        }
+      }
+
+      if (targetIds.size > 0) {
+        const dossierBlocks: string[] = [];
+        for (const clientId of Array.from(targetIds)) {
+          const [leadRes, notesRes, tasksRes] = await Promise.all([
+            supabaseAdmin.from('leads').select('*').eq('id', clientId).maybeSingle(),
+            supabaseAdmin
+              .from('comments')
+              .select('content, created_at')
+              .eq('lead_id', clientId)
+              .order('created_at', { ascending: false })
+              .limit(20),
+            supabaseAdmin
+              .from('tasks')
+              .select('title, due_date, completed, priority, type')
+              .eq('contact_id', clientId)
+              .order('due_date', { ascending: false })
+              .limit(20),
+          ]);
+
+          const lead: any = leadRes?.data;
+          if (!lead) continue;
+
+          let stageName = '';
+          let pipelineName = '';
+          if (lead.stage_id || lead.pipeline_id) {
+            const [stageRes, pipeRes] = await Promise.all([
+              lead.stage_id
+                ? supabaseAdmin.from('pipeline_stages').select('name').eq('id', lead.stage_id).maybeSingle()
+                : Promise.resolve({ data: null }),
+              lead.pipeline_id
+                ? supabaseAdmin.from('pipelines').select('name').eq('id', lead.pipeline_id).maybeSingle()
+                : Promise.resolve({ data: null }),
+            ]);
+            stageName = (stageRes?.data as any)?.name || '';
+            pipelineName = (pipeRes?.data as any)?.name || '';
+          }
+
+          const notesList = Array.isArray(notesRes?.data) ? notesRes.data : [];
+          const tasksList = Array.isArray(tasksRes?.data) ? tasksRes.data : [];
+          const fullName =
+            lead.full_name ||
+            [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim() ||
+            lead.name ||
+            'Client';
+
+          const lines: string[] = [
+            `FICHE CLIENT COMPLÈTE : ${fullName} (ID: ${clientId})`,
+            `• Catégorie / Type : ${lead.client_type || lead.type || 'Non renseigné'}`,
+            `• Température / Statut : ${lead.statut_lead || lead.status || 'Non renseigné'}`,
+            `• Pipeline / Étape actuelle : ${[pipelineName, stageName].filter(Boolean).join(' → ') || 'Non renseigné'}`,
+            `• Montant / Honoraires estimés : ${lead.amount != null ? `${Number(lead.amount).toLocaleString('fr-FR')} €` : '0 €'}${lead.budget != null ? ` | Budget : ${Number(lead.budget).toLocaleString('fr-FR')} €` : ''}`,
+            `• Coordonnées : Email: ${lead.email || 'non renseigné'} | Tél: ${lead.phone || 'non renseigné'}${lead.address || lead.city ? ` | Adresse: ${[lead.address, lead.postal_code, lead.city].filter(Boolean).join(' ')}` : ''}`,
+            `• Date de création de la fiche : ${lead.created_at ? String(lead.created_at).slice(0, 10) : 'inconnue'}`,
+            `• Commentaire général de la fiche : ${lead.comments && String(lead.comments).trim() ? String(lead.comments).trim() : '(aucun commentaire général enregistré)'}`,
+          ];
+
+          if (notesList.length > 0) {
+            lines.push(`• Notes de suivi datées (${notesList.length}) :`);
+            for (const n of notesList) {
+              const d = n.created_at ? String(n.created_at).slice(0, 16).replace('T', ' ') : '';
+              lines.push(`  - [${d}] ${String(n.content || '').replace(/\s+/g, ' ').trim()}`);
+            }
+          } else {
+            lines.push(`• Notes de suivi datées : aucune note enregistrée pour l'instant.`);
+          }
+
+          if (tasksList.length > 0) {
+            lines.push(`• Tâches & Rendez-vous liés à ce client (${tasksList.length}) :`);
+            for (const t of tasksList) {
+              const st = t.completed ? '✅ Terminée' : '⏳ À faire';
+              lines.push(`  - [${st}] ${t.title} — échéance : ${t.due_date || 'non définie'} (${t.type || 'Tâche'}, priorité ${t.priority || 'Moyenne'})`);
+            }
+          } else {
+            lines.push(`• Tâches & Rendez-vous liés à ce client : aucune tâche enregistrée pour l'instant.`);
+          }
+
+          dossierBlocks.push(lines.join('\n'));
+        }
+
+        if (dossierBlocks.length > 0) {
+          clientDossierPromptBlock =
+            `\n\n═══ DOSSIER(S) CLIENT(S) COMPLET(S) CHARGÉ(S) DEPUIS LE CRM ═══\n` +
+            `RÈGLE ABSOLUE : Tu disposes ci-dessous de TOUTES les informations réelles de la fiche client (statut, pipeline, étape, montant, coordonnées, commentaire général, notes datées et tâches). Ne dis JAMAIS "je n'ai pas d'outil dédié pour afficher la fiche complète" et ne dis JAMAIS à l'utilisateur d'ouvrir la fiche lui-même ! Utilise directement ces données pour produire une synthèse structurée et professionnelle (Profil & statut, Avancement pipeline, Résumé des notes & échanges, Tâches en cours, et Prochaine action recommandée) ou répondre à toute question sur ce client.\n\n` +
+            dossierBlocks.join('\n\n---\n\n') +
+            `\n═══════════════════════════════════════════════════════════════\n`;
+        }
+      }
+    } catch (err) {
+      console.warn('Enrichissement dossier client IA ignoré:', err);
+    }
+
     const claudeMessages = (messages as any[]).map((m) => ({
       role: m.sender === 'user' ? 'user' : 'assistant',
       content: m.text,
@@ -1157,7 +1274,9 @@ ${
 
 ${
   (context as any)?.currentClientId
-    ? `Client actuellement affiché à l'écran (fiche ouverte) : ${(context as any).currentClientId}. Utilise-le comme contactId par défaut pour send_client_email si l'utilisateur dit "lui"/"elle"/"ce client"/"le client" sans citer de nom précis.\n\n`
+    ? `Client actuellement affiché à l'écran (fiche ouverte) : ${(context as any).currentClientId}. Utilise-le comme contactId par défaut pour send_client_email, create_task, create_note et create_appointment si l'utilisateur dit "lui"/"elle"/"ce client"/"le client" sans citer de nom précis.${clientDossierPromptBlock}\n\n`
+    : clientDossierPromptBlock
+    ? `${clientDossierPromptBlock}\n\n`
     : ''
 }Contacts existants (id — nom), à utiliser pour renseigner contactId quand l'utilisateur cite un client par son nom — ne mets JAMAIS un contactId qui ne vient pas exactement de cette liste :
 ${
