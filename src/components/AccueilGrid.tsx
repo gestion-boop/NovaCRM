@@ -1847,15 +1847,18 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     saved.slice(0, ROOT_GRID_SLOTS).forEach((id, i) => { if (typeof id === 'string' && id !== ADD_TILE_ID) grid[i] = id; });
     // "Ajoute les tuiles manquantes" — une tuile présente dans `tiles` (ex:
     // nouveau raccourci créé, ou nouvelle fonctionnalité activée) mais
-    // absente de la grille de positions sauvegardée est insérée dans la
-    // première case vide, sans toucher aux tuiles déjà placées.
+    // absente de la grille de positions sauvegardée est ajoutée à la suite
+    // des tuiles déjà placées, SANS jamais combler ni déplacer les cases
+    // vides que l'utilisateur a délibérément laissées pour son agencement.
     const present = new Set(grid.filter(Boolean));
     const missing = realIds.filter((id) => !present.has(id));
-    let i = 0;
+    const lastPlaced = grid.reduce((last, id, idx) => (id ? idx : last), -1);
+    let insertIdx = Math.max(0, lastPlaced + 1);
     for (const id of missing) {
-      while (i < grid.length && grid[i] !== null) i++;
-      if (i >= grid.length) break;
-      grid[i] = id;
+      while (insertIdx < grid.length && grid[insertIdx] !== null) insertIdx++;
+      if (insertIdx >= grid.length) break;
+      grid[insertIdx] = id;
+      insertIdx++;
     }
     return grid;
   };
@@ -1907,11 +1910,13 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       const missing = tiles.filter((t) => t.id !== 'nova-lock-spacer' && !present.has(t.id)).map((t) => t.id);
       if (missing.length === 0) return prev;
       const grid = [...prev];
-      let i = 0;
+      const lastPlaced = grid.reduce((last, id, idx) => (id ? idx : last), -1);
+      let insertIdx = Math.max(0, lastPlaced + 1);
       for (const id of missing) {
-        while (i < grid.length && grid[i] !== null) i++;
-        if (i >= grid.length) break;
-        grid[i] = id;
+        while (insertIdx < grid.length && grid[insertIdx] !== null) insertIdx++;
+        if (insertIdx >= grid.length) break;
+        grid[insertIdx] = id;
+        insertIdx++;
       }
       return grid;
     });
@@ -3703,14 +3708,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     }
   }
   // Défense en profondeur : une tuile réelle présente mais absente de
-  // rootSlots (désync jamais censée arriver grâce au useEffect de
-  // comblement) n'est jamais perdue silencieusement — insérée dans la
-  // première case vide restante, ou en overflow si le cap est atteint.
+  // rootSlots n'est jamais perdue silencieusement — insérée après la
+  // dernière tuile réelle sans jamais combler les cases vides intermédiaires.
   for (const t of tuilesRacine) {
     if (usedIds.has(t.id)) continue;
     if (realCount >= MAX_VISIBLE_TILES) { overflowTiles.push(t); continue; }
-    const emptyIdx = rootDisplaySlots.findIndex((s) => s === null);
-    if (emptyIdx >= 0) rootDisplaySlots[emptyIdx] = t;
+    const lastFilledIdx = rootDisplaySlots.reduce((last, item, idx) => (item ? idx : last), -1);
+    let emptyIdx = lastFilledIdx + 1;
+    while (emptyIdx < rootDisplaySlots.length && rootDisplaySlots[emptyIdx] !== null) emptyIdx++;
+    if (emptyIdx < rootDisplaySlots.length) rootDisplaySlots[emptyIdx] = t;
     else rootDisplaySlots.push(t);
     realCount++;
   }
@@ -3749,14 +3755,18 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     setRootSlots((prev) => {
       const next: (string | null)[] = Array.from({ length: ROOT_GRID_SLOTS }, (_, i) => prev[i] ?? null);
       let change = false;
+      const lastOccupied = next.reduce((last, val, idx) => (val ? idx : last), -1);
+      let fallback = lastOccupied + 1;
       for (const id of aAncrer) {
         if (next.includes(id)) continue;
         // De préférence la case où elle s'affiche déjà (aucun saut visible).
         const ici = positions.get(id);
-        const cible = typeof ici === 'number' && next[ici] === null ? ici : next.indexOf(null);
+        while (fallback < next.length && next[fallback] !== null) fallback++;
+        const cible = typeof ici === 'number' && next[ici] === null ? ici : (fallback < next.length ? fallback : -1);
         if (cible === -1) continue;
         next[cible] = id;
         change = true;
+        if (cible === fallback) fallback++;
       }
       return change ? next : prev;
     });

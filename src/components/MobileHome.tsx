@@ -9,7 +9,7 @@ import {
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, CloudSun,
   Bell, MessageSquare, Users, GitFork, FileText, Mail, BarChart2,
   Headphones, Calendar, FileEdit, UserPlus, Folder, Plus, X,
-  ChevronDown, ChevronUp, Megaphone, Camera, Lock, Zap, Home as HomeIcon, Globe,
+  ChevronDown, ChevronUp, ChevronRight, Megaphone, Camera, Lock, Zap, Home as HomeIcon, Globe,
   ExternalLink, Bookmark, Target, Shield, Award, Sparkles, CheckSquare, Image as ImageIcon, MapPin, Settings,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -579,18 +579,19 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const ALL_SPACE_IDS = useMemo(() => ALL_SPACES.map((s) => s.id), [ALL_SPACES]);
 
   const [cellIds, setCellIds] = useState<(string | null)[]>(() => {
-    // Ajoute dans les cases vides les tuiles du catalogue qui manqueraient
-    // encore à une grille déjà enregistrée (demande explicite : "ajoute les
-    // tuiles manquantes") — sans toucher à l'ordre/l'emplacement des tuiles
-    // déjà placées par l'utilisateur.
+    // Ajoute après les tuiles existantes les tuiles du catalogue qui manqueraient
+    // encore à une grille déjà enregistrée — sans toucher à l'ordre/l'emplacement des tuiles
+    // déjà placées par l'utilisateur ni écraser ses espaces vides.
     const fillMissing = (grid: (string | null)[]) => {
       const present = new Set(grid.filter(Boolean));
       const missing = ALL_SPACE_IDS.filter((id) => !present.has(id));
-      let i = 0;
+      const lastPlaced = grid.reduce((last, id, idx) => (id ? idx : last), -1);
+      let i = Math.max(0, lastPlaced + 1);
       for (const id of missing) {
         while (i < grid.length && grid[i] !== null) i++;
         if (i >= grid.length) break;
         grid[i] = id;
+        i++;
       }
       return grid;
     };
@@ -667,11 +668,13 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
       const changed = missing.length > 0 || cleaned.some((id, i) => id !== cur[i]);
       if (!changed) return cur;
       const next = [...cleaned];
-      let i = 0;
+      const lastPlaced = next.reduce((last, id, idx) => (id ? idx : last), -1);
+      let i = Math.max(0, lastPlaced + 1);
       for (const id of missing) {
         while (i < next.length && next[i] !== null) i++;
         if (i >= next.length) { next.push(id); i = next.length; continue; }
         next[i] = id;
+        i++;
       }
       return next;
     });

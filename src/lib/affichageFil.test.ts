@@ -68,6 +68,12 @@ describe('défilement du fil', () => {
       messagesAjoutes: 60,
       distanceDuBas: 900,
     })).toBe('auto');
+    expect(comportementDefilementFil({
+      changementDeFil: false,
+      chargementInitial: true,
+      messagesAjoutes: 60,
+      distanceDuBas: 1500,
+    })).toBe('auto');
   });
 
   it('glisse seulement pour un nouveau message quand on est déjà en bas', () => {

@@ -103,6 +103,7 @@ export function fusionnerMessage<T extends { id: string; created_at: string; use
 /**
  * Comment amener le fil vers le dernier message.
  * - changement de conversation ou de canal : saut immédiat
+ * - chargement initial d'une conversation : saut immédiat
  * - un ou deux messages, et le lecteur est déjà en bas : défilement fluide
  * - lot entier alors qu'on est en bas (ouverture) : saut immédiat
  * - le lecteur lit l'historique : on ne bouge pas
@@ -111,8 +112,9 @@ export function comportementDefilementFil(opts: {
   changementDeFil: boolean;
   messagesAjoutes: number;
   distanceDuBas: number;
+  chargementInitial?: boolean;
 }): ScrollBehavior | null {
-  if (opts.changementDeFil) return 'auto';
+  if (opts.changementDeFil || opts.chargementInitial) return 'auto';
   if (opts.messagesAjoutes <= 0) return null;
   if (opts.distanceDuBas > 160) return null;
   return opts.messagesAjoutes > 2 ? 'auto' : 'smooth';

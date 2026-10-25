@@ -134,6 +134,19 @@ export default function AcademyView() {
     try { localStorage.setItem('nova_academy_vue', v); } catch { /* stockage indisponible */ }
   };
 
+  const [menuOptionsAdmin, setMenuOptionsAdmin] = useState(false);
+  const optionsAdminRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuOptionsAdmin) return;
+    const onClic = (e: MouseEvent) => {
+      if (optionsAdminRef.current && !optionsAdminRef.current.contains(e.target as Node)) {
+        setMenuOptionsAdmin(false);
+      }
+    };
+    document.addEventListener('mousedown', onClic);
+    return () => document.removeEventListener('mousedown', onClic);
+  }, [menuOptionsAdmin]);
+
   // Image de fond propre à chaque dossier (table academy_folders, liée par le
   // nom de la rubrique). Un dossier sans ligne reste un dossier valide,
   // simplement sans visuel.
@@ -1281,149 +1294,166 @@ export default function AcademyView() {
             </div>
           )}
 
-          {/* Recherche et actions calées à DROITE : à gauche, l'image de fond
-              porte le logo et le titre « IMMOSPHERA ACADEMY » — une barre
-              centrée passait dessus et le rendait illisible. */}
-          <div className="flex flex-wrap items-center gap-2.5 justify-end">
-            <div className="relative w-full sm:w-auto sm:min-w-[260px] sm:max-w-sm">
+          {/* Barre d'outils unifiée et simplifiée */}
+          <div className="bg-white/80 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 border border-black/5 shadow-xs flex flex-wrap items-center justify-between gap-3 mb-6">
+            {/* Recherche à gauche */}
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 value={recherche}
                 onChange={(e) => setRecherche(e.target.value)}
                 placeholder="Rechercher une procédure…"
-                // Style en ligne : une règle globale impose un fond sombre à
-                // TOUT champ de saisie de l'application (voir index.css, « 8.
-                // Champs de formulaire »). Sur ce seul écran, clair, il faut
-                // passer devant elle.
-                style={{ backgroundColor: '#ffffff', color: '#1f2937', borderColor: 'rgba(0,0,0,0.12)' }}
-                className="w-full pl-5 pr-11 py-2.5 rounded-full placeholder-slate-400 text-sm shadow-md border focus:outline-none focus:ring-2 focus:ring-[#E0A21A]"
+                style={{ backgroundColor: '#ffffff', color: '#1f2937' }}
+                className="w-full pl-9 pr-4 py-2 rounded-xl placeholder-slate-400 text-xs sm:text-sm border border-black/10 focus:outline-none focus:border-[#E0A21A] focus:ring-1 focus:ring-[#E0A21A] shadow-inner"
               />
-              <Search className="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
-            {/* Grille ou liste */}
-            <div className="flex items-center rounded-full bg-white/90 border border-black/10 p-0.5 shadow-md">
-              <button
-                onClick={() => choisirVue('grille')}
-                title="Afficher les dossiers en grille"
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                  vueDossiers === 'grille' ? 'bg-[#E0A21A] text-white' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => choisirVue('liste')}
-                title="Afficher les dossiers en liste"
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                  vueDossiers === 'liste' ? 'bg-[#E0A21A] text-white' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <ListIcon className="w-4 h-4" />
-              </button>
-            </div>
+            {/* Actions à droite */}
+            <div className="flex items-center gap-2 flex-wrap ml-auto">
+              {/* Avancement personnel compact */}
+              {ressources.length > 0 && (
+                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/90 border border-black/5 text-xs text-slate-700">
+                  <CheckCircle2
+                    className={`w-3.5 h-3.5 ${validees.size === ressources.length ? 'text-emerald-600' : 'text-[#E0A21A]'}`}
+                  />
+                  <span className="font-semibold">{validees.size}/{ressources.length} validée{validees.size > 1 ? 's' : ''}</span>
+                  <span className="w-14 h-1.5 rounded-full bg-black/10 overflow-hidden">
+                    <span
+                      className={`block h-full rounded-full transition-all duration-500 ${
+                        validees.size === ressources.length ? 'bg-emerald-600' : 'bg-[#E0A21A]'
+                      }`}
+                      style={{ width: `${Math.round((validees.size / ressources.length) * 100)}%` }}
+                    />
+                  </span>
+                </div>
+              )}
 
-            {estSuperAdmin && (
-              <>
+              {/* Sélecteur Grille ou Liste */}
+              <div className="flex items-center rounded-xl bg-slate-100 p-0.5 border border-black/5">
                 <button
-                  onClick={ouvrirAjout}
-                  className="px-3.5 py-2.5 rounded-full bg-[#1b2b2e] hover:bg-[#0f1c1e] text-white font-bold text-xs flex items-center gap-2 shadow-md"
-                >
-                  <Plus className="w-4 h-4" />
-                  Ajouter une procédure
-                </button>
-                {/* Dossier racine, VIDE si besoin — demande explicite (15
-                    septembre) : « des dossiers avec des sous-dossiers pour
-                    ne pas se perdre ». Le sous-dossier, lui, se crée depuis
-                    l'intérieur d'un dossier (voir le fil d'Ariane). */}
-                {auNiveauDossiers && (
-                  <button
-                    onClick={() => void creerSousDossier(null)}
-                    className="px-3.5 py-2.5 rounded-full bg-white/90 hover:bg-white border border-black/10 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-md"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Nouveau dossier
-                  </button>
-                )}
-                <input
-                  ref={champCouvertureRapide}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const image = e.target.files?.[0];
-                    const cible = ressourcePourCouverture.current;
-                    e.target.value = '';
-                    ressourcePourCouverture.current = null;
-                    if (image && cible) void changerCouvertureRapide(cible, image);
-                  }}
-                  className="hidden"
-                />
-                <input
-                  ref={champVisuelDossier}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const image = e.target.files?.[0];
-                    const cible = dossierPourVisuel.current;
-                    e.target.value = '';
-                    dossierPourVisuel.current = null;
-                    if (image && cible) void changerVisuelDossier(cible, image);
-                  }}
-                  className="hidden"
-                />
-                <input
-                  ref={champFond}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const image = e.target.files?.[0];
-                    e.target.value = '';
-                    if (image) void changerFond(image);
-                  }}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => champFond.current?.click()}
-                  disabled={fondEnCours}
-                  title="Choisir l'image de fond de l'Académy"
-                  className="px-3.5 py-2.5 rounded-full bg-white/90 hover:bg-white border border-black/10 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-md disabled:opacity-60"
-                >
-                  {fondEnCours ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
-                  Image de fond
-                </button>
-                {ressources.some((r) => r.drive_file_id) && (
-                  <button
-                    onClick={() => void rendrePublicsLesFichiersExistants()}
-                    disabled={reparationEnCours}
-                    title="Ouvrir en lecture les anciens fichiers Drive, sans connexion Google pour les lire"
-                    className="px-3.5 py-2.5 rounded-full bg-white/90 hover:bg-white border border-black/10 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-md disabled:opacity-60"
-                  >
-                    {reparationEnCours ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />}
-                    Rendre les fichiers existants publics
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Avancement personnel */}
-          {ressources.length > 0 && (
-            <div className="mt-3 flex items-center justify-end gap-2.5 text-xs text-slate-700">
-              <CheckCircle2
-                className={`w-4 h-4 ${validees.size === ressources.length ? 'text-emerald-600' : 'text-slate-400'}`}
-              />
-              {validees.size === ressources.length
-                ? 'Toutes les procédures sont validées.'
-                : `${validees.size} validée${validees.size > 1 ? 's' : ''} sur ${ressources.length}`}
-              <span className="w-28 h-1.5 rounded-full bg-black/10 overflow-hidden">
-                <span
-                  className={`block h-full rounded-full transition-all duration-500 ${
-                    validees.size === ressources.length ? 'bg-emerald-600' : 'bg-[#E0A21A]'
+                  onClick={() => choisirVue('grille')}
+                  title="Afficher les dossiers en grille"
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    vueDossiers === 'grille' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400 hover:text-slate-700'
                   }`}
-                  style={{ width: `${Math.round((validees.size / ressources.length) * 100)}%` }}
-                />
-              </span>
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => choisirVue('liste')}
+                  title="Afficher les dossiers en liste"
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    vueDossiers === 'liste' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400 hover:text-slate-700'
+                  }`}
+                >
+                  <ListIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {estSuperAdmin && (
+                <>
+                  <input
+                    ref={champCouvertureRapide}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const image = e.target.files?.[0];
+                      const cible = ressourcePourCouverture.current;
+                      e.target.value = '';
+                      ressourcePourCouverture.current = null;
+                      if (image && cible) void changerCouvertureRapide(cible, image);
+                    }}
+                    className="hidden"
+                  />
+                  <input
+                    ref={champVisuelDossier}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const image = e.target.files?.[0];
+                      const cible = dossierPourVisuel.current;
+                      e.target.value = '';
+                      dossierPourVisuel.current = null;
+                      if (image && cible) void changerVisuelDossier(cible, image);
+                    }}
+                    className="hidden"
+                  />
+                  <input
+                    ref={champFond}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const image = e.target.files?.[0];
+                      e.target.value = '';
+                      if (image) void changerFond(image);
+                    }}
+                    className="hidden"
+                  />
+
+                  {auNiveauDossiers && (
+                    <button
+                      onClick={() => void creerSousDossier(null)}
+                      className="h-8 px-3 rounded-xl bg-white hover:bg-slate-50 border border-black/10 text-slate-700 font-semibold text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Dossier</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={ouvrirAjout}
+                    className="h-8 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-xs hover:brightness-105 active:scale-95 transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>Procédure</span>
+                  </button>
+
+                  {/* Menu discret des options admin */}
+                  <div className="relative" ref={optionsAdminRef}>
+                    <button
+                      type="button"
+                      onClick={() => setMenuOptionsAdmin((v) => !v)}
+                      title="Options d'administration"
+                      className="w-8 h-8 rounded-xl bg-white hover:bg-slate-50 border border-black/10 text-slate-600 flex items-center justify-center shadow-2xs active:scale-95 transition-all"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+
+                    {menuOptionsAdmin && (
+                      <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-white border border-black/10 shadow-xl py-1 z-30 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOptionsAdmin(false);
+                            champFond.current?.click();
+                          }}
+                          disabled={fondEnCours}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 font-medium text-left"
+                        >
+                          {fondEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5 text-slate-500" />}
+                          <span>Changer l'image de fond</span>
+                        </button>
+                        {ressources.some((r) => r.drive_file_id) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOptionsAdmin(false);
+                              void rendrePublicsLesFichiersExistants();
+                            }}
+                            disabled={reparationEnCours}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 font-medium text-left border-t border-slate-100"
+                          >
+                            {reparationEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5 text-slate-500" />}
+                            <span>Rendre fichiers existants publics</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
-          )}
+          </div>
 
           {/* ── Le contenu d'un dossier, à N'IMPORTE QUEL niveau ──────────
               Demande explicite (15 septembre) : « des dossiers avec des

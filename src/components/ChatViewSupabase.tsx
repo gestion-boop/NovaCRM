@@ -203,6 +203,35 @@ interface ChatViewSupabaseProps {
   isActive?: boolean;
 }
 
+/**
+ * Force le défilement jusqu'au dernier message tout en bas.
+ * Utilise un défilement immédiat complété par des rattrapages différés (rAF, 50ms, 150ms, 350ms)
+ * pour absorber le temps de calcul des flexbox, le chargement des images/avatars et
+ * les transitions de visibilité (display: none -> flex).
+ */
+function forcerDefilementBas(pane: HTMLElement | null, behavior: ScrollBehavior = 'auto') {
+  if (!pane) return () => {};
+  pane.scrollTo({ top: pane.scrollHeight, behavior });
+  const f1 = window.requestAnimationFrame(() => {
+    pane.scrollTo({ top: pane.scrollHeight, behavior: 'auto' });
+  });
+  const t1 = window.setTimeout(() => {
+    pane.scrollTo({ top: pane.scrollHeight, behavior: 'auto' });
+  }, 50);
+  const t2 = window.setTimeout(() => {
+    pane.scrollTo({ top: pane.scrollHeight, behavior: 'auto' });
+  }, 150);
+  const t3 = window.setTimeout(() => {
+    pane.scrollTo({ top: pane.scrollHeight, behavior: 'auto' });
+  }, 350);
+  return () => {
+    window.cancelAnimationFrame(f1);
+    window.clearTimeout(t1);
+    window.clearTimeout(t2);
+    window.clearTimeout(t3);
+  };
+}
+
 export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, initialConversationId, onConversationTargetConsumed, initialChannelId, onChannelTargetConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const isSuperAdmin = userProfile?.role === 'super_admin';
@@ -281,6 +310,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [expandedChannels, setExpandedChannels] = useState<Record<string, boolean>>({});
   const [newSubChannelFor, setNewSubChannelFor] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const canalTailleVueRef = useRef(0);
+  const canalFilVuRef = useRef<string | null>(null);
+  const canalDernierFilAncreRef = useRef<string | null>(null);
+  const canalDoitRecadrerBasRef = useRef(false);
 
   // ── Gestion des membres par projet (table chat_project_members) ─────────
   const [membersModalProjectId, setMembersModalProjectId] = useState<string | null>(null);
@@ -467,6 +500,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [selectedInviteIds, setSelectedInviteIds] = useState<Set<string>>(new Set());
   const [invitingToConv, setInvitingToConv] = useState(false);
   const convScrollRef = useRef<HTMLDivElement>(null);
+  const convTailleVueRef = useRef(0);
+  const convFilVuRef = useRef<string | null>(null);
+  const convDernierFilAncreRef = useRef<string | null>(null);
+  const convDoitRecadrerBasRef = useRef(false);
   const [convReactions, setConvReactions] = useState<Record<string, { userId: string; emoji: string }[]>>({});
   const [showConvReactionPickerFor, setShowConvReactionPickerFor] = useState<string | null>(null);
   const reactionPickerRef = useRef<HTMLDivElement | null>(null);
@@ -1251,6 +1288,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const openConversation = (id: string) => {
     setActiveConversationId(id);
+    convDoitRecadrerBasRef.current = true;
+    convFilVuRef.current = null;
+    convDernierFilAncreRef.current = null;
     // Signalé (17/09/2026) : "on attend jusqu'à 5 secondes" — deux correctifs
     // conjoints :
     //  1) Affiche tout de suite le dernier lot connu de CETTE conversation
@@ -1270,6 +1310,19 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setConvMessages(connus);
     setConvHasMoreOlder(true);
     setConvFilEnChargement(connus.length === 0);
+    if (convScrollRef.current && connus.length > 0) {
+      forcerDefilementBas(convScrollRef.current);
+    }
+  };
+
+  const openChannel = (c: ChatChannel) => {
+    setActiveChannel(c);
+    canalDoitRecadrerBasRef.current = true;
+    canalFilVuRef.current = null;
+    canalDernierFilAncreRef.current = null;
+    if (scrollRef.current) {
+      forcerDefilementBas(scrollRef.current);
+    }
   };
 
   // Signalé (urgent, 30/08/2026) : "elle ne sait pas d'où ça vient" —
@@ -1323,7 +1376,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     };
     const ouvrirCanal = (canal: ChatChannel, messageId?: string | null) => {
       setTab('projets');
-      setActiveChannel(canal);
+      openChannel(canal);
       montrer(messageId);
     };
     const canalConnu = (id: string) =>
@@ -1584,46 +1637,57 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId, isActive, tab]);
 
+  // Demande utilisateur : quand on clique dans message (activation du module
+  // ou bascule d'onglet), la vue doit toujours atterrir sur le dernier message tout en bas.
+  useEffect(() => {
+    if (isActive) {
+      convDoitRecadrerBasRef.current = true;
+      canalDoitRecadrerBasRef.current = true;
+      if (tab === 'conversations' && convScrollRef.current) {
+        forcerDefilementBas(convScrollRef.current);
+      } else if (tab === 'channels' && scrollRef.current) {
+        forcerDefilementBas(scrollRef.current);
+      }
+    }
+  }, [isActive, tab]);
+
   // Ticket #9 (nouvelle base) : à l'ouverture d'une conversation le défilement
   // ne se produisait pas — un scrollTo immédiat tirait souvent avant que la
   // liste ait fini de se mettre en page (scrollHeight pas encore à jour).
-  // Un rAF force le saut au prochain paint, puis un rattrapage après le
-  // rendu complet (images) garantit qu'on atterrit bien tout en bas.
-  //
-  // Le saut fluide sur TOUT le lot (60 messages) faisait croire que les
-  // messages mettaient du temps à arriver : on les voyait défiler depuis le
-  // haut. On ne garde le glissement que pour un seul nouveau message, quand
-  // le lecteur est déjà en bas. L'ouverture et un rattrapage de lot sautent.
-  const convTailleVueRef = useRef(0);
-  const convFilVuRef = useRef<string | null>(null);
+  // Un rAF force le saut au prochain paint, puis des rattrapages différés
+  // garantissent qu'on atterrit bien tout en bas sur le dernier message.
   useEffect(() => {
-    // Signalé (10 septembre, Sylvain/Pauline) : « ça ne va pas dans le bon
-    // message » en cliquant sur une notification. Cause trouvée : CET effet
-    // (scroll-tout-en-bas, avec son propre rattrapage à 150ms conçu pour
-    // gagner toute course de mise en page) et celui du rebond sur le message
-    // ciblé plus haut (scrollIntoView, voir highlightedMessageId) dépendent
-    // tous les deux de `convMessages.length` — ils se déclenchent donc sur
-    // le MÊME rendu à l'ouverture d'une conversation depuis une
-    // notification, et celui-ci, pensé pour être increvable, l'emportait
-    // systématiquement : on atterrissait toujours en bas de la conversation
-    // (le message le plus récent), jamais sur le message visé par la
-    // notification s'il ne s'agissait pas déjà du dernier.
     const pane = convScrollRef.current;
+    if (highlightedMessageId || !pane || !activeConversationId) return;
+
+    const premierAncrage = convDernierFilAncreRef.current !== activeConversationId;
+    const doitRecadrer = convDoitRecadrerBasRef.current || premierAncrage;
     const ajout = convMessages.length - convTailleVueRef.current;
     const changement = convFilVuRef.current !== activeConversationId;
-    convTailleVueRef.current = convMessages.length;
-    convFilVuRef.current = pane ? activeConversationId : null;
-    if (highlightedMessageId || !pane) return;
+
+    if (convMessages.length > 0) {
+      convTailleVueRef.current = convMessages.length;
+      convFilVuRef.current = activeConversationId;
+    }
+
+    // Saut direct tout en bas à l'ouverture ou au clic dans un message
+    if (doitRecadrer && convMessages.length > 0) {
+      convDoitRecadrerBasRef.current = false;
+      convDernierFilAncreRef.current = activeConversationId;
+      return forcerDefilementBas(pane, 'auto');
+    }
+
     const behavior = comportementDefilementFil({
       changementDeFil: changement,
+      chargementInitial: premierAncrage,
       messagesAjoutes: ajout,
       distanceDuBas: pane.scrollHeight - pane.scrollTop - pane.clientHeight,
     });
     if (!behavior) return;
+
     const frame = window.requestAnimationFrame(() => {
       pane.scrollTo({ top: pane.scrollHeight, behavior });
     });
-    // Le rattrapage à 150 ms annulerait le glissement d'un message seul.
     const settle = behavior === 'auto'
       ? window.setTimeout(() => {
           pane.scrollTo({ top: pane.scrollHeight, behavior: 'auto' });
@@ -1633,7 +1697,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       window.cancelAnimationFrame(frame);
       if (settle) window.clearTimeout(settle);
     };
-  }, [convMessages.length, activeConversationId, highlightedMessageId]);
+  }, [convMessages.length, activeConversationId, highlightedMessageId, isActive, tab, clavierOuvert]);
 
   const sendConvMessage = async () => {
     const body = convDraft.trim();
@@ -1694,6 +1758,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       edited_at: null,
       created_at: new Date().toISOString(),
     });
+    convDoitRecadrerBasRef.current = true;
+    if (convScrollRef.current) forcerDefilementBas(convScrollRef.current, 'smooth');
 
     let inserted: { id?: string } | null = null;
     let error: unknown = null;
@@ -3246,31 +3312,37 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChannel?.id, isActive, tab]);
 
-  // Ticket #9 (nouvelle base) : voir le correctif identique sur convScrollRef
-  // ci-dessus — même cause, même fix, pour les canaux d'équipe. Signalé (15
-  // octobre) : ce garde-fou n'avait en réalité jamais été reporté ici — ce
-  // défilement systématique vers le bas du canal l'emportait donc toujours
-  // sur le rebond ciblé (highlightedMessageId) au clic sur une notification
-  // de message de canal, exactement la course déjà corrigée côté
-  // conversations directes le 10 septembre.
-  const canalTailleVueRef = useRef(0);
-  const canalFilVuRef = useRef<string | null>(null);
+  // Ticket #9 (nouvelle base) : défilement automatique vers le bas pour les canaux d'équipe.
+  // À l'ouverture d'un canal ou au clic sur un canal, la vue est systématiquement positionnée tout en bas.
   useEffect(() => {
     const pane = scrollRef.current;
     const idCanal = activeChannel?.id || null;
+    if (highlightedMessageId || !pane || !idCanal) return;
+
+    const premierAncrage = canalDernierFilAncreRef.current !== idCanal;
+    const doitRecadrer = canalDoitRecadrerBasRef.current || premierAncrage;
     const ajout = messages.length - canalTailleVueRef.current;
     const changement = canalFilVuRef.current !== idCanal;
-    canalTailleVueRef.current = messages.length;
-    canalFilVuRef.current = pane ? idCanal : null;
-    // Même garde que côté conversations : un message ciblé par une
-    // notification ne doit pas être recouvert par le saut en bas du fil.
-    if (highlightedMessageId || !pane) return;
+
+    if (messages.length > 0) {
+      canalTailleVueRef.current = messages.length;
+      canalFilVuRef.current = idCanal;
+    }
+
+    if (doitRecadrer && messages.length > 0) {
+      canalDoitRecadrerBasRef.current = false;
+      canalDernierFilAncreRef.current = idCanal;
+      return forcerDefilementBas(pane, 'auto');
+    }
+
     const behavior = comportementDefilementFil({
       changementDeFil: changement,
+      chargementInitial: premierAncrage,
       messagesAjoutes: ajout,
       distanceDuBas: pane.scrollHeight - pane.scrollTop - pane.clientHeight,
     });
     if (!behavior) return;
+
     const frame = window.requestAnimationFrame(() => {
       pane.scrollTo({ top: pane.scrollHeight, behavior });
     });
@@ -3283,7 +3355,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       window.cancelAnimationFrame(frame);
       if (settle) window.clearTimeout(settle);
     };
-  }, [messages.length, activeChannel?.id, highlightedMessageId]);
+  }, [messages.length, activeChannel?.id, highlightedMessageId, isActive, tab, clavierOuvert]);
 
   // Bug nº 6 (consigne du 1er septembre), deuxieme partie. Signale a la
   // recette : « quand je mets un chat dans le dossier, elle ne recoit rien ».
@@ -3394,6 +3466,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
       data: { body, sender_id: currentUser.uid, sender_name: displayName, created_at: creeLe },
     });
+    canalDoitRecadrerBasRef.current = true;
+    if (scrollRef.current) forcerDefilementBas(scrollRef.current, 'smooth');
     const { error } = await supabase.from('chat_messages').insert({
       // Signalé : "les Novadji dans les messages ne se mettent pas" — en
       // creusant, la colonne `id` de `chat_messages` n'a pas de valeur par
@@ -3569,7 +3643,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             </button>
           )}
           <button
-            onClick={() => setActiveChannel(c)}
+            onClick={() => openChannel(c)}
             className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-left truncate transition-all ${
               activeChannel?.id === c.id
                 ? 'bg-[#F7BC5F]/20 text-[#FAD592] border border-[#F7BC5F]/40 shadow-[0_0_12px_rgba(247,188,95,0.15)] font-bold'
@@ -4029,6 +4103,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       const ouvert = window.innerHeight - vv.height > window.innerHeight * 0.2;
       setClavierOuvert(ouvert);
       setHauteurVisible(ouvert ? Math.round(vv.height) : null);
+      if (ouvert) {
+        convDoitRecadrerBasRef.current = true;
+        canalDoitRecadrerBasRef.current = true;
+        if (convScrollRef.current) forcerDefilementBas(convScrollRef.current);
+        if (scrollRef.current) forcerDefilementBas(scrollRef.current);
+      }
     };
     // Rattrapage (10 septembre, persiste après un premier correctif) :
     // fermer le clavier via le petit bouton dédié du clavier iOS (plutôt
