@@ -1638,25 +1638,24 @@ function App() {
         )}
       </div>
 
-      {/* Panneau latéral droit des notifications — effet tiroir aller/retour */}
+      {/* Panneau latéral droit des notifications — effet tiroir aller/retour fluide et rapide */}
       <>
         <button
           type="button"
           aria-label="Fermer les notifications"
           onClick={() => setNotificationsPanelOpen(false)}
-          className={`fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm cursor-default ${
+          className={`fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm cursor-default transition-opacity duration-150 ${
             notificationsPanelOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
           }`}
-          style={{ transition: 'opacity 220ms cubic-bezier(0.22, 1, 0.36, 1)' }}
         />
         <aside
-          className={`fixed right-3 sm:right-4 top-3 sm:top-4 bottom-3 sm:bottom-4 z-[80] w-[calc(100%-1.5rem)] sm:w-[440px] lg:w-[480px] bg-[#071317]/95 backdrop-blur-2xl border border-teal-500/25 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_30px_rgba(247,188,95,0.1)] flex flex-col overflow-hidden ${
-            notificationsPanelOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
+          className={`fixed right-3 sm:right-4 top-3 sm:top-4 bottom-3 sm:bottom-4 z-[80] w-[calc(100%-1.5rem)] sm:w-[440px] lg:w-[480px] bg-[#071317]/95 backdrop-blur-2xl border border-teal-500/25 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_30px_rgba(247,188,95,0.1)] flex flex-col overflow-hidden will-change-transform ${
+            notificationsPanelOpen ? 'translate-x-0' : 'translate-x-[110%] pointer-events-none'
           }`}
           style={{
             top: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
             bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
-            transition: 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms cubic-bezier(0.16, 1, 0.3, 1)',
+            transition: 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >
             {/* Liseré supérieur or lumineux */}

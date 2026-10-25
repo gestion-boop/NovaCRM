@@ -305,56 +305,32 @@ export const Header: React.FC<
     // Barre du haut masquée en mobile : la navigation du bas (Accueil / Chat
     // / IA / Alertes / Menu) couvre déjà tous ces accès sur petit écran.
     <header className="hidden md:flex bg-[#081318] border-b border-white/5 px-2.5 sm:px-6 items-center justify-between z-40 shrink-0 select-none pt-[env(safe-area-inset-top,0px)] min-h-[3.5rem] sm:min-h-[4rem] pb-1.5 sm:pb-0">
-      {/* BRAND + MENU */}
-      <div className="flex items-center gap-1.5 sm:gap-3 overflow-hidden">
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <img
-            data-tour="header-logo"
-            src={currentAgencyLogo}
-            alt={activeAgencyLabel}
-            className="w-7 h-7 sm:w-9 sm:h-9 rounded-full object-contain border border-[#F7BC5F]/40 shadow-md shrink-0 bg-[#0a2528]"
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              const target = e.currentTarget;
-              target.onerror = null;
-              target.src = "/icon-192.png";
-            }}
-          />
-
-          <span className="text-white font-bold text-sm sm:text-xl tracking-tight hidden sm:inline-block whitespace-nowrap">
-            {activeAgencyLabel}
-          </span>
-        </div>
-
-        {/* Icône "Accueil" — toujours visible, ramène directement à l'accueil
-            depuis n'importe quelle tuile/page, comme un bouton retour
-            universel (aucune des pages ouvertes depuis une tuile n'a de
-            bouton retour propre). */}
+      {/* ACCUEIL, MENU & SÉLECTEUR DE SOCIÉTÉ TOUT À GAUCHE */}
+      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        {/* Icône "Accueil" (la maison) tout à gauche */}
         <button
           type="button"
           onClick={() => onNavigate?.('accueil')}
           title="Retour à l'accueil"
-          className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 flex items-center justify-center rounded-lg bg-[#0b1c1e] hover:bg-[#102a2d] border border-white/10 text-gray-300 hover:text-[#F7BC5F] transition-colors"
+          className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 flex items-center justify-center rounded-xl bg-[#0b1c1e] hover:bg-[#102a2d] border border-white/10 text-gray-300 hover:text-[#F7BC5F] transition-colors cursor-pointer"
         >
           <Home className="w-4 h-4" />
         </button>
 
-        {/* Bouton "Menu" — ouvre le panneau de navigation coulissant (Sidebar
-            en mode overlay, réutilisé tel quel : mêmes routes, permissions,
-            badges et ordre personnalisable qu'avant). */}
+        {/* Bouton "Menu" */}
         <button
           data-tour="header-menu"
           type="button"
           onClick={onToggleMobileMenu}
           aria-expanded={menuOpen}
           aria-controls="novasphere-nav-menu"
-          className="flex items-center gap-1.5 h-9 sm:h-10 px-2.5 sm:px-3 rounded-lg bg-[#0b1c1e] hover:bg-[#102a2d] border border-[#F7BC5F]/25 text-gray-200 hover:text-white transition-colors shrink-0"
+          className="flex items-center gap-1.5 h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl bg-[#0b1c1e] hover:bg-[#102a2d] border border-[#F7BC5F]/25 text-gray-200 hover:text-white transition-colors shrink-0 cursor-pointer"
         >
           <MenuIcon className="w-4 h-4 text-[#F7BC5F]" />
           <span className="hidden sm:inline text-xs font-semibold">Menu</span>
         </button>
 
-        {/* Sélecteur de société par logos : un clic, sans menu déroulant. */}
+        {/* Sélecteur de société par logos : 100% interactif, nom et logo complets sans doublon */}
         <AgencyLogoSwitcher
           agencies={societesAccessibles}
           selectedId={selectedAgencyId || activeAgency.id}
@@ -362,8 +338,8 @@ export const Header: React.FC<
           className="shrink-0"
         />
 
-        <div className="hidden lg:flex items-center gap-1 sm:gap-2 overflow-hidden">
-          <span className="text-[10px] sm:text-xs bg-[#F7BC5F]/20 text-[#F7BC5F] border border-[#F7BC5F]/40 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full font-bold flex items-center gap-1 shadow-sm shrink-0">
+        <div className="hidden xl:flex items-center gap-1 shrink-0">
+          <span className="text-[10px] sm:text-xs bg-[#F7BC5F]/20 text-[#F7BC5F] border border-[#F7BC5F]/40 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-sm shrink-0">
             <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             <span>{contacts.length}</span>
           </span>
@@ -371,53 +347,36 @@ export const Header: React.FC<
       </div>
 
       {/* RECHERCHE - BOUTON D'ACCÈS RAPIDE QUI OUVRE LA GRANDE BARRE SPOTLIGHT */}
-      <div data-tour="header-search" className="hidden md:flex items-center flex-1 max-w-[200px] xl:max-w-xs mx-2 relative shrink min-w-[42px]">
+      <div data-tour="header-search" className="hidden md:flex items-center flex-1 max-w-xs xl:max-w-md mx-3 relative shrink min-w-[42px]">
         <button
           type="button"
           onClick={() => {
             setIsSearchModalOpen(true);
           }}
-          className="w-full flex items-center justify-between gap-2 h-9 sm:h-10 px-3 rounded-xl bg-[#0b1c1e] hover:bg-[#102a2d] border border-white/10 hover:border-[#F7BC5F]/50 text-gray-400 hover:text-white transition-all shadow-inner group cursor-pointer"
+          className="w-full flex items-center justify-between gap-2.5 h-9 sm:h-10 px-3.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-[#F7BC5F]/50 text-gray-400 hover:text-white transition-all shadow-inner group cursor-pointer"
           title="Ouvrir la recherche globale (⌘K ou Ctrl+K)"
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <Search className="w-4 h-4 text-gray-400 group-hover:text-[#F7BC5F] transition-colors shrink-0" />
-            <span className="hidden xl:inline text-xs text-gray-400 group-hover:text-gray-200 truncate">
-              Rechercher partout…
-            </span>
-            <span className="xl:hidden hidden sm:inline text-xs text-gray-400 group-hover:text-gray-200 truncate">
-              Recherche…
+            <span className="hidden sm:inline text-xs text-gray-300 group-hover:text-white truncate">
+              Rechercher partout dans NovaCRM…
             </span>
           </div>
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-black/50 border border-white/10 text-[10px] font-mono font-bold text-gray-400 group-hover:text-[#F7BC5F] shrink-0">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-black/50 border border-white/10 text-[10px] font-mono font-bold text-gray-400 group-hover:text-[#F7BC5F] shrink-0 shadow-sm">
             <span>⌘</span>K
           </kbd>
         </button>
       </div>
 
-
-
       {/* OUTILS HEADER */}
       <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-        {onOpenClientDictation && (
-          <button
-            onClick={onOpenClientDictation}
-            title="Dicter une note vocale directement dans une fiche client"
-            className="bg-white/5 hover:bg-white/10 border border-[#F7BC5F]/35 text-[#FAD592] hover:text-white font-semibold text-xs px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all active:scale-95 shrink-0 cursor-pointer"
-          >
-            <Mic className="w-3.5 h-3.5 text-[#F7BC5F]" />
-            <span className="hidden lg:inline">Dictée client</span>
-          </button>
-        )}
-
         <button
           data-tour="header-nouveau-lead"
           onClick={onOpenNouveauLead}
-          className="bg-[#F7BC5F] hover:bg-[#d9ab38] text-black font-semibold text-xs px-2.5 sm:px-3.5 py-1.5 rounded-lg flex items-center gap-1 shadow-md hover:shadow-gold/20 transition-all active:scale-95 shrink-0"
+          title="Nouveau lead"
+          className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-[#E5A642] text-slate-950 font-black flex items-center justify-center shadow-md hover:brightness-110 active:scale-95 transition-all shrink-0 cursor-pointer"
         >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span className="hidden sm:inline">Nouveau lead</span>
-          <span className="sm:hidden text-[11px] font-bold">Lead</span>
+          <Plus className="w-5 h-5 stroke-[2.5]" />
         </button>
 
         <button

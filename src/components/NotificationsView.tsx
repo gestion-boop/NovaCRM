@@ -962,11 +962,24 @@ export const NotificationsView: React.FC<
               {isAppUpdate ? (
                 <button
                   type="button"
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.stopPropagation();
+                    try {
+                      await dismissNotification(notification.id);
+                      if (currentUser?.uid) {
+                        await supabase
+                          .from('notifications')
+                          .update({ dismissed_at: new Date().toISOString() })
+                          .eq('user_id', currentUser.uid)
+                          .eq('type', 'app_update')
+                          .is('dismissed_at', null);
+                      }
+                    } catch {
+                      /* best effort */
+                    }
                     window.location.reload();
                   }}
-                  className="px-3 py-1 rounded-full bg-gradient-to-r from-[#F7BC5F] to-amber-500 hover:from-amber-400 hover:to-yellow-500 text-slate-950 font-black text-xs shadow-[0_0_14px_rgba(247,188,95,0.35)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ml-auto"
+                  className="px-3 py-1 rounded-full bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-amber-500 hover:from-amber-400 hover:to-yellow-500 text-slate-950 font-black text-xs shadow-[0_0_14px_rgba(247,188,95,0.35)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ml-auto"
                 >
                   <RefreshCw className="w-3 h-3" />
                   Rafraîchir maintenant

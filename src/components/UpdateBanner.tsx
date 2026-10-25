@@ -54,12 +54,29 @@ export default function UpdateBanner() {
     let cancelled = false;
     (async () => {
       const v = await fetchServerVersion();
-      if (!cancelled) setBootVersion(v ? v.version : null);
+      if (!cancelled && v) {
+        setBootVersion(v.version);
+        // Au démarrage sur la version à jour : si une ancienne notification "app_update"
+        // était en attente (après rafraîchissement du navigateur ou du popup), on la marque
+        // comme traitée pour nettoyer immédiatement la pastille de la clochette.
+        if (currentUser?.uid) {
+          try {
+            await supabase
+              .from('notifications')
+              .update({ dismissed_at: new Date().toISOString() })
+              .eq('user_id', currentUser.uid)
+              .eq('type', 'app_update')
+              .is('dismissed_at', null);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [currentUser?.uid]);
 
   useEffect(() => {
     if (!bootVersion) return;
@@ -131,7 +148,19 @@ export default function UpdateBanner() {
     snoozedUntilRef.current = Date.now() + SNOOZE_MS;
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
+    if (currentUser?.uid) {
+      try {
+        await supabase
+          .from('notifications')
+          .update({ dismissed_at: new Date().toISOString() })
+          .eq('user_id', currentUser.uid)
+          .eq('type', 'app_update')
+          .is('dismissed_at', null);
+      } catch {
+        /* best effort */
+      }
+    }
     window.location.reload();
   };
 
