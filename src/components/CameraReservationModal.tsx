@@ -220,7 +220,10 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
     const equipement = selectedEquipment;
     const ignore = editReservation?.id;
     if (heure <= startTime) {
-      setSubmitError('L’heure de fin doit être après le début.');
+      // Si l'utilisateur clique une heure antérieure ou égale au début, on repositionne intelligemment le début
+      setStartTime(heure);
+      setEndTime(ajouterMinutes(heure, 60));
+      setSubmitError(null);
       return;
     }
     if (plageConflit(startTime, heure, reservationsDuCreneau, equipement, ignore)) {

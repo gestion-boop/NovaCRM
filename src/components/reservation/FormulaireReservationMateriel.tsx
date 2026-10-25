@@ -1,10 +1,13 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 import {
   Calendar, ChevronDown, ChevronLeft, ChevronRight, MapPin, Briefcase, Hash, FileText, Send, Check,
+  Clock, Sparkles, Sun, Sunset,
 } from 'lucide-react';
-import type { NiveauDispo } from '@/lib/creneauxReservationCamera';
+import {
+  ajouterMinutes, minutesEntre, libelleDuree, heuresFinAffichees, type NiveauDispo,
+} from '@/lib/creneauxReservationCamera';
 
 export interface JourCalendrier {
   cle: string;
@@ -289,11 +292,39 @@ export function FormulaireReservationMateriel({
     </div>
   );
 
-  const creneauxVisibles = ongletHoraire === 'debut' ? creneauxDebut : creneauxFin;
+  const [periodeFiltre, setPeriodeFiltre] = useState<'tous' | 'matin' | 'apres-midi'>('tous');
+
+  const optionsFin = heuresFinAffichees(debut, fin);
+
+  const creneauxVisibles = (ongletHoraire === 'debut' ? creneauxDebut : creneauxFin).filter((c) => {
+    if (periodeFiltre === 'matin') return c.debut < '12:00';
+    if (periodeFiltre === 'apres-midi') return c.debut >= '12:00';
+    return true;
+  });
+
+  const dureeActuelleMin = minutesEntre(debut, fin);
+  const dureeTexte = libelleDuree(debut, fin) || '1 h';
+
+  const DUREES_RAPIDES = [
+    { label: '1 h', minutes: 60 },
+    { label: '1 h 30', minutes: 90 },
+    { label: '2 h', minutes: 120 },
+    { label: '3 h', minutes: 180 },
+    { label: '4 h', minutes: 240 },
+  ];
+
   const grilleCreneaux = (
     <div>
-      <p className="text-xs text-[var(--ink-2)] mb-2 capitalize">{dateChoisie}</p>
-      <div role="tablist" aria-label="Horaires" className="grid grid-cols-2 gap-2 mb-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <p className="text-xs font-semibold text-[var(--ink-2)] capitalize truncate">{dateChoisie}</p>
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-300 text-[11px] font-bold shrink-0">
+          <Clock className="w-3 h-3 text-violet-400" />
+          <span>{dureeTexte}</span>
+        </div>
+      </div>
+
+      {/* Onglets DÉBUT / FIN rehaussés avec affichage clair */}
+      <div role="tablist" aria-label="Horaires" className="grid grid-cols-2 gap-2 mb-2.5">
         {([
           ['debut', 'Début', debut],
           ['fin', 'Fin', fin],
@@ -307,45 +338,199 @@ export function FormulaireReservationMateriel({
               aria-label={libelle}
               aria-selected={actif}
               onClick={() => onOngletHoraire(onglet)}
-              className={`rounded-xl px-2 py-2 text-center transition-colors ${
+              className={`rounded-2xl p-2.5 text-center transition-all cursor-pointer relative ${
                 actif
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-[var(--nv-field)] text-[var(--ink-1)] border border-[var(--nv-field-border)]'
+                  ? 'bg-violet-600 text-white shadow-md shadow-violet-950/40 ring-2 ring-violet-400'
+                  : 'bg-[var(--nv-field)] text-[var(--ink-1)] border border-[var(--nv-field-border)] hover:border-violet-400'
               }`}
             >
-              <span className={`block text-[10px] font-semibold uppercase tracking-wide ${actif ? 'text-white/80' : 'text-[var(--ink-3)]'}`}>{libelle}</span>
-              <span className="block text-lg font-bold tabular-nums leading-tight">{heure}</span>
+              <div className="flex items-center justify-between mb-0.5">
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${actif ? 'text-white/90' : 'text-[var(--ink-3)]'}`}>
+                  {libelle}
+                </span>
+                {actif ? (
+                  <span className="w-1.5 h-1.5 rounded-full bg-white shadow-xs" />
+                ) : (
+                  <span className="text-[9px] text-[var(--ink-3)]">cliquer</span>
+                )}
+              </div>
+              <span className="block text-xl font-black tabular-nums leading-tight tracking-tight">{heure}</span>
+              <span className={`block text-[10px] mt-0.5 truncate ${actif ? 'text-violet-100 font-medium' : 'text-[var(--ink-3)]'}`}>
+                {actif ? 'Étape en cours' : 'Modifier'}
+              </span>
             </button>
           );
         })}
       </div>
-      <p className="text-xs text-[var(--ink-2)] mb-2">
-        {ongletHoraire === 'debut' ? 'Choisissez l’heure de début' : 'Choisissez l’heure de fin'}
-      </p>
-      <div className="max-h-56 overflow-y-auto overscroll-contain scroll-smooth rounded-xl">
-      <div className="grid grid-cols-3 gap-2">
-        {creneauxVisibles.map((creneau) => (
+
+      {/* Raccourcis de durée en 1 clic */}
+      <div className="mb-3 space-y-1 bg-white/[0.02] border border-white/5 p-2 rounded-xl">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold text-[var(--ink-2)] uppercase tracking-wide flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-[#F5C451]" />
+            <span>Durée rapide :</span>
+          </span>
+          <span className="text-[10px] text-violet-300 font-semibold">{dureeTexte}</span>
+        </div>
+        <div className="flex items-center gap-1 flex-wrap">
+          {DUREES_RAPIDES.map(({ label, minutes }) => {
+            const estActif = dureeActuelleMin === minutes;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => onChoisirFin(ajouterMinutes(debut, minutes))}
+                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer active:scale-95 ${
+                  estActif
+                    ? 'bg-violet-600 text-white shadow-sm ring-1 ring-violet-400'
+                    : 'bg-[var(--nv-field)] text-[var(--ink-2)] hover:text-[var(--ink-1)] border border-[var(--nv-field-border)] hover:border-violet-400'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
           <button
-            key={creneau.debut}
             type="button"
-            onClick={() => (ongletHoraire === 'debut' ? onChoisirDebut(creneau.debut) : onChoisirFin(creneau.debut))}
-            aria-pressed={creneau.actif}
-            className={`h-10 rounded-xl text-sm font-semibold transition-all duration-200 ${
-              creneau.occupe
-                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-                : creneau.actif
-                  ? 'bg-violet-600 text-white'
-                  : creneau.dansPlage
-                    ? 'bg-violet-600/40 text-white border border-violet-400'
-                    : 'bg-[var(--nv-field)] text-[var(--ink-1)] border border-[var(--nv-field-border)] hover:border-violet-400'
+            onClick={() => { onChoisirDebut('09:00'); onChoisirFin('12:00'); }}
+            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer active:scale-95 ${
+              debut === '09:00' && fin === '12:00'
+                ? 'bg-violet-600 text-white shadow-sm ring-1 ring-violet-400'
+                : 'bg-[var(--nv-field)] text-[var(--ink-2)] hover:text-[var(--ink-1)] border border-[var(--nv-field-border)] hover:border-violet-400'
             }`}
           >
-            {creneau.debut}
+            Matin (9h-12h)
           </button>
-        ))}
+          <button
+            type="button"
+            onClick={() => { onChoisirDebut('14:00'); onChoisirFin('18:00'); }}
+            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer active:scale-95 ${
+              debut === '14:00' && fin === '18:00'
+                ? 'bg-violet-600 text-white shadow-sm ring-1 ring-violet-400'
+                : 'bg-[var(--nv-field)] text-[var(--ink-2)] hover:text-[var(--ink-1)] border border-[var(--nv-field-border)] hover:border-violet-400'
+            }`}
+          >
+            Après-midi (14h-18h)
+          </button>
+          <button
+            type="button"
+            onClick={() => { onChoisirDebut('09:00'); onChoisirFin('18:00'); }}
+            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer active:scale-95 ${
+              debut === '09:00' && fin === '18:00'
+                ? 'bg-violet-600 text-white shadow-sm ring-1 ring-violet-400'
+                : 'bg-[var(--nv-field)] text-[var(--ink-2)] hover:text-[var(--ink-1)] border border-[var(--nv-field-border)] hover:border-violet-400'
+            }`}
+          >
+            Journée (9h-18h)
+          </button>
+        </div>
       </div>
+
+      {/* Sélecteurs directs déroulants De ➔ À */}
+      <div className="grid grid-cols-2 gap-2 mb-3 bg-[var(--nv-field)]/60 p-2 rounded-xl border border-[var(--nv-field-border)]">
+        <div>
+          <label className="block text-[10px] font-bold text-[var(--ink-2)] uppercase tracking-wide mb-1">
+            De (Début)
+          </label>
+          <select
+            value={debut}
+            onChange={(e) => onChoisirDebut(e.target.value)}
+            className="w-full h-8 px-2 rounded-lg bg-[var(--nv-field)] text-[var(--ink-1)] border border-[var(--nv-field-border)] font-bold text-xs outline-none cursor-pointer focus:border-violet-500"
+          >
+            {creneauxDebut.map((c) => (
+              <option key={c.debut} value={c.debut} disabled={c.occupe}>
+                {c.debut} {c.occupe ? '(occupé)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-[var(--ink-2)] uppercase tracking-wide mb-1">
+            À (Fin)
+          </label>
+          <select
+            value={fin}
+            onChange={(e) => onChoisirFin(e.target.value)}
+            className="w-full h-8 px-2 rounded-lg bg-[var(--nv-field)] text-[var(--ink-1)] border border-[var(--nv-field-border)] font-bold text-xs outline-none cursor-pointer focus:border-violet-500"
+          >
+            {optionsFin.map((h) => (
+              <option key={h} value={h}>
+                {h}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
-      <p className="text-sm font-medium text-[var(--ink-1)] mt-2">{plage}</p>
+
+      {/* Titre & Filtres Matin / Après-midi */}
+      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+        <p className="text-xs font-semibold text-[var(--ink-2)]">
+          {ongletHoraire === 'debut' ? 'Choisissez l’heure de début' : 'Choisissez l’heure de fin'}
+        </p>
+        <div className="flex items-center gap-1 bg-black/20 p-0.5 rounded-lg border border-[var(--nv-field-border)] text-[10px]">
+          {(['tous', 'matin', 'apres-midi'] as const).map((filtre) => (
+            <button
+              key={filtre}
+              type="button"
+              onClick={() => setPeriodeFiltre(filtre)}
+              className={`px-2 py-0.5 rounded-md font-semibold transition-colors cursor-pointer ${
+                periodeFiltre === filtre
+                  ? 'bg-violet-600 text-white shadow-xs'
+                  : 'text-[var(--ink-3)] hover:text-[var(--ink-1)]'
+              }`}
+            >
+              {filtre === 'tous' ? 'Tous' : filtre === 'matin' ? 'Matin' : 'Après-midi'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="max-h-52 overflow-y-auto overscroll-contain scroll-smooth rounded-xl border border-[var(--nv-field-border)] p-1.5 bg-black/10 custom-scrollbar">
+        <div className="grid grid-cols-3 gap-1.5">
+          {creneauxVisibles.map((creneau) => {
+            const isStart = creneau.debut === debut;
+            const isEnd = creneau.debut === fin;
+            const isInRange = creneau.debut > debut && creneau.debut < fin;
+            const isSelectedTab = (ongletHoraire === 'debut' && isStart) || (ongletHoraire === 'fin' && isEnd);
+
+            return (
+              <button
+                key={creneau.debut}
+                type="button"
+                onClick={() => (ongletHoraire === 'debut' ? onChoisirDebut(creneau.debut) : onChoisirFin(creneau.debut))}
+                aria-pressed={creneau.actif}
+                className={`h-9 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer relative flex items-center justify-center gap-1 ${
+                  creneau.occupe
+                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 cursor-not-allowed'
+                    : isSelectedTab
+                      ? 'bg-violet-600 text-white shadow-md shadow-violet-950/40 ring-2 ring-violet-400'
+                      : (isStart || isEnd)
+                        ? 'bg-violet-600/80 text-white border border-violet-400'
+                        : (creneau.dansPlage || isInRange)
+                          ? 'bg-violet-600/30 text-violet-100 border border-violet-500/40'
+                          : 'bg-[var(--nv-field)] text-[var(--ink-1)] border border-[var(--nv-field-border)] hover:border-violet-400'
+                }`}
+              >
+                <span>{creneau.debut}</span>
+                {isStart && <span aria-hidden="true" className="text-[8px] opacity-75 font-normal">Déb</span>}
+                {isEnd && <span aria-hidden="true" className="text-[8px] opacity-75 font-normal">Fin</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Récapitulatif clair en bas */}
+      <div className="mt-2.5 p-2 rounded-xl bg-violet-500/10 border border-violet-500/25 flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-violet-200 flex items-center gap-1.5 truncate">
+          <Clock className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+          <span>{plage || `${debut} – ${fin}`}</span>
+        </span>
+        <span className="px-2 py-0.5 rounded-full bg-violet-600 text-white text-[11px] font-black shrink-0">
+          {dureeTexte}
+        </span>
+      </div>
+
       {reservationsDuJour.length > 0 && (
         <ul className="mt-2 space-y-1">
           {reservationsDuJour.slice(0, 3).map((reservation) => (
