@@ -2534,14 +2534,14 @@ export default function ClientProfileView({
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-[#FDE047] via-[#F7BC5F] to-[#B4781E] flex items-center justify-center text-slate-950 font-black text-base sm:text-lg shadow-[0_0_24px_rgba(247,188,95,0.4)] ring-1 ring-[#FDE047]/50 shrink-0">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-[#1b262c] via-[#0f1b20] to-[#081215] border border-[#F7BC5F]/35 flex items-center justify-center text-[#FAD592] font-black text-base sm:text-lg shadow-[0_4px_16px_rgba(0,0,0,0.5)] shrink-0">
               {client.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">{client.name}</h1>
                 {client.type && (
-                  <span className="px-2.5 py-0.5 rounded-lg bg-gradient-to-r from-[#F7BC5F]/25 to-[#FDE047]/10 border border-[#F7BC5F]/50 text-[#FDE68A] text-[11px] font-extrabold shadow-[0_0_12px_rgba(247,188,95,0.15)]">
+                  <span className="px-2.5 py-0.5 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/35 text-[#FAD592] text-[11px] font-bold">
                     {client.type}
                   </span>
                 )}
@@ -2618,7 +2618,7 @@ export default function ClientProfileView({
             <button
               onClick={() => setShowActionsMenu((v) => !v)}
               aria-label="Actions"
-              className="px-4 py-2.5 max-sm:px-3 bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
+              className="px-4 py-2.5 max-sm:px-3 bg-gradient-to-r from-[#c68e36] to-[#a36f20] hover:from-[#d49b3f] hover:to-[#b07b27] text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md border border-[#F7BC5F]/30 hover:scale-[1.02] transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4 stroke-[3] shrink-0" />
               <span>Actions</span>
@@ -2695,28 +2695,28 @@ export default function ClientProfileView({
         <div className={`${mobileDetailsExpanded ? 'grid' : 'hidden lg:grid'} grid-cols-1 lg:grid-cols-12 gap-3.5 pt-1`}>
           {/* Carte 1 : Coordonnées & Honoraires / Patrimoine (4 col) — dégradé Noir & Or/Jaune */}
           <div className="lg:col-span-4 rounded-2xl nv-bento-gold p-3.5 flex flex-col justify-between gap-3 relative overflow-hidden transition-all duration-200">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/50 to-transparent" />
             <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#F7BC5F]/20">
               <div>
-                <span className="text-[10px] uppercase font-bold text-[#FAD592]/80 tracking-wider block">Montant Estimé</span>
-                <div className="text-xl sm:text-2xl font-black bg-gradient-to-r from-[#FFFBEB] via-[#FDE047] to-[#F7BC5F] bg-clip-text text-transparent leading-tight mt-0.5 drop-shadow-[0_2px_10px_rgba(247,188,95,0.25)]">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Montant Estimé</span>
+                <div className="text-xl sm:text-2xl font-black text-white leading-tight mt-0.5">
                   {activeDeal ? formatCurrency(activeDeal.amount) : '0 €'}
                 </div>
               </div>
-              <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-lg bg-gradient-to-r from-[#F7BC5F]/25 to-[#FDE047]/10 text-[#FDE68A] border border-[#F7BC5F]/50 uppercase tracking-wider shadow-[0_0_12px_rgba(247,188,95,0.2)]">
+              <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-lg bg-[#F7BC5F]/15 text-[#e0b263] border border-[#F7BC5F]/30 uppercase tracking-wider">
                 Honoraires
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
               <div className="nv-coord-box flex items-center gap-2 min-w-0 p-2 rounded-xl bg-black/50 border border-[#F7BC5F]/20 hover:border-[#F7BC5F]/45 transition-colors">
-                <Mail className="w-3.5 h-3.5 text-[#FDE047] shrink-0" />
+                <Mail className="w-3.5 h-3.5 text-[#c68e36] shrink-0" />
                 {client.email ? (
                   <a
                     href={`mailto:${client.email}`}
                     onClick={clicMailCrm(client.email)}
                     title={client.email}
-                    className="text-[#FDE68A] hover:text-white underline underline-offset-2 truncate font-semibold"
+                    className="text-slate-200 hover:text-white underline underline-offset-2 truncate font-semibold"
                   >
                     {client.email}
                   </a>
@@ -2725,11 +2725,11 @@ export default function ClientProfileView({
                 )}
               </div>
               <div className="nv-coord-box flex items-center gap-2 min-w-0 p-2 rounded-xl bg-black/50 border border-[#F7BC5F]/20 hover:border-[#F7BC5F]/45 transition-colors">
-                <Phone className="w-3.5 h-3.5 text-[#FDE047] shrink-0" />
+                <Phone className="w-3.5 h-3.5 text-[#c68e36] shrink-0" />
                 {client.phone ? (
                   <a
                     href={`tel:${String(client.phone).replace(/[^+\d]/g, '')}`}
-                    className="text-[#FDE68A] hover:text-white underline underline-offset-2 truncate font-semibold"
+                    className="text-slate-200 hover:text-white underline underline-offset-2 truncate font-semibold"
                   >
                     {client.phone}
                   </a>
@@ -2743,26 +2743,26 @@ export default function ClientProfileView({
               <div className="flex flex-wrap gap-1.5 pt-1 border-t border-[#F7BC5F]/15 text-[11px]">
                 {client.revenus ? (
                   <span className="px-2 py-0.5 rounded-md bg-black/50 border border-[#F7BC5F]/20 text-slate-300">
-                    Revenus : <strong className="text-[#FDE68A]">{formatCurrency(client.revenus)}</strong>
+                    Revenus : <strong className="text-white">{formatCurrency(client.revenus)}</strong>
                   </span>
                 ) : null}
                 {client.apport ? (
                   <span className="px-2 py-0.5 rounded-md bg-black/50 border border-[#F7BC5F]/20 text-slate-300">
-                    Apport : <strong className="text-[#FDE68A]">{formatCurrency(client.apport)}</strong>
+                    Apport : <strong className="text-white">{formatCurrency(client.apport)}</strong>
                   </span>
                 ) : null}
                 {client.credits ? (
                   <span className="px-2 py-0.5 rounded-md bg-black/50 border border-[#F7BC5F]/20 text-slate-300">
-                    Crédits : <strong className="text-[#FDE68A]">{formatCurrency(client.credits)}/m</strong>
+                    Crédits : <strong className="text-white">{formatCurrency(client.credits)}/m</strong>
                   </span>
                 ) : null}
                 {client.contractType ? (
                   <span className="px-2 py-0.5 rounded-md bg-black/50 border border-[#F7BC5F]/20 text-slate-300">
-                    Contrat : <strong className="text-[#FDE68A]">{client.contractType}</strong>
+                    Contrat : <strong className="text-white">{client.contractType}</strong>
                   </span>
                 ) : null}
                 {client.projectType ? (
-                  <span className="px-2 py-0.5 rounded-md bg-gradient-to-r from-[#F7BC5F]/25 to-[#FDE047]/10 border border-[#F7BC5F]/40 text-[#FDE68A] font-bold">
+                  <span className="px-2 py-0.5 rounded-md bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#e0b263] font-bold">
                     {client.projectType}
                   </span>
                 ) : null}
@@ -2772,8 +2772,8 @@ export default function ClientProfileView({
 
           {/* Carte 2 : Structure, Agent attribué & Liens / Consentement (4 col) */}
           <div className="lg:col-span-4 rounded-2xl nv-bento-dark p-3.5 flex flex-col justify-between gap-2.5 relative overflow-hidden transition-all duration-200">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent" />
-            <span className="text-[10px] uppercase font-bold text-[#FAD592] tracking-wider">Structure & Attribution</span>
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/40 to-transparent" />
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Structure & Attribution</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Structure / Agence</label>
@@ -2902,12 +2902,12 @@ export default function ClientProfileView({
 
           {/* Carte 3 : Mémo / Commentaire général de la fiche (4 col) — unique, sans doublon */}
           <div className="lg:col-span-4 rounded-2xl nv-bento-dark p-3.5 flex flex-col justify-between gap-2 relative overflow-hidden transition-all duration-200">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/40 to-transparent" />
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] uppercase font-bold text-[#FAD592] tracking-wider">Commentaire général</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Commentaire général</span>
               <button
                 onClick={handleSaveComments}
-                className="px-2.5 py-0.5 rounded-lg bg-[#F7BC5F]/15 hover:bg-[#F7BC5F]/25 border border-[#F7BC5F]/35 text-[11px] font-bold text-[#FDE68A] hover:text-white flex items-center gap-1 cursor-pointer transition-all"
+                className="px-2.5 py-0.5 rounded-lg bg-[#F7BC5F]/15 hover:bg-[#F7BC5F]/25 border border-[#F7BC5F]/30 text-[11px] font-bold text-[#e0b263] hover:text-white flex items-center gap-1 cursor-pointer transition-all"
               >
                 {savedCommentsSuccess ? (
                   <>
@@ -2937,7 +2937,7 @@ export default function ClientProfileView({
             téléphone (24 octobre, "mets la barre plus petite") : padding et
             marges réduits sous sm:, inchangé sur tablette/ordinateur. */}
         <div className="nv-bento-dark rounded-2xl p-4 sm:p-5 sm:pb-6 relative shadow-lg backdrop-blur-md overflow-hidden">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-[#FDE047]/70 via-[#F7BC5F]/60 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/40 to-transparent" />
           <div className="flex items-center gap-2.5 mb-3 sm:mb-5 text-xs font-bold text-slate-400">
             Pipeline :
             <DropdownMenu>
@@ -3178,18 +3178,18 @@ export default function ClientProfileView({
         <div className={`w-full nv-activity-shell rounded-2xl flex flex-col shadow-xl backdrop-blur-xl overflow-hidden relative ${showHalo ? 'target-halo-bounce' : ''}`}>
           {/* Barre d'actions rapides Copilote Nova IA & Dictée Vocale directe dans la fiche — dégradé Noir & Jaune/Or */}
           <div className="p-3 sm:px-5 sm:py-4 nv-copilot-banner space-y-3 relative overflow-hidden">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-transparent opacity-90" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/40 to-transparent" />
             <div className="flex flex-wrap items-center justify-between gap-2.5">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FDE047] via-[#F7BC5F] to-[#B4781E] p-0.5 shadow-[0_0_20px_rgba(247,188,95,0.45)] shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#c68e36] to-[#8a5d16] p-0.5 shadow-md shrink-0">
                   <img src="/nova-mascotte.png" alt="Nova" className="w-full h-full rounded-[10px] object-cover" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs sm:text-sm font-black bg-gradient-to-r from-white via-[#FEF08A] to-[#F7BC5F] bg-clip-text text-transparent truncate">
+                    <span className="text-xs sm:text-sm font-black text-white truncate">
                       Copilote Nova & Dictée vocale
                     </span>
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-gradient-to-r from-[#F7BC5F]/25 to-[#FDE047]/10 text-[#FDE68A] border border-[#F7BC5F]/45 hidden sm:inline shadow-[0_0_12px_rgba(247,188,95,0.2)]">
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#e0b263] hidden sm:inline">
                       Gain de temps
                     </span>
                   </div>
@@ -3213,8 +3213,8 @@ export default function ClientProfileView({
                     quickDictationListening
                       ? 'bg-rose-600 text-white animate-pulse shadow-[0_0_20px_rgba(225,29,72,0.5)]'
                       : quickDictationOpen
-                      ? 'bg-gradient-to-r from-[#F7BC5F]/35 to-[#FDE047]/15 border border-[#FDE047]/70 text-[#FEF08A]'
-                      : 'bg-gradient-to-r from-[#F7BC5F]/20 to-black/60 hover:from-[#F7BC5F]/30 hover:to-black/70 border border-[#F7BC5F]/50 text-[#FDE68A]'
+                      ? 'bg-[#F7BC5F]/20 border border-[#F7BC5F]/50 text-[#FAD592]'
+                      : 'bg-[#F7BC5F]/12 hover:bg-[#F7BC5F]/20 border border-[#F7BC5F]/35 text-[#e0b263]'
                   }`}
                 >
                   {quickDictationListening ? (
@@ -3224,7 +3224,7 @@ export default function ClientProfileView({
                     </>
                   ) : (
                     <>
-                      <Mic className="w-3.5 h-3.5 text-[#FDE047]" />
+                      <Mic className="w-3.5 h-3.5 text-[#c68e36]" />
                       <span>Dicter dans la fiche</span>
                     </>
                   )}
@@ -3239,10 +3239,10 @@ export default function ClientProfileView({
                           initialPrompt: `Fais-moi une synthèse complète du dossier de ${client.name} (situation, profil, historique et points clés).`,
                         })
                       }
-                      className="px-2.5 py-1.5 rounded-xl bg-black/55 hover:bg-[#F7BC5F]/20 border border-[#F7BC5F]/25 hover:border-[#F7BC5F]/55 text-xs font-bold text-slate-100 hover:text-[#FDE68A] flex items-center gap-1 transition-all cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-xl bg-black/55 hover:bg-[#F7BC5F]/15 border border-[#F7BC5F]/25 hover:border-[#F7BC5F]/45 text-xs font-bold text-slate-100 hover:text-white flex items-center gap-1 transition-all cursor-pointer"
                       title="Générer une synthèse complète du dossier avec Nova"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-[#FDE047]" />
+                      <Sparkles className="w-3.5 h-3.5 text-[#c68e36]" />
                       <span>Synthèse</span>
                     </button>
 
@@ -3253,7 +3253,7 @@ export default function ClientProfileView({
                           prefill: `Crée une tâche de suivi pour ${client.name} : `,
                         })
                       }
-                      className="px-2.5 py-1.5 rounded-xl bg-black/55 hover:bg-[#F7BC5F]/20 border border-[#F7BC5F]/25 hover:border-[#F7BC5F]/55 text-xs font-bold text-slate-100 hover:text-[#FDE68A] flex items-center gap-1 transition-all cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-xl bg-black/55 hover:bg-[#F7BC5F]/15 border border-[#F7BC5F]/25 hover:border-[#F7BC5F]/45 text-xs font-bold text-slate-100 hover:text-white flex items-center gap-1 transition-all cursor-pointer"
                       title="Créer une tâche via Nova"
                     >
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
@@ -3267,17 +3267,17 @@ export default function ClientProfileView({
                           initialPrompt: `Planifie un rendez-vous avec ${client.name}`,
                         })
                       }
-                      className="px-2.5 py-1.5 rounded-xl bg-black/55 hover:bg-[#F7BC5F]/20 border border-[#F7BC5F]/25 hover:border-[#F7BC5F]/55 text-xs font-bold text-slate-100 hover:text-[#FDE68A] flex items-center gap-1 transition-all cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-xl bg-black/55 hover:bg-[#F7BC5F]/15 border border-[#F7BC5F]/25 hover:border-[#F7BC5F]/45 text-xs font-bold text-slate-100 hover:text-white flex items-center gap-1 transition-all cursor-pointer"
                       title="Planifier un RDV avec Nova"
                     >
-                      <Calendar className="w-3.5 h-3.5 text-[#FDE047]" />
+                      <Calendar className="w-3.5 h-3.5 text-[#c68e36]" />
                       <span>+ RDV IA</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => onOpenNova()}
-                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-[#E5A93C] hover:brightness-105 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-[0_0_18px_rgba(247,188,95,0.35)] transition-all cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#c68e36] to-[#a36f20] hover:from-[#d49b3f] hover:to-[#b07b27] text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-md border border-[#F7BC5F]/30 transition-all cursor-pointer"
                     >
                       <img src="/nova-mascotte.png" alt="" className="w-3.5 h-3.5 rounded-full object-cover" />
                       <span>Ouvrir Nova</span>

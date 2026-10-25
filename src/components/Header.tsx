@@ -374,7 +374,7 @@ export const Header: React.FC<
           data-tour="header-nouveau-lead"
           onClick={onOpenNouveauLead}
           title="Nouveau lead"
-          className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-[#E5A642] text-slate-950 font-black flex items-center justify-center shadow-md hover:brightness-110 active:scale-95 transition-all shrink-0 cursor-pointer"
+          className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-r from-[#c68e36] to-[#a36f20] hover:from-[#d49b3f] hover:to-[#b07b27] text-slate-950 font-black flex items-center justify-center shadow-md border border-[#F7BC5F]/30 active:scale-95 transition-all shrink-0 cursor-pointer"
         >
           <Plus className="w-5 h-5 stroke-[2.5]" />
         </button>
