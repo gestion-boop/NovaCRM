@@ -1811,8 +1811,8 @@ async function startServer() {
       const contents = messages.map((m: any) => ({ role: m.sender === 'user' ? 'user' : 'model', parts: [{ text: m.text }] }));
       if (prompt) contents.push({ role: 'user', parts: [{ text: prompt }] });
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash', contents,
-        config: { systemInstruction: `Tu es l'assistant IA NovaSphere. Réponds en français. Agence active: ${context.activeAgency?.name || 'Toutes'}.`, temperature: 0.4, tools: [{ functionDeclarations: [createContactTool, createTaskTool, createNoteTool, createAppointmentTool, getDailySummaryTool, getUpcomingBriefTool] }] },
+        model: 'gemini-2.5-flash', contents,
+        config: { systemInstruction: `Tu es l'assistant IA NovaSphere. Réponds en français. Agence active: ${context.activeAgency?.name || 'Toutes'}.`, temperature: 0.3, tools: [{ functionDeclarations: [createContactTool, createTaskTool, createNoteTool, createAppointmentTool, getDailySummaryTool, getUpcomingBriefTool] }] },
       });
       res.json({ text: response.text || '', functionCalls: response.functionCalls || [] });
     } catch (e: any) { res.status(500).json({ error: e.message || 'Erreur Gemini.' }); }

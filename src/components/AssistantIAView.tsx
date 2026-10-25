@@ -906,13 +906,18 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   // enchaîner dessus (relancer l'écoute).
   // Tentative ElevenLabs (voix "Charlie", api/ai/agent.ts mode:'speak') —
   // renvoie l'audio joué avec succès, ou lève pour déclencher le repli.
+  // Mémorise si ElevenLabs n'est pas configuré pour éviter de faire ramer chaque message avec un appel 500
+  const elevenLabsDisabledRef = useRef(false);
   const speakViaElevenLabs = async (cleaned: string, onStart?: () => void): Promise<void> => {
     const res = await fetch('/api/ai/agent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'speak', text: cleaned }),
     });
-    if (!res.ok) throw new Error('elevenlabs_unavailable');
+    if (!res.ok) {
+      elevenLabsDisabledRef.current = true;
+      throw new Error('elevenlabs_unavailable');
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
@@ -933,21 +938,16 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     stopSpeaking();
     const cleaned = stripMarkdownForSpeech(text);
     if (!cleaned) return;
-    // Console vocale : mémorisé pour "Réécouter" et pour pouvoir relancer
-    // la lecture avec une nouvelle vitesse/volume (repli navigateur
-    // uniquement — `speechSynthesis` n'applique ces réglages qu'au
-    // démarrage, contrairement à ElevenLabs/<audio> qui les acceptent en
-    // direct, voir changeVoiceRate/changeVoiceVolume plus bas).
     lastSpokenTextRef.current = cleaned;
 
-    if (!isMobile) {
+    if (!isMobile && !elevenLabsDisabledRef.current) {
       try {
         await speakViaElevenLabs(cleaned, onStart);
         return;
       } catch (e) {
-        console.warn('ElevenLabs indisponible, repli sur la voix du navigateur :', e);
+        console.warn('ElevenLabs indisponible, bascule immédiate sur la voix locale rapide :', e);
+        elevenLabsDisabledRef.current = true;
         activeSpeechEngineRef.current = null;
-        // repli silencieux ci-dessous — jamais d'erreur remontée pour ça.
       }
     }
 
@@ -1121,6 +1121,11 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   // l'utterance en cours sachent quoi relire, indépendamment de React.
   const lastSpokenTextRef = useRef('');
 
+  // Réactivité vocale ultra-rapide (détection de silence 750ms + retour visuel instantané)
+  const voiceSilenceTimerRef = useRef<any>(null);
+  const voiceTranscriptRef = useRef('');
+  const voiceHasDispatchedRef = useRef(false);
+
   const startVoiceModeListening = () => {
     if (!voiceModeActiveRef.current) return;
     const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -1129,37 +1134,85 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       setVoiceModeActive(false);
       return;
     }
+    if (voiceSilenceTimerRef.current) {
+      clearTimeout(voiceSilenceTimerRef.current);
+      voiceSilenceTimerRef.current = null;
+    }
+    voiceTranscriptRef.current = '';
+    voiceHasDispatchedRef.current = false;
+
     const recognition = new SpeechRecognitionCtor();
     voiceModeRecognitionRef.current = recognition;
     recognition.lang = 'fr-FR';
-    // Une seule phrase à la fois (pas continu) : la reconnaissance s'arrête
-    // toute seule au silence, ce qui sert justement de signal "il a fini de
-    // parler, j'envoie" — plus naturel qu'un bouton à relâcher pour ce mode
-    // mains libres.
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.onresult = (e: any) => {
-      const transcript = e.results?.[0]?.[0]?.transcript?.trim();
-      if (transcript) {
-        setVoiceModeStatus('thinking');
-        void handleSendMessage(transcript);
+    // Mode continu et résultats intermédiaires : fluidité totale, l'utilisateur voit ce qu'il
+    // dit en direct et Nova enchaîne après seulement 750ms de pause (au lieu de 2.5 à 3s imposées par l'OS).
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    const dispatchVoiceQuery = (text: string) => {
+      const clean = text.trim();
+      if (!clean || voiceHasDispatchedRef.current || !voiceModeActiveRef.current) return;
+      voiceHasDispatchedRef.current = true;
+      if (voiceSilenceTimerRef.current) {
+        clearTimeout(voiceSilenceTimerRef.current);
+        voiceSilenceTimerRef.current = null;
       }
+      try { recognition.stop(); } catch {}
+      setVoiceModeStatus('thinking');
+      void handleSendMessage(clean);
     };
+
+    recognition.onresult = (e: any) => {
+      let currentText = '';
+      let hasFinal = false;
+      for (let i = 0; i < e.results.length; i++) {
+        const item = e.results[i];
+        if (item[0]?.transcript) {
+          currentText += item[0].transcript;
+        }
+        if (item.isFinal) hasFinal = true;
+      }
+      currentText = currentText.trim();
+      if (!currentText) return;
+
+      voiceTranscriptRef.current = currentText;
+      // Retranscription en direct sous l'orbe : retour visuel instantané
+      setVoiceModeLastText(currentText);
+
+      if (voiceSilenceTimerRef.current) clearTimeout(voiceSilenceTimerRef.current);
+
+      // 600ms après segment final ou 800ms après pause naturelle : départ immédiat
+      const silenceDelay = hasFinal ? 600 : 800;
+      voiceSilenceTimerRef.current = setTimeout(() => {
+        dispatchVoiceQuery(voiceTranscriptRef.current);
+      }, silenceDelay);
+    };
+
     recognition.onerror = (e: any) => {
-      // "no-speech" (rien détecté) n'est pas une vraie erreur dans ce mode
-      // continu — juste rien à envoyer, on réécoute directement plutôt que
-      // d'afficher une erreur ou de couper le mode vocal pour si peu.
       if (e?.error === 'no-speech' && voiceModeActiveRef.current) {
-        startVoiceModeListening();
         return;
       }
-      setVoiceModeStatus('idle');
+      if (voiceSilenceTimerRef.current) clearTimeout(voiceSilenceTimerRef.current);
+      if (!voiceHasDispatchedRef.current) {
+        setVoiceModeStatus('idle');
+      }
     };
+
     recognition.onend = () => {
-      setVoiceModeStatus((s) => (s === 'listening' ? 'idle' : s));
+      if (voiceSilenceTimerRef.current) clearTimeout(voiceSilenceTimerRef.current);
+      if (voiceTranscriptRef.current && !voiceHasDispatchedRef.current && voiceModeActiveRef.current) {
+        dispatchVoiceQuery(voiceTranscriptRef.current);
+      } else {
+        setVoiceModeStatus((s) => (s === 'listening' ? 'idle' : s));
+      }
     };
+
     setVoiceModeStatus('listening');
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (e) {
+      console.warn('Erreur démarrage recognition:', e);
+    }
   };
 
   // Demande explicite (historique) : "peut-on lui couper la parole si
@@ -1203,6 +1256,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     setVoiceModeLastText('');
     clearVoiceInfo();
     setIsVoicePaused(false);
+    if (voiceSilenceTimerRef.current) {
+      clearTimeout(voiceSilenceTimerRef.current);
+      voiceSilenceTimerRef.current = null;
+    }
     voiceModeRecognitionRef.current?.stop();
     stopBargeInListener();
     stopSpeaking();
@@ -2610,7 +2667,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                 setVoiceModeStatus('success');
                 setTimeout(() => {
                   if (voiceModeActiveRef.current) startVoiceModeListening();
-                }, 900);
+                }, 350);
               } else if (voiceModeActiveRef.current) {
                 startVoiceModeListening();
               } else {
@@ -2622,7 +2679,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
               showVoiceInfo('Erreur', (err as Error)?.message || 'La lecture audio a échoué.');
               if (voiceModeActiveRef.current) {
                 setVoiceModeStatus('error');
-                setTimeout(() => { if (voiceModeActiveRef.current) startVoiceModeListening(); }, 2200);
+                setTimeout(() => { if (voiceModeActiveRef.current) startVoiceModeListening(); }, 800);
               } else {
                 setVoiceModeStatus('idle');
               }
@@ -4015,8 +4072,24 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
               type="button"
               onClick={() => {
                 if (voiceModeStatus === 'listening') {
-                  voiceModeRecognitionRef.current?.stop();
-                  setVoiceModeStatus('idle');
+                  if (voiceTranscriptRef.current && voiceTranscriptRef.current.trim() && !voiceHasDispatchedRef.current) {
+                    // Clic pour valider immédiatement ce qui a été dit sans attendre la fin du silence
+                    voiceHasDispatchedRef.current = true;
+                    if (voiceSilenceTimerRef.current) {
+                      clearTimeout(voiceSilenceTimerRef.current);
+                      voiceSilenceTimerRef.current = null;
+                    }
+                    try { voiceModeRecognitionRef.current?.stop(); } catch {}
+                    setVoiceModeStatus('thinking');
+                    void handleSendMessage(voiceTranscriptRef.current.trim());
+                  } else {
+                    if (voiceSilenceTimerRef.current) {
+                      clearTimeout(voiceSilenceTimerRef.current);
+                      voiceSilenceTimerRef.current = null;
+                    }
+                    voiceModeRecognitionRef.current?.stop();
+                    setVoiceModeStatus('idle');
+                  }
                 } else if (voiceModeStatus === 'idle') {
                   startVoiceModeListening();
                 } else if (voiceModeStatus === 'speaking') {

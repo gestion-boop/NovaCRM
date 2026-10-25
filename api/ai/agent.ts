@@ -17,6 +17,16 @@ import { getAuthedUser, resolvePublicOrigin, supabaseAdmin } from '../_supabaseA
 // send-system-email/upload-client-document (compte système unique).
 const NOVA_SUPER_ASSISTANT_USER_ID = '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29';
 
+// Modèle Gemini préféré mémorisé : élimine les faux modèles (3.8-flash) et les requêtes 404 inutiles
+let preferredGeminiModel = 'gemini-2.5-flash';
+const candidateGeminiModels = [
+  'gemini-2.5-flash',
+  'gemini-flash-latest',
+  'gemini-2.5-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-3.7-flash',
+];
+
 async function resolveIsNovaSuperAssistant(req: any): Promise<boolean> {
   try {
     const user = await getAuthedUser(req);
@@ -1048,10 +1058,10 @@ export default async function handler(req: any, res: any) {
     }
 
     const { prompt, messages = [], context = {} } = req.body || {};
-    const isNovaSuperAssistant = await resolveIsNovaSuperAssistant(req);
-    // Ticket #267 : id utilisateur nécessaire pour retrouver son jeton
-    // kDrive — jamais bloquant si absent/invalide (comme ci-dessus).
-    const currentUserId = await getAuthedUser(req).then((u) => u.id).catch(() => null);
+    // Requête d'authentification unique : évite deux allers-retours Supabase séquentiels
+    const authedUser = await getAuthedUser(req).catch(() => null);
+    const isNovaSuperAssistant = authedUser?.id === NOVA_SUPER_ASSISTANT_USER_ID;
+    const currentUserId = authedUser?.id || null;
 
     const claudeMessages = (messages as any[]).map((m) => ({
       role: m.sender === 'user' ? 'user' : 'assistant',
@@ -1227,17 +1237,14 @@ ${
           }
         }
 
-        const candidateGeminiModels = [
-          'gemini-3.8-flash',
-          'gemini-3.6-flash',
-          'gemini-3.7-flash',
-          'gemini-2.5-flash',
-          'gemini-flash-latest',
-        ];
-
         const callGemini = async (contentsToSend: any[]) => {
           let lastErr: any = null;
-          for (const model of candidateGeminiModels) {
+          // Place le modèle actif en premier pour une exécution ultra-rapide au 1er essai
+          const orderedModels = [
+            preferredGeminiModel,
+            ...candidateGeminiModels.filter((m) => m !== preferredGeminiModel),
+          ];
+          for (const model of orderedModels) {
             try {
               const r = await fetch(
                 `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
@@ -1249,14 +1256,15 @@ ${
                     contents: contentsToSend,
                     tools: [{ functionDeclarations: geminiFunctionDeclarations }],
                     generationConfig: {
-                      temperature: 0.4,
-                      maxOutputTokens: 4096,
+                      temperature: 0.3,
+                      maxOutputTokens: 2048,
                     },
                   }),
                 }
               );
               const data = await r.json().catch(() => ({}));
               if (r.ok && data?.candidates?.[0]) {
+                preferredGeminiModel = model;
                 return { ok: true, data, model };
               }
               if (data?.error) {
@@ -1428,8 +1436,8 @@ ${
             'anthropic-version': '2023-06-01',
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-5-5',
-            max_tokens: 4096,
+            model: 'claude-3-5-haiku-20241022',
+            max_tokens: 2048,
             system: systemPrompt,
             messages: msgs,
             tools: activeTools,
