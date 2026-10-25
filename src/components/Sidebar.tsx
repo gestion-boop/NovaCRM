@@ -479,15 +479,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </div>
   );
 
-  // Fermeture au clavier (Échap) — la navigation complète au clavier à
-  // l'intérieur du panneau vient gratuitement des <button> natifs.
+  // Fermeture au clavier (Échap) et verrouillage du défilement du fond
+  // quand le tiroir est ouvert (évite que le scroll dans le menu interagisse
+  // avec les tuiles ou éléments sous-jacents de la page).
   useEffect(() => {
     if (!mobileOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCloseMobile?.();
     };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [mobileOpen, onCloseMobile]);
 
   return (

@@ -55,11 +55,21 @@ export default async function handler(req: any, res: any) {
         .eq('assigned_to', userId);
       const ownedCount = (ownedLeads || []).length;
 
-      const reassignTo = body.reassignTo ? String(body.reassignTo) : null;
+      let reassignTo = body.reassignTo ? String(body.reassignTo) : null;
 
+      // Règle CRM : Si l'utilisateur possède des contacts et qu'aucun repreneur explicite
+      // n'est désigné, les contacts sont automatiquement et systématiquement réassignés
+      // à Sylvain GRAZIA.
       if (ownedCount > 0 && !reassignTo) {
-        res.status(200).json({ success: false, needsReassignment: true, ownedLeadsCount: ownedCount });
-        return;
+        const { data: sylvainProfile } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .or('email.eq.s.grazia@conseilfinances.fr,id.eq.4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29')
+          .maybeSingle();
+
+        if (sylvainProfile?.id && sylvainProfile.id !== userId) {
+          reassignTo = sylvainProfile.id;
+        }
       }
 
       if (ownedCount > 0 && reassignTo) {
@@ -107,6 +117,17 @@ export default async function handler(req: any, res: any) {
 
       res.status(200).json({ success: true, permanent: true, reassignedCount: ownedCount });
       return;
+    }
+
+    // Réassignation des contacts à Sylvain GRAZIA si l'utilisateur supprimé ou désactivé en possédait
+    const { data: sylvainFallback } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .or('email.eq.s.grazia@conseilfinances.fr,id.eq.4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29')
+      .maybeSingle();
+
+    if (sylvainFallback?.id && sylvainFallback.id !== userId) {
+      await supabaseAdmin.from('leads').update({ assigned_to: sylvainFallback.id, updated_at: new Date().toISOString() }).eq('assigned_to', userId);
     }
 
     await supabaseAdmin

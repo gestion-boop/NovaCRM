@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   DndContext, DragOverEvent, DragStartEvent, PointerSensor, TouchSensor, useSensor, useSensors, closestCenter,
@@ -718,16 +718,46 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   const [showAllSpaces, setShowAllSpaces] = useState(false);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
 
-  const startLongPress = () => {
-    longPressTimer.current = setTimeout(() => setEditMode(true), 480);
-  };
-  const cancelLongPress = () => {
+  const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
-  };
+    touchStartPos.current = null;
+  }, []);
+
+  // Déclenchement de l'appui long pour réorganiser les tuiles :
+  // Le délai passe de 480ms à 800ms pour éviter tout déclenchement intempestif
+  // lors d'un défilement ou d'un toucher prolongé. Tout mouvement de plus de 8px
+  // ou tout événement de scroll annule immédiatement le timer.
+  const startLongPress = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    cancelLongPress();
+    touchStartPos.current = { x: e.clientX, y: e.clientY };
+    longPressTimer.current = setTimeout(() => {
+      setEditMode(true);
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try { navigator.vibrate(50); } catch { /* ignore */ }
+      }
+      cancelLongPress();
+    }, 800);
+  }, [cancelLongPress]);
+
+  const moveLongPress = useCallback((e: React.PointerEvent) => {
+    if (!longPressTimer.current || !touchStartPos.current) return;
+    const dx = Math.abs(e.clientX - touchStartPos.current.x);
+    const dy = Math.abs(e.clientY - touchStartPos.current.y);
+    if (dx > 8 || dy > 8) {
+      cancelLongPress();
+    }
+  }, [cancelLongPress]);
+
+  useEffect(() => {
+    window.addEventListener('scroll', cancelLongPress, { passive: true });
+    return () => window.removeEventListener('scroll', cancelLongPress);
+  }, [cancelLongPress]);
 
   // Masquer une tuile vide simplement sa case (elle ne comble plus
   // automatiquement le trou, contrairement à l'ancienne liste compacte).
@@ -769,8 +799,8 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   };
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } })
   );
 
   // La tuile qu'on déplace se soulève (échelle + ombre + halo doré). Le
@@ -1086,6 +1116,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                             onNavigate(space.nav);
                           }}
                           onStartPress={startLongPress}
+                          onMovePress={moveLongPress}
                           onCancelPress={cancelLongPress}
                           onHide={() => hideSpace(space.id)}
                         />
@@ -1223,7 +1254,8 @@ interface SpaceTileProps {
   index: number;
   editMode: boolean;
   onActivate: () => void;
-  onStartPress: () => void;
+  onStartPress: (e: React.PointerEvent) => void;
+  onMovePress: (e: React.PointerEvent) => void;
   onCancelPress: () => void;
   onHide: () => void;
 }
@@ -1240,7 +1272,7 @@ const EmptyGridCell: React.FC<{ slotId: string; editMode: boolean }> = ({ slotId
   );
 };
 
-const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivate, onStartPress, onCancelPress, onHide }) => {
+const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivate, onStartPress, onMovePress, onCancelPress, onHide }) => {
   // `transition` de dnd-kit anime déjà le déplacement de CHAQUE tuile vers
   // sa nouvelle position dès que `visibleIds` change (réordonné en direct
   // dans onDragOver) — c'est ce qui produit l'effet "glisse pour laisser la
@@ -1256,8 +1288,10 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
       {...(editMode ? attributes : {})}
       {...(editMode ? listeners : {})}
       onPointerDown={editMode ? undefined : onStartPress}
+      onPointerMove={editMode ? undefined : onMovePress}
       onPointerUp={editMode ? undefined : onCancelPress}
       onPointerLeave={editMode ? undefined : onCancelPress}
+      onPointerCancel={editMode ? undefined : onCancelPress}
       onClick={onActivate}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {

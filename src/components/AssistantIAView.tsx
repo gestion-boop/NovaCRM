@@ -3274,8 +3274,8 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                   <h1
                     className={`text-3xl sm:text-4xl font-black tracking-tight ${
                       darkWallpaperActive
-                        ? 'text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]'
-                        : 'text-[#1a1230]'
+                        ? 'text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)] nova-greeting-title on-dark-wallpaper'
+                        : 'text-[#1a1230] nova-greeting-title'
                     }`}
                   >
                     Comment ça va, {firstName} ?
@@ -3299,12 +3299,12 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                             handleSendMessage(p.prompt);
                           }
                         }}
-                        className="w-full px-2.5 py-2.5 sm:px-3 sm:py-2.5 rounded-2xl bg-white/95 hover:bg-white border border-white shadow-md hover:shadow-lg text-left flex items-center gap-2 text-[#1a1230] text-[11px] sm:text-xs font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
+                        className="nova-quick-prompt-btn w-full px-2.5 py-2.5 sm:px-3 sm:py-2.5 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200/80 shadow-md hover:shadow-lg text-left flex items-center gap-2 text-slate-900 text-[11px] sm:text-xs font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
                       >
                         <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color}`}>
                           <p.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         </div>
-                        <span className="leading-snug font-bold">{p.label}</span>
+                        <span className="leading-snug font-bold text-slate-900">{p.label}</span>
                       </button>
                     ))}
                   </div>
@@ -3317,12 +3317,12 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
                           key={p.label}
                           type="button"
                           onClick={() => handleSendMessage(p.prompt)}
-                          className="w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-white/90 hover:bg-white border border-white shadow-md hover:shadow-lg text-left flex items-center gap-2.5 sm:gap-3 text-[#1a1230] text-xs sm:text-sm font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
+                          className="nova-quick-prompt-btn w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200/80 shadow-md hover:shadow-lg text-left flex items-center gap-2.5 sm:gap-3 text-slate-900 text-xs sm:text-sm font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
                         >
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color || 'bg-[#F7BC5F]/20 text-[#B8863F] border-[#F7BC5F]/30'}`}>
                             <Icon className="w-4 h-4" />
                           </div>
-                          <span className="leading-tight font-bold">{p.label}</span>
+                          <span className="leading-tight font-bold text-slate-900">{p.label}</span>
                         </button>
                       );
                     })}
@@ -3929,7 +3929,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         // peu contrasté. border-black/15 reste discret mais délimite
         // vraiment la barre, dans les deux thèmes (cette carte reste
         // volontairement blanche quel que soit le mode, inchangé).
-        className="z-10 w-full max-w-xl flex items-end gap-2 bg-white/95 backdrop-blur-xl rounded-full shadow-[0_15px_40px_-10px_rgba(0,0,0,0.18),0_0_20px_rgba(247,188,95,0.1)] border border-white/90 px-3 py-2 transition-all ring-1 ring-black/5 focus-within:ring-2 focus-within:ring-[#F7BC5F]/70"
+        className="nova-input-pill z-10 w-full max-w-xl flex items-end gap-2 bg-white/95 backdrop-blur-xl rounded-full shadow-[0_15px_40px_-10px_rgba(0,0,0,0.18),0_0_20px_rgba(247,188,95,0.1)] border border-slate-200/90 px-3 py-2 transition-all ring-1 ring-black/5 focus-within:ring-2 focus-within:ring-[#F7BC5F]/70"
       >
         <button
           type="button"

@@ -1099,9 +1099,14 @@ export const EquipeView: React.FC<EquipeViewProps> = ({ onNavigate, onComposeMai
                   <button
                     type="button"
                     onClick={() => {
+                      const sylvain = members.find((m) =>
+                        m.id === '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29' ||
+                        m.email?.toLowerCase() === 's.grazia@conseilfinances.fr' ||
+                        (m.name.toLowerCase().includes('sylvain') && m.name.toLowerCase().includes('grazia'))
+                      );
                       setDeleteInternModal({ userId: selected.id, name: selected.name });
                       setDeleteInternConfirmText('');
-                      setDeleteInternReassignTo('');
+                      setDeleteInternReassignTo(sylvain && sylvain.id !== selected.id ? sylvain.id : '');
                       setDeleteInternOwnedCount(null);
                     }}
                     className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 hover:bg-red-500/20 text-xs font-bold transition-colors"
@@ -1321,7 +1326,7 @@ export const EquipeView: React.FC<EquipeViewProps> = ({ onNavigate, onComposeMai
             {deleteInternOwnedCount !== null && deleteInternOwnedCount > 0 && (
               <div className="space-y-2 p-3 rounded-xl bg-orange-500/10 border border-orange-500/30">
                 <p className="text-xs text-orange-200">
-                  {deleteInternOwnedCount} fiche{deleteInternOwnedCount > 1 ? 's' : ''} client{deleteInternOwnedCount > 1 ? 's' : ''} lui {deleteInternOwnedCount > 1 ? 'sont' : 'est'} assignée{deleteInternOwnedCount > 1 ? 's' : ''}. Choisissez qui les reprend avant de continuer.
+                  {deleteInternOwnedCount} fiche{deleteInternOwnedCount > 1 ? 's' : ''} client{deleteInternOwnedCount > 1 ? 's' : ''} lui {deleteInternOwnedCount > 1 ? 'sont' : 'est'} assignée{deleteInternOwnedCount > 1 ? 's' : ''}. Par défaut, elles seront réassignées à Sylvain GRAZIA.
                 </p>
                 <select
                   value={deleteInternReassignTo}
@@ -1329,9 +1334,17 @@ export const EquipeView: React.FC<EquipeViewProps> = ({ onNavigate, onComposeMai
                   className="w-full rounded-lg bg-[#071f21] border border-[#1c4448] px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
                 >
                   <option value="">Choisir un repreneur...</option>
-                  {members.filter((m) => m.id !== deleteInternModal.userId).map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
+                  {members.filter((m) => m.id !== deleteInternModal.userId).map((m) => {
+                    const isSylvain =
+                      m.id === '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29' ||
+                      m.email?.toLowerCase() === 's.grazia@conseilfinances.fr' ||
+                      (m.name.toLowerCase().includes('sylvain') && m.name.toLowerCase().includes('grazia'));
+                    return (
+                      <option key={m.id} value={m.id}>
+                        {m.name} {isSylvain ? '★ (Par défaut)' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}
