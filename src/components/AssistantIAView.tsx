@@ -2828,6 +2828,84 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     setHeroListening(true);
     recognition.start();
   };
+  // ── Dictée agentique (gros micro rouge) ─────────────────────────────────
+  // Demande explicite (25 octobre) : « on place un bouton micro rouge dans
+  // Nova quand il s'ouvre, on peut dicter des notes, des actions, et il
+  // répond si besoin ». Choix validés : un appui = Nova écoute, l'envoi part
+  // TOUT SEUL dès qu'on s'arrête de parler, Nova exécute (note, tâche, RDV,
+  // mail…) puis s'arrête — un ordre à la fois. Réponse ÉCRITE uniquement
+  // (aucune voix, donc aucun coût ElevenLabs) : indépendant du drapeau
+  // VOICE_FEATURES_ENABLED, qui reste coupé pour le mode vocal complet.
+  const [dicteeAgent, setDicteeAgent] = useState(false);
+  const [dicteeAgentTexte, setDicteeAgentTexte] = useState('');
+  const dicteeAgentRecoRef = useRef<any>(null);
+  const dicteeAgentTexteRef = useRef('');
+  const dicteeAgentEnvoyeeRef = useRef(false);
+  const dicteeAgentAnnuleeRef = useRef(false);
+  const dicteeAgentSilenceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // handleSendMessage change à chaque rendu : la reconnaissance (créée une
+  // fois au démarrage) appelle toujours la version à jour via ce miroir.
+  const envoyerDicteeRef = useRef<(t: string) => void>(() => {});
+  envoyerDicteeRef.current = (t: string) => { void handleSendMessage(t); };
+
+  const effacerSilenceDictee = () => {
+    if (dicteeAgentSilenceRef.current) { clearTimeout(dicteeAgentSilenceRef.current); dicteeAgentSilenceRef.current = null; }
+  };
+  const terminerDicteeAgent = (envoyer: boolean) => {
+    effacerSilenceDictee();
+    dicteeAgentAnnuleeRef.current = !envoyer;
+    try { dicteeAgentRecoRef.current?.stop(); } catch { /* déjà arrêtée */ }
+  };
+  const demarrerDicteeAgent = () => {
+    if (dicteeAgent) { terminerDicteeAgent(true); return; }
+    const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      setErrorStatus("La dictée vocale n'est pas disponible sur ce navigateur (utilisez Chrome ou Safari).");
+      return;
+    }
+    if (heroListening) { heroRecognitionRef.current?.stop(); setHeroListening(false); }
+    setErrorStatus(null);
+    const recognition = new SpeechRecognitionCtor();
+    dicteeAgentRecoRef.current = recognition;
+    recognition.lang = 'fr-FR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    dicteeAgentTexteRef.current = '';
+    dicteeAgentEnvoyeeRef.current = false;
+    dicteeAgentAnnuleeRef.current = false;
+    setDicteeAgentTexte('');
+    recognition.onresult = (e: any) => {
+      const texte = assemblerDictee(e.results, '');
+      dicteeAgentTexteRef.current = texte;
+      setDicteeAgentTexte(texte);
+      // 1,8 s de silence après la dernière parole = fin de l'ordre → envoi.
+      effacerSilenceDictee();
+      dicteeAgentSilenceRef.current = setTimeout(() => terminerDicteeAgent(true), 1800);
+    };
+    recognition.onerror = (e: any) => {
+      if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') {
+        setErrorStatus("Micro refusé : autorisez l'accès au micro pour dicter à Nova.");
+      }
+    };
+    recognition.onend = () => {
+      effacerSilenceDictee();
+      setDicteeAgent(false);
+      const texte = dicteeAgentTexteRef.current.trim();
+      if (texte && !dicteeAgentAnnuleeRef.current && !dicteeAgentEnvoyeeRef.current) {
+        dicteeAgentEnvoyeeRef.current = true;
+        envoyerDicteeRef.current(texte);
+      }
+      setDicteeAgentTexte('');
+    };
+    setDicteeAgent(true);
+    try { recognition.start(); } catch { setDicteeAgent(false); }
+  };
+  useEffect(() => () => {
+    effacerSilenceDictee();
+    dicteeAgentAnnuleeRef.current = true;
+    try { dicteeAgentRecoRef.current?.stop(); } catch { /* rien */ }
+  }, []);
+
   const firstName = (userProfile?.displayName || currentUser?.displayName || '').split(' ')[0] || 'Sylvain';
 
   // Bascule Discussion / Fonds d'écran, affichée en overlay au-dessus des
@@ -3099,6 +3177,25 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
               Comment ça va, {firstName} ?
             </h1>
           )}
+
+          {/* Gros micro rouge : dicter une note ou une action d'un geste. */}
+          <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={demarrerDicteeAgent}
+              title={dicteeAgent ? 'Envoyer maintenant' : 'Dicter une note ou une action'}
+              aria-label={dicteeAgent ? 'Envoyer maintenant' : 'Dicter une note ou une action'}
+              className={`relative w-20 h-20 rounded-full flex items-center justify-center text-white shadow-[0_12px_30px_-6px_rgba(225,29,72,0.65)] transition-all active:scale-95 cursor-pointer ${
+                dicteeAgent ? 'bg-rose-600 scale-105' : 'bg-gradient-to-br from-rose-500 to-red-600 hover:brightness-110'
+              }`}
+            >
+              {dicteeAgent && <span className="absolute inset-0 rounded-full bg-rose-500/50 animate-ping" />}
+              {dicteeAgent ? <Square className="relative w-7 h-7 fill-current" /> : <Mic className="relative w-9 h-9" />}
+            </button>
+            <p className="text-xs font-semibold text-[#1a1230]/70">
+              {dicteeAgent ? 'Je vous écoute… arrêtez de parler pour envoyer' : 'Touchez pour dicter une note, une tâche, un RDV…'}
+            </p>
+          </div>
 
           {activeClient ? (
             <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 w-full">
@@ -3708,6 +3805,25 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         </div>
       )}
 
+      {dicteeAgent && (
+        <div className="z-10 mb-3 w-full max-w-xl rounded-2xl bg-white/95 backdrop-blur-xl border border-rose-500/30 shadow-[0_15px_40px_-10px_rgba(225,29,72,0.35)] px-4 py-3 flex items-start gap-3">
+          <span className="mt-1 w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-black uppercase tracking-wider text-rose-600">Nova vous écoute</p>
+            <p className="text-sm text-[#1a1230] break-words">
+              {dicteeAgentTexte || <span className="text-[#1a1230]/50">Dictez votre note ou votre action… l'envoi se fait dès que vous vous arrêtez.</span>}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => terminerDicteeAgent(false)}
+            className="shrink-0 px-2.5 py-1 rounded-full text-xs font-bold text-[#1a1230]/70 hover:bg-black/5 cursor-pointer"
+          >
+            Annuler
+          </button>
+        </div>
+      )}
+
       <form
         onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
         // Au cas où "dans chat tu n'as pas mis le liseret" viserait aussi
@@ -3769,6 +3885,19 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
             <img src="/nova-mascotte.png" alt="Nova" className="w-full h-full object-cover scale-110" />
           </button>
         )}
+        {/* Micro rouge de dictée agentique : toujours visible, même pendant
+            une conversation — un appui, on parle, Nova agit. */}
+        <button
+          type="button"
+          onClick={demarrerDicteeAgent}
+          title={dicteeAgent ? 'Envoyer maintenant' : 'Dicter une note ou une action'}
+          aria-label={dicteeAgent ? 'Envoyer maintenant' : 'Dicter une note ou une action'}
+          className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-white shadow-md transition-all active:scale-95 cursor-pointer mb-0.5 ${
+            dicteeAgent ? 'bg-rose-600 animate-pulse' : 'bg-gradient-to-br from-rose-500 to-red-600 hover:brightness-110'
+          }`}
+        >
+          {dicteeAgent ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-4 h-4" />}
+        </button>
         <button
           type="submit"
           title="Envoyer"
