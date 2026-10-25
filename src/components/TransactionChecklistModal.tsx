@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { X, Loader2, CheckCircle2, Circle, AlertTriangle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Loader2, CheckCircle2, Circle, AlertTriangle, ClipboardCheck, ChevronDown, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
@@ -13,6 +14,7 @@ export interface ChecklistItemDef {
 
 export interface StageChecklistConfig {
   stageName: string;
+  shortLabel: string;
   stageId: string;
   checklistType: string;
   title: string;
@@ -50,6 +52,7 @@ const MORALE_EXTRA_ITEMS: ChecklistItemDef[] = [
 export const STAGE_CHECKLISTS: Record<string, StageChecklistConfig> = {
   'Récolte docs': {
     stageName: 'Récolte docs',
+    shortLabel: 'Récolte docs',
     stageId: '134a1667-9531-4a01-bd40-fb07c513c764',
     checklistType: 'recolte_docs',
     title: 'Checklist — Récolte documents',
@@ -68,19 +71,21 @@ export const STAGE_CHECKLISTS: Record<string, StageChecklistConfig> = {
   },
   'Saisie bien netty': {
     stageName: 'Saisie bien netty',
+    shortLabel: 'Saisie Netty',
     stageId: '5798510d-9536-4566-91fb-40a3d9081375',
     checklistType: 'saisie_bien_netty',
     title: 'Checklist — Saisie bien Netty',
     subtitle: "Cochez chaque étape réalisée pour la mise en ligne de l'annonce.",
     progressLabel: 'étapes validées',
     items: [
-      { key: 'pieces_justificatives', label: "Insérer les pièces justificatives dans le fichier de l'espace de stockage (renommées en amont sur votre ordinateur)", required: true },
+      { key: 'pieces_justificatives', label: "Insérer les pièces justificatives dans l'espace de stockage (renommées en amont)", required: true },
       { key: 'annonce_faite', label: "Faire l'annonce", required: true },
       { key: 'dpe_effectue', label: 'DPE effectué', required: true, help: "Obligatoire pour mettre en ligne l'annonce" },
     ],
   },
   'Tracfin vendeur': {
     stageName: 'Tracfin vendeur',
+    shortLabel: 'Tracfin',
     stageId: '0759ed76-d8db-49ad-b7e9-5b8af883c1ad',
     checklistType: 'tracfin_vendeur',
     title: 'Checklist — Tracfin vendeur',
@@ -92,18 +97,20 @@ export const STAGE_CHECKLISTS: Record<string, StageChecklistConfig> = {
   },
   'Mandat': {
     stageName: 'Mandat',
+    shortLabel: 'Mandat',
     stageId: '44090289-7ba0-4c8e-b395-2a2453b100b5',
     checklistType: 'mandat',
     title: 'Checklist — Mandat',
     subtitle: 'Cochez chaque étape réalisée pour le mandat.',
     progressLabel: 'étapes validées',
     items: [
-      { key: 'info_precontractuelle', label: "Renseigner l'information précontractuelle obligatoires", required: true },
-      { key: 'delai_retractation', label: 'Insérer le délai de rétractation (en répondant oui), sauf si SCI ou professionnel achetant pour sa société', required: true },
+      { key: 'info_precontractuelle', label: "Renseigner l'information précontractuelle obligatoire", required: true },
+      { key: 'delai_retractation', label: 'Insérer le délai de rétractation (oui), sauf SCI ou société pro', required: true },
     ],
   },
   'Prise de vues': {
     stageName: 'Prise de vues',
+    shortLabel: 'Prise de vues',
     stageId: '72abacab-8f23-405a-abb2-51bbbc66b707',
     checklistType: 'prise_de_vues',
     title: 'Checklist — Prises de vues',
@@ -113,37 +120,39 @@ export const STAGE_CHECKLISTS: Record<string, StageChecklistConfig> = {
       { key: 'verif_creneau', label: "Vérifier la disponibilité du créneau avant réservation dans l'agenda", required: true },
       { key: 'reserver_camera', label: 'Réserver la caméra sur l’agenda CRM (onglet Caméra)', required: true },
       { key: 'recharger_camera', label: 'Recharger la caméra', required: true },
-      { key: 'vider_carte', label: 'Après les prises de vues, vider la carte dans le Drive Google Immosphera partagé (dossier Novavisio)', required: true },
+      { key: 'vider_carte', label: 'Après les prises de vues, vider la carte dans le Drive Immosphera (dossier Novavisio)', required: true },
     ],
   },
   'Mise en ligne': {
     stageName: 'Mise en ligne',
+    shortLabel: 'Mise en ligne',
     stageId: '75e36ed8-032b-4f1e-9ec7-d2e83e784876',
     checklistType: 'mise_en_ligne',
     title: 'Checklist — Mise en ligne',
     subtitle: "Cochez chaque étape réalisée pour la mise en ligne de l'annonce.",
     progressLabel: 'étapes validées',
     items: [
-      { key: 'coordonnees_visite_virtuelle', label: 'Bien mettre vos coordonnées dans la visite virtuelle. Aller sur girafe dans la fiche du bien, et sur infos propriété, informations de contact', required: true },
+      { key: 'coordonnees_visite_virtuelle', label: 'Mettre vos coordonnées dans la visite virtuelle (Girafe → Infos propriété → Contact)', required: true },
       { key: 'mise_en_ligne_passerelles', label: 'Mise en ligne sur vos passerelles', required: true },
       { key: 'verif_conformite_passerelles', label: 'Vérifier sur les passerelles la bonne conformité des annonces', required: true },
     ],
   },
   "Offre d'achat": {
     stageName: "Offre d'achat",
+    shortLabel: "Offre d'achat",
     stageId: '81db9db7-0c37-467f-ae1e-9f22de1bf736',
     checklistType: 'offre_achat',
     title: "Checklist — Offre d'achat",
     subtitle: "Cochez chaque étape réalisée à la réception d'une offre d'achat.",
     hasSellerTypeToggle: true,
-    sellerTypeLabel: 'Type de acquéreur',
+    sellerTypeLabel: "Type d'acquéreur",
     hasCoproprieteToggle: true,
     progressLabel: 'documents récupérés',
     items: [
       { key: 'tracfin_acquereurs', label: 'Si offre reçue, faire le Tracfin acquéreurs', required: true },
       { key: 'carte_identite', label: 'Carte d’identité ou passeport', required: true },
       { key: 'diagnostic', label: 'Diagnostic', required: true },
-      { key: 'financement_valide', label: 'Financement à valider obligatoirement par un Courtier ou Banque avec un document à l’appui', required: true },
+      { key: 'financement_valide', label: 'Financement validé par un Courtier ou une Banque (document à l’appui)', required: true },
       { key: 'facture_travaux', label: 'Facture des travaux', required: false },
     ],
     moraleExtraItems: MORALE_EXTRA_ITEMS,
@@ -173,17 +182,11 @@ export function getStageChecklistConfig(stageName: string | undefined | null): S
   return Object.values(STAGE_CHECKLISTS).find((cfg) => normalizeStageKey(cfg.stageName) === norm);
 }
 
-// Retourne TOUTES les checklists des étapes précédant `stageName` dans le pipeline,
-// afin que tout document ou élément obligatoire oublié à une étape antérieure soit
-// systématiquement reporté sur l'étape suivante (et les suivantes tant qu'il n'est pas coché).
 export function getPreviousChecklistConfigs(stageName: string | undefined | null): StageChecklistConfig[] {
   if (!stageName) return [];
   const normTarget = normalizeStageKey(stageName);
   const idx = TRANSACTIONS_V2_STAGE_ORDER.findIndex((s) => normalizeStageKey(s) === normTarget);
   if (idx === 0) return [];
-  // Si l'étape est dans TRANSACTIONS_V2_STAGE_ORDER (idx > 0), on prend toutes les étapes 0 .. idx-1.
-  // Si c'est une étape ajoutée en fin de pipeline (ex. Conciergerie, Location validée...), on reporte
-  // les oublis de toutes les étapes précédentes configurées.
   const limit = idx > 0 ? idx : TRANSACTIONS_V2_STAGE_ORDER.length;
   const result: StageChecklistConfig[] = [];
   for (let i = 0; i < limit; i++) {
@@ -226,10 +229,6 @@ function getEffectiveItems(config: StageChecklistConfig, sellerType: 'personne_p
   return config.items;
 }
 
-// Cache léger des UUID réels de `pipeline_stages` pour éviter de violer
-// `lead_checklists_stage_id_fkey` lorsque les colonnes du pipeline ont été
-// recréées ou modifiées en base (les stageId codés en dur à l'origine ne
-// correspondent alors plus aux UUID présents dans `pipeline_stages`).
 const liveStageIdsCache = new Map<string, Record<string, string>>();
 
 async function resolveLiveStageIds(pipelineId: string): Promise<Record<string, string>> {
@@ -261,7 +260,6 @@ function findMatchingChecklistRow(
       (liveStageId && r.stage_id === liveStageId)
   );
   if (!found) return null;
-  // Fusionne avec la définition actuelle au cas où des items auraient été ajoutés
   const sellerType: 'personne_physique' | 'personne_morale' =
     found.seller_type === 'personne_morale' ? 'personne_morale' : 'personne_physique';
   const effective = getEffectiveItems(config, sellerType);
@@ -271,12 +269,12 @@ function findMatchingChecklistRow(
     const existing = rawItems[it.key];
     mergedItems[it.key] = existing
       ? {
-          label: existing.label || it.label,
+          label: it.label,
           checked: Boolean(existing.checked),
           required: it.required,
           checked_at: existing.checked_at || null,
           checked_by: existing.checked_by || null,
-          help: existing.help ?? it.help,
+          help: it.help,
         }
       : {
           label: it.label,
@@ -329,8 +327,6 @@ function buildDefaultChecklistRow(
   };
 }
 
-// Nombre total de documents/étapes obligatoires manquants sur TOUTES les
-// étapes précédentes (reportés d'étape en étape tant qu'ils ne sont pas cochés).
 export function usePreviousStageMissingCount(leadId: string, currentStageName: string | undefined): number | null {
   const [count, setCount] = useState<number | null>(null);
   const prevConfigs = getPreviousChecklistConfigs(currentStageName);
@@ -346,8 +342,6 @@ export function usePreviousStageMissingCount(leadId: string, currentStageName: s
       supabase.from('lead_checklists' as any).select('*').eq('lead_id', leadId),
     ]);
     const rows = (data || []) as any[];
-    // Si un document (même clé, ex: `carte_identite` ou `diagnostic`) a été coché
-    // sur une étape ultérieure ou antérieure, on le considère comme régularisé.
     const checkedKeysGlobal = new Set<string>();
     rows.forEach((r) => {
       const items = (r?.items || {}) as Record<string, ChecklistItemState>;
@@ -388,7 +382,6 @@ export function usePreviousStageMissingCount(leadId: string, currentStageName: s
   return count;
 }
 
-// X / Y de la checklist de l'étape ACTUELLE.
 export function useCurrentStageChecklistCount(
   leadId: string,
   currentStageName: string | undefined
@@ -456,10 +449,8 @@ const TransactionChecklistModal: React.FC<{
 
   const [loading, setLoading] = useState(true);
   const [rowsByType, setRowsByType] = useState<Record<string, ChecklistRow>>({});
-  // Garde en mémoire les items qui étaient manquants à l'ouverture de la modale
-  // afin qu'ils restent visibles (avec une coche verte) quand l'utilisateur les
-  // coche dans la section "Reportés", au lieu de disparaître brutalement sous son clic.
   const [initialMissingKeys, setInitialMissingKeys] = useState<Set<string>>(new Set());
+  const [carriedOpen, setCarriedOpen] = useState(true);
   const [justSaved, flashSaved] = useSavedFlash();
 
   useEffect(() => {
@@ -488,7 +479,6 @@ const TransactionChecklistModal: React.FC<{
           nextMap[cfg.checklistType] = row;
         });
 
-        // Détecte les items obligatoires non cochés des étapes précédentes
         prevConfigs.forEach((cfg) => {
           const r = nextMap[cfg.checklistType];
           if (!r) return;
@@ -532,7 +522,6 @@ const TransactionChecklistModal: React.FC<{
 
       let rowId = next.id;
       if (!rowId) {
-        // Vérifie si une ligne existe déjà en base pour ce lead + checklist_type
         const { data: existing } = await supabase
           .from('lead_checklists' as any)
           .select('id')
@@ -549,8 +538,6 @@ const TransactionChecklistModal: React.FC<{
           .from('lead_checklists' as any)
           .update(buildPayload(validStageId))
           .eq('id', rowId);
-        // Filet de sécurité : si `validStageId` viole malgré tout la FK `lead_checklists_stage_id_fkey`,
-        // on réessaie immédiatement avec `stage_id: null`.
         if (error && /stage_id_fkey|foreign key/i.test(error.message || '')) {
           liveStageIdsCache.delete(effectivePipelineId);
           const retry = await supabase
@@ -628,8 +615,6 @@ const TransactionChecklistModal: React.FC<{
     };
     void persistChecklistRow(targetConfig, nextRow);
 
-    // Si le même document existe aussi dans l'étape courante (ex: `carte_identite` ou `diagnostic`),
-    // on synchronise son état pour éviter d'avoir à le cocher deux fois.
     if (config && config.checklistType !== targetConfig.checklistType) {
       const currentStageRow = rowsByType[config.checklistType];
       if (currentStageRow && currentStageRow.items[itemKey]) {
@@ -656,229 +641,315 @@ const TransactionChecklistModal: React.FC<{
   const itemsList = currentRow ? Object.entries(currentRow.items) : [];
   const doneCount = itemsList.filter(([, it]) => it.checked).length;
   const total = itemsList.length;
+  const progressPercent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-  // Regroupe tous les documents/étapes reportés des étapes précédentes :
-  // - ceux qui sont encore non cochés, OU
-  // - ceux qui étaient non cochés à l'ouverture de la modale (pour qu'ils restent affichés avec une coche verte quand on les valide).
-  const carriedOverGroups = prevConfigs
-    .map((prevCfg) => {
-      const r = rowsByType[prevCfg.checklistType];
-      if (!r) return null;
-      const entries = Object.entries(r.items).filter(
-        ([key, it]) =>
-          it.required && (!it.checked || initialMissingKeys.has(`${prevCfg.checklistType}:${key}`))
-      );
-      if (entries.length === 0) return null;
-      const stillMissingCount = entries.filter(([, it]) => !it.checked).length;
-      return {
-        config: prevCfg,
-        row: r,
-        entries,
-        stillMissingCount,
-      };
-    })
-    .filter((g): g is NonNullable<typeof g> => g !== null);
+  // Liste plate et compacte des éléments reportés, chacun portant le badge court de son étape d'origine
+  const carriedItems: {
+    config: StageChecklistConfig;
+    key: string;
+    item: ChecklistItemState;
+  }[] = [];
 
-  const totalStillMissing = carriedOverGroups.reduce((acc, g) => acc + g.stillMissingCount, 0);
+  prevConfigs.forEach((prevCfg) => {
+    const r = rowsByType[prevCfg.checklistType];
+    if (!r) return;
+    Object.entries(r.items).forEach(([key, it]) => {
+      if (it.required && (!it.checked || initialMissingKeys.has(`${prevCfg.checklistType}:${key}`))) {
+        carriedItems.push({ config: prevCfg, key, item: it });
+      }
+    });
+  });
 
-  return (
-    <div className="fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+  const totalStillMissing = carriedItems.filter((x) => !x.item.checked).length;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[250] bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5"
+      onClick={onClose}
+    >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg sm:max-w-2xl lg:max-w-3xl bg-[#07191b] border border-[#144447] rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto custom-scrollbar"
+        className="relative w-full max-w-2xl bg-gradient-to-b from-[#081f23] to-[#051417] border border-white/15 rounded-2xl shadow-[0_25px_70px_-15px_rgba(0,0,0,0.85),0_0_30px_rgba(247,188,95,0.08)] flex flex-col max-h-[86vh] overflow-hidden"
       >
-        <div className="flex items-start justify-between gap-3 p-4 border-b border-[#144447]">
-          <div className="min-w-0">
-            <h3 className="text-lg font-extrabold text-white">
-              {config ? config.title : `Checklist — ${stageName}`}
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              {config
-                ? config.subtitle
-                : 'Documents et étapes reportés des étapes précédentes.'}
-            </p>
+        {/* Liseré supérieur doré signature NovaSphere */}
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/80 to-transparent pointer-events-none" />
+
+        {/* En-tête fixe */}
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10 bg-[#07191c]/90 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F7BC5F]/20 to-[#F7BC5F]/5 border border-[#F7BC5F]/40 flex items-center justify-center text-[#F7BC5F] shrink-0 shadow-sm">
+              <ClipboardCheck className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-extrabold text-white truncate">
+                  {config ? config.title.replace('Checklist — ', '') : stageName}
+                </h3>
+                {config && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#F7BC5F]/15 text-[#FAD592] border border-[#F7BC5F]/30">
+                    {doneCount}/{total} {config.progressLabel}
+                  </span>
+                )}
+                {justSaved && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 animate-fade-in">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Enregistré
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 truncate mt-0.5">
+                {config ? config.subtitle : 'Documents et étapes reportés des étapes précédentes.'}
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white shrink-0">
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-colors shrink-0 cursor-pointer"
+            aria-label="Fermer"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* Barre de progression fine */}
+        {config && total > 0 && (
+          <div className="h-1 w-full bg-white/[0.04] shrink-0">
+            <div
+              className="h-full bg-gradient-to-r from-[#F7BC5F] to-emerald-400 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        )}
+
+        {/* Corps scrollable */}
         {loading ? (
-          <div className="p-8 flex items-center justify-center text-slate-500 gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" /> Chargement...
+          <div className="p-10 flex items-center justify-center text-slate-400 text-sm gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-[#F7BC5F]" /> Chargement de la checklist...
           </div>
         ) : (
-          <div className="p-4 space-y-3">
-            <div className="flex items-center justify-between text-xs flex-wrap gap-2">
-              {config && (
-                <span className="px-3 py-1.5 rounded-lg bg-white/5 text-slate-300 font-semibold">
-                  {doneCount} / {total} {config.progressLabel}
-                </span>
-              )}
-              {justSaved && (
-                <span className="text-emerald-400 font-semibold flex items-center gap-1 animate-fade-in">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Enregistré à l'instant
-                </span>
-              )}
-            </div>
-
-            {carriedOverGroups.length > 0 && (
-              <div
-                className={`rounded-xl border p-3 space-y-2.5 transition-colors ${
-                  totalStillMissing > 0
-                    ? 'border-rose-500/40 bg-rose-500/10'
-                    : 'border-emerald-500/40 bg-emerald-500/10'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <p
-                    className={`text-xs font-bold flex items-center gap-1.5 ${
-                      totalStillMissing > 0 ? 'text-rose-300' : 'text-emerald-300'
-                    }`}
-                  >
-                    {totalStillMissing > 0 ? (
-                      <>
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        {totalStillMissing} document{totalStillMissing > 1 ? 's' : ''} / étape{totalStillMissing > 1 ? 's' : ''} reporté{totalStillMissing > 1 ? 's' : ''}
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                        Tous les éléments reportés ont été validés
-                      </>
-                    )}
-                  </p>
-                  <p className={`text-[10px] ${totalStillMissing > 0 ? 'text-rose-300/80' : 'text-emerald-300/80'}`}>
-                    Cochez directement ici sans revenir à l'étape précédente.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  {carriedOverGroups.map((group) => (
-                    <div key={group.config.checklistType} className="space-y-1.5">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-300/80">
-                        Reporté de : {group.config.title.replace('Checklist — ', '')}
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                        {group.entries.map(([key, it]) => (
-                          <button
-                            key={`${group.config.checklistType}:${key}`}
-                            type="button"
-                            onClick={() => toggleStageItem(group.config, key)}
-                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-left cursor-pointer ${
-                              it.checked
-                                ? 'bg-emerald-950/40 hover:bg-emerald-950/60 border-emerald-500/40 text-emerald-100'
-                                : 'bg-rose-950/30 hover:bg-rose-950/50 border-rose-500/30 text-rose-100'
-                            }`}
-                          >
-                            {it.checked ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                            ) : (
-                              <Circle className="w-4 h-4 text-rose-400 shrink-0" />
-                            )}
-                            <span className="text-xs font-semibold flex-1">{it.label}</span>
-                          </button>
-                        ))}
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-5 space-y-4">
+            {/* 1. ÉTAPE ACTUELLE EN PREMIER (toujours accessible immédiatement) */}
+            {config && currentRow && (
+              <div className="space-y-3">
+                {(config.hasSellerTypeToggle || config.hasCoproprieteToggle) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {config.hasSellerTypeToggle && (
+                      <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/10">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                          {config.sellerTypeLabel || 'Type de vendeur'}
+                        </p>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(['personne_physique', 'personne_morale'] as const).map((v) => {
+                            const active = currentRow.seller_type === v;
+                            return (
+                              <button
+                                key={v}
+                                type="button"
+                                onClick={() => {
+                                  const effective = getEffectiveItems(config, v);
+                                  const nextItems: Record<string, ChecklistItemState> = {};
+                                  effective.forEach((it) => {
+                                    nextItems[it.key] = currentRow.items[it.key] || {
+                                      label: it.label,
+                                      checked: false,
+                                      required: it.required,
+                                      checked_at: null,
+                                      checked_by: null,
+                                      help: it.help,
+                                    };
+                                  });
+                                  void persistChecklistRow(config, { ...currentRow, seller_type: v, items: nextItems });
+                                }}
+                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                  active
+                                    ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
+                                    : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                                }`}
+                              >
+                                {v === 'personne_physique' ? 'Physique' : 'Société / SCI'}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )}
+
+                    {config.hasCoproprieteToggle && (
+                      <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-white/[0.03] border border-white/10">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white">Bien en copropriété</p>
+                          <p className="text-[10px] text-slate-400 truncate">Règlement, PV d'AG, plan pluriannuel</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void persistChecklistRow(config, { ...currentRow, is_copropriete: !currentRow.is_copropriete })}
+                          className={`w-10 h-5 rounded-full shrink-0 transition-colors relative cursor-pointer ${
+                            currentRow.is_copropriete ? 'bg-[#F7BC5F]' : 'bg-white/15'
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                              currentRow.is_copropriete ? 'left-[22px]' : 'left-0.5'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#F7BC5F] flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3" />
+                      À valider à cette étape
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {itemsList.map(([key, it]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => toggleStageItem(config, key)}
+                        className={`group w-full flex items-start gap-2.5 p-3 rounded-xl border transition-all text-left cursor-pointer ${
+                          it.checked
+                            ? 'bg-[#F7BC5F]/10 border-[#F7BC5F]/45 shadow-[0_0_15px_rgba(247,188,95,0.08)]'
+                            : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                            it.checked
+                              ? 'bg-[#F7BC5F] text-slate-950'
+                              : 'border border-slate-500 group-hover:border-[#F7BC5F]/70'
+                          }`}
+                        >
+                          {it.checked && <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-xs sm:text-[13px] font-semibold leading-snug ${it.checked ? 'text-[#FAD592]' : 'text-white'}`}>
+                            {it.label}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            {it.required ? (
+                              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/5 text-slate-400">
+                                Obligatoire
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/5 text-slate-500">
+                                Optionnel
+                              </span>
+                            )}
+                            {it.help && <span className="text-[10px] text-slate-400">{it.help}</span>}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
 
-            {config && currentRow && (
-              <>
-                {config.hasSellerTypeToggle && (
-                  <div>
-                    <p className="text-xs font-bold text-slate-300 mb-1.5">{config.sellerTypeLabel || 'Type de vendeur'}</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(['personne_physique', 'personne_morale'] as const).map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          onClick={() => {
-                            const effective = getEffectiveItems(config, v);
-                            const nextItems: Record<string, ChecklistItemState> = {};
-                            effective.forEach((it) => {
-                              nextItems[it.key] = currentRow.items[it.key] || {
-                                label: it.label,
-                                checked: false,
-                                required: it.required,
-                                checked_at: null,
-                                checked_by: null,
-                                help: it.help,
-                              };
-                            });
-                            void persistChecklistRow(config, { ...currentRow, seller_type: v, items: nextItems });
-                          }}
-                          className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition-colors ${
-                            currentRow.seller_type === v
-                              ? 'border-[#F7BC5F] bg-[#F7BC5F]/10 text-[#F7BC5F]'
-                              : 'border-[#144447] text-slate-300 hover:border-[#256064]'
+            {/* 2. DOCUMENTS / ÉTAPES REPORTÉS DES ÉTAPES PRÉCÉDENTES (compact, avec badge d'étape sur chaque ligne) */}
+            {carriedItems.length > 0 && (
+              <div
+                className={`rounded-xl border transition-colors overflow-hidden ${
+                  totalStillMissing > 0
+                    ? 'border-amber-500/35 bg-gradient-to-b from-amber-500/[0.08] to-rose-500/[0.05]'
+                    : 'border-emerald-500/35 bg-emerald-500/[0.06]'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setCarriedOpen((v) => !v)}
+                  className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-left hover:bg-white/[0.03] transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {totalStillMissing > 0 ? (
+                      <span className="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                      </span>
+                    ) : (
+                      <span className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300 shrink-0">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className={`text-xs font-bold truncate ${totalStillMissing > 0 ? 'text-amber-200' : 'text-emerald-200'}`}>
+                        {totalStillMissing > 0
+                          ? `${totalStillMissing} élément${totalStillMissing > 1 ? 's' : ''} reporté${totalStillMissing > 1 ? 's' : ''} des étapes précédentes`
+                          : 'Tous les éléments reportés ont été régularisés'}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Cochez directement ici pour régulariser sans revenir en arrière
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${carriedOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                {carriedOpen && (
+                  <div className="px-3.5 pb-3 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {carriedItems.map(({ config: prevCfg, key, item }) => (
+                      <button
+                        key={`${prevCfg.checklistType}:${key}`}
+                        type="button"
+                        onClick={() => toggleStageItem(prevCfg, key)}
+                        className={`group w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all text-left cursor-pointer ${
+                          item.checked
+                            ? 'bg-emerald-950/35 border-emerald-500/40 text-emerald-100'
+                            : 'bg-[#07191c]/80 hover:bg-[#0b2429] border-amber-500/25 hover:border-amber-400/50 text-slate-100'
+                        }`}
+                      >
+                        {item.checked ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <Circle className="w-4 h-4 text-amber-400/80 group-hover:text-amber-300 shrink-0" />
+                        )}
+                        <span className="text-xs font-medium flex-1 min-w-0 line-clamp-2 leading-snug">
+                          {item.label}
+                        </span>
+                        <span
+                          className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${
+                            item.checked
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-amber-500/15 text-amber-300 border border-amber-500/25'
                           }`}
                         >
-                          {currentRow.seller_type === v ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4 text-slate-600" />}
-                          {v === 'personne_physique' ? 'Personne physique' : 'Personne morale'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {config.hasCoproprieteToggle && (
-                  <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-white/5 border border-[#144447]">
-                    <div>
-                      <p className="text-xs font-bold text-white">Bien en copropriété</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Active les documents complémentaires (règlement, PV d'AG, plan pluriannuel).</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void persistChecklistRow(config, { ...currentRow, is_copropriete: !currentRow.is_copropriete })}
-                      className={`w-11 h-6 rounded-full shrink-0 transition-colors relative ${currentRow.is_copropriete ? 'bg-[#F7BC5F]' : 'bg-white/10'}`}
-                    >
-                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${currentRow.is_copropriete ? 'left-[22px]' : 'left-0.5'}`} />
-                    </button>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {itemsList.map(([key, it]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => toggleStageItem(config, key)}
-                      className="w-full flex items-start gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-[#144447] transition-colors text-left cursor-pointer"
-                    >
-                      {it.checked ? <CheckCircle2 className="w-4 h-4 text-[#F7BC5F] shrink-0 mt-0.5" /> : <Circle className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />}
-                      <span className="min-w-0">
-                        <span className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold text-white">{it.label}</span>
-                          {it.required && (
-                            <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 shrink-0">Obligatoire</span>
-                          )}
+                          {prevCfg.shortLabel}
                         </span>
-                        {it.help && <span className="block text-[11px] text-slate-400 mt-0.5">{it.help}</span>}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
-
-            <div className="flex justify-end pt-1">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-5 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-xs"
-              >
-                Fermer
-              </button>
-            </div>
           </div>
         )}
+
+        {/* Pied de modale fixe */}
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-white/10 bg-[#07191c]/90 shrink-0">
+          <span className="text-[11px] text-slate-400">
+            {totalStillMissing > 0
+              ? `${totalStillMissing} élément${totalStillMissing > 1 ? 's' : ''} en attente de régularisation`
+              : 'Tout est à jour sur les étapes précédentes ✓'}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] hover:brightness-110 text-slate-950 font-black text-xs shadow-md transition-all cursor-pointer"
+          >
+            Fermer
+          </button>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

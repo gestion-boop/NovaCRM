@@ -818,6 +818,7 @@ main[class*="bg-[#071015]/55" i] {
    distinguer la variante) : le survol se retrouvait peint de la même
    couleur que le repos, donc sans effet visible nulle part dans l'appli.
    Rétabli ici, dans les deux thèmes. */
+[class*="hover:bg-[#0b2429" i]:hover,
 [class*="hover:bg-[#0c2e32" i]:hover,
 [class*="hover:bg-[#0c2e33" i]:hover,
 [class*="hover:bg-[#0d2a2f" i]:hover,
