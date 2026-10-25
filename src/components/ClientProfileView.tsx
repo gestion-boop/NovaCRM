@@ -271,8 +271,10 @@ export default function ClientProfileView({
   const HAUTEUR_MAX_SAISIE_LEAD = isMobileSaisieLead ? 220 : 132;
   // Swipe-back (geste iOS) : balayer depuis le bord gauche revient à l'écran
   // précédent, uniquement sur mobile. Réutilise `isMobileSaisieLead` comme
-  // condition "enabled" plutôt que de redemander useIsMobile().
-  const swipeBackRef = useSwipeBack<HTMLDivElement>(onBack, isMobileSaisieLead);
+  // condition "enabled" plutôt que de redemander useIsMobile(). Le calcul de
+  // `enabled` (lequel dépend d'états de modales déclarés plus bas dans ce
+  // composant) est repoussé juste avant son unique utilisation, voir plus
+  // bas (`uneModaleEstOuverte`/`swipeBackRef`).
   // Demande explicite (24 octobre, maquette validée) : sur téléphone, la
   // grille d'étapes (8 pastilles, souvent 4 visibles seulement + un grand
   // vide en dessous) remplace tout l'écran avant même le contenu utile.
@@ -281,6 +283,14 @@ export default function ClientProfileView({
   // `isMobileSaisieLead` (même hook, même résultat) plutôt que d'en
   // redemander un second.
   const [pipelineMobileExpanded, setPipelineMobileExpanded] = useState(false);
+  // Signalé en revue (25 octobre) : ce composant n'est PAS remonté quand on
+  // change de client (App.tsx le rend sans key sur clientId) — sans cet
+  // effet, déplier la grille d'étapes sur la fiche A puis naviguer vers la
+  // fiche B affichait B directement dépliée au lieu du résumé compact voulu
+  // par défaut.
+  useEffect(() => {
+    setPipelineMobileExpanded(false);
+  }, [clientId]);
   useEffect(() => {
     const zone = leadTextareaRef.current;
     if (!zone) return;
@@ -1187,7 +1197,13 @@ export default function ClientProfileView({
     // Questionnaire confidentiel : Conseils Finances uniquement (voir plus
     // haut, estConseilsFinances) — inutile de charger quoi que ce soit
     // ailleurs.
+    // Signalé en revue (25 octobre) : sans ce `else`, passer d'une fiche
+    // Conseils Finances (questionnaire rempli) à une fiche d'une autre
+    // agence gardait la liste précédente (composant jamais remonté entre
+    // deux clients) — les badges « Questionnaire validé/rempli » du client
+    // précédent s'affichaient alors à tort sur le nouveau.
     if (estConseilsFinances) loadQuestionnaires();
+    else setQuestionnaires([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, estConseilsFinances]);
 
@@ -1634,6 +1650,31 @@ export default function ClientProfileView({
     recorder.stop();
   };
 
+  // Signalé en revue (25 octobre) : rien n'arrêtait l'enregistrement vocal du
+  // Chat au démontage de la fiche (micro laissé ouvert, intervalle qui tourne
+  // sans fin, chunks accumulés en mémoire) ni en changeant de client sans
+  // démonter le composant (le vocal de la fiche A pouvait alors être envoyé
+  // dans le chat de la fiche B, avec le clientId courant au moment de
+  // l'arrêt). `onstop` est retiré avant `stop()` pour empêcher tout envoi
+  // différé une fois sorti de cet écran/client.
+  useEffect(() => {
+    return () => {
+      if (chatRecordingTimerRef.current) {
+        clearInterval(chatRecordingTimerRef.current);
+        chatRecordingTimerRef.current = null;
+      }
+      const recorder = chatMediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.onstop = null;
+        recorder.stop();
+        recorder.stream.getTracks().forEach((t) => t.stop());
+        setIsRecordingChat(false);
+        setRecordingSeconds(0);
+      }
+      chatAudioChunksRef.current = [];
+    };
+  }, [clientId]);
+
   const handleSaveEditChat = async (msg: ChatMessageRow) => {
     const body = editingChatText.trim();
     if (!body) return;
@@ -1680,11 +1721,18 @@ export default function ClientProfileView({
     }
   };
 
+  // Signalé en revue (25 octobre) : useContacts mappe un commentaire vide à
+  // '' (useContacts.ts), donc passer d'une fiche A (commentaire vide) à une
+  // fiche B (commentaire vide aussi) ne changeait pas `client?.comments` —
+  // la dépendance ne bougeait pas, cet effet ne se relançait pas, et un
+  // brouillon non enregistré tapé sur A restait affiché sur B. `clientId`
+  // force la resynchronisation à chaque changement de fiche, même quand les
+  // deux commentaires sont identiques (ou vides).
   useEffect(() => {
     if (client?.comments !== undefined) {
       setContactComments(client.comments || '');
     }
-  }, [client?.comments]);
+  }, [clientId, client?.comments]);
 
   const loadNotes = async () => {
     if (!client || !currentUser) {
@@ -2467,6 +2515,24 @@ export default function ClientProfileView({
     if (!result.destination) return;
   };
 
+  // Signalé en revue (25 octobre) : la plupart des modales de cette fiche
+  // sont rendues EN LIGNE, comme enfants du conteneur qui porte le ref du
+  // geste (pas de createPortal), donc leurs touchers y remontaient — un
+  // balayage pour fermer une modale (réflexe iOS) fermait toute la fiche à
+  // la place et perdait ce qui venait d'être saisi dedans (montant à
+  // facturer, réponse e-mail en cours, tâche, archivage...). Le geste est
+  // désormais coupé tant qu'une de ces modales est ouverte.
+  const uneModaleEstOuverte =
+    showQuestionnaireModal ||
+    showShareModal ||
+    lightboxUrl !== null ||
+    openEmail !== null ||
+    showTaskModal ||
+    showSendConsentModal ||
+    montantEtapePrompt !== null ||
+    showArchiveModal;
+  const swipeBackRef = useSwipeBack<HTMLDivElement>(onBack, isMobileSaisieLead && !uneModaleEstOuverte);
+
   if (!client) return (
     // Signalé en revue : sans `ref={swipeBackRef}` ici aussi, un chargement à
     // froid (client pas encore résolu par useContacts()) ferait rater le
@@ -2978,15 +3044,24 @@ export default function ClientProfileView({
             >
               <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-400">
                 <span className="truncate">{currentPipelineName}</span>
-                <span className="shrink-0">Étape {Math.max(currentStageIndex, 0) + 1}/{stages.length}</span>
+                {/* Signalé en revue (25 octobre) : currentStageIndex vaut -1
+                    quand la fiche n'a pas de stage_id, ou un stage_id d'un
+                    autre pipeline que celui affiché, ou tant que lead-stage
+                    charge encore. `Math.max(currentStageIndex, 0)` ramenait
+                    alors ce cas à "Étape 1/N" avec le nom de la 1re étape —
+                    une information fausse (aucune étape n'est en fait
+                    surlignée dans la grille dépliée juste en dessous). */}
+                <span className="shrink-0">
+                  {currentStageIndex >= 0 ? `Étape ${currentStageIndex + 1}/${stages.length}` : 'Aucune étape'}
+                </span>
               </div>
               <p className="mt-1 text-sm font-extrabold text-white truncate">
-                {stages[Math.max(currentStageIndex, 0)]?.name}
+                {currentStageIndex >= 0 ? stages[currentStageIndex]?.name : '—'}
               </p>
               <div className="mt-1.5 h-1.5 rounded-full bg-slate-700/40 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-[#F7BC5F] transition-all"
-                  style={{ width: `${((Math.max(currentStageIndex, 0) + 1) / stages.length) * 100}%` }}
+                  style={{ width: currentStageIndex >= 0 ? `${((currentStageIndex + 1) / stages.length) * 100}%` : '0%' }}
                 />
               </div>
               <div className="mt-1.5 flex items-center justify-end gap-1 text-[11px] font-bold text-[#F7BC5F]">
@@ -3099,7 +3174,12 @@ export default function ClientProfileView({
               nettement moins haut. Inchangé sur tablette/ordinateur (bloc
               ci-dessus). */}
           {stages.length > 0 && isMobileSaisieLead && pipelineMobileExpanded && (
-            <div data-swipe-back-exclude="true" className="w-full overflow-x-auto -mx-4 px-4 custom-scrollbar">
+            // Signalé en revue (25 octobre) : ce bloc n'existe que sur
+            // téléphone, où la carte est passée à p-3.5 (14px) — -mx-4
+            // (16px) dépassait donc de 2px la bordure de la carte pendant le
+            // défilement horizontal des pastilles. -mx-3.5 correspond
+            // exactement au nouveau padding.
+            <div data-swipe-back-exclude="true" className="w-full overflow-x-auto -mx-3.5 px-3.5 custom-scrollbar">
               <div className="flex items-center gap-1.5 w-max">
                 {stages.map((stage: any, index: number) => {
                   const isActive = index === currentStageIndex;

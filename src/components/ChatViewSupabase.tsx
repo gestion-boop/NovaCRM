@@ -691,6 +691,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           .from('chat_messages')
           .select('id, channel, data, created_at')
           .eq('is_deleted', false)
+          // Signalé en revue (25 octobre) : sans ce filtre, la limite portait
+          // sur les 300 derniers messages de canaux TOUS TYPES confondus
+          // (texte compris), avant même de garder les images/fichiers côté
+          // client — contrairement à la requête conversations ci-dessus, qui
+          // filtre déjà côté serveur. Quelques jours de messages texte
+          // suffisaient à faire disparaître des documents de canaux pourtant
+          // plus anciens mais toujours réels.
+          .or('data->>kind.eq.image,data->>kind.eq.file')
           .order('created_at', { ascending: false })
           .limit(LIMITE_DOCUMENTS),
         supabase.from('chat_channels').select('id, name, project_id'),
@@ -706,7 +714,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           const agencyId = chan ? agencyByProjectId.get(chan.project_id) : undefined;
           return { r, chan, agencyId };
         })
-        .filter((x) => x.chan && (activeAgency.id === 'all' || x.agencyId === activeAgency.id || x.agencyId === null || x.agencyId === undefined))
+        // Signalé en revue (25 octobre) : `projectsQuery` est filtrée par
+        // agence (ligne 648) alors que `chat_channels` est toujours chargée
+        // en entier — pour un canal dont le dossier appartient à une AUTRE
+        // agence, `agencyByProjectId.get` renvoie `undefined` (le projet
+        // n'est pas dans la carte, pas parce qu'il est inconnu), et
+        // l'ancien filtre acceptait `undefined` sans condition : les pièces
+        // jointes de canaux d'autres agences passaient donc le cloisonnement
+        // par agence. `undefined` n'est maintenant accepté que quand aucun
+        // filtre d'agence n'est actif (vue « toutes agences »).
+        .filter((x) => x.chan && (activeAgency.id === 'all' || x.agencyId === activeAgency.id || x.agencyId === null))
         .map(({ r, chan }) => ({
           id: r.id,
           genre: r.data.kind as 'image' | 'file',
@@ -2772,6 +2789,41 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     recorder.stop();
   };
 
+  // Signalé en revue (25 octobre) : changer de conversation/canal (sans
+  // passer par goBackToList — ex. ouvrir directement une autre conversation
+  // depuis la liste) ou quitter Chat sans démontage (isActive passe à
+  // false, voir le filet de secours au démontage plus haut, qui ne suffit
+  // pas puisque ce composant reste monté) laissait le micro capturé pour le
+  // fil qu'on vient de quitter.
+  useEffect(() => {
+    return () => {
+      if (convMediaRecorderRef.current && convMediaRecorderRef.current.state !== 'inactive') {
+        void handleStopRecordingConv(true);
+      }
+      if (channelMediaRecorderRef.current && channelMediaRecorderRef.current.state !== 'inactive') {
+        void handleStopRecordingChannel(true);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId, activeChannel?.id, isActive]);
+
+  // Signalé en revue (25 octobre) : `convDraft`/`convVocalPret` (et leurs
+  // équivalents canal `draft`/`channelVocalPret`) sont un seul état pour
+  // tout le composant, jamais vidé en changeant de fil — qu'on revienne à
+  // la liste (bouton ou swipe) ou qu'on ouvre directement une autre
+  // conversation/canal. Le composeur rouvrait alors rempli du brouillon
+  // (texte ou vocal en attente) du fil précédent, prêt à partir au mauvais
+  // destinataire d'un simple appui sur Envoyer.
+  useEffect(() => {
+    setConvDraft('');
+    setConvVocalPret(null);
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    setDraft('');
+    setChannelVocalPret(null);
+  }, [activeChannel?.id]);
+
   const envoyerVocalConv = async () => {
     if (!convVocalPret) return;
     // Audit (10 septembre, Sylvain → Natacha) : même verrou que
@@ -4035,13 +4087,37 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         };
   const mobileShowingConversation = tab === 'conversations' ? !!activeConversationId : !!activeChannel;
   const goBackToList = () => {
+    // Signalé en revue (25 octobre) : ni le bouton Retour ni le swipe
+    // n'arrêtaient un enregistrement vocal en cours — Chat n'est jamais
+    // démonté (App.tsx bascule juste `hidden`), donc le seul filet de
+    // secours existant (démontage, voir plus haut) ne se déclenchait pas.
+    // Le micro restait capturé et le vocal en attente pouvait partir dans
+    // la conversation suivante.
+    if (isRecordingConv) void handleStopRecordingConv(true);
+    if (isRecordingChannel) void handleStopRecordingChannel(true);
     if (tab === 'conversations') setActiveConversationId(null);
     else setActiveChannel(null);
   };
   // Swipe retour (24 octobre) : depuis le bord gauche, revient à la liste si
   // une conversation/un canal est ouvert, sinon quitte le panneau mobile.
   const handleSwipeBack = mobileShowingConversation ? goBackToList : onExitMobile;
-  const swipeBackRef = useSwipeBack<HTMLDivElement>(handleSwipeBack, isMobile);
+  // Signalé en revue (25 octobre) : plusieurs modales de Chat (membres,
+  // participants, Documents, nouveau dossier, nouvelle conversation,
+  // inviter, sélecteur de réactions) sont rendues en `fixed inset-0` SANS
+  // createPortal, donc à l'intérieur de cette racine — un swipe par-dessus
+  // l'une d'elles fermait la conversation/quittait Chat derrière elle au
+  // lieu de fermer la modale, avec pertes de saisie (sélections d'invités,
+  // recherche en cours) et des modales qui se rouvraient seules au retour.
+  const aucuneModaleChatOuverte =
+    !membersModalProjectId &&
+    !membersModalChannelId &&
+    !showAddProject &&
+    !showNewConvModal &&
+    !showInviteConvModal &&
+    !showDocuments &&
+    !showConvReactionPickerFor &&
+    !showChannelReactionPickerFor;
+  const swipeBackRef = useSwipeBack<HTMLDivElement>(handleSwipeBack, isMobile && aucuneModaleChatOuverte);
 
   // Signalé (4 septembre, deux captures) : « quand je clique dans le message
   // pour écrire et que j'abaisse le clavier, j'ai un écart tout en bas, ce

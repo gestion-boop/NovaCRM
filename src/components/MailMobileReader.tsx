@@ -129,7 +129,20 @@ export const MailMobileReader: React.FC<MailMobileReaderProps> = ({
       </div>
 
       {/* ── MESSAGE ────────────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 min-h-0 relative">
+        {/* Signalé en revue (25 octobre) : le corps HTML est rendu par une
+            <iframe> (EmailHtmlFrame) — les événements tactiles qui
+            commencent dedans vont à SON document et ne remontent jamais au
+            parent, donc le geste de retour (bord gauche) ne fonctionnait
+            plus une fois le mail défilé jusqu'au corps. Bande transparente,
+            hors de l'iframe, posée par-dessus la zone défilante : en enfant
+            direct de ce conteneur relatif (et non de la div qui défile), elle
+            reste fixée sur le bord visible quelle que soit la position de
+            défilement, sans bloquer la lecture au-delà des premiers 24px.
+            `pointer-events-auto` : par défaut ce conteneur relatif ne gêne
+            rien, seule cette bande doit capter le toucher. */}
+        <div className="absolute left-0 top-0 bottom-0 w-6 z-10 pointer-events-auto" data-mail-reader-edge-strip />
+        <div className="absolute inset-0 overflow-y-auto custom-scrollbar">
         <div className="px-4 pt-4">
           <div className="flex items-start gap-3">
             <h1 className="flex-1 text-xl font-bold leading-snug text-white" style={{ textWrap: 'balance' } as React.CSSProperties}>
@@ -179,6 +192,7 @@ export const MailMobileReader: React.FC<MailMobileReaderProps> = ({
             lien) se retrouve collée sous la barre d'actions. */}
         <div className="mt-3 px-1 pb-6">
           {body}
+        </div>
         </div>
       </div>
 
