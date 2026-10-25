@@ -3842,7 +3842,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       {/* "Ma journée" / "Priorités" — masqués sur mobile (MobileHome a sa
           propre version de ces blocs) ; uniquement pour l'accueil desktop,
           alignés sur la même hauteur, avec des données 100% dynamiques. */}
-      {!openFolderStack.length && showTopPanel && (
+      {!openFolderStack.length && (
         <div className="hidden sm:flex flex-col max-w-7xl mx-auto w-full mb-3 z-10">
           {/* Cases d'activité & priorités (format cartes individuelles comme au début) */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-5 gap-3 sm:gap-3.5 w-full">
@@ -3895,24 +3895,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         </div>
       )}
 
-      {/* Top Breadcrumb & Reset Controls — masqués sur mobile : la barre du
-          bas (Accueil / Chat / IA / Alertes / Menu) remplace ce repère, et
-          "Réinitialiser l'accueil" n'a pas sa place sur petit écran.
-          Signalé (ticket #50, KO) : « ne mets pas un fond sur la longueur
-          pour les deux onglets ajouter un dossier, et masquer le bandeau »
-          — le fond gris/le liseré/le padding qui habillaient toute la
-          largeur de cette ligne sont retirés ; chaque bouton (Ajouter,
-          Masquer le bandeau) garde son propre fond, seulement autour de
-          son texte, comme demandé. */}
-      <div className="hidden sm:flex max-w-7xl mx-auto w-full mb-2 items-center justify-between z-10">
-        <div className="flex items-center gap-2 text-sm text-gray-300">
-          {/* Demande explicite (30/08/2026) : "supprime le texte, mon
-              espace ou mes espaces, cela ne sert à rien" — retiré
-              uniquement à la racine (rien à retrouver via ce repère quand
-              aucun dossier n'est ouvert). À l'intérieur d'un dossier, ce
-              même élément garde son rôle utile de fil d'Ariane ("Accueil"
-              cliquable pour remonter), inchangé. */}
-          {openFolderStack.length > 0 && (
+      {openFolderStack.length > 0 && (
+        <div className="hidden sm:flex max-w-7xl mx-auto w-full mb-2 items-center justify-between z-10">
+          <div className="flex items-center gap-2 text-sm text-gray-300">
             <span
               onClick={() => setOpenFolderStack([])}
               className="cursor-pointer font-bold hover:text-[#F7BC5F] transition-colors flex items-center gap-1.5"
@@ -3920,62 +3905,22 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               <LayoutGrid className="w-4 h-4 text-[#F7BC5F]" />
               Accueil
             </span>
-          )}
-          {openFolderStack.map((folder, idx) => (
-            <React.Fragment key={folder.id}>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
-              <span 
-                onClick={() => setOpenFolderStack(openFolderStack.slice(0, idx + 1))}
-                className={`cursor-pointer font-medium transition-colors ${
-                  idx === openFolderStack.length - 1 ? 'text-[#F7BC5F] font-semibold' : 'text-gray-300 hover:text-white'
-                }`}
-              >
-                {folder.title}
-              </span>
-            </React.Fragment>
-          ))}
+            {openFolderStack.map((folder, idx) => (
+              <React.Fragment key={folder.id}>
+                <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
+                <span 
+                  onClick={() => setOpenFolderStack(openFolderStack.slice(0, idx + 1))}
+                  className={`cursor-pointer font-medium transition-colors ${
+                    idx === openFolderStack.length - 1 ? 'text-[#F7BC5F] font-semibold' : 'text-gray-300 hover:text-white'
+                  }`}
+                >
+                  {folder.title}
+                </span>
+              </React.Fragment>
+            ))}
+          </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          {/* Demande explicite : le bouton "Ajouter" n'est plus une tuile de
-              la grille racine (il gênait le repositionnement libre des
-              tuiles, ticket #256) — remonté ici, dans le bandeau du haut.
-              Revu (30/08/2026, "mets en évidence... qu'on ne voit pas") :
-              ce bouton et celui de droite étaient trop discrets (gris pâle,
-              liseré presque invisible) pour être repérés — couleur dorée de
-              la marque appliquée aux deux, comme les autres actions
-              importantes de l'appli.
-              Revu (30/08/2026, encore, "fond plus gris... 80%... liseré
-              noir très léger") : fond doré translucide remplacé par le même
-              gris anthracite que le panneau juste au-dessus, texte doré
-              conservé pour rester lisible/reconnaissable comme action. */}
-          {!activeFolder && (
-            <button
-              onClick={handleOpenAddModal}
-              title="Ajouter un raccourci ou un dossier"
-              className="text-xs font-bold px-3 py-1.5 rounded-lg border border-black/60 transition-colors flex items-center gap-1.5 text-[#F9C977] bg-[#2b2b2b]/80 hover:bg-[#2b2b2b]"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Ajouter
-            </button>
-          )}
-          {/* Ticket #50 : afficher/masquer entièrement le bandeau "Ma
-              journée + Priorités", pour reprendre cet espace au profit des
-              tuiles si on ne s'en sert pas. */}
-          <button
-            onClick={toggleTopPanel}
-            title={showTopPanel ? 'Masquer le bandeau Ma journée / Priorités' : 'Réafficher le bandeau Ma journée / Priorités'}
-            className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${
-              showTopPanel
-                ? 'text-[#F9C977] bg-[#2b2b2b]/80 hover:bg-[#2b2b2b] border-black/60'
-                : 'bg-[#F7BC5F] text-slate-950 border-[#F7BC5F]'
-            }`}
-          >
-            {showTopPanel ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            {showTopPanel ? 'Masquer le bandeau' : 'Bandeau masqué'}
-          </button>
-        </div>
-      </div>
+      )}
       </div>
 
       {/* Ticket #213 : "Personnaliser" et "Réinitialiser l'accueil" retirés

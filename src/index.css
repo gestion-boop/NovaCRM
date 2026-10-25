@@ -829,8 +829,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="hover:bg-[#143c3f" i]:hover,
 [class*="hover:bg-[#184448" i]:hover,
 [class*="hover:bg-[#1c5054" i]:hover,
-[class*="hover:bg-[#1e585c" i]:hover,
-[class*="hover:bg-[#2b2b2b" i]:hover {
+[class*="hover:bg-[#1e585c" i]:hover {
   background-color: var(--nv-surface-1-hover) !important;
 }
 
