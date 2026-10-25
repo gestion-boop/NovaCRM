@@ -47,6 +47,7 @@ import { couleurNovavisio, couleurEtapeNovavisio, estAgenceNovavisio } from '@/l
 import { useIsLightMode } from './AccueilGrid';
 import TransactionChecklistModal, {
   STAGE_CHECKLISTS,
+  getStageChecklistConfig,
   IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID,
   IMMOSPHERA_AGENCY_ID,
   usePreviousStageMissingCount,
@@ -172,18 +173,12 @@ const STAGE_ACCENT_COLORS = [
 // TransactionChecklistModal.tsx. N'apparaît QUE sur cette pipeline précise,
 // jamais ailleurs.
 const TransactionsV2ChecklistBadge: React.FC<{ deal: Deal; onOpen: () => void }> = ({ deal, onOpen }) => {
-  const hasChecklist = !!STAGE_CHECKLISTS[deal.stage];
+  const hasChecklist = !!getStageChecklistConfig(deal.stage);
   const missingFromPrevStage = usePreviousStageMissingCount(deal.contactId, deal.stage);
   const currentCount = useCurrentStageChecklistCount(deal.contactId, deal.stage);
 
   if (!hasChecklist && !missingFromPrevStage) return null;
 
-  // Demande explicite (24 octobre, maquette validée) : « aérer » les
-  // cartes du pipeline comme la fiche client — un trait fin + un petit
-  // libellé en majuscules au-dessus de chaque bloc d'info, plutôt qu'un
-  // simple badge collé au reste. Le composant gère lui-même sa section
-  // (plutôt que le parent) pour que le trait/libellé disparaisse avec le
-  // reste quand il n'y a rien à afficher (return null ci-dessus).
   return (
     <div className="mt-3 pt-3 border-t border-[#143c3f]/50">
       <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Suivi</span>
@@ -193,7 +188,7 @@ const TransactionsV2ChecklistBadge: React.FC<{ deal: Deal; onOpen: () => void }>
             type="button"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onOpen(); }}
-            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] text-[10px] font-bold hover:bg-[#F7BC5F]/25 transition-colors"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] text-[10px] font-bold hover:bg-[#F7BC5F]/25 transition-colors cursor-pointer"
           >
             <ClipboardList className="w-3 h-3" />
             Checklist
@@ -201,12 +196,15 @@ const TransactionsV2ChecklistBadge: React.FC<{ deal: Deal; onOpen: () => void }>
           </button>
         )}
         {!!missingFromPrevStage && (
-          <span
-            title={`${missingFromPrevStage} document(s) obligatoire(s) manquant(s) à l'étape précédente — n'empêche pas d'avancer, juste un rappel.`}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-300 text-[10px] font-black"
+          <button
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onOpen(); }}
+            title={`${missingFromPrevStage} document(s) obligatoire(s) reporté(s) des étapes précédentes — cliquez pour régulariser.`}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-[10px] font-black transition-colors cursor-pointer"
           >
             {missingFromPrevStage} manquant{missingFromPrevStage > 1 ? 's' : ''}
-          </span>
+          </button>
         )}
       </div>
     </div>

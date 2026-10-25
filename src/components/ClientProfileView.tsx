@@ -9,6 +9,7 @@ import { useSwipeBack } from '@/hooks/useSwipeBack';
 import { AGENCIES, NoteItem, DocItem, Task } from '@/types';
 import TransactionChecklistModal, {
   STAGE_CHECKLISTS,
+  getStageChecklistConfig,
   IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID,
   IMMOSPHERA_AGENCY_ID,
   usePreviousStageMissingCount,
@@ -142,26 +143,30 @@ interface ClientDocItem extends DocItem {
 // en plus le badge rouge si des documents obligatoires manquent encore à
 // l'étape précédente.
 const ClientStageChecklistButton: React.FC<{ leadId: string; stageName: string; onOpen: () => void }> = ({ leadId, stageName, onOpen }) => {
+  const hasChecklist = !!getStageChecklistConfig(stageName);
   const count = useCurrentStageChecklistCount(leadId, stageName);
   const missingFromPrevStage = usePreviousStageMissingCount(leadId, stageName);
+  if (!hasChecklist && !missingFromPrevStage) return null;
   return (
     <div className="flex items-center justify-center gap-2 mt-3">
       <button
         type="button"
         onClick={onOpen}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] text-xs font-bold hover:bg-[#F7BC5F]/25 transition-colors"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] text-xs font-bold hover:bg-[#F7BC5F]/25 transition-colors cursor-pointer"
       >
         <ClipboardList className="w-3.5 h-3.5" />
         Checklist
         {count && <span className="text-[10px] opacity-80">{count.done}/{count.total}</span>}
       </button>
       {!!missingFromPrevStage && (
-        <span
-          title={`${missingFromPrevStage} document(s) obligatoire(s) manquant(s) à l'étape précédente — n'empêche pas d'avancer, juste un rappel.`}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-300 text-[10px] font-black"
+        <button
+          type="button"
+          onClick={onOpen}
+          title={`${missingFromPrevStage} document(s) obligatoire(s) reporté(s) des étapes précédentes — cliquez pour régulariser.`}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-[10px] font-black transition-colors cursor-pointer"
         >
           {missingFromPrevStage} manquant{missingFromPrevStage > 1 ? 's' : ''}
-        </span>
+        </button>
       )}
     </div>
   );
@@ -2646,7 +2651,7 @@ export default function ClientProfileView({
           {client.agencyId === '15157da9-71ea-4760-ae1c-3bc99d9caa20' &&
             currentPipelineId === IMMOSPHERA_TRANSACTIONS_V2_PIPELINE_ID &&
             currentStageIndex >= 0 &&
-            STAGE_CHECKLISTS[stages[currentStageIndex]?.name] && (
+            stages[currentStageIndex]?.name && (
               <ClientStageChecklistButton
                 leadId={client.id}
                 stageName={stages[currentStageIndex].name}
