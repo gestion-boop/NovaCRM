@@ -52,6 +52,7 @@ const ReserverCameraView = lazy(() => import('./components/ReserverCameraView'))
 const ClientProfileView = lazy(() => import('./components/ClientProfileView'));
 import NotificationsView from './components/NotificationsView';
 import MobileBottomNav, { MobileTopPlus } from './components/MobileBottomNav';
+import MobileHeader from './components/MobileHeader';
 import PublicQuestionnaire from './components/PublicQuestionnaire';
 import PublicConsentement from './components/PublicConsentement';
 import PublicVisiteImmosphera from './immosphera/pages/TourView';
@@ -1011,7 +1012,11 @@ function App() {
         <main className={`flex-1 relative z-[1] custom-scrollbar ${
           novaOpen && !isMobile && !isCoarsePointer ? 'overflow-hidden' : 'overflow-y-auto'
         } ${
-          isMobile && currentNav === 'chat' ? 'pt-0' : 'pt-[env(safe-area-inset-top,0px)] md:pt-0'
+          isMobile && currentNav === 'chat'
+            ? 'pt-0'
+            : isMobile && currentNav !== 'accueil' && !selectedClientProfileId
+              ? 'pt-[calc(3.5rem+env(safe-area-inset-top,0px))] md:pt-0'
+              : 'pt-[env(safe-area-inset-top,0px)] md:pt-0'
         } ${
           isMobile && currentNav === 'chat' ? 'pb-0' : 'pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-0'
         } ${
@@ -1753,17 +1758,31 @@ function App() {
           unreadRemindersCount={unreadRemindersCount}
         />
       )}
-      {/* Le « + » est en haut. Sur l'accueil il est déjà dans l'en-tête,
-          à côté de la clochette. Ailleurs il reste fixé en haut à droite
-          (lead, écrire un message, ajouter un rendez-vous). */}
-      {isMobile && currentNav !== 'accueil' && !(currentNav === 'chat' || novaOpen) && (
-        currentNav === 'mail'
-          ? (mailReading ? null : (
-            <MobileTopPlus onClick={() => setMailComposeSignal((n) => n + 1)} label="Écrire un message" />
-          ))
-          : currentNav === 'agenda'
-            ? <MobileTopPlus onClick={() => setAgendaCreateSignal((n) => n + 1)} label="Ajouter un rendez-vous" />
-            : <MobileTopPlus onClick={() => setShowNouveauLead(true)} label="Créer un lead" />
+      {/* En-tête mobile unifié pour toutes les sous-vues (titre, retour accueil, action contextuelle) */}
+      {isMobile && currentNav !== 'accueil' && !selectedClientProfileId && !(currentNav === 'chat' || novaOpen) && (
+        <MobileHeader
+          currentNav={currentNav}
+          onBack={() => setCurrentNav('accueil')}
+          onOpenAction={
+            currentNav === 'mail'
+              ? (mailReading ? undefined : () => setMailComposeSignal((n) => n + 1))
+              : currentNav === 'agenda'
+                ? () => setAgendaCreateSignal((n) => n + 1)
+                : (currentNav === 'clients' || currentNav === 'pipeline')
+                  ? () => setShowNouveauLead(true)
+                  : currentNav === 'rappels'
+                    ? () => window.dispatchEvent(new CustomEvent('nova-open-new-task'))
+                    : currentNav === 'notes'
+                      ? () => window.dispatchEvent(new CustomEvent('nova-open-new-note'))
+                      : currentNav === 'documents'
+                        ? () => window.dispatchEvent(new CustomEvent('nova-open-new-document'))
+                        : currentNav === 'reserver-camera'
+                          ? () => window.dispatchEvent(new CustomEvent('nova-open-camera-reservation'))
+                          : undefined
+          }
+          activeAgency={activeAgency}
+          unreadRemindersCount={unreadRemindersCount}
+        />
       )}
     </div>
   );

@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import ConsentStatusBadge from "@/components/consent/ConsentStatusBadge";
 import { latestConsent } from "@/lib/consent";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const IMMOSPHERA_ID = "15157da9-71ea-4760-ae1c-3bc99d9caa20";
 
@@ -89,6 +90,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
   const { activeAgency: rawActiveAgency, currentUser: user, userProfile } = useAuth();
   const activeAgency = rawActiveAgency?.id === 'all' ? null : rawActiveAgency;
   const qc = useQueryClient();
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "chaud" | "tiede" | "froid">("all");
   // Demandé le 7 octobre : « un filtre acquéreurs et vendeurs pour
@@ -397,9 +399,83 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
   };
 
   return (
-    <div className="space-y-6 w-full p-3 sm:p-6">
-      {/* ── En-tête ── */}
-      <div className="rounded-2xl border border-border bg-card/95 px-4 py-4 shadow-card backdrop-blur-sm">
+    <div className="space-y-4 md:space-y-6 w-full p-2.5 sm:p-6">
+      {/* ── En-tête mobile compact ── */}
+      <div className="md:hidden space-y-2.5">
+        {/* Scopes tabs compacts */}
+        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#081e22]/95 border border-teal-500/20 backdrop-blur-md">
+          {scopesDisponibles.map((s) => (
+            <button
+              key={s}
+              onClick={() => setScope(s)}
+              className={cn(
+                "flex-1 py-1.5 px-2 rounded-xl text-xs font-bold text-center transition-all",
+                scopeEffectif === s
+                  ? "bg-gradient-to-r from-[#FAD592] via-[#F9C977] to-[#D9A34E] text-[#1a1230] shadow-sm font-extrabold"
+                  : "text-slate-400 hover:text-slate-200"
+              )}
+            >
+              {s === "mine" ? "Mes clients" : s === "shared" ? "Partagés" : "Tous"}
+            </button>
+          ))}
+        </div>
+
+        {/* Barre de recherche mobile */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher nom, e-mail, téléphone..."
+            className="w-full bg-[#081e22]/95 border border-teal-500/20 focus:border-[#F7BC5F] rounded-2xl pl-10 pr-9 py-2.5 text-xs text-white placeholder-slate-400 outline-none shadow-sm"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Filtres rapides en carrousel horizontal */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-2 px-2 custom-scrollbar snap-x">
+          {(["all", "chaud", "tiede", "froid"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                "px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap shrink-0 border transition-all",
+                filter === f
+                  ? "bg-[#F7BC5F]/20 text-[#F9C977] border-[#F7BC5F]/50 shadow-xs"
+                  : "bg-white/5 border-white/10 text-slate-400"
+              )}
+            >
+              {f === "all" ? `Tous (${filtered.length})` : f === "chaud" ? "🔥 Chaud" : f === "tiede" ? "☀️ Tiède" : "❄️ Froid"}
+            </button>
+          ))}
+          {(["all", "Acquéreur", "Vendeur"] as const).filter(t => t !== "all").map((t) => (
+            <button
+              key={t}
+              onClick={() => setTypeFilter(typeFilter === t ? "all" : t)}
+              className={cn(
+                "px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap shrink-0 border transition-all",
+                typeFilter === t
+                  ? "bg-[#F7BC5F]/20 text-[#F9C977] border-[#F7BC5F]/50 shadow-xs"
+                  : "bg-white/5 border-white/10 text-slate-400"
+              )}
+            >
+              {t === "Acquéreur" ? "Acquéreurs" : "Vendeurs"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── En-tête Bureau ── */}
+      <div className="hidden md:block rounded-2xl border border-border bg-card/95 px-4 py-4 shadow-card backdrop-blur-sm">
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground drop-shadow-sm">
@@ -454,24 +530,8 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         </div>
       </div>
 
-      {/* Recherche de la liste, téléphone seulement.
-          Sur ordinateur la barre du haut (« Rechercher : client, pipeline,
-          message… ») cherche déjà les clients : la garder ici faisait deux
-          recherches l'une sous l'autre. Sous 768 px cet en-tête disparaît
-          (Header.tsx, `hidden md:flex`), donc cette barre reste le seul
-          moyen de filtrer la liste. */}
-      <div className="relative md:hidden">
-        <Search className="w-4 h-4 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher un client (nom, e-mail, téléphone)..."
-          className="w-full bg-card/95 border border-border focus:border-primary rounded-2xl pl-10 pr-4 py-3 text-sm outline-none shadow-card"
-        />
-      </div>
-
-      <div className="bg-card/95 border border-border rounded-2xl p-4 backdrop-blur-sm flex items-center gap-3 flex-wrap shadow-card">
+      {/* ── Filtres Bureau ── */}
+      <div className="hidden md:flex bg-card/95 border border-border rounded-2xl p-4 backdrop-blur-sm items-center gap-3 flex-wrap shadow-card">
         <div className="flex gap-2 flex-wrap">
           {(["all", "chaud", "tiede", "froid"] as const).map((f) => (
             <button
@@ -518,6 +578,110 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
         {displayedLeads.map((l: any) => {
           const reminderStatus = getReminderStatus(l.reminders ?? []);
           const statusCfg = reminderStatus ? STATUS_CONFIG[reminderStatus] : null;
+
+          if (isMobile) {
+            return (
+              <div
+                key={l.id}
+                data-lead-id={l.id}
+                onClick={() => openContact(l.id)}
+                className={cn(
+                  "group relative flex flex-col overflow-hidden rounded-2xl border border-teal-500/20 bg-[#081e22]/95 shadow-md cursor-pointer p-3.5 pl-4 transition-all duration-150 active:scale-[0.99]",
+                  l.archived_at && "opacity-40 grayscale border-dashed"
+                )}
+              >
+                {/* Liseré vertical doré */}
+                <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[#FAD592] via-[#F9C977] to-[#D9A34E]" />
+
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {statusCfg && (
+                      <span
+                        title={statusCfg.label}
+                        className={cn("shrink-0 h-2.5 w-2.5 rounded-full ring-2", statusCfg.color, statusCfg.ring)}
+                      />
+                    )}
+                    <h3 className="font-extrabold text-base text-white truncate">{l.full_name}</h3>
+                  </div>
+
+                  {/* Température cliquable */}
+                  <div className="flex items-center gap-0.5 shrink-0 bg-white/5 rounded-full p-0.5 border border-white/10" onClick={(e) => e.stopPropagation()}>
+                    {TEMP_OPTIONS.map((opt) => {
+                      const Icon = opt.icon;
+                      const isActive = l.temperature === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          title={tempLabel[opt.value]}
+                          onClick={() => void handleSetTemperature(l.id, opt.value)}
+                          className={cn(
+                            "w-5 h-5 rounded-full flex items-center justify-center border transition-colors",
+                            isActive ? opt.activeClass : "text-gray-500 border-transparent hover:text-gray-300",
+                          )}
+                        >
+                          <Icon className="w-3 h-3" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Badges lead type / ville / rappel */}
+                <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-400 mt-1">
+                  {l.lead_type && (
+                    <span className="px-2 py-0.5 rounded-md bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F9C977] text-[10px] font-bold">
+                      {l.lead_type}
+                    </span>
+                  )}
+                  {l.agency_id === IMMOSPHERA_ID && <ConsentStatusBadge record={l.latest_consent} />}
+                  {statusCfg && (
+                    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border", statusCfg.chip)}>
+                      <statusCfg.Icon className="w-2.5 h-2.5" />
+                      {statusCfg.label}
+                    </span>
+                  )}
+                  {l.pipeline_stages?.name && (
+                    <span className="text-[11px] text-slate-400 truncate">
+                      · {l.pipeline_stages.name}
+                    </span>
+                  )}
+                </div>
+
+                {/* Actions 1-tap: Appel + Email + Fiche */}
+                <div className="flex items-center justify-between pt-2.5 mt-1 border-t border-white/5">
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    {l.phone && (
+                      <a
+                        href={`tel:${String(l.phone).replace(/[^+\d]/g, '')}`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-teal-500/15 border border-teal-500/30 text-teal-300 text-xs font-semibold active:scale-90 transition-all"
+                        title="Appeler"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-teal-400" />
+                        <span>Appeler</span>
+                      </a>
+                    )}
+                    {l.email && (
+                      <button
+                        type="button"
+                        onClick={clicMailCrm(l.email)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F9C977] text-xs font-semibold active:scale-90 transition-all"
+                        title="Écrire un e-mail"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Email</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1 text-xs text-[#F7BC5F] font-bold">
+                    <span>Fiche</span>
+                    <ChevronRight className="w-4 h-4 text-[#F7BC5F]" />
+                  </div>
+                </div>
+              </div>
+            );
+          }
 
           return (
             <div

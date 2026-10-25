@@ -1122,7 +1122,7 @@ export default function Dashboard({
     : null;
 
   return (
-    <div className="space-y-8">
+    <div className="p-2 sm:p-6 space-y-4 sm:space-y-8">
       {/* Header section (30/08/2026, demande explicite : "supprime le
           panneau tableau de bord et centre les objectifs à la place, avec
           un fond gris classique") — le panneau titre "Tableau de bord"
@@ -1133,7 +1133,7 @@ export default function Dashboard({
           fin que le panneau Priorités de l'accueil (voir AccueilGrid.tsx),
           pour une teinte cohérente entre les deux écrans. */}
       <div className="flex justify-center">
-        <div className="bg-[#2b2b2b]/80 border border-white/10 px-5 py-3 rounded-2xl flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
+        <div className="bg-[#2b2b2b]/80 border border-white/10 px-3 sm:px-5 py-2.5 sm:py-3 rounded-2xl flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1.5 sm:gap-y-2 text-xs sm:text-sm">
           <Sparkles className="w-4 h-4 text-[#F7BC5F] shrink-0" />
           {editingGoal ? (
             <>
@@ -1238,7 +1238,7 @@ export default function Dashboard({
             onClick={() => setDetailCa('realise')}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('realise'); } }}
             title="Voir le détail des affaires comptabilisées, ligne par ligne"
-            className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group cursor-pointer text-left">
+            className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Chiffre d'affaires de l'agence</span>
               {/* Demandé le 6 septembre : « le chiffre d'affaires de l'agence
@@ -1339,7 +1339,7 @@ export default function Dashboard({
             `perimetre` plus haut) : ces tuiles reprennent donc les mêmes
             chiffres que celles des super admins, restreints à lui. */}
         {!estDirectionCF && estConseilsFinances && (
-          <div className="dash-card p-6 rounded-2xl border border-white/10 flex items-start justify-between group">
+          <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 flex items-start justify-between group">
             <div className="space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">CA du collaborateur</span>
               <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
@@ -1370,7 +1370,7 @@ export default function Dashboard({
         )}
 
         {!estDirectionCF && estConseilsFinances && (
-          <div className="dash-card p-6 rounded-2xl border border-white/10 flex items-start justify-between group">
+          <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 flex items-start justify-between group">
             <div className="space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">CA à venir</span>
               <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
@@ -1393,7 +1393,7 @@ export default function Dashboard({
             est réglé par un super admin (panneau plus bas) ; ici, le
             collaborateur voit le sien et où il en est. */}
         {!estDirectionCF && estConseilsFinances && (
-          <div className="dash-card p-6 rounded-2xl border border-white/10 flex items-start justify-between gap-4 group">
+          <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 flex items-start justify-between gap-4 group">
             <div className="space-y-1 min-w-0 flex-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Objectif de l'année {currentYear}</span>
               <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
@@ -1439,7 +1439,7 @@ export default function Dashboard({
             onClick={() => setDetailCa('avenir')}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('avenir'); } }}
             title="Voir le détail des dossiers à venir, ligne par ligne"
-            className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group cursor-pointer text-left">
+            className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">CA à venir agence</span>
               <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
@@ -1478,7 +1478,7 @@ export default function Dashboard({
             onClick={() => setDetailCa('avenir')}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCa('avenir'); } }}
             title="Voir le détail des affaires à venir, ligne par ligne"
-            className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group cursor-pointer text-left">
+            className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group cursor-pointer text-left">
             <div className="space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">
                 {voitChiffresAgence ? 'CA à venir agence' : 'CA à venir'}
@@ -1507,7 +1507,7 @@ export default function Dashboard({
             soustraction demandée. Objectif atteint : cercle tout doré et
             dépassement affiché. */}
         {voitChiffresAgence && !estNovavisio && !vueReunionSansAgence && (
-          <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between gap-4 group">
+          <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between gap-4 group">
             <div className="space-y-1 min-w-0 flex-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Objectif de l'année {currentYear}</span>
               {editionObjectifAnnee ? (
@@ -1605,7 +1605,7 @@ export default function Dashboard({
             devis à venir ». Deux tuiles de plus, seulement sur Novavisio :
             ailleurs, elles n'auraient aucun sens. */}
         {isSuperAdmin && estNovavisio && (
-          <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group">
+          <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group">
             <div className="space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">
                 Commission {natacha?.name?.split(' ')[0] || 'Natacha'}
@@ -1624,7 +1624,7 @@ export default function Dashboard({
         )}
 
         {isSuperAdmin && estNovavisio && (
-          <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group">
+          <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group">
             <div className="space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Devis signés à venir</span>
               <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
@@ -1643,7 +1643,7 @@ export default function Dashboard({
         )}
 
         {isSuperAdmin && estNovavisio && (
-          <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group">
+          <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-start justify-between group">
             <div className="space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Récurrence</span>
               <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">
@@ -1787,7 +1787,7 @@ export default function Dashboard({
           réalisé est celui de l'année en cours, dossiers archivés et
           confirmés, attribués à la personne. */}
       {estDirectionCF && estVueDirectionCF && goalAgencyId && (
-        <div className="dash-card p-6 rounded-2xl border border-white/10 space-y-4">
+        <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 space-y-4">
           <div>
             <h3 className="font-semibold text-sm text-white">Objectifs {currentYear}</h3>
             <p className="text-xs text-slate-400">
@@ -1874,7 +1874,7 @@ export default function Dashboard({
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1 - Prospects (Deep Teal theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
+        <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
           <div className="space-y-1">
             <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Prospects & Clients</span>
             <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">{totalContacts}</div>
@@ -1891,7 +1891,7 @@ export default function Dashboard({
         </div>
 
         {/* Metric 2 - Dossiers Actifs (Deep Amber theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
+        <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
           <div className="space-y-1">
             <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Dossiers actifs</span>
             <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">{activeDeals}</div>
@@ -1908,7 +1908,7 @@ export default function Dashboard({
         </div>
 
         {/* Metric 3 - Volume Financier (Deep Emerald theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
+        <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
           <div className="space-y-1">
             <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Volume financier</span>
             <div className="text-2xl font-semibold text-emerald-300 tracking-tight tabular-nums">{formatCurrency(totalDealValue)}</div>
@@ -1920,7 +1920,7 @@ export default function Dashboard({
         </div>
 
         {/* Metric 4 - Tâches en Attente (Deep Slate-Indigo theme) */}
-        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
+        <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex items-center justify-between group">
           <div className="space-y-1">
             <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Tâches en attente</span>
             <div className="text-3xl font-semibold text-white tracking-tight tabular-nums">{pendingTasks}</div>
@@ -1992,7 +1992,7 @@ export default function Dashboard({
             colonne ; la tuile dorée, elle, montre le réalisé. Masqué en vue
             réunion (6 septembre) : c'est un chiffre agence. */}
         {!vueReunionSansAgence && (
-        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex flex-col justify-between">
+        <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-sm text-white">CA à venir</h3>
             <p className="text-xs text-slate-400">
@@ -2114,7 +2114,7 @@ export default function Dashboard({
         </div>
 
         {/* Info panel */}
-        <div className="dash-card p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors space-y-4 flex flex-col justify-between">
+        <div className="dash-card p-4 sm:p-6 rounded-2xl border border-white/10 hover:border-[#F7BC5F]/40 transition-colors space-y-4 flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 text-[#F9C977] font-bold text-xs uppercase tracking-wider mb-2">
               <Sparkles className="w-4 h-4" />

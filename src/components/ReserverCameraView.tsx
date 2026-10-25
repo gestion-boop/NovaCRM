@@ -189,6 +189,15 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
     }
   };
 
+  // Écoute de l'action rapide mobile déclenchée depuis MobileHeader
+  useEffect(() => {
+    const handleCameraSignal = () => {
+      handleTriggerOpen();
+    };
+    window.addEventListener('nova-open-camera-reservation', handleCameraSignal);
+    return () => window.removeEventListener('nova-open-camera-reservation', handleCameraSignal);
+  }, [onOpenModal]);
+
   const handleEdit = (r: StoredCameraReservation) => {
     setEditingReservation(r);
     setShowModal(true);
@@ -254,8 +263,8 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
   });
 
   return (
-    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5 text-[var(--ink-1)]">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--nv-surface-1)] p-4 sm:p-5 rounded-3xl border border-[var(--nv-hairline)]">
+    <div className="p-2.5 sm:p-6 max-w-3xl mx-auto space-y-3.5 sm:space-y-5 text-[var(--ink-1)]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-[var(--nv-surface-1)] p-3.5 sm:p-5 rounded-3xl border border-[var(--nv-hairline)]">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-11 h-11 rounded-2xl bg-purple-950/60 border border-purple-500/40 text-purple-300 flex items-center justify-center shrink-0">
             <Camera className="w-5 h-5 text-purple-300" />

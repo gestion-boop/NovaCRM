@@ -3058,7 +3058,7 @@ export default function ClientProfileView({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as 'rdv' | 'agenda' | 'notes' | 'emails' | 'documents' | 'chat' | 'espace-client')}
-                className={`px-8 py-4 text-sm font-bold transition-all border-b-2 ${
+                className={`px-4 py-3 sm:px-8 sm:py-4 text-xs sm:text-sm font-bold transition-all border-b-2 whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-[#F7BC5F] text-[#F7BC5F] bg-[#F7BC5F]/5 shadow-[inset_0_0_16px_1px_rgba(247,188,95,0.12)]'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5 hover:shadow-[inset_0_0_16px_1px_rgba(247,188,95,0.1)]'
@@ -3070,7 +3070,7 @@ export default function ClientProfileView({
           </div>
 
           {/* Tab Content */}
-          <div className="p-6">
+          <div className="p-3.5 sm:p-6">
             {activeTab === 'rdv' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">

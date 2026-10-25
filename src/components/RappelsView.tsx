@@ -28,6 +28,18 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
   const isMobile = useIsMobile();
+
+  // Écoute de l'action rapide mobile déclenchée depuis MobileHeader
+  useEffect(() => {
+    const handleNewTaskSignal = () => {
+      setSelectedContactForNextTask(undefined);
+      setEditingTask(null);
+      setShowTaskModal(true);
+    };
+    window.addEventListener('nova-open-new-task', handleNewTaskSignal);
+    return () => window.removeEventListener('nova-open-new-task', handleNewTaskSignal);
+  }, []);
+
   // Sur mobile, les filtres sont repliés par défaut (ils prenaient trop de
   // place) — mais les valeurs sélectionnées restent actives tant que la
   // zone est repliée, seule leur affichage change.
@@ -115,21 +127,67 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
   ].filter(Boolean).join(' · ');
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-8 relative">
-      {/* Signalé sur mobile : le titre + le badge + "Nouvelle tâche" tenus
-          sur une seule ligne forçaient le titre à s'écraser sur 3 lignes en
-          collision avec le bouton retour. Empilé en colonne sur petit
-          écran (flex-col), redevient une ligne normale à partir de sm. */}
-      {/* Signalé (30/08/2026) : "il n'y a plus de fond d'écran... mets des
-          cases en haut" — le fond opaque sur TOUTE la page (essai
-          précédent) cachait l'image de fond personnalisée partout sur
-          cette page, alors qu'elle ne devait être couverte qu'au niveau du
-          bandeau de titre. Revenu à une simple carte opaque autour de ce
-          bandeau (comme Pipeline/Mail), le reste de la page laisse
-          à nouveau voir la photo. Effet d'ombre portée sur le texte
-          retiré (rendait le texte flou/moins lisible une fois sur fond
-          plein — inutile en plus d'une carte opaque). */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#144447]/50 pb-6 bg-[#050f11] rounded-2xl p-4">
+    <div className="p-2.5 sm:p-6 max-w-6xl mx-auto space-y-3.5 sm:space-y-8 relative">
+      {/* ── En-tête Mobile Compact ── */}
+      <div className="md:hidden space-y-2.5">
+        {/* Pills filtres rapides */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-2 px-2 custom-scrollbar snap-x">
+          <button
+            type="button"
+            onClick={() => { setDueFilter('RetardEtJourJ'); setStatusFilter('A faire'); }}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shrink-0 border transition-all flex items-center gap-1.5 ${
+              dueFilter === 'RetardEtJourJ' && statusFilter === 'A faire'
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-xs'
+                : 'bg-[#07191b] border-white/10 text-slate-400'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            <span>Jour J &amp; Retards</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500/30 text-rose-200 font-black">
+              {todayAndOverdueCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setDueFilter('Toutes'); setStatusFilter('A faire'); }}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shrink-0 border transition-all ${
+              dueFilter === 'Toutes' && statusFilter === 'A faire'
+                ? 'bg-[#F7BC5F]/20 text-[#F9C977] border-[#F7BC5F]/40 shadow-xs'
+                : 'bg-[#07191b] border-white/10 text-slate-400'
+            }`}
+          >
+            <span>Toutes à faire ({localTasks.filter(t => !t.completed).length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setDueFilter('Toutes'); setStatusFilter('Terminée'); }}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shrink-0 border transition-all ${
+              statusFilter === 'Terminée'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs'
+                : 'bg-[#07191b] border-white/10 text-slate-400'
+            }`}
+          >
+            <span>Terminées ({localTasks.filter(t => t.completed).length})</span>
+          </button>
+        </div>
+
+        {/* Barre de recherche mobile */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher tâche ou client..."
+            className="w-full bg-[#081e22]/95 border border-teal-500/20 focus:border-[#F7BC5F] rounded-2xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-400 outline-none shadow-sm"
+          />
+        </div>
+      </div>
+
+      {/* ── En-tête Bureau ── */}
+      <div className="hidden md:flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#144447]/50 pb-6 bg-[#050f11] rounded-2xl p-4">
         <div className="flex items-start sm:items-center gap-3 sm:gap-4">
           <button
             onClick={onBack}
@@ -161,7 +219,7 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
         </button>
       </div>
 
-      <div className="space-y-4">
+      <div className="hidden md:block space-y-4">
         <div className="flex items-center justify-between">
           {/* Signalé (mode jour) : "on ne voit pas le mot filtre" — ce titre
               n'avait aucun fond propre et se retrouvait écrit à même la photo
@@ -320,9 +378,9 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
                           // en dessous, pleine largeur) ; à partir du format
                           // tablette, la disposition d'origine (une seule ligne)
                           // est inchangée.
-                          className={`p-4 rounded-2xl bg-[#07191b] border-l-4 ${borderLeftClass} border-t border-r border-b border-[#144447]/60 flex flex-col sm:flex-row items-stretch sm:items-start justify-start sm:justify-between gap-3 sm:gap-4 cursor-pointer hover:bg-[#123336] hover:border-t-[#F7BC5F]/70 hover:border-r-[#F7BC5F]/70 hover:border-b-[#F7BC5F]/70 hover:shadow-[0_0_28px_6px_rgba(247,188,95,0.5)] transition-all group ${snapshot.isDragging ? 'shadow-2xl opacity-90 scale-[1.02] border-[#F7BC5F]/50 z-50 bg-[#0a1e20]' : 'shadow-md'}`}
+                          className={`p-3.5 sm:p-4 rounded-2xl bg-[#07191b] border-l-4 ${borderLeftClass} border-t border-r border-b border-[#144447]/60 flex flex-col sm:flex-row items-stretch sm:items-start justify-start sm:justify-between gap-2.5 sm:gap-4 cursor-pointer hover:bg-[#123336] hover:border-t-[#F7BC5F]/70 hover:border-r-[#F7BC5F]/70 hover:border-b-[#F7BC5F]/70 hover:shadow-[0_0_28px_6px_rgba(247,188,95,0.5)] transition-all group ${snapshot.isDragging ? 'shadow-2xl opacity-90 scale-[1.02] border-[#F7BC5F]/50 z-50 bg-[#0a1e20]' : 'shadow-md'}`}
                         >
-                          <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
+                          <div className="flex items-start gap-2.5 sm:gap-4 min-w-0 flex-1">
                             <div 
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -337,7 +395,7 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
                                   updateTask.mutateAsync({ id: task.id, updates: { completed: false } });
                                 }
                               }}
-                              className="mt-0.5 cursor-pointer text-slate-400 hover:text-[#F7BC5F] transition-colors shrink-0"
+                              className="p-1 -ml-1 cursor-pointer text-slate-400 hover:text-[#F7BC5F] active:scale-90 transition-all shrink-0"
                               title={task.completed ? "Marquer à faire" : "Valider et planifier la suite"}
                             >
                               {task.completed ? (
@@ -347,19 +405,26 @@ export const RappelsView: React.FC<{ onSelectContact: (contactId: string) => voi
                               )}
                             </div>
                             
-                            <div className="space-y-1.5 min-w-0 flex-1">
+                            <div className="space-y-1 min-w-0 flex-1">
                               <div className="flex flex-col gap-0.5">
-                                <h3 className={`text-base font-bold ${task.completed ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                <h3 className={`text-sm sm:text-base font-bold ${task.completed ? 'text-slate-500 line-through' : 'text-white'}`}>
                                   {task.type === 'Appel' ? 'Appel' : task.type === 'Rendez-vous' ? 'Rendez-vous' : task.title}
                                 </h3>
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+                                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-400">
                                   {task.contactId && (
-                                    <span className="flex items-center gap-1.5 font-medium text-slate-300">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onSelectContact(task.contactId);
+                                      }}
+                                      className="inline-flex items-center gap-1 font-bold text-xs text-[#F9C977] hover:underline"
+                                    >
                                       <User className="w-3.5 h-3.5 text-[#F9C977]" />
-                                      {getContactName(task.contactId)}
-                                    </span>
+                                      <span className="truncate max-w-[150px]">{getContactName(task.contactId)}</span>
+                                    </button>
                                   )}
-                                  <span className="flex items-center gap-1.5">
+                                  <span className="flex items-center gap-1">
                                     <Calendar className="w-3.5 h-3.5" />
                                     {dateCourte}
                                   </span>

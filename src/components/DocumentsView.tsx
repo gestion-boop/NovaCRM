@@ -85,6 +85,15 @@ export const DocumentsView: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Écoute de l'action rapide mobile déclenchée depuis MobileHeader
+  useEffect(() => {
+    const handleNewDocSignal = () => {
+      startUpload(currentLeadId);
+    };
+    window.addEventListener('nova-open-new-document', handleNewDocSignal);
+    return () => window.removeEventListener('nova-open-new-document', handleNewDocSignal);
+  }, [currentLeadId]);
+
   const loadDocuments = async () => {
     if (!currentUser) {
       setDocuments([]);
@@ -283,26 +292,27 @@ export const DocumentsView: React.FC = () => {
   const renderDocRow = (documentItem: StoredDocument) => (
     <div
       key={documentItem.id}
-      // Signalé (mode jour) : "on ne voit rien" dans le Coffre Documents.
-      // `bg-white/5` n'est pas une surface mais un voile translucide : au-
-      // dessus de la photo de fond, le nom du fichier et sa taille étaient
-      // écrits à même l'image. `.nv-panel` = vrai fond de carte (index.css).
-      className="p-4 nv-panel border border-white/10 rounded-2xl flex items-center justify-between gap-4 hover:border-[#F7BC5F]/40 transition-all"
+      onClick={() => {
+        setPreviewIsAudio(!!documentItem.mimeType?.startsWith('audio/'));
+        setPreviewUrl(documentItem.url);
+      }}
+      className="p-3 sm:p-4 nv-panel border border-white/10 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 hover:border-[#F7BC5F]/40 active:border-[#F7BC5F]/60 transition-all cursor-pointer"
     >
       <div className="flex items-center gap-3 min-w-0">
         <div className="p-2.5 rounded-xl bg-[#F7BC5F]/20 text-[#F9C977] shrink-0">
           <File className="w-5 h-5" />
         </div>
         <div className="min-w-0">
-          <h3 className="font-bold text-white text-sm truncate">{documentItem.name}</h3>
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-400 mt-1">
+          <h3 className="font-bold text-white text-xs sm:text-sm truncate">{documentItem.name}</h3>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-gray-400 mt-0.5 sm:mt-1">
             <span>{documentItem.size}</span>
-            <span>Déposé par {documentItem.uploadedByName}</span>
+            <span>•</span>
+            <span className="truncate">Déposé par {documentItem.uploadedByName}</span>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 self-end sm:self-auto" onClick={(e) => e.stopPropagation()}>
         {/* Ticket #18 (nouvelle base) : l'aperçu (icône œil) était réservé aux
             images et audios — la modale gère déjà tout document Google Drive
             via une iframe (/preview), donc on l'ouvre à tous les types. */}
@@ -348,9 +358,55 @@ export const DocumentsView: React.FC = () => {
   );
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 text-white">
-      {/* HEADER — carte opaque dédiée (pas toute la page, voir RappelsView.tsx) */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#050f11] rounded-2xl p-4">
+    <div className="p-2.5 sm:p-6 max-w-7xl mx-auto space-y-3.5 sm:space-y-6 text-white">
+      {/* Mobile Top Navigation & Controls */}
+      <div className="md:hidden space-y-2">
+        {currentLeadId ? (
+          <div className="flex items-center justify-between bg-[#0a1e20]/95 border border-white/10 rounded-xl px-3 py-2">
+            <button
+              onClick={() => setCurrentLeadId(null)}
+              className="flex items-center gap-1 text-xs font-bold text-emerald-400 active:scale-95 transition-transform"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Dossiers</span>
+            </button>
+            <span className="text-xs font-semibold text-white truncate max-w-[160px]">
+              📁 {currentClientName}
+            </span>
+            <button
+              onClick={() => startUpload(currentLeadId)}
+              disabled={uploading}
+              className="px-2.5 py-1.5 rounded-lg bg-[#F7BC5F] active:scale-95 text-slate-950 text-xs font-bold flex items-center gap-1 shrink-0"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>{uploading ? 'Envoi...' : 'Déposer'}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => startUpload(null)}
+              disabled={uploading}
+              className="flex-1 bg-gradient-to-r from-[#FAD592] via-[#F9C977] to-[#D9A34E] active:scale-95 text-[#1a1230] font-black text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-md"
+            >
+              <Upload className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>{uploading ? 'Envoi...' : 'Déposer un document'}</span>
+            </button>
+            <button
+              onClick={handleCreateGoogleSheet}
+              disabled={exporting || uploading}
+              className="bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 active:scale-95 text-xs font-bold py-2 px-3 rounded-xl flex items-center gap-1.5 shrink-0"
+              title="Exporter vers Sheets"
+            >
+              <Table className="w-3.5 h-3.5" />
+              <span>Sheets</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* HEADER DESKTOP — carte opaque dédiée (pas toute la page, voir RappelsView.tsx) */}
+      <div className="hidden md:flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#050f11] rounded-2xl p-4">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-bold shrink-0">
             <FileText className="w-5 h-5" />

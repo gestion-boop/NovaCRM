@@ -2130,6 +2130,33 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
           // glisser-déposer) n'est pas concerné et reste fluide.
           autoScroll={false}
         >
+          {/* Sélecteur d'étape rapide pour mobile */}
+          <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-2 -mx-1 px-1 custom-scrollbar snap-x mb-2">
+            {activePipeline.stages.map((stage, idx) => {
+              const stageDeals = dealsByStage.get(stage) || EMPTY_DEALS;
+              const accentColor =
+                (estAgenceNovavisio(currentAgencyId) && couleurEtapeNovavisio(stage)) ||
+                STAGE_ACCENT_COLORS[idx % STAGE_ACCENT_COLORS.length];
+              return (
+                <button
+                  key={stage}
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById(`pipeline-stage-${stage}`);
+                    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#081e22]/95 border border-teal-500/20 text-slate-200 text-xs font-bold whitespace-nowrap shrink-0 snap-start active:scale-95 shadow-sm"
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />
+                  <span className="truncate max-w-[120px]">{stage}</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/10 text-white font-black">
+                    {stageDeals.length}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           <SortableContext items={activePipeline.stages} strategy={horizontalListSortingStrategy}>
             <div
               // Demande explicite (mobile) : le défilement horizontal entre

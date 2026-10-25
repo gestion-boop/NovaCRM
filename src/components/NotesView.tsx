@@ -103,6 +103,18 @@ export const NotesView: React.FC = () => {
   // Le comportement mobile (dossiers en tuiles, drill-down) reste inchangé.
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
+  // Écoute de l'action rapide mobile déclenchée depuis MobileHeader
+  useEffect(() => {
+    const handleNewNoteSignal = () => {
+      resetForm();
+      setError(null);
+      setSuccess(null);
+      setShowAdd(true);
+    };
+    window.addEventListener('nova-open-new-note', handleNewNoteSignal);
+    return () => window.removeEventListener('nova-open-new-note', handleNewNoteSignal);
+  }, []);
+
   const loadAll = async () => {
     if (!currentUser) {
       setNotes([]);
@@ -498,14 +510,72 @@ export const NotesView: React.FC = () => {
   const noteCountInFolder = (folderId: string) => agencyNotes.filter((n) => n.folderId === folderId).length;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 text-white">
-      {/* HEADER */}
-      {/* Signalé (30/08/2026, capture à l'appui) : "améliore le haut car on
-          ne voit pas les écritures" — ce bandeau n'avait aucun fond propre,
-          le texte blanc flottait directement sur la photo de fond de page
-          (bgImage), illisible selon la photo. Fond opaque ajouté, comme les
-          autres en-têtes de page de l'appli. */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#0a1e20]/95 border border-white/10 rounded-2xl p-4">
+    <div className="p-2.5 sm:p-6 max-w-7xl mx-auto space-y-3 sm:space-y-6 text-white">
+      {/* Mobile Top Navigation & Controls */}
+      <div className="md:hidden space-y-2">
+        {/* Fil d'Ariane si dans un dossier */}
+        {currentFolderId && !searching && (
+          <div className="flex items-center justify-between bg-[#0a1e20]/95 border border-white/10 rounded-xl px-3 py-2">
+            <button
+              onClick={() => setCurrentFolderId(null)}
+              className="flex items-center gap-1 text-xs font-bold text-[#F9C977] active:scale-95 transition-transform"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Dossiers</span>
+            </button>
+            <span className="text-xs font-semibold text-white truncate max-w-[170px]">
+              📁 {currentFolder?.name || 'Dossier'}
+            </span>
+            <span className="text-[10px] text-slate-400">
+              {displayedNotes.length} note(s)
+            </span>
+          </div>
+        )}
+
+        {/* Barre de recherche & boutons rapides mobiles */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Rechercher une note..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-[#07191b] border border-[#144447] rounded-xl pl-8 pr-7 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {!currentFolderId && !searching && (
+            <button
+              onClick={() => { setFolderNameInput(''); setShowFolderModal('new'); }}
+              className="bg-white/5 active:bg-white/10 border border-white/10 text-white font-semibold text-xs px-2.5 py-2 rounded-xl flex items-center gap-1.5 shrink-0"
+              title="Nouveau dossier"
+            >
+              <FolderPlus className="w-3.5 h-3.5 text-[#F9C977]" />
+              <span className="text-[11px]">Dossier</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => { resetForm(); setError(null); setSuccess(null); setShowAdd(true); }}
+            className="bg-gradient-to-r from-[#FAD592] via-[#F9C977] to-[#D9A34E] active:scale-95 text-[#1a1230] font-black text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-md shrink-0 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <span className="text-[11px]">Note</span>
+          </button>
+        </div>
+      </div>
+
+      {/* HEADER DESKTOP */}
+      <div className="hidden md:flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#0a1e20]/95 border border-white/10 rounded-2xl p-4">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-[#F7BC5F]/20 border border-[#F7BC5F]/30 text-[#F9C977] flex items-center justify-center font-bold shrink-0">
             <FileEdit className="w-5 h-5" />
@@ -883,19 +953,20 @@ export const NotesView: React.FC = () => {
                       draggable
                       onDragStart={() => setDraggedNoteId(note.id)}
                       onDragEnd={() => setDraggedNoteId(null)}
-                      className={`p-5 bg-[#07191b] border border-[#144447] rounded-2xl space-y-3 flex flex-col justify-between hover:border-[#226368] transition-all shadow-md relative cursor-grab active:cursor-grabbing ${
+                      onClick={() => openEdit(note)}
+                      className={`p-4 sm:p-5 bg-[#07191b] border border-[#144447] rounded-2xl space-y-3 flex flex-col justify-between hover:border-[#226368] active:border-[#F7BC5F]/50 transition-all shadow-md relative cursor-pointer ${
                         draggedNoteId === note.id ? 'opacity-40' : ''
                       }`}
                     >
                       <div>
                         <div className="flex items-center justify-between mb-2 gap-2">
                           <span className="text-[10px] text-slate-400">{new Date(note.updatedAt).toLocaleString('fr-FR')}</span>
-                          <div className="relative">
+                          <div className="relative" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => setOpenMenuNoteId(openMenuNoteId === note.id ? null : note.id)}
-                              className="p-1 rounded-lg text-slate-500 hover:text-white hover:bg-white/10"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 active:scale-90 transition-transform"
                             >
-                              <MoreVertical className="w-3.5 h-3.5" />
+                              <MoreVertical className="w-4 h-4" />
                             </button>
                             {openMenuNoteId === note.id && (
                               <div className="absolute right-0 top-full mt-1 z-20 w-40 bg-[#0b292b] border border-[#1c4448] rounded-xl shadow-2xl p-1.5 space-y-0.5">
@@ -952,8 +1023,8 @@ export const NotesView: React.FC = () => {
 
       {/* MODALE CRÉATION / ÉDITION */}
       {showAdd && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#07191b] border border-[#144447] rounded-2xl max-w-md w-full p-6 text-white shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-[#07191b] border border-[#144447] rounded-2xl max-w-md w-full p-4 sm:p-6 text-white shadow-2xl max-h-[92vh] overflow-y-auto my-auto">
             <h3 className="text-lg font-bold mb-1 text-[#F7BC5F] flex items-center gap-2">
               <FileEdit className="w-5 h-5" />
               <span>{editingNote ? 'Modifier la note' : 'Rédiger une note'}</span>
