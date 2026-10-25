@@ -3570,8 +3570,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           )}
           <button
             onClick={() => setActiveChannel(c)}
-            className={`flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-left truncate ${
-              activeChannel?.id === c.id ? 'bg-[#F7BC5F]/20 text-[#F7BC5F]' : 'text-slate-300 hover:bg-white/5'
+            className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-left truncate transition-all ${
+              activeChannel?.id === c.id
+                ? 'bg-[#F7BC5F]/20 text-[#FAD592] border border-[#F7BC5F]/40 shadow-[0_0_12px_rgba(247,188,95,0.15)] font-bold'
+                : 'text-teal-200/80 hover:text-white hover:bg-white/5 border border-transparent'
             }`}
           >
             {aDesEnfants ? <Folder className="w-3.5 h-3.5 shrink-0" /> : <Hash className="w-3.5 h-3.5 shrink-0" />}
@@ -4102,7 +4104,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
          maintenant la largeur à parts égales, sur une seule ligne, et
          « Nouveau » devient un simple « + » rond à droite. Ordinateur
          inchangé. */
-      <div className={`flex items-center justify-between gap-2 ${isMobile ? 'px-3' : 'px-4'} py-3 border-b border-white/20 shrink-0`}>
+      <div className={`flex items-center justify-between gap-2 ${isMobile ? 'px-3' : 'px-4'} py-3 border-b border-teal-500/20 bg-[#071317]/80 backdrop-blur-xl shrink-0 shadow-sm`}>
         <div className={isMobile ? 'flex-1 min-w-0 grid grid-cols-3 gap-1.5' : 'flex items-center min-w-0 overflow-x-auto custom-scrollbar gap-2'}>
           {TABS.map((t) => {
             // Demandé : "un compteur sur conversation" — total des messages
@@ -4118,15 +4120,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`${isMobile ? 'w-full min-w-0 justify-center px-1.5 gap-1 text-[13px]' : 'shrink-0 px-4 gap-2 text-sm'} py-2 rounded-xl font-semibold flex items-center transition-all ${
-                  tab === t.id ? 'bg-[#F7BC5F] text-slate-950' : 'text-slate-300 hover:bg-white/5'
+                className={`${isMobile ? 'w-full min-w-0 justify-center px-1.5 gap-1 text-[13px]' : 'shrink-0 px-4 gap-2 text-sm'} py-2 rounded-2xl font-bold flex items-center transition-all ${
+                  tab === t.id
+                    ? 'bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 shadow-[0_0_15px_rgba(247,188,95,0.35)]'
+                    : 'text-teal-200/80 hover:text-white hover:bg-white/5 border border-transparent hover:border-teal-500/20'
                 }`}
               >
                 <t.icon className="w-4 h-4 shrink-0" />
                 <span className="truncate">{t.label}</span>
                 {tabUnread > 0 && (
-                  <span className={`min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
-                    tab === t.id ? 'bg-slate-950 text-[#F7BC5F]' : 'bg-[#F7BC5F] text-slate-950'
+                  <span className={`min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-black flex items-center justify-center ${
+                    tab === t.id ? 'bg-slate-950 text-[#F7BC5F]' : 'bg-[#F7BC5F] text-slate-950 shadow-sm'
                   }`}>
                     {tabUnread > 9 ? '9+' : tabUnread}
                   </span>
@@ -4146,7 +4150,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               onClick={ouvrirDocuments}
               aria-label="Documents"
               title="Tous les documents envoyés dans la messagerie"
-              className={`shrink-0 ${isMobile ? 'w-10 h-10 rounded-full justify-center' : 'px-3.5 py-2 rounded-xl gap-1.5'} text-sm font-bold bg-white/10 text-white hover:bg-white/20 flex items-center border border-white/10`}
+              className={`shrink-0 ${isMobile ? 'w-10 h-10 rounded-full justify-center' : 'px-3.5 py-2 rounded-2xl gap-1.5'} text-sm font-bold bg-[#092226]/85 text-teal-200 hover:text-white hover:bg-[#0c2e33] flex items-center border border-teal-500/30 shadow-md transition-all active:scale-95`}
             >
               <FileText className={isMobile ? 'w-4 h-4' : 'w-4 h-4'} />
               {!isMobile && 'Documents'}
@@ -4157,7 +4161,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               onClick={() => { setShowNewConvModal(true); ensureProfilesLoaded(); }}
               aria-label="Nouvelle conversation"
               title="Nouvelle conversation"
-              className={`shrink-0 ${isMobile ? 'w-10 h-10 rounded-full justify-center' : 'px-4 py-2 rounded-xl gap-1.5'} text-sm font-bold bg-[#F7BC5F] text-slate-950 hover:bg-[#d4a83b] flex items-center`}
+              className={`shrink-0 ${isMobile ? 'w-10 h-10 rounded-full justify-center' : 'px-4 py-2 rounded-2xl gap-1.5'} text-sm font-bold bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 hover:brightness-110 flex items-center shadow-[0_0_15px_rgba(247,188,95,0.3)] transition-all active:scale-95`}
             >
               <Plus className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
               {!isMobile && 'Nouveau'}
@@ -4170,15 +4174,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       <div className="flex-1 flex min-h-0">
         {/* Folder tree */}
         {tab === 'projets' && (!isMobile || !activeChannel) && (
-          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-white/20 overflow-y-auto custom-scrollbar p-3 space-y-2`}>
+          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-teal-500/20 bg-[#061517]/60 backdrop-blur-xl overflow-y-auto custom-scrollbar p-3 sm:p-3.5 space-y-2.5`}>
             <div className="flex items-center justify-between px-1 mb-1">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Projets</span>
+              <span className="text-xs font-bold text-teal-400 uppercase tracking-wider">Projets</span>
               {isAdmin && (
                 <button
                   type="button"
                   onClick={() => { setProjectError(null); setShowAddProject(true); void ensureProfilesLoaded(); }}
                   title="Créer un dossier de projet"
-                  className="w-7 h-7 rounded-lg bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 flex items-center justify-center shrink-0"
+                  className="w-7 h-7 rounded-xl bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] hover:brightness-110 text-slate-950 flex items-center justify-center shrink-0 shadow-md transition-all active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -4191,18 +4195,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               // Ticket (nouvelle base, signalé) : texte plus grand + séparateurs
               // entre les projets sur mobile.
               <React.Fragment key={project.id}>
-              {isMobile && pi > 0 && <div className="h-px bg-white/10 mx-1 my-1" />}
+              {isMobile && pi > 0 && <div className="h-px bg-teal-500/15 mx-1 my-1" />}
               <div className="space-y-1">
                 <div
-                  className={`w-full flex items-center gap-1 rounded-xl bg-[#0b1c1e] border transition-colors ${
+                  className={`w-full flex items-center gap-1 rounded-2xl transition-all shadow-sm ${
                     isSpecialGroup
-                      ? 'border-[#F7BC5F] ring-1 ring-[#F7BC5F]/50'
-                      : 'border-white/20 hover:border-[#F7BC5F]/40'
+                      ? 'bg-gradient-to-r from-[#0c252a]/95 via-[#11333a]/90 to-[#0c252a]/95 border border-[#F7BC5F]/60 ring-1 ring-[#F7BC5F]/30 shadow-[0_0_15px_rgba(247,188,95,0.15)]'
+                      : 'bg-[#081e22]/85 hover:bg-[#0c272c] border border-teal-500/25 hover:border-teal-500/50'
                   }`}
                 >
                   <button
                     onClick={() => setExpanded((p) => ({ ...p, [project.id]: !p[project.id] }))}
-                    className={`flex-1 flex items-center justify-between min-w-0 font-bold ${isMobile ? 'px-3 py-3.5 text-base' : 'px-3 py-2 text-sm'}`}
+                    className={`flex-1 flex items-center justify-between min-w-0 font-bold ${isMobile ? 'px-3 py-3.5 text-base' : 'px-3.5 py-2.5 text-sm'}`}
                   >
                     <span className="flex items-center gap-2 truncate">
                       {isSpecialGroup ? (
@@ -4210,7 +4214,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       ) : (
                         <Folder className="w-4 h-4 text-[#F7BC5F] shrink-0" />
                       )}
-                      {project.name}
+                      <span className="text-white truncate">{project.name}</span>
                     </span>
                     <span className="flex items-center gap-1.5 shrink-0 ml-2">
                       {(() => {
@@ -4218,19 +4222,19 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           .filter((c) => !c.parent_channel_id)
                           .reduce((sum, c) => sum + unreadCanalRecursif(c.id), 0);
                         return projetUnread > 0 ? (
-                          <span className="min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-[#F7BC5F] text-slate-950">
+                          <span className="min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-[#F7BC5F] text-slate-950 shadow-sm">
                             {projetUnread > 9 ? '9+' : projetUnread}
                           </span>
                         ) : null;
                       })()}
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[10px] text-teal-300/60 font-medium">
                         {(channelsByProject[project.id] || []).length} canaux
                       </span>
                     </span>
                   </button>
                   <button
                     onClick={() => openMembersModal(project.id)}
-                    className="p-1.5 mr-1.5 rounded-lg text-slate-400 hover:text-[#F7BC5F] hover:bg-white/5 shrink-0"
+                    className="p-1.5 mr-1.5 rounded-xl text-slate-400 hover:text-[#F7BC5F] hover:bg-white/5 shrink-0 transition-colors"
                     title="Gérer les membres"
                   >
                     <Users className="w-3.5 h-3.5" />
@@ -4278,14 +4282,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
         {/* Conversations list */}
         {tab === 'conversations' && (!isMobile || !activeConversationId) && (
-          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-white/20 overflow-y-auto custom-scrollbar p-3 space-y-2`}>
+          <div className={`${isMobile ? 'w-full' : 'w-72 shrink-0'} border-r border-teal-500/20 bg-[#061517]/60 backdrop-blur-xl overflow-y-auto custom-scrollbar p-3 sm:p-3.5 space-y-2`}>
             <div className="relative mb-1">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-teal-400/60" />
               <input
                 value={convSearch}
                 onChange={(e) => setConvSearch(e.target.value)}
                 placeholder="Rechercher..."
-                className="w-full bg-[#0b1c1e] border border-[#153c3f] rounded-lg pl-8 pr-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
+                className="w-full bg-[#081e22]/90 border border-teal-500/30 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-teal-200/40 focus:outline-none focus:border-[#F7BC5F]/70 shadow-inner"
               />
             </div>
             {conversationsLoading ? (
@@ -4302,16 +4306,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 // entre les entrées. Comportement d'envoi/permissions/
                 // pièces jointes/notifications inchangé (uniquement l'affichage).
                 <React.Fragment key={c.id}>
-                  {isMobile && i > 0 && <div className="h-px bg-white/10 mx-2" />}
+                  {isMobile && i > 0 && <div className="h-px bg-teal-500/15 mx-2" />}
                   <button
                     onClick={() => openConversation(c.id)}
-                    className={`w-full flex items-center gap-3 rounded-xl border text-left transition-colors ${
-                      isMobile ? 'px-3 py-3' : 'px-3 py-3'
+                    className={`w-full flex items-center gap-3 rounded-2xl border text-left transition-all ${
+                      isMobile ? 'px-3.5 py-3' : 'px-3 py-2.5'
                     } ${
-                      activeConversationId === c.id ? 'bg-[#F7BC5F]/20 border-[#F7BC5F]/40' : 'border-white/10 hover:bg-white/5 hover:border-[#F7BC5F]/40'
+                      activeConversationId === c.id
+                        ? 'bg-gradient-to-r from-[#F7BC5F]/20 via-[#F7BC5F]/10 to-transparent border-[#F7BC5F]/50 shadow-[0_4px_16px_rgba(247,188,95,0.12)]'
+                        : 'bg-[#081e22]/70 border-teal-500/20 hover:border-teal-500/40 hover:bg-[#0c272c]'
                     }`}
                   >
-                    <div className={`rounded-full bg-[#0b1c1e] border border-[#153c3f] flex items-center justify-center font-bold shrink-0 overflow-hidden text-sm ${isMobile ? 'w-12 h-12' : 'w-11 h-11'} ${activeConversationId === c.id ? 'text-[#F7BC5F]' : 'text-slate-300'}`}>
+                    <div className={`rounded-2xl bg-[#092226] border border-teal-500/30 flex items-center justify-center font-bold shrink-0 overflow-hidden text-sm shadow-sm ${isMobile ? 'w-12 h-12' : 'w-10 h-10'} ${activeConversationId === c.id ? 'text-[#F7BC5F] border-[#F7BC5F]/50' : 'text-slate-300'}`}>
                       {conversationAvatarUrl(c) ? (
                         <img src={conversationAvatarUrl(c)!} alt="" className="w-full h-full object-cover" />
                       ) : (
@@ -4320,21 +4326,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-2">
-                        <p className={`font-bold truncate ${isMobile ? 'text-base' : 'text-sm'} ${activeConversationId === c.id ? 'text-[#F7BC5F]' : 'text-white'}`}>
+                        <p className={`font-bold truncate ${isMobile ? 'text-base' : 'text-sm'} ${activeConversationId === c.id ? 'text-[#FAD592]' : 'text-white'}`}>
                           {conversationLabel(c)}
                         </p>
                         {conversationTime(c.id) && (
-                          <span className={`shrink-0 text-[10px] ${unread > 0 ? 'text-[#F7BC5F] font-bold' : 'text-slate-500'}`}>
+                          <span className={`shrink-0 text-[10px] ${unread > 0 ? 'text-[#F7BC5F] font-bold' : 'text-teal-400/60'}`}>
                             {conversationTime(c.id)}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <p className={`truncate ${isMobile ? 'text-sm' : 'text-xs'} ${unread > 0 ? 'text-slate-200 font-semibold' : 'text-slate-500'}`}>
+                        <p className={`truncate ${isMobile ? 'text-sm' : 'text-xs'} ${unread > 0 ? 'text-teal-100 font-semibold' : 'text-teal-200/50'}`}>
                           {lastMessagePreview(c.id)}
                         </p>
                         {unread > 0 && (
-                          <span className="shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-[#F7BC5F] text-slate-950 text-[10px] font-black flex items-center justify-center">
+                          <span className="shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 text-[10px] font-black flex items-center justify-center shadow-sm">
                             {unread > 9 ? '9+' : unread}
                           </span>
                         )}
@@ -4359,14 +4365,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     sans jamais reprendre ce padding — il se retrouvait sous
                     l'encoche/la barre de statut, invisible et inatteignable
                     sur mobile. */}
-                <div className={`px-5 py-3.5 border-b border-white/20 flex items-center gap-2 ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
+                <div className={`px-5 py-3.5 border-b border-teal-500/20 bg-[#071317]/85 backdrop-blur-md shadow-sm flex items-center gap-2.5 ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
                   {isMobile && (
                     <button onClick={goBackToList} aria-label="Revenir à la liste" className="p-3 -ml-2 mr-0.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
                       <ArrowLeft className="w-5 h-5" />
                     </button>
                   )}
                   <MessageSquare className="w-4 h-4 text-[#F7BC5F] shrink-0" />
-                  <span className="font-bold truncate flex-1 min-w-0">
+                  <span className="font-bold truncate flex-1 min-w-0 text-white">
                     {conversationLabel(conversations.find((c) => c.id === activeConversationId))}
                   </span>
                   {/* "chaque utilisateur puisse inviter [...] et inviter
@@ -4385,7 +4391,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       }}
                       title="Inviter des participants"
                       aria-label="Inviter des participants"
-                      className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-[#F7BC5F] transition-colors"
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#092226] hover:bg-[#0c2e33] border border-teal-500/30 text-teal-200 hover:text-white shadow-sm transition-all active:scale-95"
                     >
                       <UserPlus className="w-3.5 h-3.5" />
                       {!isMobile && <span className="text-xs font-semibold">Inviter</span>}
@@ -4446,8 +4452,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             {/* L'aplat doré plein transformait un long message
                                 en bloc jaune. Le doré reste le liseré ; la
                                 largeur ne change pas. */}
-                            <div className={`px-4 py-2.5 rounded-2xl text-sm ${isEditing ? 'w-full' : ''} ${
-                              mine ? 'bg-[#F7BC5F]/30 border border-[#F7BC5F]/60 text-white rounded-br-md' : 'bg-[#0b1c1e] border border-[#153c3f] text-white rounded-bl-md'
+                            <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${isEditing ? 'w-full' : ''} ${
+                              mine
+                                ? 'bg-gradient-to-br from-[#F7BC5F]/35 via-[#E5A642]/25 to-[#F7BC5F]/20 border border-[#F7BC5F]/60 text-white rounded-br-md shadow-[0_4px_16px_rgba(247,188,95,0.15)]'
+                                : 'bg-[#081e22]/90 border border-teal-500/25 text-slate-100 rounded-bl-md shadow-sm backdrop-blur-md'
                             }`}>
                               {!mine && <p className="text-[10px] font-bold text-[#F7BC5F] mb-0.5">{author?.displayName || 'Utilisateur'}</p>}
 
@@ -4742,7 +4750,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     la justifiaient), inchangé sur ordinateur. */}
                 {/* Même correctif que côté canaux (11 septembre) : espace
                     réduit au strict nécessaire sous la barre de saisie. */}
-                <div className="relative p-3 max-sm:px-1 max-sm:pb-[env(safe-area-inset-bottom,0px)] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
+                <div className="relative p-3.5 max-sm:px-2 max-sm:pb-[env(safe-area-inset-bottom,0px)] border-t border-teal-500/20 bg-[#07171a]/85 backdrop-blur-xl space-y-2.5 shadow-lg" style={rembourrageBarre}>
                   <input ref={convImageInputRef} type="file" accept="image/*" hidden onChange={handleConvImageSelected} />
                   <input ref={convCameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleConvImageSelected} />
                   <input ref={convFileInputRef} type="file" accept="application/pdf" hidden onChange={handleConvFileSelected} />
@@ -4833,7 +4841,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     // la ligne par défaut, plus rien à intercepter ici.
                     placeholder="Écrire un message..."
                     disabled={isRecordingConv}
-                    className="w-full resize-none bg-[#0b1c1e] border border-white/20 rounded-3xl px-5 max-sm:px-3 py-2.5 text-sm text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F] disabled:opacity-40"
+                    className="w-full resize-none bg-[#081e22]/90 border border-teal-500/30 rounded-3xl px-5 max-sm:px-3 py-2.5 text-sm text-white placeholder-teal-200/40 leading-relaxed focus:outline-none focus:border-[#F7BC5F]/70 shadow-inner disabled:opacity-40"
                   />
 
                   {/* Signalé (17/09/2026) : le bouton flottant de dictée
@@ -5151,7 +5159,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         // sendConvMessage), le bouton doit donc rester actif
                         // dans ce cas.
                         disabled={(!convDraft.trim() && !convVocalPret) || isRecordingConv}
-                        className="w-11 h-11 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-30 text-slate-950"
+                        className="w-11 h-11 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] hover:brightness-110 active:scale-95 disabled:opacity-30 text-slate-950 shadow-md transition-all"
                       >
                         <Send className="w-5 h-5 sm:w-4 sm:h-4" />
                       </button>
@@ -5160,26 +5168,29 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 </div>
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center bg-[#0b1c1e] border border-[#153c3f] rounded-3xl p-10 max-w-sm">
-                  <div className="w-14 h-14 rounded-2xl bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 flex items-center justify-center mx-auto mb-4">
-                    <MessageSquare className="w-6 h-6 text-[#F7BC5F]" />
+              <div className="flex-1 flex items-center justify-center p-6">
+                <div className="relative text-center bg-gradient-to-br from-[#081f23]/90 via-[#0a272c]/90 to-[#061517]/95 border border-teal-500/30 rounded-3xl p-10 sm:p-12 max-w-md backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7),0_0_35px_rgba(247,188,95,0.08)] overflow-hidden">
+                  <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
+                  <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/20 via-[#F7BC5F]/10 to-transparent border border-[#F7BC5F]/40 flex items-center justify-center mx-auto mb-5 shadow-[0_0_24px_rgba(247,188,95,0.25)]">
+                    <MessageSquare className="w-7 h-7 text-[#FAD592]" />
                   </div>
-                  <h3 className="text-lg font-bold mb-1">Aucune conversation sélectionnée</h3>
-                  <p className="text-sm text-slate-400">Choisissez une conversation à gauche, ou cliquez sur "Nouveau" pour en démarrer une.</p>
+                  <h3 className="text-lg sm:text-xl font-bold text-white tracking-wide mb-2">Aucune conversation sélectionnée</h3>
+                  <p className="text-sm text-teal-200/70 leading-relaxed max-w-xs mx-auto">
+                    Choisissez une conversation dans la liste à gauche, ou cliquez sur « Nouveau » pour démarrer un échange.
+                  </p>
                 </div>
               </div>
             )
           ) : activeChannel ? (
             <>
-              <div className={`px-5 py-3.5 border-b border-white/20 flex items-center gap-2 ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
+              <div className={`px-5 py-3.5 border-b border-teal-500/20 bg-[#071317]/85 backdrop-blur-md shadow-sm flex items-center gap-2.5 ${isMobile ? 'pt-[calc(env(safe-area-inset-top,0px)+0.875rem)]' : ''}`}>
                 {isMobile && (
                   <button onClick={goBackToList} aria-label="Revenir à la liste" className="p-3 -ml-2 mr-0.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 shrink-0">
                     <ArrowLeft className="w-5 h-5" />
                   </button>
                 )}
                 <Hash className="w-4 h-4 text-[#F7BC5F]" />
-                <span className="font-bold">{activeChannel.name}</span>
+                <span className="font-bold text-white">{activeChannel.name}</span>
                 {(channelMemberCounts[activeChannel.id] || 0) > 0 && (
                   <span title="Canal restreint à ses participants"><Lock className="w-3.5 h-3.5 text-[#F7BC5F]" /></span>
                 )}
@@ -5191,7 +5202,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     en lecture au minimum. */}
                 <button
                   onClick={() => openChannelMembersModal(activeChannel.id)}
-                  className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/5 shrink-0"
+                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#092226] hover:bg-[#0c2e33] border border-teal-500/30 text-teal-200 hover:text-white shadow-sm transition-all active:scale-95 shrink-0"
                   title="Voir les participants de ce canal"
                 >
                   <Users className="w-3.5 h-3.5" />
@@ -5225,10 +5236,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       <div className={`flex items-end gap-1.5 ${isEditing ? 'w-full max-w-full' : 'max-w-[92%] sm:max-w-[70%]'} ${mine ? 'flex-row-reverse' : ''}`} {...gestesMessage(m.id)}>
                       {/* Même bulle que les conversations directes : liseré
                           doré, plus d'aplat jaune sur les longs messages. */}
-                      <div className={`px-4 py-2.5 rounded-2xl text-sm ${isEditing ? 'w-full' : ''} ${
+                      <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${isEditing ? 'w-full' : ''} ${
                         mine
-                          ? 'bg-[#F7BC5F]/30 border border-[#F7BC5F]/60 text-white rounded-br-md'
-                          : 'bg-[#0b1c1e] border border-[#153c3f] text-white rounded-bl-md'
+                          ? 'bg-gradient-to-br from-[#F7BC5F]/35 via-[#E5A642]/25 to-[#F7BC5F]/20 border border-[#F7BC5F]/60 text-white rounded-br-md shadow-[0_4px_16px_rgba(247,188,95,0.15)]'
+                          : 'bg-[#081e22]/90 border border-teal-500/25 text-slate-100 rounded-bl-md shadow-sm backdrop-blur-md'
                       }`}>
                         {!mine && (
                           <p className="text-[10px] font-bold text-[#F7BC5F] mb-0.5">{m.data?.sender_name || 'Collaborateur'}</p>
@@ -5466,7 +5477,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   : espace visible sous la barre de saisie sur mobile —
                   réduit au strict nécessaire (juste la zone sûre du bas,
                   sans marge ajoutée) plutôt que 1.5rem + zone sûre. */}
-              <div className="relative p-4 max-sm:px-1 max-sm:pb-[env(safe-area-inset-bottom,0px)] border-t border-white/20 space-y-2.5" style={rembourrageBarre}>
+              <div className="relative p-3.5 max-sm:px-2 max-sm:pb-[env(safe-area-inset-bottom,0px)] border-t border-teal-500/20 bg-[#07171a]/85 backdrop-blur-xl space-y-2.5 shadow-lg" style={rembourrageBarre}>
                 {channelVocalPret && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/20">
                     <audio
@@ -5673,7 +5684,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                      défilement pour les rattraper. Avec `min-w-0`, le champ
                      accepte de rétrécir et tous les boutons restent visibles.
                      Sur ordinateur, rien ne change : la place ne manquait pas. */
-                  className="flex-1 min-w-0 resize-none bg-[#0b1c1e] border border-white/20 rounded-xl px-4 max-sm:px-2.5 py-2.5 text-sm text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F]"
+                  className="flex-1 min-w-0 resize-none bg-[#081e22]/90 border border-teal-500/30 rounded-2xl px-4 max-sm:px-2.5 py-2.5 text-sm text-white placeholder-teal-200/40 leading-relaxed focus:outline-none focus:border-[#F7BC5F]/70 shadow-inner"
                 />
                 {/* Image et vocal dans les canaux (31/08/2026) — les
                     conversations directes les avaient depuis toujours, les
@@ -5847,7 +5858,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   // qui ne faisait rien de visible. Même logique désormais que
                   // le composeur direct : actif si texte OU vocal en attente.
                   disabled={(!draft.trim() && !channelVocalPret) || isRecordingChannel}
-                  className="p-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-30 text-slate-950"
+                  className="p-2.5 rounded-xl bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] hover:brightness-110 active:scale-95 disabled:opacity-30 text-slate-950 shadow-md transition-all"
                 >
                   <Send className="w-4 h-4" />
                 </button>
@@ -5855,13 +5866,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center bg-[#0b1c1e] border border-[#153c3f] rounded-3xl p-10 max-w-sm">
-                <div className="w-14 h-14 rounded-2xl bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 flex items-center justify-center mx-auto mb-4">
-                  <Folder className="w-6 h-6 text-[#F7BC5F]" />
+            <div className="flex-1 flex items-center justify-center p-6">
+              <div className="relative text-center bg-gradient-to-br from-[#081f23]/90 via-[#0a272c]/90 to-[#061517]/95 border border-teal-500/30 rounded-3xl p-10 sm:p-12 max-w-md backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7),0_0_35px_rgba(247,188,95,0.08)] overflow-hidden">
+                <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
+                <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/20 via-[#F7BC5F]/10 to-transparent border border-[#F7BC5F]/40 flex items-center justify-center mx-auto mb-5 shadow-[0_0_24px_rgba(247,188,95,0.25)]">
+                  <Folder className="w-7 h-7 text-[#FAD592]" />
                 </div>
-                <h3 className="text-lg font-bold mb-1">Aucun canal sélectionné</h3>
-                <p className="text-sm text-slate-400">Choisissez un canal de projet à gauche pour consulter les échanges associés.</p>
+                <h3 className="text-lg sm:text-xl font-bold text-white tracking-wide mb-2">Aucun canal sélectionné</h3>
+                <p className="text-sm text-teal-200/70 leading-relaxed max-w-xs mx-auto">
+                  Choisissez un canal de projet dans la colonne de gauche pour consulter ou participer aux échanges.
+                </p>
               </div>
             </div>
           )}
