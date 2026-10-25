@@ -3,6 +3,7 @@ import {
   FileText, PlayCircle, Plus, Search, Trash2, X, Loader2, Upload, Link as LinkIcon, Pencil,
   CheckCircle2, Circle, Users, ImagePlus, GraduationCap, LayoutGrid, List as ListIcon,
   MoreVertical, ImageOff, Maximize2, Minimize2, Unlock, ArrowUp, ArrowDown, ArrowLeft,
+  Folder, ChevronRight, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -187,6 +188,7 @@ export default function AcademyView() {
   // dossierSurvolIntention ci-dessus (avant/après selon la moitié gauche/
   // droite survolée), simplifiée : pas de notion "dans" ici, une procédure
   // ne peut pas en contenir une autre.
+  const [ressourceEnDrag, setRessourceEnDrag] = useState<string | null>(null);
   const [ressourceSurvolee, setRessourceSurvolee] = useState<string | null>(null);
   const [ressourceSurvolIntention, setRessourceSurvolIntention] = useState<'avant' | 'apres' | null>(null);
   const dossierPourVisuel = useRef<string | null>(null);
@@ -1252,23 +1254,12 @@ export default function AcademyView() {
       className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 min-h-[calc(100vh-4rem)]"
       style={{ backgroundColor: '#F7F1E5' }}
     >
-      {/* Bandeau d'image séparé du reste — signalé le 2 septembre (la barre
-          passait sur « ACADEMY ») puis le 1er octobre (« le fond n'est pas
-          bien centré »). La première version posait l'image en `cover` sur
-          CE DIV EXTÉRIEUR, dont la hauteur suit tout le contenu (donc varie
-          selon le nombre de dossiers/procédures affichés) : `cover` zoomait
-          alors différemment selon l'écran consulté, et le logo n'était bien
-          centré que par coïncidence. Le bandeau a maintenant sa PROPRE
-          hauteur fixe (indépendante du contenu en dessous) : le même cadrage
-          de l'image est donc toujours visible, quel que soit le dossier
-          ouvert. La hauteur reste exprimée en pourcentage de la largeur
-          (17vw, bornée) pour garder le même cadrage apparent sur un petit
-          comme sur un grand écran. */}
+      {/* Bandeau d'image de l'agence */}
       {fond && (
         <div
           className="w-full"
           style={{
-            height: 'clamp(140px, 17vw, 380px)',
+            height: 'clamp(120px, 15vw, 320px)',
             backgroundImage: `url(${fond})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
@@ -1276,55 +1267,98 @@ export default function AcademyView() {
           }}
         />
       )}
+
       <div
         className="px-4 sm:px-6 lg:px-8 pb-16"
-        style={{ paddingTop: fond ? undefined : '2.5rem' }}
+        style={{ paddingTop: fond ? '1.25rem' : '2rem' }}
       >
         <div className="max-w-6xl mx-auto">
-          {/* Sans image de fond, l'écran a besoin de son titre. Avec, l'image
-              le porte déjà — le répéter ferait double emploi. */}
           {!fond && (
-            <div className="text-center mb-8">
-              <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+            <div className="mb-6">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
                 Académy {activeAgency?.name}
               </h1>
-              <p className="mt-2 text-sm text-slate-600">
-                Toutes les procédures de l'agence, en documents et en vidéo.
+              <p className="mt-1 text-xs sm:text-sm text-slate-600">
+                Toutes les procédures et formations de l'agence, rangées par dossier.
               </p>
             </div>
           )}
 
-          {/* Barre d'outils unifiée et simplifiée */}
-          <div className="bg-white/80 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 border border-black/5 shadow-xs flex flex-wrap items-center justify-between gap-3 mb-6">
-            {/* Recherche à gauche */}
-            <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {/* Barre unique : navigation + recherche + actions */}
+          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 border border-black/8 shadow-xs flex flex-wrap items-center justify-between gap-2.5 mb-6">
+            {/* Gauche : Fil d'Ariane si on est dans un dossier, sinon Recherche */}
+            {!auNiveauDossiers && !enRecherche ? (
+              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                <button
+                  onClick={() => {
+                    if (cheminDossiers.length > 1) {
+                      allerAuNiveau(cheminDossiers.length - 2);
+                    } else {
+                      setCheminDossiers([]);
+                    }
+                  }}
+                  className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Retour</span>
+                </button>
+                <button
+                  onClick={() => setCheminDossiers([])}
+                  className="hidden sm:inline-flex px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Dossiers
+                </button>
+                {cheminDossiers.map((nom, index) => (
+                  <React.Fragment key={nom}>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0 hidden sm:block" />
+                    <button
+                      onClick={() => allerAuNiveau(index)}
+                      disabled={index === cheminDossiers.length - 1}
+                      className={`px-2.5 py-1 rounded-lg text-xs sm:text-sm font-extrabold truncate max-w-[200px] sm:max-w-xs ${
+                        index === cheminDossiers.length - 1
+                          ? 'text-slate-900'
+                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer'
+                      }`}
+                    >
+                      {nom}
+                    </button>
+                  </React.Fragment>
+                ))}
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-900 text-[11px] font-bold shrink-0">
+                  {visibles.length} procédure{visibles.length > 1 ? 's' : ''}
+                </span>
+              </div>
+            ) : null}
+
+            {/* Champ de recherche */}
+            <div className={`relative flex-1 min-w-[180px] ${!auNiveauDossiers && !enRecherche ? 'sm:max-w-xs ml-auto' : 'max-w-md'}`}>
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 value={recherche}
                 onChange={(e) => setRecherche(e.target.value)}
-                placeholder="Rechercher une procédure…"
-                style={{ backgroundColor: '#ffffff', color: '#1f2937' }}
-                className="w-full pl-9 pr-4 py-2 rounded-xl placeholder-slate-400 text-xs sm:text-sm border border-black/10 focus:outline-none focus:border-[#E0A21A] focus:ring-1 focus:ring-[#E0A21A] shadow-inner"
+                placeholder={dossierActif ? `Rechercher dans ${dossierActif}…` : 'Rechercher une procédure…'}
+                style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
+                className="w-full pl-9 pr-8 py-2 rounded-xl placeholder-slate-400 text-xs sm:text-sm border border-black/10 focus:outline-none focus:border-[#E0A21A] focus:ring-1 focus:ring-[#E0A21A]"
               />
+              {recherche && (
+                <button
+                  type="button"
+                  onClick={() => setRecherche('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            {/* Actions à droite */}
-            <div className="flex items-center gap-2 flex-wrap ml-auto">
-              {/* Avancement personnel compact */}
-              {ressources.length > 0 && (
-                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/90 border border-black/5 text-xs text-slate-700">
+            {/* Droite : progression + vue + actions admin */}
+            <div className="flex items-center gap-2 flex-wrap ml-auto sm:ml-0">
+              {auNiveauDossiers && ressources.length > 0 && (
+                <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-black/5 text-xs text-slate-700">
                   <CheckCircle2
                     className={`w-3.5 h-3.5 ${validees.size === ressources.length ? 'text-emerald-600' : 'text-[#E0A21A]'}`}
                   />
-                  <span className="font-semibold">{validees.size}/{ressources.length} validée{validees.size > 1 ? 's' : ''}</span>
-                  <span className="w-14 h-1.5 rounded-full bg-black/10 overflow-hidden">
-                    <span
-                      className={`block h-full rounded-full transition-all duration-500 ${
-                        validees.size === ressources.length ? 'bg-emerald-600' : 'bg-[#E0A21A]'
-                      }`}
-                      style={{ width: `${Math.round((validees.size / ressources.length) * 100)}%` }}
-                    />
-                  </span>
+                  <span className="font-semibold">{validees.size}/{ressources.length} lue{validees.size > 1 ? 's' : ''}</span>
                 </div>
               )}
 
@@ -1332,8 +1366,8 @@ export default function AcademyView() {
               <div className="flex items-center rounded-xl bg-slate-100 p-0.5 border border-black/5">
                 <button
                   onClick={() => choisirVue('grille')}
-                  title="Afficher les dossiers en grille"
-                  className={`p-1.5 rounded-lg transition-colors ${
+                  title="Affichage en grille"
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                     vueDossiers === 'grille' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400 hover:text-slate-700'
                   }`}
                 >
@@ -1341,8 +1375,8 @@ export default function AcademyView() {
                 </button>
                 <button
                   onClick={() => choisirVue('liste')}
-                  title="Afficher les dossiers en liste"
-                  className={`p-1.5 rounded-lg transition-colors ${
+                  title="Affichage en liste"
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                     vueDossiers === 'liste' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400 hover:text-slate-700'
                   }`}
                 >
@@ -1390,524 +1424,551 @@ export default function AcademyView() {
                     className="hidden"
                   />
 
-                  {auNiveauDossiers && (
+                  {!enRecherche && (
                     <button
-                      onClick={() => void creerSousDossier(null)}
-                      className="h-8 px-3 rounded-xl bg-white hover:bg-slate-50 border border-black/10 text-slate-700 font-semibold text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all"
+                      onClick={() => void creerSousDossier(dossierActif)}
+                      className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Dossier</span>
+                      <Plus className="w-3.5 h-3.5 text-slate-600" />
+                      <span>{dossierActif ? 'Sous-dossier' : 'Dossier'}</span>
                     </button>
                   )}
 
                   <button
                     onClick={ouvrirAjout}
-                    className="h-8 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-xs hover:brightness-105 active:scale-95 transition-all"
+                    className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Procédure</span>
                   </button>
 
-                  {/* Menu discret des options admin */}
-                  <div className="relative" ref={optionsAdminRef}>
-                    <button
-                      type="button"
-                      onClick={() => setMenuOptionsAdmin((v) => !v)}
-                      title="Options d'administration"
-                      className="w-8 h-8 rounded-xl bg-white hover:bg-slate-50 border border-black/10 text-slate-600 flex items-center justify-center shadow-2xs active:scale-95 transition-all"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
+                  {auNiveauDossiers && (
+                    <div className="relative" ref={optionsAdminRef}>
+                      <button
+                        type="button"
+                        onClick={() => setMenuOptionsAdmin((v) => !v)}
+                        title="Options d'administration"
+                        className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-600 flex items-center justify-center transition-all cursor-pointer"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
 
-                    {menuOptionsAdmin && (
-                      <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-white border border-black/10 shadow-xl py-1 z-30 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMenuOptionsAdmin(false);
-                            champFond.current?.click();
-                          }}
-                          disabled={fondEnCours}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 font-medium text-left"
-                        >
-                          {fondEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5 text-slate-500" />}
-                          <span>Changer l'image de fond</span>
-                        </button>
-                        {ressources.some((r) => r.drive_file_id) && (
+                      {menuOptionsAdmin && (
+                        <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-white border border-black/10 shadow-xl py-1 z-30 text-xs">
                           <button
                             type="button"
                             onClick={() => {
                               setMenuOptionsAdmin(false);
-                              void rendrePublicsLesFichiersExistants();
+                              champFond.current?.click();
                             }}
-                            disabled={reparationEnCours}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-slate-50 font-medium text-left border-t border-slate-100"
+                            disabled={fondEnCours}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-700 hover:bg-slate-50 font-medium text-left cursor-pointer"
                           >
-                            {reparationEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5 text-slate-500" />}
-                            <span>Rendre fichiers existants publics</span>
+                            {fondEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5 text-slate-500" />}
+                            <span>Changer la bannière</span>
                           </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                          {ressources.some((r) => r.drive_file_id) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMenuOptionsAdmin(false);
+                                void rendrePublicsLesFichiersExistants();
+                              }}
+                              disabled={reparationEnCours}
+                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-700 hover:bg-slate-50 font-medium text-left border-t border-slate-100 cursor-pointer"
+                            >
+                              {reparationEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5 text-slate-500" />}
+                              <span>Rendre fichiers publics</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>
           </div>
 
-          {/* ── Le contenu d'un dossier, à N'IMPORTE QUEL niveau ──────────
-              Demande explicite (15 septembre) : « des dossiers avec des
-              sous-dossiers pour ne pas se perdre » — fil d'Ariane cliquable
-              à chaque niveau (au lieu d'un seul retour "Tous les dossiers"),
-              pour toujours savoir où l'on est ET pouvoir remonter d'un
-              coup à n'importe quel palier, pas seulement à la racine.
-              Affiché AVANT la grille des sous-dossiers ci-dessous : on sait
-              où l'on est avant de voir ce qu'il y a dedans. */}
-          {!auNiveauDossiers && (
-            <div className="mt-8 flex flex-wrap items-center gap-x-1.5 gap-y-2">
+          {/* En-tête de recherche si recherche active */}
+          {enRecherche && (
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-sm font-bold text-slate-700">
+                {visibles.length} résultat{visibles.length > 1 ? 's' : ''} pour « {recherche.trim()} »
+                {dossierActif ? ` dans ${dossierActif}` : ''}
+              </p>
               <button
-                onClick={() => { setCheminDossiers([]); setRecherche(''); }}
-                className="px-3.5 py-2 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 text-xs font-bold shadow-sm"
+                onClick={() => setRecherche('')}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 underline cursor-pointer"
               >
-                ← Tous les dossiers
+                Effacer la recherche
               </button>
-              {!enRecherche && cheminDossiers.map((nom, index) => (
-                <React.Fragment key={nom}>
-                  <span className="text-slate-400 text-xs">/</span>
-                  <button
-                    onClick={() => allerAuNiveau(index)}
-                    disabled={index === cheminDossiers.length - 1}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold ${
-                      index === cheminDossiers.length - 1
-                        ? 'text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                    }`}
-                  >
-                    {nom}
-                  </button>
-                </React.Fragment>
-              ))}
-              {enRecherche && (
-                <h2 className="text-lg font-black text-slate-900 truncate">
-                  Résultats pour « {recherche.trim()} »
-                </h2>
-              )}
-              <span className="text-xs text-slate-500 ml-1">
-                {visibles.length} procédure{visibles.length > 1 ? 's' : ''}
-              </span>
-              {/* Sous-dossier : créable à n'importe quel niveau, y compris
-                  vide — la grille des dossiers ci-dessus n'existait
-                  jusqu'ici QU'à travers une ressource déjà déposée dedans. */}
-              {estSuperAdmin && !enRecherche && dossierActif && (
-                <button
-                  onClick={() => void creerSousDossier(dossierActif)}
-                  className="ml-auto px-3.5 py-2 rounded-full bg-white/80 hover:bg-white border border-black/10 text-slate-700 text-xs font-bold shadow-sm flex items-center gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Sous-dossier
-                </button>
-              )}
             </div>
           )}
 
-          {/* ── NIVEAU 1 : les dossiers ─────────────────────────────────
-              Demandé : « un vrai dossier jaune comme on a l'habitude de voir,
-              et quand on clique dedans on accède aux différentes formations ».
-              Le dossier est dessiné en CSS — onglet, corps, rabat avant — pour
-              rester net à toutes les tailles et suivre le thème sans image. */}
+          {/* ── LES DOSSIERS (racine ou sous-dossiers) ─────────────────────── */}
           {(auNiveauDossiers || dansUnDossier) && !chargement && dossiersEnfants.length > 0 && (
-            vueDossiers === 'grille' ? (
-              <div className={`grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-x-4 gap-y-6 ${auNiveauDossiers ? 'mt-8' : 'mt-4'}`}>
-                {dossiersEnfants.map(({ nom, nombre }, index) => {
-                  const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
-                  return (
-                    <button
-                      key={nom}
-                      onClick={() => entrerDossier(nom)}
-                      // Demande explicite (16 septembre) : « drag and drop
-                      // dans les dossiers pour que les sous dossiers se
-                      // mettent ». Puis (14 septembre) : « je ne peux pas
-                      // bouger l'ordre des dossiers » — déposer sur le quart
-                      // gauche/droit d'un dossier le réordonne avant/après
-                      // lui ; déposer au centre le neste dedans, comme avant.
-                      draggable={estSuperAdmin}
-                      onDragStart={(e) => { e.dataTransfer.setData('text/plain', `dossier:${nom}`); e.stopPropagation(); }}
-                      onDragOver={(e) => {
-                        if (!estSuperAdmin) return;
-                        e.preventDefault();
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const fraction = (e.clientX - rect.left) / rect.width;
-                        setDossierSurvoleParDossier(nom);
-                        setDossierSurvolIntention(fraction < 0.25 ? 'avant' : fraction > 0.75 ? 'apres' : 'dans');
-                      }}
-                      onDragLeave={() => {
-                        setDossierSurvoleParDossier((v) => (v === nom ? null : v));
-                        setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setDossierSurvoleParDossier(null);
-                        const intention = dossierSurvolIntention;
-                        setDossierSurvolIntention(null);
-                        const donnee = e.dataTransfer.getData('text/plain');
-                        if (donnee.startsWith('dossier:')) {
-                          const nomSource = donnee.slice('dossier:'.length);
-                          if (intention === 'avant' || intention === 'apres') {
-                            void reordonnerDossier(nomSource, nom, intention);
+            <div className={dansUnDossier ? 'mb-6' : ''}>
+              {dansUnDossier && (
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
+                  Sous-dossiers
+                </p>
+              )}
+
+              {vueDossiers === 'grille' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+                  {dossiersEnfants.map(({ nom, nombre }, index) => {
+                    const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
+                    return (
+                      <div
+                        key={nom}
+                        onClick={() => entrerDossier(nom)}
+                        draggable={estSuperAdmin}
+                        onDragStart={(e) => { e.dataTransfer.setData('text/plain', `dossier:${nom}`); e.stopPropagation(); }}
+                        onDragOver={(e) => {
+                          if (!estSuperAdmin) return;
+                          e.preventDefault();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const fraction = (e.clientX - rect.left) / rect.width;
+                          setDossierSurvoleParDossier(nom);
+                          setDossierSurvolIntention(fraction < 0.25 ? 'avant' : fraction > 0.75 ? 'apres' : 'dans');
+                        }}
+                        onDragLeave={() => {
+                          setDossierSurvoleParDossier((v) => (v === nom ? null : v));
+                          setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDossierSurvoleParDossier(null);
+                          const intention = dossierSurvolIntention;
+                          setDossierSurvolIntention(null);
+                          setRessourceEnDrag(null);
+                          const donnee = e.dataTransfer.getData('text/plain');
+                          if (donnee.startsWith('dossier:')) {
+                            const nomSource = donnee.slice('dossier:'.length);
+                            if (intention === 'avant' || intention === 'apres') {
+                              void reordonnerDossier(nomSource, nom, intention);
+                            } else {
+                              void deplacerDossierVersParent(nomSource, nom);
+                            }
                           } else {
-                            void deplacerDossierVersParent(nomSource, nom);
+                            const ressource = ressources.find((r) => r.id === donnee);
+                            if (ressource) void deplacerVers(ressource, nom);
                           }
-                        } else {
-                          const ressource = ressources.find((r) => r.id === donnee);
-                          if (ressource) void deplacerVers(ressource, nom);
-                        }
-                      }}
-                      className={`group relative flex flex-col items-center focus:outline-none rounded-xl transition-colors ${
-                        dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans'
-                          ? 'ring-2 ring-[#E0A21A] ring-offset-2 ring-offset-[#F7F1E5]'
-                          : ''
-                      }`}
-                      title={`${nom} — ${nombre} procédure${nombre > 1 ? 's' : ''}`}
-                    >
-                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'avant' && (
-                        <span className="absolute -left-2 top-0 bottom-0 w-1 rounded-full bg-[#E0A21A]" />
-                      )}
-                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'apres' && (
-                        <span className="absolute -right-2 top-0 bottom-0 w-1 rounded-full bg-[#E0A21A]" />
-                      )}
-                      {/* Dossier réduit : signalé « beaucoup trop gros ». Il
-                          reste reconnaissable — onglet, corps, rabat — mais
-                          plusieurs tiennent maintenant sur une ligne. */}
-                      <div className="relative w-full max-w-[104px] aspect-[5/4] transition-transform duration-200 group-hover:-translate-y-1">
-                        <div className="absolute inset-x-0 top-[12%] bottom-0 rounded-lg bg-gradient-to-b from-[#E8B33A] to-[#C88C12] shadow-[0_10px_16px_-10px_rgba(0,0,0,0.55)]" />
-                        <div className="absolute left-[5%] top-[2%] h-[16%] w-[46%] rounded-t-md bg-gradient-to-b from-[#F2C55C] to-[#E3AE33]" />
-                        <div className="absolute inset-x-0 top-[28%] bottom-0 rounded-lg bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40 overflow-hidden">
-                          {/* « Je voudrais pouvoir mettre une image de fond
-                              dans les dossiers » : elle habille le rabat avant,
-                              le jaune restant visible autour pour que le
-                              dossier reste un dossier. */}
-                          {visuelsDossiers.get(nom) && (
-                            <img
-                              src={visuelsDossiers.get(nom)}
-                              alt=""
-                              className="absolute inset-[6%] rounded object-cover w-[88%] h-[88%]"
-                            />
-                          )}
+                        }}
+                        className={`group relative bg-white hover:bg-amber-50/40 rounded-2xl p-3.5 border border-black/8 shadow-xs hover:shadow-md transition-all flex items-center gap-3.5 cursor-pointer select-none ${
+                          dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans'
+                            ? 'ring-2 ring-[#E0A21A] bg-amber-50'
+                            : ''
+                        }`}
+                      >
+                        {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'avant' && (
+                          <span className="absolute -left-1.5 top-2 bottom-2 w-1 rounded-full bg-[#E0A21A]" />
+                        )}
+                        {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'apres' && (
+                          <span className="absolute -right-1.5 top-2 bottom-2 w-1 rounded-full bg-[#E0A21A]" />
+                        )}
+
+                        {/* Icône dossier jaune épurée (ou miniature choisie) */}
+                        <div className="relative w-12 h-10 shrink-0">
+                          <div className="absolute inset-x-0 top-[14%] bottom-0 rounded-lg bg-gradient-to-b from-[#E8B33A] to-[#C88C12] shadow-xs" />
+                          <div className="absolute left-[6%] top-0 h-[20%] w-[44%] rounded-t-md bg-gradient-to-b from-[#F2C55C] to-[#E3AE33]" />
+                          <div className="absolute inset-x-0 top-[30%] bottom-0 rounded-lg bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/50 overflow-hidden flex items-center justify-center">
+                            {visuelsDossiers.get(nom) && (
+                              <img
+                                src={visuelsDossiers.get(nom)}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                          </div>
                         </div>
-                        <span className="absolute right-1.5 top-[34%] min-w-[18px] px-1.5 py-0.5 rounded-full bg-black/40 text-white text-[10px] font-black text-center">
-                          {nombre}
-                        </span>
-                        {estSuperAdmin && (
-                          <span
-                            role="button"
+
+                        {/* Nom + compteur clair */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-black">
+                            {nom}
+                          </p>
+                          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                            <span>{nombre} procédure{nombre > 1 ? 's' : ''}</span>
+                            {vues > 0 && (
+                              <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-700">
+                                <CheckCircle2 className="w-3 h-3" />
+                                {vues}/{nombre}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Menu admin ou chevron */}
+                        {estSuperAdmin ? (
+                          <button
+                            type="button"
                             data-menu-dossier=""
                             title="Gérer ce dossier"
                             onClick={(e) => {
                               e.stopPropagation();
                               setMenuDossier(menuDossier === nom ? null : nom);
                             }}
-                            className={`absolute -top-1 -right-1 w-6 h-6 rounded-full bg-[#1b2b2e] text-white flex items-center justify-center transition-opacity shadow ${
-                              menuDossier === nom ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                            }`}
+                            className="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-black/5 flex items-center justify-center shrink-0 transition-colors"
                           >
                             {dossierEnDepot === nom ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
-                              <MoreVertical className="w-3 h-3" />
+                              <MoreVertical className="w-4 h-4" />
                             )}
-                          </span>
+                          </button>
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600 shrink-0 transition-colors" />
                         )}
+
+                        {estSuperAdmin && menuDossier === nom && (
+                          <div
+                            data-menu-dossier=""
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute z-30 right-2 top-full mt-1 w-48 rounded-xl bg-white border border-black/10 shadow-xl py-1 text-left"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => { setMenuDossier(null); void renommerDossier(nom); }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                              Renommer
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMenuDossier(null);
+                                dossierPourVisuel.current = nom;
+                                champVisuelDossier.current?.click();
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              <ImagePlus className="w-3.5 h-3.5 text-slate-500" />
+                              {visuelsDossiers.get(nom) ? "Changer l'image" : 'Ajouter une image'}
+                            </button>
+                            {visuelsDossiers.get(nom) && (
+                              <button
+                                type="button"
+                                onClick={() => { setMenuDossier(null); void retirerVisuelDossier(nom); }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              >
+                                <ImageOff className="w-3.5 h-3.5 text-slate-500" />
+                                Retirer l'image
+                              </button>
+                            )}
+                            <div className="my-1 border-t border-slate-100" />
+                            <button
+                              type="button"
+                              disabled={index === 0}
+                              onClick={() => { if (index > 0) { setMenuDossier(null); void deplacerDossier(nom, 'monter'); } }}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === 0 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-50'}`}
+                            >
+                              <ArrowUp className="w-3.5 h-3.5 text-slate-500" />
+                              Déplacer avant
+                            </button>
+                            <button
+                              type="button"
+                              disabled={index === dossiersEnfants.length - 1}
+                              onClick={() => { if (index < dossiersEnfants.length - 1) { setMenuDossier(null); void deplacerDossier(nom, 'descendre'); } }}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === dossiersEnfants.length - 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-50'}`}
+                            >
+                              <ArrowDown className="w-3.5 h-3.5 text-slate-500" />
+                              Déplacer après
+                            </button>
+                            <div className="my-1 border-t border-slate-100" />
+                            <button
+                              type="button"
+                              onClick={() => { setMenuDossier(null); void supprimerDossier(nom, nombre); }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Supprimer
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-white border border-black/8 shadow-xs divide-y divide-black/5 overflow-hidden">
+                  {dossiersEnfants.map(({ nom, nombre }, index) => {
+                    const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
+                    return (
+                      <div
+                        key={nom}
+                        onClick={() => entrerDossier(nom)}
+                        draggable={estSuperAdmin}
+                        onDragStart={(e) => { e.dataTransfer.setData('text/plain', `dossier:${nom}`); e.stopPropagation(); }}
+                        onDragOver={(e) => {
+                          if (!estSuperAdmin) return;
+                          e.preventDefault();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const fraction = (e.clientY - rect.top) / rect.height;
+                          setDossierSurvoleParDossier(nom);
+                          setDossierSurvolIntention(fraction < 0.25 ? 'avant' : fraction > 0.75 ? 'apres' : 'dans');
+                        }}
+                        onDragLeave={() => {
+                          setDossierSurvoleParDossier((v) => (v === nom ? null : v));
+                          setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDossierSurvoleParDossier(null);
+                          const intention = dossierSurvolIntention;
+                          setDossierSurvolIntention(null);
+                          setRessourceEnDrag(null);
+                          const donnee = e.dataTransfer.getData('text/plain');
+                          if (donnee.startsWith('dossier:')) {
+                            const nomSource = donnee.slice('dossier:'.length);
+                            if (intention === 'avant' || intention === 'apres') {
+                              void reordonnerDossier(nomSource, nom, intention);
+                            } else {
+                              void deplacerDossierVersParent(nomSource, nom);
+                            }
+                          } else {
+                            const ressource = ressources.find((r) => r.id === donnee);
+                            if (ressource) void deplacerVers(ressource, nom);
+                          }
+                        }}
+                        className={`relative w-full flex items-center gap-3.5 px-4 py-3 hover:bg-amber-50/40 transition-colors cursor-pointer ${
+                          dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans' ? 'bg-amber-50' : ''
+                        }`}
+                      >
+                        <div className="relative w-9 h-7 shrink-0">
+                          <span className="absolute inset-x-0 top-[14%] bottom-0 rounded bg-gradient-to-b from-[#E8B33A] to-[#C88C12]" />
+                          <span className="absolute left-[6%] top-0 h-[20%] w-[46%] rounded-t-sm bg-[#F2C55C]" />
+                          <span className="absolute inset-x-0 top-[32%] bottom-0 rounded bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40" />
+                        </div>
+                        <span className="flex-1 min-w-0 text-sm font-bold text-slate-900 truncate">{nom}</span>
                         {vues > 0 && (
-                          <span className="absolute left-1.5 bottom-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white/85 text-[9px] font-bold text-emerald-700">
-                            <CheckCircle2 className="w-2.5 h-2.5" />
+                          <span className="flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
                             {vues}/{nombre}
                           </span>
                         )}
-                      </div>
-                      <span className="mt-2 text-[11px] font-bold text-slate-800 text-center leading-tight line-clamp-2 group-hover:text-black">
-                        {nom}
-                      </span>
-
-                      {/* Gérer le dossier : changer ou retirer son image, le
-                          renommer, le supprimer. Un menu plutôt que trois
-                          pastilles : sur un dossier de 104 px, elles se
-                          marcheraient dessus. */}
-                      {estSuperAdmin && menuDossier === nom && (
-                        <span
-                          data-menu-dossier=""
-                          onClick={(e) => e.stopPropagation()}
-                          className="absolute z-20 top-[70%] left-1/2 -translate-x-1/2 w-52 rounded-xl bg-white border border-black/10 shadow-2xl py-1 text-left"
-                        >
-                          <span
-                            role="button"
-                            onClick={() => {
-                              setMenuDossier(null);
-                              dossierPourVisuel.current = nom;
-                              champVisuelDossier.current?.click();
-                            }}
-                            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                          >
-                            <ImagePlus className="w-3.5 h-3.5 text-slate-500" />
-                            {visuelsDossiers.get(nom) ? "Changer l'image" : 'Choisir une image'}
-                          </span>
-                          {visuelsDossiers.get(nom) && (
-                            <span
-                              role="button"
-                              onClick={() => { setMenuDossier(null); void retirerVisuelDossier(nom); }}
-                              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                        <span className="text-xs text-slate-500 tabular-nums">
+                          {nombre} procédure{nombre > 1 ? 's' : ''}
+                        </span>
+                        {estSuperAdmin ? (
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              title="Renommer"
+                              onClick={() => void renommerDossier(nom)}
+                              className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-black/5 flex items-center justify-center"
                             >
-                              <ImageOff className="w-3.5 h-3.5 text-slate-500" />
-                              Retirer l'image
-                            </span>
-                          )}
-                          {/* Demande explicite (16 septembre) : « dans les
-                              sous dossiers, je veux pouvoir aussi les
-                              mettre dans l'ordre que je veux » — échange
-                              de position avec le voisin immédiat, désactivé
-                              en bout de rangée. */}
-                          <span
-                            role="button"
-                            aria-disabled={index === 0}
-                            onClick={() => { if (index > 0) { setMenuDossier(null); void deplacerDossier(nom, 'monter'); } }}
-                            className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === 0 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-100'}`}
-                          >
-                            <ArrowUp className="w-3.5 h-3.5 text-slate-500" />
-                            Monter
-                          </span>
-                          <span
-                            role="button"
-                            aria-disabled={index === dossiersEnfants.length - 1}
-                            onClick={() => { if (index < dossiersEnfants.length - 1) { setMenuDossier(null); void deplacerDossier(nom, 'descendre'); } }}
-                            className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === dossiersEnfants.length - 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-100'}`}
-                          >
-                            <ArrowDown className="w-3.5 h-3.5 text-slate-500" />
-                            Descendre
-                          </span>
-                          <span
-                            role="button"
-                            onClick={() => { setMenuDossier(null); void renommerDossier(nom); }}
-                            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-slate-500" />
-                            Renommer le dossier
-                          </span>
-                          <span
-                            role="button"
-                            onClick={() => { setMenuDossier(null); void supprimerDossier(nom, nombre); }}
-                            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Supprimer le dossier
-                          </span>
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className={`max-w-3xl rounded-2xl bg-white/85 border border-black/10 shadow-lg divide-y divide-black/5 overflow-hidden ${auNiveauDossiers ? 'mt-8' : 'mt-4'}`}>
-                {dossiersEnfants.map(({ nom, nombre }, index) => {
-                  const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
-                  return (
-                    <button
-                      key={nom}
-                      onClick={() => entrerDossier(nom)}
-                      draggable={estSuperAdmin}
-                      onDragStart={(e) => { e.dataTransfer.setData('text/plain', `dossier:${nom}`); e.stopPropagation(); }}
-                      onDragOver={(e) => {
-                        if (!estSuperAdmin) return;
-                        e.preventDefault();
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const fraction = (e.clientY - rect.top) / rect.height;
-                        setDossierSurvoleParDossier(nom);
-                        setDossierSurvolIntention(fraction < 0.25 ? 'avant' : fraction > 0.75 ? 'apres' : 'dans');
-                      }}
-                      onDragLeave={() => {
-                        setDossierSurvoleParDossier((v) => (v === nom ? null : v));
-                        setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setDossierSurvoleParDossier(null);
-                        const intention = dossierSurvolIntention;
-                        setDossierSurvolIntention(null);
-                        const donnee = e.dataTransfer.getData('text/plain');
-                        if (donnee.startsWith('dossier:')) {
-                          const nomSource = donnee.slice('dossier:'.length);
-                          if (intention === 'avant' || intention === 'apres') {
-                            void reordonnerDossier(nomSource, nom, intention);
-                          } else {
-                            void deplacerDossierVersParent(nomSource, nom);
-                          }
-                        } else {
-                          const ressource = ressources.find((r) => r.id === donnee);
-                          if (ressource) void deplacerVers(ressource, nom);
-                        }
-                      }}
-                      className={`relative w-full flex items-center gap-3 px-4 py-3 hover:bg-[#E0A21A]/10 transition-colors text-left ${
-                        dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans' ? 'bg-[#E0A21A]/20' : ''
-                      }`}
-                    >
-                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'avant' && (
-                        <span className="absolute inset-x-2 -top-px h-0.5 rounded-full bg-[#E0A21A]" />
-                      )}
-                      {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'apres' && (
-                        <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#E0A21A]" />
-                      )}
-                      {/* Même dossier, en miniature : la liste garde le repère
-                          visuel, elle ne le remplace pas par une puce. */}
-                      <span className="relative w-9 h-7 shrink-0">
-                        <span className="absolute inset-x-0 top-[14%] bottom-0 rounded bg-gradient-to-b from-[#E8B33A] to-[#C88C12]" />
-                        <span className="absolute left-[6%] top-0 h-[20%] w-[46%] rounded-t-sm bg-[#F2C55C]" />
-                        <span className="absolute inset-x-0 top-[32%] bottom-0 rounded bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40" />
-                      </span>
-                      <span className="flex-1 min-w-0 text-sm font-bold text-slate-800 truncate">{nom}</span>
-                      {vues > 0 && (
-                        <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          {vues}/{nombre}
-                        </span>
-                      )}
-                      <span className="text-xs text-slate-500 tabular-nums">
-                        {nombre} procédure{nombre > 1 ? 's' : ''}
-                      </span>
-                      {estSuperAdmin && (
-                        <>
-                          <span
-                            role="button"
-                            title="Monter"
-                            onClick={(e) => { e.stopPropagation(); if (index > 0) void deplacerDossier(nom, 'monter'); }}
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center ${index === 0 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-800 hover:bg-black/5'}`}
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </span>
-                          <span
-                            role="button"
-                            title="Descendre"
-                            onClick={(e) => { e.stopPropagation(); if (index < dossiersEnfants.length - 1) void deplacerDossier(nom, 'descendre'); }}
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center ${index === dossiersEnfants.length - 1 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-800 hover:bg-black/5'}`}
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </span>
-                          <span
-                            role="button"
-                            title="Renommer le dossier"
-                            onClick={(e) => { e.stopPropagation(); void renommerDossier(nom); }}
-                            className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-black/5 flex items-center justify-center"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </span>
-                          <span
-                            role="button"
-                            title="Supprimer le dossier"
-                            onClick={(e) => { e.stopPropagation(); void supprimerDossier(nom, nombre); }}
-                            className="w-7 h-7 rounded-lg text-rose-500 hover:bg-rose-50 flex items-center justify-center"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </span>
-                        </>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Supprimer"
+                              onClick={() => void supprimerDossier(nom, nombre)}
+                              className="w-7 h-7 rounded-lg text-rose-500 hover:bg-rose-50 flex items-center justify-center"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-slate-300" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Glisser-déposer entre dossiers — « de façon à ce que si on s'est
-              trompé, on puisse avoir une solution de repli ». Le déplacement
-              ne fait que changer le dossier d'une procédure : rien n'est copié
-              ni supprimé, et le chemin inverse est le même geste. */}
-          {!auNiveauDossiers && estSuperAdmin && rubriques.length > 1 && (
-            <div className="mt-4">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Glisser une procédure vers
-              </span>
-              {/* Demandé le 7 octobre : « diminue les icônes et qu'on en
-                  mette 5 par ligne » — grille à 5 colonnes fixes (au lieu du
-                  flex-wrap d'origine, qui enchaînait les pastilles selon la
-                  largeur de leur texte, d'où des rangées irrégulières).
-                  Libellé tronqué avec points de suspension si trop long pour
-                  sa colonne — le nom complet reste lisible via l'infobulle
-                  (`title`). Réduit sur mobile (2 colonnes) pour rester
-                  lisible, 5 à partir de `sm`. */}
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+          {/* Zone de dépôt vers un autre dossier : s'affiche UNIQUEMENT quand on glisse une procédure */}
+          {ressourceEnDrag && estSuperAdmin && rubriques.length > 1 && (
+            <div className="mb-5 p-3 rounded-2xl bg-amber-50/90 border border-amber-300/80 shadow-xs">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-900 mb-2">
+                Déposer dans un autre dossier :
+              </p>
+              <div className="flex flex-wrap gap-1.5">
                 {rubriques
                   .filter(([nom]) => nom !== dossierActif)
                   .map(([nom, nombre]) => (
                     <span
                       key={nom}
-                      title={nom}
                       onDragOver={(e) => { e.preventDefault(); setDossierSurvole(nom); }}
                       onDragLeave={() => setDossierSurvole((v) => (v === nom ? null : v))}
                       onDrop={(e) => {
                         e.preventDefault();
                         setDossierSurvole(null);
+                        setRessourceEnDrag(null);
                         const id = e.dataTransfer.getData('text/plain');
                         const ressource = ressources.find((r) => r.id === id);
                         if (ressource) void deplacerVers(ressource, nom);
                       }}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-full border text-[10px] font-bold transition-colors min-w-0 ${
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
                         dossierSurvole === nom
-                          ? 'bg-[#E0A21A] border-[#E0A21A] text-white scale-105'
-                          : 'bg-white/85 border-black/10 text-slate-700'
+                          ? 'bg-[#E0A21A] border-[#E0A21A] text-white scale-105 shadow'
+                          : 'bg-white border-black/10 text-slate-700'
                       }`}
                     >
-                      <span className="relative w-3.5 h-3 shrink-0">
-                        <span className="absolute inset-x-0 top-[16%] bottom-0 rounded-sm bg-gradient-to-b from-[#E8B33A] to-[#C88C12]" />
-                        <span className="absolute left-[8%] top-0 h-[22%] w-[46%] rounded-t-[2px] bg-[#F2C55C]" />
-                        <span className="absolute inset-x-0 top-[34%] bottom-0 rounded-sm bg-gradient-to-b from-[#FFD976] to-[#EFB52C]" />
-                      </span>
-                      <span className="truncate">{nom}</span>
-                      <span className="opacity-60 shrink-0">{nombre}</span>
+                      <Folder className="w-3.5 h-3.5 text-[#E0A21A]" />
+                      <span className="truncate max-w-[180px]">{nom}</span>
+                      <span className="opacity-60 text-[10px]">({nombre})</span>
                     </span>
                   ))}
               </div>
             </div>
           )}
 
-          {/* Le catalogue — au niveau 2, ou dès qu'une recherche est en cours */}
+          {/* ── LES PROCÉDURES (dans un dossier ou lors d'une recherche) ─── */}
           {chargement ? (
             <div className="flex items-center justify-center py-20 text-slate-600 gap-2">
               <Loader2 className="w-4 h-4 animate-spin" /> Chargement de l'Académy…
             </div>
-          ) : ressources.length === 0 ? (
-            <div className="mt-10 p-12 text-center bg-white/70 border border-dashed border-black/10 rounded-2xl">
+          ) : ressources.length === 0 && dossiersEnfants.length === 0 ? (
+            <div className="p-12 text-center bg-white/80 border border-dashed border-black/10 rounded-2xl">
               <GraduationCap className="w-9 h-9 mx-auto mb-3 text-slate-400" />
-              <p className="text-sm text-slate-700">L'Académy est vide pour le moment.</p>
+              <p className="text-sm font-bold text-slate-800">L'Académy est vide pour le moment.</p>
               <p className="text-xs text-slate-500 mt-1">
                 {estSuperAdmin
-                  ? 'Ajoutez une première procédure : un document, une vidéo, une photo de couverture et son auteur.'
+                  ? 'Créez un dossier ou ajoutez votre première procédure (PDF ou vidéo).'
                   : "Les procédures de l'agence apparaîtront ici dès qu'elles seront publiées."}
               </p>
             </div>
-          ) : auNiveauDossiers ? null : visibles.length === 0 ? (
-            <div className="mt-8 p-12 text-center text-sm text-slate-600 bg-white/70 border border-black/10 rounded-2xl">
-              Aucune procédure ne correspond à « {recherche} ».
+          ) : auNiveauDossiers ? null : visibles.length === 0 && dossiersEnfants.length === 0 ? (
+            <div className="p-10 text-center bg-white/80 border border-black/8 rounded-2xl">
+              <p className="text-sm font-semibold text-slate-700">
+                {enRecherche
+                  ? `Aucune procédure ne correspond à « ${recherche} ».`
+                  : 'Ce dossier ne contient pas encore de procédure.'}
+              </p>
+              {estSuperAdmin && !enRecherche && (
+                <button
+                  onClick={ouvrirAjout}
+                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F7BC5F] text-slate-950 text-xs font-bold shadow-xs hover:brightness-105 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Ajouter une procédure ici
+                </button>
+              )}
             </div>
-          ) : (
-            // Demandé le 7 octobre : « les dossiers sont beaucoup trop
-            // importants [...] je voudrais qu'il y en ait cinq par ligne
-            // pour que le visuel soit plus confortable » — 5 colonnes à
-            // partir de xl (au lieu de 3), montée en charge progressive en
-            // dessous. Gap réduit en conséquence (6 → 4) : des colonnes plus
-            // nombreuses et plus étroites avec un grand espacement
-            // paraissent plus vides qu'aérées.
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+          ) : visibles.length === 0 ? null : vueDossiers === 'liste' ? (
+            /* Affichage en LISTE des procédures : ultra lisible et direct */
+            <div className="rounded-2xl bg-white border border-black/8 shadow-xs divide-y divide-black/5 overflow-hidden">
               {visibles.map((r) => {
                 const estVideo = r.type === 'video';
                 const estValidee = validees.has(r.id);
                 return (
+                  <div
+                    key={r.id}
+                    onClick={() => ouvrirRessource(r)}
+                    draggable={estSuperAdmin}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', r.id);
+                      setRessourceEnDrag(r.id);
+                    }}
+                    onDragEnd={() => setRessourceEnDrag(null)}
+                    className="group flex items-center gap-3.5 px-4 py-3 hover:bg-amber-50/40 transition-colors cursor-pointer"
+                  >
+                    {/* Miniature ou icône */}
+                    {r.image_url ? (
+                      <img
+                        src={r.image_url}
+                        alt=""
+                        className="w-14 h-10 rounded-lg object-cover bg-slate-100 border border-black/5 shrink-0"
+                      />
+                    ) : (
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          estVideo ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-700'
+                        }`}
+                      >
+                        {estVideo ? <PlayCircle className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                      </div>
+                    )}
+
+                    {/* Titre & infos */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-slate-900 truncate">{r.titre}</p>
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase shrink-0 ${
+                            estVideo ? 'bg-blue-100/80 text-blue-800' : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {estVideo ? 'Vidéo' : 'PDF'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 truncate mt-0.5">
+                        {enRecherche ? `${r.rubrique} · ` : ''}
+                        {r.description || (r.auteur ? `Par ${r.auteur}` : 'Cliquer pour ouvrir')}
+                        {r.duree ? ` · ${r.duree}` : ''}
+                      </p>
+                    </div>
+
+                    {/* Bouton Lu / Marquer lu */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void basculerValidation(r);
+                      }}
+                      disabled={validationEnCours === r.id}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer ${
+                        estValidee
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {validationEnCours === r.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : estValidee ? (
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      ) : (
+                        <Circle className="w-3.5 h-3.5" />
+                      )}
+                      <span className="hidden sm:inline">{estValidee ? 'Lu' : 'Marquer lu'}</span>
+                    </button>
+
+                    {estSuperAdmin && (
+                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => ouvrirModification(r)}
+                          title="Modifier"
+                          className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-black/5 flex items-center justify-center"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void supprimer(r)}
+                          title="Supprimer"
+                          className="w-8 h-8 rounded-lg text-rose-500 hover:bg-rose-50 flex items-center justify-center"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Affichage en GRILLE des procédures : cartes épurées et lisibles */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {visibles.map((r) => {
+                const estVideo = r.type === 'video';
+                const estValidee = validees.has(r.id);
+                const nbValidations = validationsParRessource.get(r.id) || 0;
+                return (
                   <article
                     key={r.id}
                     draggable={estSuperAdmin}
-                    onDragStart={(e) => e.dataTransfer.setData('text/plain', r.id)}
-                    // Réordonner au sein du dossier (1er octobre) : déposer sur
-                    // la moitié gauche/droite d'une procédure la réordonne
-                    // avant/après elle — actif seulement dans un dossier ouvert
-                    // et hors recherche (dansUnDossier : visibles ne mélange
-                    // alors qu'une seule rubrique, comme pour les pastilles de
-                    // rubrique plus haut).
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', r.id);
+                      setRessourceEnDrag(r.id);
+                    }}
+                    onDragEnd={() => setRessourceEnDrag(null)}
                     onDragOver={(e) => {
                       if (!estSuperAdmin || !dansUnDossier) return;
                       e.preventDefault();
@@ -1926,12 +1987,13 @@ export default function AcademyView() {
                       const intention = ressourceSurvolIntention;
                       setRessourceSurvolee(null);
                       setRessourceSurvolIntention(null);
+                      setRessourceEnDrag(null);
                       const idSource = e.dataTransfer.getData('text/plain');
                       if (idSource && intention) void reordonnerRessource(idSource, r.id, intention);
                     }}
-                    className={`group relative bg-white rounded-sm overflow-hidden shadow-xl flex flex-col transition-transform duration-200 hover:-translate-y-1 ${
-                      estSuperAdmin ? 'cursor-grab active:cursor-grabbing' : ''
-                    } ${deplacementEnCours === r.id ? 'opacity-50' : ''} ${
+                    className={`group relative bg-white rounded-2xl border border-black/8 overflow-hidden shadow-xs hover:shadow-md flex flex-col transition-all duration-200 hover:-translate-y-0.5 ${
+                      deplacementEnCours === r.id ? 'opacity-50' : ''
+                    } ${
                       ressourceSurvolee === r.id
                         ? ressourceSurvolIntention === 'avant'
                           ? 'border-l-4 border-l-[#E0A21A]'
@@ -1939,153 +2001,137 @@ export default function AcademyView() {
                         : ''
                     }`}
                   >
-                    {/* Couverture */}
+                    {/* Aperçu visuel sobre */}
                     <button
                       onClick={() => ouvrirRessource(r)}
-                      className="relative block w-full aspect-[16/10] bg-slate-200 overflow-hidden"
+                      className="relative block w-full aspect-[16/9] bg-slate-50 overflow-hidden border-b border-black/5 cursor-pointer"
                     >
                       {r.image_url ? (
-                        // Signalé le 2 septembre : « les images ne sont pas
-                        // centrées ». Elles l'étaient, mais RECADRÉES :
-                        // `object-cover` remplit la vignette en rognant les
-                        // bords, et une diapositive de formation y perdait son
-                        // logo et son titre. On affiche donc l'image ENTIÈRE,
-                        // centrée, quitte à laisser un liseré clair autour :
-                        // sur une couverture qui porte du texte, tout voir
-                        // vaut mieux que tout remplir.
                         <img
                           src={r.image_url}
                           alt=""
-                          className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-[1.03]"
+                          className="w-full h-full object-contain object-center transition-transform duration-300 group-hover:scale-[1.02]"
                         />
                       ) : (
-                        <span className="w-full h-full flex flex-col items-center justify-center gap-2 bg-slate-100 text-slate-400">
-                          {estVideo ? <PlayCircle className="w-7 h-7" /> : <FileText className="w-7 h-7" />}
-                          {/* Poser l'image depuis la fiche : ouvrir le
-                              formulaire complet pour une seule photo faisait
-                              un détour inutile. */}
-                          {estSuperAdmin && (
-                            <span
-                              role="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                ressourcePourCouverture.current = r;
-                                champCouvertureRapide.current?.click();
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-black/10 text-slate-700 text-[11px] font-bold shadow-sm hover:bg-slate-50"
-                            >
-                              {couvertureEnCours === r.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <ImagePlus className="w-3.5 h-3.5" />
-                              )}
-                              Ajouter une image
-                            </span>
-                          )}
-                        </span>
-                      )}
-                      <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/70 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                        {estVideo ? <PlayCircle className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
-                        {estVideo ? 'Vidéo' : 'PDF'}
-                        {r.duree && <span className="font-normal opacity-80">· {r.duree}</span>}
-                      </span>
-                      {estValidee && (
-                        <span className="absolute top-3 right-3 w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow">
-                          <CheckCircle2 className="w-4 h-4" />
-                        </span>
-                      )}
-                    </button>
-
-                    <div className="flex-1 flex flex-col p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#B45309]">{r.rubrique}</p>
-                      <button onClick={() => ouvrirRessource(r)} className="text-left">
-                        <h3 className="mt-1.5 text-sm font-extrabold uppercase text-slate-900 leading-tight">
-                          {r.titre}
-                        </h3>
-                      </button>
-                      {r.description && (
-                        <p className="mt-2 text-xs text-slate-600 leading-relaxed line-clamp-2">{r.description}</p>
-                      )}
-
-                      {/* Auteur — c'est lui qui fait qu'une fiche se lit comme
-                          une formation et non comme un fichier. */}
-                      <div className="mt-3 pt-3 flex flex-wrap items-center gap-2">
-                        {r.auteur_photo_url ? (
-                          <img
-                            src={r.auteur_photo_url}
-                            alt=""
-                            className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-200 shrink-0"
-                          />
-                        ) : r.auteur ? (
-                          <span className="w-7 h-7 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold flex items-center justify-center shrink-0">
-                            {initiales(r.auteur)}
-                          </span>
-                        ) : null}
-                        {r.auteur && <span className="text-xs text-slate-700 truncate min-w-0">{r.auteur}</span>}
-
-                        <button
-                          onClick={() => void basculerValidation(r)}
-                          disabled={validationEnCours === r.id}
-                          className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors disabled:opacity-60 ${
-                            estValidee
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                        <div
+                          className={`w-full h-full flex flex-col items-center justify-center gap-1.5 ${
+                            estVideo ? 'bg-gradient-to-br from-blue-50 to-indigo-50/70 text-blue-600' : 'bg-gradient-to-br from-amber-50/80 to-orange-50/50 text-amber-700'
                           }`}
                         >
-                          {validationEnCours === r.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : estValidee ? (
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          ) : (
-                            <Circle className="w-3.5 h-3.5" />
-                          )}
-                          {estValidee ? 'Validée' : 'Marquer comme vue'}
-                        </button>
-                      </div>
-
-                      {estSuperAdmin && (validationsParRessource.get(r.id) || 0) > 0 && (
-                        <p className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
-                          <Users className="w-3 h-3" />
-                          {validationsParRessource.get(r.id)} personne
-                          {(validationsParRessource.get(r.id) || 0) > 1 ? 's ont' : ' a'} validé cette procédure
-                        </p>
+                          {estVideo ? <PlayCircle className="w-9 h-9 stroke-[1.75]" /> : <FileText className="w-9 h-9 stroke-[1.75]" />}
+                          <span className="text-[11px] font-semibold opacity-75">
+                            {estVideo ? 'Regarder la vidéo' : 'Ouvrir le document'}
+                          </span>
+                        </div>
                       )}
-                    </div>
 
+                      {/* Pastille PDF / Vidéo */}
+                      <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-lg bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                        {estVideo ? <PlayCircle className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
+                        {estVideo ? 'Vidéo' : 'PDF'}
+                        {r.duree && <span className="font-normal opacity-85">· {r.duree}</span>}
+                      </span>
+                    </button>
+
+                    {/* Actions admin au survol */}
                     {estSuperAdmin && (
-                      <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {r.image_url && (
-                          <button
-                            onClick={() => {
-                              ressourcePourCouverture.current = r;
-                              champCouvertureRapide.current?.click();
-                            }}
-                            title="Changer l'image"
-                            className="w-8 h-8 rounded-full bg-black/70 text-white hover:text-[#F7BC5F] flex items-center justify-center"
-                          >
-                            {couvertureEnCours === r.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <ImagePlus className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        )}
+                      <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
+                          type="button"
+                          onClick={() => {
+                            ressourcePourCouverture.current = r;
+                            champCouvertureRapide.current?.click();
+                          }}
+                          title={r.image_url ? "Changer l'image" : 'Ajouter une image'}
+                          className="w-7 h-7 rounded-lg bg-slate-900/80 text-white hover:text-[#F7BC5F] flex items-center justify-center shadow-xs cursor-pointer"
+                        >
+                          {couvertureEnCours === r.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <ImagePlus className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => ouvrirModification(r)}
                           title="Modifier"
-                          className="w-8 h-8 rounded-full bg-black/70 text-white hover:text-[#F7BC5F] flex items-center justify-center"
+                          className="w-7 h-7 rounded-lg bg-slate-900/80 text-white hover:text-[#F7BC5F] flex items-center justify-center shadow-xs cursor-pointer"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => void supprimer(r)}
-                          title="Retirer de l'Académy"
-                          className="w-8 h-8 rounded-full bg-rose-600/90 text-white hover:bg-rose-600 flex items-center justify-center"
+                          title="Supprimer"
+                          className="w-7 h-7 rounded-lg bg-rose-600/90 text-white hover:bg-rose-600 flex items-center justify-center shadow-xs cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     )}
+
+                    {/* Corps de la carte */}
+                    <div className="flex-1 flex flex-col justify-between p-3.5 gap-3">
+                      <div>
+                        {enRecherche && (
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700 mb-1 truncate">
+                            {r.rubrique}
+                          </p>
+                        )}
+                        <button onClick={() => ouvrirRessource(r)} className="text-left w-full cursor-pointer">
+                          <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-amber-900 transition-colors">
+                            {r.titre}
+                          </h3>
+                        </button>
+                        {r.description && (
+                          <p className="mt-1 text-xs text-slate-500 leading-relaxed line-clamp-2">{r.description}</p>
+                        )}
+                      </div>
+
+                      {/* Pied de carte : auteur/lecteurs + bouton Lu */}
+                      <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {r.auteur_photo_url ? (
+                            <img
+                              src={r.auteur_photo_url}
+                              alt=""
+                              className="w-6 h-6 rounded-full object-cover ring-1 ring-slate-200 shrink-0"
+                            />
+                          ) : r.auteur ? (
+                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold flex items-center justify-center shrink-0">
+                              {initiales(r.auteur)}
+                            </span>
+                          ) : null}
+                          {r.auteur ? (
+                            <span className="text-xs text-slate-600 truncate">{r.auteur}</span>
+                          ) : estSuperAdmin && nbValidations > 0 ? (
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1" title={`${nbValidations} validation(s)`}>
+                              <Users className="w-3 h-3" /> {nbValidations}
+                            </span>
+                          ) : <span />}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => void basculerValidation(r)}
+                          disabled={validationEnCours === r.id}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors shrink-0 cursor-pointer disabled:opacity-60 ${
+                            estValidee
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {validationEnCours === r.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : estValidee ? (
+                            <CheckCircle2 className="w-3 h-3" />
+                          ) : (
+                            <Circle className="w-3 h-3" />
+                          )}
+                          <span>{estValidee ? 'Lu' : 'Marquer lu'}</span>
+                        </button>
+                      </div>
+                    </div>
                   </article>
                 );
               })}
@@ -2094,35 +2140,19 @@ export default function AcademyView() {
         </div>
       </div>
 
-      {/* Lecteur plein écran — demandé le 2 septembre : « quand on clique sur
-          le dossier, je voudrais qu'ils apparaissent plein écran, qu'ils
-          utilisent toute l'interface du CRM ». Une procédure se lit, elle ne
-          se consulte pas dans une vignette : le document occupe donc tout
-          l'écran, avec un simple bandeau au-dessus. */}
+      {/* ── LECTEUR PLEIN ÉCRAN ───────────────────────────────────────────── */}
       {ouverte && (
         <div ref={cadreLecteur} className="fixed inset-0 z-[100] bg-[#050f11] flex flex-col">
-          <div className="flex items-center justify-between gap-4 px-4 sm:px-6 py-3 border-b border-[#144447]/60 bg-[#07191b] shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              {/* Flèche de retour — demandée le 1er octobre : « je n'ai pas
-                  la flèche au retour pour sortir du fichier que je suis en
-                  train de visualiser ». Le bouton « Fermer » existait déjà à
-                  droite, mais rien à gauche ne signalait qu'on pouvait
-                  revenir en arrière — le geste le plus naturel pour sortir
-                  d'un lecteur plein écran. */}
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-white/10 bg-[#07191b] shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               <button
                 onClick={() => setOuverte(null)}
                 title="Retour"
-                className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10"
+                className="shrink-0 h-9 px-3 rounded-xl flex items-center gap-1.5 bg-white/10 hover:bg-white/15 text-white text-xs font-bold cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Retour</span>
               </button>
-              {ouverte.auteur_photo_url ? (
-                <img src={ouverte.auteur_photo_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0 ring-1 ring-white/10" />
-              ) : (
-                <span className="w-9 h-9 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F7BC5F] flex items-center justify-center shrink-0">
-                  {ouverte.type === 'video' ? <PlayCircle className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-                </span>
-              )}
               <div className="min-w-0">
                 <p className="text-sm font-bold text-white truncate">{ouverte.titre}</p>
                 <p className="text-[11px] text-slate-400 truncate">
@@ -2133,16 +2163,14 @@ export default function AcademyView() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              {/* Valider ici même : c'est au moment où l'on referme un document
-                  qu'on sait qu'on l'a lu. */}
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => void basculerValidation(ouverte)}
                 disabled={validationEnCours === ouverte.id}
-                className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-colors disabled:opacity-60 ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer disabled:opacity-60 ${
                   validees.has(ouverte.id)
-                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                    : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-white/10 text-white border-white/15 hover:bg-white/15'
                 }`}
               >
                 {validationEnCours === ouverte.id ? (
@@ -2152,48 +2180,29 @@ export default function AcademyView() {
                 ) : (
                   <Circle className="w-3.5 h-3.5" />
                 )}
-                {validees.has(ouverte.id) ? 'Validée' : 'Marquer comme vue'}
+                <span>{validees.has(ouverte.id) ? 'Lu' : 'Marquer lu'}</span>
               </button>
 
-              {/* Certains PDF refusent d'être affichés dans un cadre : la
-                  sortie de secours est toujours là, plutôt qu'un écran blanc
-                  sans explication. */}
-              {/* Plein écran par le navigateur : on ne quitte ni
-                  l'application, ni la page, ni l'onglet — « partir sur une
-                  ouverture avec un onglet différent, ça je ne veux pas ». */}
               <button
                 onClick={() => void basculerPleinEcran()}
-                title={pleinEcran ? 'Quitter le plein écran' : 'Afficher en plein écran'}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-[11px] font-bold"
+                title={pleinEcran ? 'Quitter le plein écran' : 'Plein écran'}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-xs font-bold cursor-pointer"
               >
                 {pleinEcran ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                <span className="hidden sm:inline">{pleinEcran ? 'Réduire' : 'Plein écran'}</span>
               </button>
 
-              {/* Sortie de secours, pour les rares fichiers qu'un serveur
-                  refuse d'afficher dans un cadre — pas une façon d'obtenir le
-                  plein écran. */}
               <a
                 href={lienOuvrable(ouverte)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] font-semibold text-slate-500 hover:text-[#F9C977] underline decoration-dotted underline-offset-4 hidden lg:inline"
+                title="Ouvrir dans un nouvel onglet"
+                className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10"
               >
-                Ouvrir le fichier
+                <ExternalLink className="w-4 h-4" />
               </a>
-
-              <button
-                onClick={() => setOuverte(null)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-[11px] font-bold"
-              >
-                <X className="w-3.5 h-3.5" />
-                Fermer
-              </button>
             </div>
           </div>
 
-          {/* Le document occupe tout ce qui reste. Fond noir pour une vidéo,
-              gris sombre pour un document : c'est ce que fait un lecteur. */}
           <div className={`flex-1 min-h-0 ${ouverte.type === 'video' ? 'bg-black' : 'bg-[#0b1416]'}`}>
             <iframe
               src={lienIntegrable(lienOuvrable(ouverte)) || ''}
@@ -2206,158 +2215,217 @@ export default function AcademyView() {
         </div>
       )}
 
-      {/* Ajout / modification — super admins */}
+      {/* ── MODALE D'AJOUT / MODIFICATION SIMPLIFIÉE ──────────────────────── */}
       {formOuvert && estSuperAdmin && (
         <div
-          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
           onClick={() => !enregistrement && setFormOuvert(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg max-h-[88vh] overflow-y-auto custom-scrollbar rounded-2xl bg-[#07191b] border border-[#1b4e52] p-5 space-y-4 shadow-2xl"
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar rounded-2xl bg-white border border-black/10 p-5 sm:p-6 space-y-4 shadow-2xl text-slate-900"
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white">
-                {enModification ? 'Modifier la procédure' : 'Ajouter une procédure'}
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-base font-extrabold text-slate-900">
+                {enModification ? 'Modifier la procédure' : 'Nouvelle procédure'}
               </h3>
-              <button onClick={() => setFormOuvert(false)} className="text-slate-500 hover:text-white">
+              <button
+                onClick={() => setFormOuvert(false)}
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Titre</label>
+            {/* 1. Le fichier ou le lien (en premier : pré-remplit le titre et le type automatiquement) */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-2.5">
+              <label className="block text-xs font-bold text-slate-700">1. Document PDF ou vidéo</label>
               <input
-                value={titre}
-                onChange={(e) => setTitre(e.target.value)}
-                placeholder="Ex : Rédiger un mandat exclusif"
-                className="w-full px-3 py-2.5 rounded-xl bg-[#030d0f] border border-[#153c3f] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+                ref={champFichier}
+                type="file"
+                accept="application/pdf,video/*"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] || null;
+                  setFichier(f);
+                  if (f) {
+                    if (f.type.startsWith('video/')) setType('video');
+                    else if (f.type === 'application/pdf') setType('pdf');
+                    if (!titre.trim()) {
+                      setTitre(f.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' '));
+                    }
+                  }
+                }}
+                className="hidden"
               />
+              <button
+                type="button"
+                onClick={() => champFichier.current?.click()}
+                style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 hover:border-[#E0A21A] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-2xs cursor-pointer transition-colors"
+              >
+                <Upload className="w-4 h-4 text-[#E0A21A] shrink-0" />
+                <span className="truncate">
+                  {fichier ? fichier.name : 'Choisir un fichier PDF ou une vidéo sur votre appareil'}
+                </span>
+              </button>
+
+              <div className="relative">
+                <LinkIcon className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  value={lienExterne}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setLienExterne(val);
+                    if (/youtube\.com|youtu\.be|vimeo\.com/i.test(val)) setType('video');
+                  }}
+                  placeholder="Ou coller un lien YouTube, Vimeo ou Google Drive…"
+                  style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
+                  className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs placeholder-slate-400 focus:outline-none focus:border-[#E0A21A]"
+                />
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* 2. Titre & Dossier */}
+            <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Rubrique</label>
-                {/* Menu déroulant plutôt qu'un champ texte + suggestions
-                    (datalist) — demandé le 1er octobre : « avoir plus de
-                    choix dans la rubrique pour pouvoir le déplacer
-                    facilement ». Tous les dossiers existants (y compris
-                    vides, voir `rubriques` plus haut) sont là, visibles d'un
-                    coup ; « + Nouvelle rubrique… » bascule vers la saisie
-                    libre pour en créer une qui n'existe pas encore. */}
-                {nouvelleRubrique ? (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      autoFocus
+                <label className="block text-xs font-bold text-slate-700 mb-1">2. Titre de la procédure</label>
+                <input
+                  value={titre}
+                  onChange={(e) => setTitre(e.target.value)}
+                  placeholder="Ex : Rédiger un mandat exclusif"
+                  style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm placeholder-slate-400 focus:outline-none focus:border-[#E0A21A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Dossier</label>
+                  {nouvelleRubrique ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        autoFocus
+                        value={rubrique}
+                        onChange={(e) => setRubrique(e.target.value)}
+                        placeholder="Nom du nouveau dossier"
+                        style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
+                        className="w-full min-w-0 px-3 py-2 rounded-xl border border-slate-200 text-sm placeholder-slate-400 focus:outline-none focus:border-[#E0A21A]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNouvelleRubrique(false);
+                          setRubrique(dossierActif || rubriques[0]?.[0] || RUBRIQUES_SUGGEREES[0]);
+                        }}
+                        className="shrink-0 text-xs font-bold text-slate-500 hover:text-slate-900 underline"
+                      >
+                        Liste
+                      </button>
+                    </div>
+                  ) : (
+                    <select
                       value={rubrique}
-                      onChange={(e) => setRubrique(e.target.value)}
-                      placeholder="Nom de la rubrique"
-                      className="w-full min-w-0 px-3 py-2.5 rounded-xl bg-[#030d0f] border border-[#153c3f] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNouvelleRubrique(false);
-                        setRubrique(dossierActif || rubriques[0]?.[0] || RUBRIQUES_SUGGEREES[0]);
+                      onChange={(e) => {
+                        if (e.target.value === '__nouvelle__') {
+                          setNouvelleRubrique(true);
+                          setRubrique('');
+                        } else {
+                          setRubrique(e.target.value);
+                        }
                       }}
-                      title="Choisir dans la liste des dossiers existants"
-                      className="shrink-0 text-[10px] font-bold text-slate-400 hover:text-white underline decoration-dotted underline-offset-2"
+                      style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#E0A21A]"
                     >
-                      Liste
-                    </button>
-                  </div>
-                ) : (
-                  <select
-                    value={rubrique}
-                    onChange={(e) => {
-                      if (e.target.value === '__nouvelle__') {
-                        setNouvelleRubrique(true);
-                        setRubrique('');
-                      } else {
-                        setRubrique(e.target.value);
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 rounded-xl bg-[#030d0f] border border-[#153c3f] text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
-                  >
-                    {[...new Set([...rubriques.map(([n]) => n), ...RUBRIQUES_SUGGEREES, rubrique])]
-                      .filter(Boolean)
-                      .sort((a, b) => a.localeCompare(b, 'fr'))
-                      .map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    <option value="__nouvelle__">+ Nouvelle rubrique…</option>
-                  </select>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Type</label>
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as 'pdf' | 'video')}
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#030d0f] border border-[#153c3f] text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
-                >
-                  <option value="pdf">PDF</option>
-                  <option value="video">Vidéo</option>
-                </select>
-              </div>
-            </div>
+                      {[...new Set([...rubriques.map(([n]) => n), ...RUBRIQUES_SUGGEREES, rubrique])]
+                        .filter(Boolean)
+                        .sort((a, b) => a.localeCompare(b, 'fr'))
+                        .map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      <option value="__nouvelle__">+ Nouveau dossier…</option>
+                    </select>
+                  )}
+                </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Description</label>
-              <textarea
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Ce que l'agent saura faire après. Deux ou trois phrases."
-                className="w-full px-3 py-2.5 rounded-xl bg-[#030d0f] border border-[#153c3f] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] resize-y"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Auteur</label>
-                <input
-                  value={auteur}
-                  onChange={(e) => setAuteur(e.target.value)}
-                  placeholder="Prénom Nom"
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#030d0f] border border-[#153c3f] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Durée ou volume</label>
-                <input
-                  value={duree}
-                  onChange={(e) => setDuree(e.target.value)}
-                  placeholder="8 min · 4 pages"
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#030d0f] border border-[#153c3f] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
-                />
-              </div>
-            </div>
-
-            {/* Visuels */}
-            <div className="rounded-xl border border-[#153c3f] bg-[#030d0f] p-3 space-y-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Les visuels</p>
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <input
-                    ref={champCouverture}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setCouverture(e.target.files?.[0] || null)}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => champCouverture.current?.click()}
-                    className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-xs text-white flex items-center gap-2"
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Format</label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value as 'pdf' | 'video')}
+                    style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#E0A21A]"
                   >
-                    <ImagePlus className="w-4 h-4 text-[#F7BC5F] shrink-0" />
-                    <span className="truncate">
-                      {couverture ? couverture.name : couvertureActuelle ? 'Changer la couverture' : 'Photo de couverture'}
-                    </span>
-                  </button>
+                    <option value="pdf">Document PDF</option>
+                    <option value="video">Vidéo</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Courte description & image de couverture (optionnels) */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Description courte <span className="font-normal text-slate-400">(optionnel)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="En une phrase : ce qu'on retrouve dans cette procédure…"
+                  style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm placeholder-slate-400 focus:outline-none focus:border-[#E0A21A] resize-y"
+                />
+              </div>
+
+              <div>
+                <input
+                  ref={champCouverture}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setCouverture(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => champCouverture.current?.click()}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <ImagePlus className="w-4 h-4 text-[#E0A21A] shrink-0" />
+                  <span className="truncate">
+                    {couverture ? couverture.name : couvertureActuelle ? "Changer l'image de couverture" : 'Ajouter une image de couverture (optionnel)'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Options supplémentaires repliées par défaut */}
+            <details className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-xs">
+              <summary className="font-bold text-slate-600 cursor-pointer select-none">
+                Plus d'options (auteur, durée…)
+              </summary>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Auteur</label>
+                  <input
+                    value={auteur}
+                    onChange={(e) => setAuteur(e.target.value)}
+                    placeholder="Prénom Nom"
+                    style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs"
+                  />
                 </div>
                 <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Durée ou nb de pages</label>
+                  <input
+                    value={duree}
+                    onChange={(e) => setDuree(e.target.value)}
+                    placeholder="Ex : 5 min ou 3 pages"
+                    style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs"
+                  />
+                </div>
+                <div className="sm:col-span-2">
                   <input
                     ref={champPortrait}
                     type="file"
@@ -2368,79 +2436,32 @@ export default function AcademyView() {
                   <button
                     type="button"
                     onClick={() => champPortrait.current?.click()}
-                    className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-xs text-white flex items-center gap-2"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-xs text-slate-700 flex items-center justify-center gap-2"
                   >
-                    <ImagePlus className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+                    <ImagePlus className="w-3.5 h-3.5 text-[#E0A21A]" />
                     <span className="truncate">
-                      {portrait ? portrait.name : portraitActuel ? "Changer le portrait" : "Portrait de l'auteur"}
+                      {portrait ? portrait.name : portraitActuel ? "Changer la photo de l'auteur" : "Photo de l'auteur (optionnel)"}
                     </span>
                   </button>
                 </div>
               </div>
-              <p className="text-[10px] text-slate-500">
-                Sans couverture, la fiche reste lisible mais perd ce qui la fait ressembler à une
-                formation plutôt qu'à un fichier.
-              </p>
-            </div>
+            </details>
 
-            {/* Contenu */}
-            <div className="rounded-xl border border-[#153c3f] bg-[#030d0f] p-3 space-y-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Le contenu</p>
-              <div>
-                <input
-                  ref={champFichier}
-                  type="file"
-                  accept="application/pdf,video/*"
-                  onChange={(e) => setFichier(e.target.files?.[0] || null)}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => champFichier.current?.click()}
-                  className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-sm text-white flex items-center gap-2"
-                >
-                  <Upload className="w-4 h-4 text-[#F7BC5F] shrink-0" />
-                  <span className="truncate">
-                    {fichier ? fichier.name : 'Déposer un PDF ou une vidéo'}
-                  </span>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                <span className="flex-1 h-px bg-white/10" /> ou <span className="flex-1 h-px bg-white/10" />
-              </div>
-
-              <div className="relative">
-                <LinkIcon className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  value={lienExterne}
-                  onChange={(e) => setLienExterne(e.target.value)}
-                  placeholder="Coller un lien YouTube, Vimeo ou Drive"
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#07191b] border border-[#153c3f] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
-                />
-              </div>
-              {enModification && !fichier && (
-                <p className="text-[10px] text-slate-500">
-                  Sans nouveau fichier ni nouveau lien, le contenu actuel est conservé.
-                </p>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2 pt-1">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setFormOuvert(false)}
                 disabled={enregistrement}
-                className="px-4 py-2 rounded-xl text-slate-300 hover:text-white text-xs font-bold"
+                className="px-4 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-bold cursor-pointer"
               >
                 Annuler
               </button>
               <button
                 onClick={() => void enregistrer()}
                 disabled={enregistrement}
-                className="px-4 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] disabled:opacity-50 text-black text-xs font-bold flex items-center gap-2"
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] hover:brightness-105 disabled:opacity-50 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer"
               >
                 {enregistrement && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {enModification ? 'Enregistrer' : 'Ajouter'}
+                {enModification ? 'Enregistrer' : 'Ajouter la procédure'}
               </button>
             </div>
           </div>
