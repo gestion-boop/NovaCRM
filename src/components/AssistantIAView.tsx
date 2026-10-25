@@ -1966,12 +1966,26 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           comments: notes,
           agencyId
         });
+        if (notes.trim() && createdContact?.id && !args._hasSeparateNoteCall) {
+          try {
+            await creerNote({
+              userId: currentUser?.uid,
+              agencyId: activeAgency.id,
+              title: 'Note de suivi',
+              content: notes.trim(),
+              matchedContactId: createdContact.id,
+              matchedContactName: contactName,
+            });
+          } catch {
+            // Déjà présent dans leads.comments
+          }
+        }
         return {
           success: true,
           action: {
             type: 'contact',
             title: `Contact créé : ${contactName}`,
-            details: `Tél: ${phone || 'N/C'} • Email: ${email || 'N/C'} • Statut: ${status}`,
+            details: `Tél: ${phone || 'N/C'} • Email: ${email || 'N/C'} • Statut: ${status}${notes.trim() ? ` • Note: ${notes.trim()}` : ''}`,
             contactId: createdContact?.id,
           }
         };
@@ -2062,8 +2076,13 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
         const contactName = typeof args.contactName === 'string' ? args.contactName : '';
         const rawContactId = typeof args.contactId === 'string' ? args.contactId : '';
         // Ne fait confiance à l'id renvoyé par Nova que s'il correspond
-        // réellement à un contact connu du CRM (jamais un id halluciné).
-        const matchedContact = rawContactId ? allContacts.find((c) => c.id === rawContactId) : undefined;
+        // réellement à un contact connu du CRM (ou au contact créé dans ce
+        // même lot d'actions, qui n'est pas encore dans `allContacts`).
+        const newlyCreatedName = typeof args._newlyCreatedContactName === 'string' ? args._newlyCreatedContactName : '';
+        const matchedContact = rawContactId
+          ? allContacts.find((c) => c.id === rawContactId) ||
+            (args._newlyCreatedContact ? { id: rawContactId, name: newlyCreatedName } : undefined)
+          : undefined;
 
         // Écriture partagée avec NovaSearchBar.tsx (Immosphera 360) — voir
         // src/lib/novaQuickActions.ts, pour que les deux se comportent
@@ -2075,7 +2094,7 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           content,
           matchedContactId: matchedContact?.id,
           matchedContactName: matchedContact?.name,
-          contactName,
+          contactName: contactName || newlyCreatedName,
         });
         if (!resultat.success) throw new Error(resultat.error || 'Écriture refusée.');
 
@@ -2523,6 +2542,8 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       // plausible (create_contact suivi de create_task/create_note dans le
       // même message ne vise jamais quelqu'un d'autre).
       let dernierContactCreeId: string | undefined;
+      let dernierContactCreeNom: string | undefined;
+      const hasSeparateNoteCall = functionCalls.some((f) => f.name === 'create_note');
       for (const fc of functionCalls) {
         if (CLIENT_GUEST_TOOLS.has(fc.name) || NOVA_ADMIN_TOOLS.has(fc.name) || CALENDAR_TOOLS.has(fc.name) || SUPPORT_TOOLS.has(fc.name) || EMAIL_TOOLS.has(fc.name)) {
           pendingClientActions.push({
@@ -2539,13 +2560,24 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           !fc.args.contactId &&
           dernierContactCreeId;
         const fcAvecContact = besoinDeLierAuContactCree
-          ? { ...fc, args: { ...fc.args, contactId: dernierContactCreeId } }
+          ? {
+              ...fc,
+              args: {
+                ...fc.args,
+                contactId: dernierContactCreeId,
+                _newlyCreatedContact: true,
+                _newlyCreatedContactName: dernierContactCreeNom || '',
+              },
+            }
+          : fc.name === 'create_contact'
+          ? { ...fc, args: { ...fc.args, _hasSeparateNoteCall: hasSeparateNoteCall } }
           : fc;
         const result = await executeFunctionCall(fcAvecContact);
         if (result.success) {
           executedActions.push(result.action);
           if (fc.name === 'create_contact' && result.action.contactId) {
             dernierContactCreeId = result.action.contactId;
+            dernierContactCreeNom = typeof fc.args.name === 'string' ? fc.args.name : '';
           }
         } else failedActions.push({ label: result.label, reason: result.reason });
         // Historique des actions de Nova (voir aussi confirmPendingAction) —
@@ -2576,6 +2608,8 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           replyText = 'Confirmez ci-dessous avant que je ne passe à l\'action.';
         } else if (data.generatedImage) {
           replyText = 'Voici le visuel généré :';
+        } else {
+          replyText = "Je vous écoute : précisez l'action souhaitée (contact, note, tâche, rendez-vous…).";
         }
       }
 
@@ -2863,9 +2897,14 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   const terminerDicteeAgent = (envoyer: boolean) => {
     effacerSilenceDictee();
     dicteeAgentAnnuleeRef.current = !envoyer;
-    if (!envoyer) {
-      setDicteeAgent(false);
-      setDicteeAgentTexte('');
+    setDicteeAgent(false);
+    setDicteeAgentTexte('');
+    if (envoyer && !dicteeAgentEnvoyeeRef.current) {
+      const texte = dicteeAgentTexteRef.current.trim();
+      if (texte) {
+        dicteeAgentEnvoyeeRef.current = true;
+        envoyerDicteeRef.current(texte);
+      }
     }
     try { dicteeAgentRecoRef.current?.stop(); } catch { /* déjà arrêtée */ }
   };

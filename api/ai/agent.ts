@@ -1265,28 +1265,44 @@ ${
           const orderedModels = [
             preferredGeminiModel,
             ...candidateGeminiModels.filter((m) => m !== preferredGeminiModel),
-          ];
+          ].slice(0, 2);
           for (const model of orderedModels) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 12000);
             try {
+              const generationConfig: Record<string, any> = {
+                temperature: 0.2,
+                maxOutputTokens: 4096,
+              };
+              // Crucial sur Gemini 2.5 : par défaut le mode "thinking" est activé,
+              // ce qui prend 15-25s et consomme tout maxOutputTokens en pensées
+              // internes (renvoyant alors 0 functionCall et 0 texte visible).
+              if (model.includes('2.5')) {
+                generationConfig.thinkingConfig = { thinkingBudget: 0 };
+              }
               const r = await fetch(
                 `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
+                  signal: ctrl.signal,
                   body: JSON.stringify({
                     systemInstruction: { parts: [{ text: systemPrompt }] },
                     contents: contentsToSend,
                     tools: [{ functionDeclarations: geminiFunctionDeclarations }],
-                    generationConfig: {
-                      temperature: 0.3,
-                      maxOutputTokens: 2048,
-                    },
+                    generationConfig,
                   }),
                 }
               );
+              clearTimeout(timer);
               const data = await r.json().catch(() => ({}));
-              if (r.ok && data?.candidates?.[0]) {
+              const rawParts = (data?.candidates?.[0]?.content?.parts || []).filter((p: any) => !p?.thought);
+              const hasUsableOutput = rawParts.some(
+                (p: any) => p?.functionCall || (typeof p?.text === 'string' && p.text.trim().length > 0)
+              );
+              if (r.ok && hasUsableOutput) {
                 preferredGeminiModel = model;
+                data.candidates[0].content.parts = rawParts;
                 return { ok: true, data, model };
               }
               if (data?.error) {
@@ -1303,13 +1319,15 @@ ${
                   msg.includes('not found') ||
                   msg.includes('no longer available') ||
                   msg.includes('quota') ||
-                  msg.includes('overloaded')
+                  msg.includes('overloaded') ||
+                  msg.includes('thinking')
                 ) {
                   continue;
                 }
                 return { ok: false, error: data.error };
               }
             } catch (err: any) {
+              clearTimeout(timer);
               lastErr = err;
             }
           }
@@ -1319,20 +1337,26 @@ ${
         const geminiRes = await callGemini(geminiContents);
         if (geminiRes?.ok && geminiRes.data?.candidates?.[0]) {
           geminiUsed = true;
-          let parts: any[] = geminiRes.data.candidates[0].content?.parts || [];
+          let parts: any[] = (geminiRes.data.candidates[0].content?.parts || []).filter((p: any) => !p?.thought);
           let properties: any[] | undefined;
           let generatedImage: { dataUrl: string; intent: string; label: string } | undefined;
 
           // Relance multi-outils (même filet de sécurité que Claude) : si la
-          // consigne dictée contient plusieurs actions ("et", "puis", "aussi")
+          // consigne dictée contient plusieurs actions ("et", "puis", "aussi", "avec une note"...)
           // mais que Gemini n'a appelé qu'un seul outil au 1er tour.
           const lastUserContent = [...geminiContents].reverse().find((c) => c.role === 'user');
           const lastUserText = (lastUserContent?.parts || []).map((p: any) => p.text || '').join(' ');
-          const demandeMultipleGemini = /\b(et|puis|ainsi que|également|aussi)\b/i.test(lastUserText);
+          const demandeMultipleGemini = /\b(et|puis|ainsi que|également|aussi|avec une note|avec une tâche|avec un rappel|avec un rdv|avec un rendez-vous)\b/i.test(lastUserText);
           const initialFnCalls = parts.filter((p: any) => p.functionCall);
+          const dejaCouvertParCreateContactNotes =
+            initialFnCalls.length === 1 &&
+            initialFnCalls[0].functionCall.name === 'create_contact' &&
+            Boolean(initialFnCalls[0].functionCall.args?.notes) &&
+            !/\b(tâche|tache|rappel|rdv|rendez-vous|mail|e-mail)\b/i.test(lastUserText);
           if (
             demandeMultipleGemini &&
             initialFnCalls.length === 1 &&
+            !dejaCouvertParCreateContactNotes &&
             !['search_properties', 'generate_image', 'search_kdrive_documents'].includes(initialFnCalls[0].functionCall.name)
           ) {
             const firstFn = initialFnCalls[0].functionCall;
@@ -1358,7 +1382,7 @@ ${
             ]);
             if (relanceGem?.ok && relanceGem.data?.candidates?.[0]) {
               const extraParts = (relanceGem.data.candidates[0].content?.parts || []).filter(
-                (p: any) => (p.functionCall && p.functionCall.name !== firstFn.name) || typeof p.text === 'string'
+                (p: any) => !p?.thought && ((p.functionCall && p.functionCall.name !== firstFn.name) || typeof p.text === 'string')
               );
               if (extraParts.length > 0) {
                 parts = [...parts, ...extraParts];
