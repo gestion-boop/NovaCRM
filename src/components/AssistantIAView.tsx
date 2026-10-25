@@ -3235,15 +3235,24 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
               ))}
             </div>
           ) : (
-            <DndContext sensors={quickPromptSensors} collisionDetection={closestCenter} onDragEnd={handleQuickPromptDragEnd}>
-              <SortableContext items={orderedQuickPrompts.map((p) => p.label)} strategy={rectSortingStrategy}>
-                <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
-                  {orderedQuickPrompts.map((p) => (
-                    <SortableQuickPrompt key={p.label} label={p.label} Icon={p.icon} color={p.color} onSelect={() => handleSendMessage(p.prompt)} />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
+            <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
+              {QUICK_PROMPTS.map((p) => {
+                const Icon = p.icon;
+                return (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => handleSendMessage(p.prompt)}
+                    className="w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-white/80 hover:bg-white border border-white/90 shadow-sm hover:shadow text-left flex items-center gap-2.5 sm:gap-3 text-[#1a1230] text-xs sm:text-sm font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
+                  >
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color || 'bg-[#F7BC5F]/20 text-[#B8863F] border-[#F7BC5F]/30'}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <span className="leading-tight font-bold">{p.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
       ) : (
