@@ -579,7 +579,7 @@ main[class*="bg-[#071015]/55" i] {
    dire s'il est périmé — à lancer après avoir ajouté un écran. */
 /* @generated:theme-surfaces:start — ne pas éditer à la main, voir scripts/theme-surfaces.mjs */
 /* ── Fonds sombres écrits en dur dans les composants → jeton de surface ──
-   68 teintes recensées automatiquement dans src/ (voir
+   70 teintes recensées automatiquement dans src/ (voir
    scripts/theme-surfaces.mjs). Le sélecteur ne cite PAS la valeur finale :
    il pose un jeton, redéfini une seule fois par thème plus haut dans ce
    fichier. Une même liste sert donc au mode nuit et au mode jour. */
@@ -595,6 +595,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#050f11" i],
 [class*="bg-[#050f14" i],
 [class*="bg-[#051416" i],
+[class*="bg-[#051417" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
 [class*="bg-[#061417" i],
@@ -611,6 +612,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#081b1e" i],
 [class*="bg-[#081b1f" i],
 [class*="bg-[#081e22" i],
+[class*="bg-[#081f23" i],
 [class*="bg-[#09151c" i],
 [class*="bg-[#092226" i],
 [class*="bg-[#0a1e10" i],
@@ -683,6 +685,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#050f11" i],
 [class*="bg-[#050f14" i],
 [class*="bg-[#051416" i],
+[class*="bg-[#051417" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
 [class*="bg-[#061417" i],
@@ -700,6 +703,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#081b1e" i],
 [class*="bg-[#081b1f" i],
 [class*="bg-[#081e22" i],
+[class*="bg-[#081f23" i],
 [class*="bg-[#09151c" i],
 [class*="bg-[#092226" i],
 [class*="bg-[#0a1e10" i],
@@ -753,6 +757,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#050f11" i],
 [class*="bg-[#050f14" i],
 [class*="bg-[#051416" i],
+[class*="bg-[#051417" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
 [class*="bg-[#061417" i],
@@ -771,6 +776,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#081b1e" i],
 [class*="bg-[#081b1f" i],
 [class*="bg-[#081e22" i],
+[class*="bg-[#081f23" i],
 [class*="bg-[#09151c" i],
 [class*="bg-[#092226" i],
 [class*="bg-[#0a1e10" i],

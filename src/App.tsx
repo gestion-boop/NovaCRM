@@ -1708,6 +1708,19 @@ function App() {
         isOpen={showTutorial}
         onClose={() => setShowTutorial(false)}
         onStartTour={() => setShowProductTour(true)}
+        onNavigateAction={(target) => {
+          if (target === 'nouveau-lead') {
+            setShowNouveauLead(true);
+          } else if (target === 'assistant-ia') {
+            openNovaFullscreen();
+          } else if (target === 'camera') {
+            setShowCameraModal(true);
+          } else {
+            setNovaOpen(false);
+            openClientProfile(null);
+            setCurrentNav(target);
+          }
+        }}
       />
 
       {/* Ticket #49 : visite guidée interactive */}
