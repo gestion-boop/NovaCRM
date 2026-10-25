@@ -182,9 +182,9 @@ const getDesktopTileOrder = (): string[] => {
 };
 
 const SPACE_TILE_CLASS =
-  'relative flex flex-col items-center justify-start gap-2 pt-3 pb-2 select-none';
+  'relative flex flex-col items-center justify-start gap-2 pt-2.5 pb-2 select-none';
 const SPACE_LABEL_CLASS =
-  'text-sm font-semibold text-center leading-tight line-clamp-2 min-h-[2.5rem] w-full px-1';
+  'text-xs font-bold text-center leading-tight line-clamp-2 min-h-[2rem] w-full px-1';
 
 export const MobileHome: React.FC<MobileHomeProps> = ({
   onNavigate,
@@ -828,7 +828,15 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           <h1 className="text-2xl font-extrabold text-white truncate">
             {greeting} <span className="text-[#F7BC5F]">{firstName}</span>
           </h1>
-          <p className="text-sm text-slate-400 capitalize">{dateLabel}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-slate-400 capitalize">{dateLabel}</p>
+            {weather && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[11px] text-teal-200 font-semibold shadow-xs">
+                <WeatherIcon className="w-3 h-3 text-[#F7BC5F]" />
+                <span>{weather.temp}°C · {weatherMeta(weather.code).label}</span>
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {onOpenNouveauLead && (
@@ -837,9 +845,9 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
               onClick={onOpenNouveauLead}
               title="Créer un lead"
               aria-label="Créer un lead"
-              className="w-11 h-11 rounded-full bg-[#F7BC5F] text-[#061719] flex items-center justify-center shadow-md active:scale-95"
+              className="w-11 h-11 rounded-full bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] text-slate-950 flex items-center justify-center shadow-[0_0_15px_rgba(247,188,95,0.35)] active:scale-95 transition-all cursor-pointer"
             >
-              <Plus className="w-6 h-6" strokeWidth={3} />
+              <Plus className="w-5 h-5 stroke-[3]" />
             </button>
           )}
           {/* Loupe retirée (demande explicite) ; clochette agrandie à la
@@ -848,17 +856,17 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             <button
               onClick={onOpenNotifications}
               title="Notifications"
-              className="relative w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+              className="relative w-11 h-11 rounded-full bg-[#081e22]/90 border border-teal-500/25 flex items-center justify-center text-slate-300 hover:text-white hover:bg-teal-500/10 active:scale-95 transition-all cursor-pointer shadow-xs"
             >
               <Bell className="w-5 h-5" />
               {unreadNotificationsCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-[#050d0f]" />
+                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-[#050d0f] shadow-xs" />
               )}
             </button>
           )}
           <button
             onClick={() => onNavigate('parametres')}
-            className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-white/20 shrink-0 bg-black/30"
+            className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-teal-500/40 hover:border-[#F7BC5F]/70 shrink-0 bg-black/40 shadow-sm active:scale-95 transition-all cursor-pointer"
             title="Mon profil"
           >
             {avatarUrl ? (
@@ -869,37 +877,35 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             <img
               src={agencyLogo}
               alt=""
-              className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full border border-[#071015] bg-[#071015] object-contain"
+              className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-[#071015] bg-[#071015] object-contain shadow-xs"
             />
           </button>
         </div>
       </div>
 
-      {/* Dock façon accueil desktop : même cadre qu'avant (fond gris/
-          transparent). Signalé : les tuiles réelles de "Mes espaces"
-          juste en dessous sont plates (pas de relief 3D/reflet verre) —
-          les 4 cases reprennent maintenant EXACTEMENT ce style-là (mêmes
-          classes que SpaceTile plus bas dans ce fichier : carré dégradé
-          simple, ombre douce, badge rond dans le coin), pas celui, plus
-          travaillé, des tuiles de l'accueil ordinateur. */}
-      <div className="rounded-2xl bg-white/[0.06] backdrop-blur-xl border border-white/10 px-3 py-3">
+      {/* Dock façon accueil desktop */}
+      <div className="relative rounded-3xl bg-gradient-to-b from-[#081e22]/95 via-[#061719]/95 to-[#041214]/98 backdrop-blur-2xl border border-teal-500/25 p-3.5 sm:p-4 shadow-[0_15px_35px_-10px_rgba(0,0,0,0.8),0_0_25px_rgba(247,188,95,0.06)] overflow-hidden">
+        {/* Liseré supérieur doré */}
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
+
         <div className="grid grid-cols-4 gap-2">
           {dockItems.map((item) => (
             <motion.button
               key={item.id}
               onClick={() => onNavigate(item.nav)}
-              whileTap={{ scale: 0.95 }}
-              className="flex flex-col items-center gap-1.5"
+              whileTap={{ scale: 0.92 }}
+              className="flex flex-col items-center gap-1.5 cursor-pointer group"
             >
-              <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center relative shadow-md`}>
-                <item.icon className="w-5 h-5 text-white" />
+              <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center relative shadow-[0_6px_16px_-4px_rgba(0,0,0,0.5)] border border-white/10 group-hover:border-white/20 transition-all overflow-hidden`}>
+                <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+                <item.icon className="w-5 h-5 text-white drop-shadow-sm" />
                 {item.count > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-black min-w-5 h-5 px-1 rounded-full flex items-center justify-center ring-2 ring-[#0b1c1e]">
+                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-black min-w-5 h-5 px-1 rounded-full flex items-center justify-center ring-2 ring-[#071317] shadow-xs">
                     {item.count > 9 ? '9+' : item.count}
                   </span>
                 )}
               </div>
-              <span className="nv-texte-icone text-[10px] font-semibold text-slate-200 text-center truncate w-full">{item.label}</span>
+              <span className="nv-texte-icone text-[11px] font-bold text-slate-200 text-center truncate w-full group-hover:text-white transition-colors">{item.label}</span>
             </motion.button>
           ))}
         </div>
@@ -907,16 +913,24 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           <button
             type="button"
             onClick={() => onNavigate(gesteDuMoment.nav)}
-            className="mt-2 w-full text-center text-sm font-semibold text-slate-100 truncate hover:text-[#F7BC5F]"
+            className="mt-3 w-full p-2.5 rounded-xl bg-gradient-to-r from-[#F7BC5F]/15 via-[#F7BC5F]/10 to-transparent border border-[#F7BC5F]/30 flex items-center justify-between text-xs font-bold text-slate-100 hover:text-white transition-all active:scale-[0.98] cursor-pointer group"
           >
-            {gesteDuMoment.texte}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-[#F7BC5F] animate-pulse shrink-0 shadow-[0_0_6px_rgba(247,188,95,0.8)]" />
+              <span className="truncate">{gesteDuMoment.texte}</span>
+            </div>
+            <div className="flex items-center gap-1 text-[#F7BC5F] text-[11px] font-black shrink-0 pl-2">
+              <span>Ouvrir</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+            </div>
           </button>
         )}
       </div>
 
       {/* Mes espaces */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-end">
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-[11px] font-black uppercase tracking-wider text-teal-300/70">Mes espaces</h2>
           {editMode && (
             <div className="flex items-center gap-2">
               {/* Ticket #48 (suivi #43) : la tuile "Ajouter" en bas de la
@@ -929,14 +943,14 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   grille. */}
               <button
                 onClick={() => setShowAddSheet(true)}
-                className="w-7 h-7 rounded-full bg-[#F7BC5F]/10 text-[#F7BC5F] flex items-center justify-center hover:bg-[#F7BC5F]/20"
+                className="w-7 h-7 rounded-full bg-[#F7BC5F]/20 text-[#F7BC5F] flex items-center justify-center hover:bg-[#F7BC5F]/30 active:scale-95 transition-all"
                 title="Ajouter un espace"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 stroke-[2.5]" />
               </button>
               <button
                 onClick={() => setEditMode(false)}
-                className="text-xs font-black text-[#F7BC5F] px-3 py-1 rounded-full bg-[#F7BC5F]/10"
+                className="text-xs font-black text-[#F7BC5F] px-3 py-1 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 active:scale-95 transition-all"
               >
                 Terminé
               </button>
@@ -944,7 +958,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           )}
         </div>
 
-        <div className="rounded-3xl bg-[#0b1c1e] border border-[#143c3f]/80 overflow-hidden">
+        <div className="relative rounded-3xl bg-gradient-to-b from-[#081e22]/95 via-[#061719]/95 to-[#041214]/98 backdrop-blur-2xl border border-teal-500/25 p-3 sm:p-4 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.85)] overflow-hidden">
+          {/* Liseré supérieur doré discret */}
+          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
+
           {cellulesAffichees.filter(Boolean).length === 0 && !editMode ? (
             // Filet de sécurité : si tous les espaces ont été masqués, il n'y
             // a plus aucune tuile sur laquelle faire un appui long pour
@@ -953,7 +970,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
               onClick={() => { setEditMode(true); setShowAddSheet(true); }}
               className="w-full flex flex-col items-center gap-2 py-8 text-slate-400 hover:text-white transition-colors"
             >
-              <Plus className="w-6 h-6" />
+              <Plus className="w-6 h-6 text-[#F7BC5F]" />
               <span className="text-sm font-semibold">Ajouter un espace</span>
             </button>
           ) : (
@@ -966,7 +983,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
             autoScroll={false}
           >
             <SortableContext items={cellSlotIds} strategy={rectSortingStrategy}>
-              <div className="grid grid-cols-3 divide-x divide-y divide-[#143c3f]/60">
+              <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
                 {(() => {
                   // Grille à positions libres : on affiche toutes les cases
                   // jusqu'à la dernière occupée (arrondi à la ligne
@@ -1040,12 +1057,13 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                         key="deploy-more"
                         type="button"
                         onClick={() => setShowAllSpaces(true)}
-                        className={`${SPACE_TILE_CLASS} text-[#F9C977] hover:text-white`}
+                        className={`${SPACE_TILE_CLASS} text-[#F9C977] hover:text-white active:scale-95 transition-all`}
                       >
-                        <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                          <ChevronDown className="w-6 h-6" />
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#122e33] to-[#0a1c1f] border border-[#F7BC5F]/35 flex items-center justify-center shrink-0 shadow-[0_6px_16px_-4px_rgba(0,0,0,0.5)] relative overflow-hidden">
+                          <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/15 to-transparent pointer-events-none" />
+                          <ChevronDown className="w-6 h-6 text-[#F7BC5F]" />
                         </div>
-                        <span className={`${SPACE_LABEL_CLASS} text-[#F9C977]`}>+{reste}</span>
+                        <span className={`${SPACE_LABEL_CLASS} text-[#F7BC5F] font-bold`}>+{reste}</span>
                       </button>
                     );
                   }
@@ -1056,10 +1074,11 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowAllSpaces(false)}
-                    className={`${SPACE_TILE_CLASS} text-slate-400 hover:text-white`}
+                    className={`${SPACE_TILE_CLASS} text-slate-400 hover:text-white active:scale-95 transition-all`}
                   >
-                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                      <ChevronUp className="w-6 h-6" />
+                    <div className="w-16 h-16 rounded-2xl bg-[#0b2125] border border-teal-500/25 flex items-center justify-center shrink-0 relative overflow-hidden shadow-[0_6px_16px_-4px_rgba(0,0,0,0.5)]">
+                      <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />
+                      <ChevronUp className="w-6 h-6 text-slate-300" />
                     </div>
                     <span className={SPACE_LABEL_CLASS}>Réduire</span>
                   </button>
@@ -1073,10 +1092,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                     // flux, ce qui la pousse aussi automatiquement sur la
                     // ligne suivante (donc tout en bas) si la ligne en
                     // cours n'a pas encore atteint cette colonne.
-                    className={`${SPACE_TILE_CLASS} text-slate-400 hover:text-white col-start-3`}
+                    className={`${SPACE_TILE_CLASS} text-teal-300 hover:text-white col-start-3 active:scale-95 transition-all`}
                   >
-                    <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-white/20 flex items-center justify-center shrink-0">
-                      <Plus className="w-6 h-6" />
+                    <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-teal-500/40 bg-teal-500/5 flex items-center justify-center shrink-0">
+                      <Plus className="w-6 h-6 text-teal-300" />
                     </div>
                     <span className={SPACE_LABEL_CLASS}>Ajouter</span>
                   </button>
@@ -1097,45 +1116,6 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
         {(editMode || showAllSpaces) && <div className="h-16" aria-hidden="true" />}
       </div>
 
-      {showAddSheet && (
-        <div
-          className="fixed inset-0 z-[75] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 safe-area-top safe-area-bottom"
-          onClick={() => setShowAddSheet(false)}
-        >
-          <div
-            className="w-full max-w-md bg-[#0a1e20] border border-[#144447]/60 rounded-3xl p-6 max-h-[75vh] flex flex-col animate-drawer-up-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4 shrink-0">
-              <h3 className="text-white font-bold text-lg">Ajouter un espace</h3>
-              <button onClick={() => setShowAddSheet(false)} className="p-2 rounded-xl bg-white/5 text-slate-300">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="overflow-y-auto -mx-1 px-1">
-              {espacesAjoutables.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-6">Tous les espaces sont déjà affichés.</p>
-              ) : (
-                <div className="grid grid-cols-3 gap-3 pb-1">
-                  {espacesAjoutables.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => addSpace(s.id)}
-                      className="flex flex-col items-center gap-2 py-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
-                    >
-                      <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${s.gradient} flex items-center justify-center`}>
-                        <s.icon className="w-5 h-5 text-white" />
-                      </div>
-                      <span className="text-[11px] font-semibold text-slate-200 text-center">{s.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Dossier verrouillé ouvert (façon dossier iPhone) : ses cartes sont
           affichées en plein écran, chacune tapable directement — imposées
           par le super admin, elles ne sont ni déplaçables ni supprimables
@@ -1143,19 +1123,20 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
       {openLockedFolder && (
         <div
           ref={swipeBackRef}
-          className="fixed inset-0 z-[75] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 safe-area-top safe-area-bottom"
+          className="fixed inset-0 z-[75] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 safe-area-top safe-area-bottom"
           onClick={() => setOpenLockedFolder(null)}
         >
           <div
-            className="w-full max-w-md bg-[#0a1e20] border border-[#144447]/60 rounded-3xl p-6 max-h-[75vh] flex flex-col animate-drawer-up-center"
+            className="w-full max-w-md bg-gradient-to-b from-[#081e22] via-[#061719] to-[#041214] border border-teal-500/30 rounded-3xl p-6 max-h-[75vh] flex flex-col shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] animate-drawer-up-center relative overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
             <div className="flex items-center justify-between mb-4 shrink-0">
-              <h3 className="text-white font-bold text-lg flex items-center gap-2">
-                {openLockedFolder.locked && <Lock className="w-4 h-4 text-slate-400" />}
+              <h3 className="text-white font-extrabold text-lg flex items-center gap-2">
+                {openLockedFolder.locked && <Lock className="w-4 h-4 text-[#F7BC5F]" />}
                 {openLockedFolder.label}
               </h3>
-              <button onClick={() => setOpenLockedFolder(null)} className="p-2 rounded-xl bg-white/5 text-slate-300">
+              <button onClick={() => setOpenLockedFolder(null)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 active:scale-95 transition-all">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1176,12 +1157,13 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
                         onNavigate(c.nav);
                       }
                     }}
-                    className="flex flex-col items-center justify-start gap-2 py-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
+                    className="flex flex-col items-center justify-start gap-2 py-3 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-95 transition-all cursor-pointer group"
                   >
-                    <div className={`w-11 h-11 shrink-0 rounded-2xl bg-gradient-to-br ${c.gradient} flex items-center justify-center`}>
-                      <c.icon className="w-5 h-5 text-white" />
+                    <div className={`w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br ${c.gradient} flex items-center justify-center shadow-md relative overflow-hidden border border-white/10 group-hover:border-white/20 transition-all`}>
+                      <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+                      <c.icon className="w-5 h-5 text-white drop-shadow-sm" />
                     </div>
-                    <span className="text-sm font-semibold text-slate-200 text-center leading-tight line-clamp-2 min-h-[2.5rem] w-full px-1">{c.label}</span>
+                    <span className="text-xs font-bold text-slate-200 text-center leading-tight line-clamp-2 min-h-[2rem] w-full px-1 group-hover:text-white transition-colors">{c.label}</span>
                   </button>
                 ))}
               </div>
@@ -1210,7 +1192,7 @@ const EmptyGridCell: React.FC<{ slotId: string; editMode: boolean }> = ({ slotId
   const { setNodeRef } = useSortable({ id: slotId });
   return (
     <div ref={setNodeRef} className={SPACE_TILE_CLASS}>
-      {editMode && <div className="w-16 h-16 rounded-2xl border border-dashed border-white/10" />}
+      {editMode && <div className="w-16 h-16 rounded-2xl border border-dashed border-teal-500/30 bg-white/[0.02]" />}
     </div>
   );
 };
@@ -1244,7 +1226,7 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
       } ${
         isDragging
           ? 'opacity-95 z-30 shadow-[0_12px_28px_-6px_rgba(0,0,0,0.7)] ring-2 ring-[#F7BC5F] bg-[#0f2a2d]'
-          : 'transition-transform'
+          : 'hover:bg-white/[0.04] transition-all'
       }`}
     >
       {editMode && !isDragging && (
@@ -1254,41 +1236,42 @@ const SpaceTile: React.FC<SpaceTileProps> = ({ space, index, editMode, onActivat
           // que sur AccueilGrid où une tuile verrouillée ne peut pas être
           // retirée par un utilisateur normal.
           <span
-            className="absolute top-1 left-1 w-6 h-6 rounded-full bg-slate-600 text-white flex items-center justify-center shadow-md z-10"
+            className="absolute top-1 left-1 w-6 h-6 rounded-full bg-slate-700/90 text-white flex items-center justify-center shadow-md z-10 border border-white/10"
             title="Imposée par l'administrateur"
           >
-            <Lock className="w-3 h-3" />
+            <Lock className="w-3 h-3 text-[#F7BC5F]" />
           </span>
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onHide(); }}
-            className="absolute top-1 left-1 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-sm font-black shadow-md z-10"
+            className="absolute top-1 left-1 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-sm font-black shadow-md z-10 active:scale-90 transition-transform"
             title="Masquer"
           >
             −
           </button>
         )
       )}
-      <div className={`w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br ${space.gradient} flex items-center justify-center relative shadow-md overflow-hidden`}>
+      <div className={`w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br ${space.gradient} flex items-center justify-center relative shadow-[0_8px_20px_-6px_rgba(0,0,0,0.6)] border border-white/10 overflow-hidden`}>
+        <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
         {space.isFolder && space.children?.length ? (
           // Aperçu façon dossier iPhone : mini-grille des 4 premières icônes
           // du dossier plutôt qu'une seule icône générique de dossier.
-          <div className="grid grid-cols-2 gap-1 p-2">
+          <div className="grid grid-cols-2 gap-1.5 p-2.5">
             {space.children.slice(0, 4).map((c, ci) => {
               const ChildIcon = c.icon;
-              return <ChildIcon key={ci} className="w-3 h-3 text-white/90" />;
+              return <ChildIcon key={ci} className="w-3.5 h-3.5 text-white/90 drop-shadow-sm" />;
             })}
           </div>
         ) : (
-          <Icon className="w-7 h-7 text-white" />
+          <Icon className="w-7 h-7 text-white drop-shadow-sm" />
         )}
         {!!space.badge && space.badge > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-black min-w-5 h-5 px-1 rounded-full flex items-center justify-center ring-2 ring-[#0b1c1e]">
+          <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-black min-w-5 h-5 px-1 rounded-full flex items-center justify-center ring-2 ring-[#071317] shadow-xs">
             {space.badge > 9 ? '9+' : space.badge}
           </span>
         )}
       </div>
-      <span className={`${SPACE_LABEL_CLASS} text-slate-200`}>{space.label}</span>
+      <span className={`${SPACE_LABEL_CLASS} text-slate-200 group-hover:text-white transition-colors`}>{space.label}</span>
     </div>
   );
 };

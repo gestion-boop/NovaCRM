@@ -505,7 +505,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         className={`fixed inset-0 z-50 flex items-stretch p-3 sm:p-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] ${
           mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
-        style={{ transition: 'opacity 900ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+        style={{ transition: 'opacity 350ms cubic-bezier(0.22, 1, 0.36, 1)' }}
         role="dialog"
         aria-modal="true"
         aria-label="Menu de navigation"
@@ -528,7 +528,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className={`relative w-full md:w-[270px] md:max-w-[270px] bg-[#081318] border border-[#F7BC5F]/50 rounded-3xl md:rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden ${
             mobileOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
-          style={{ transition: 'transform 900ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+          style={{ transition: 'transform 350ms cubic-bezier(0.22, 1, 0.36, 1)' }}
         >
           {sidebarContent(true)}
           {/* Identité du build, tout en bas du menu : la réponse immédiate à

@@ -579,7 +579,7 @@ main[class*="bg-[#071015]/55" i] {
    dire s'il est périmé — à lancer après avoir ajouté un écran. */
 /* @generated:theme-surfaces:start — ne pas éditer à la main, voir scripts/theme-surfaces.mjs */
 /* ── Fonds sombres écrits en dur dans les composants → jeton de surface ──
-   64 teintes recensées automatiquement dans src/ (voir
+   65 teintes recensées automatiquement dans src/ (voir
    scripts/theme-surfaces.mjs). Le sélecteur ne cite PAS la valeur finale :
    il pose un jeton, redéfini une seule fois par thème plus haut dans ce
    fichier. Une même liste sert donc au mode nuit et au mode jour. */
@@ -620,6 +620,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0b1719" i],
 [class*="bg-[#0b171f" i],
 [class*="bg-[#0b1c1e" i],
+[class*="bg-[#0b2125" i],
 [class*="bg-[#0b2427" i],
 [class*="bg-[#0b292b" i],
 [class*="bg-[#0c2628" i],
@@ -705,6 +706,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0b1719" i],
 [class*="bg-[#0b171f" i],
 [class*="bg-[#0b1c1e" i],
+[class*="bg-[#0b2125" i],
 [class*="bg-[#0b2427" i],
 [class*="bg-[#0b292b" i],
 [class*="bg-[#0c2628" i],
@@ -772,6 +774,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0b1719" i],
 [class*="bg-[#0b171f" i],
 [class*="bg-[#0b1c1e" i],
+[class*="bg-[#0b2125" i],
 [class*="bg-[#0b2427" i],
 [class*="bg-[#0b292b" i],
 [class*="bg-[#0c2628" i],
@@ -875,9 +878,9 @@ main[class*="bg-[#071015]/55" i] {
 /* Liserés (`ring-*`) sombres : ils détachent un avatar/badge de son fond,
    donc ils doivent prendre la couleur DU FOND, pas une couleur fixe. */
 .light-mode [class*="ring-[#050d0f" i],
+.light-mode [class*="ring-[#071317" i],
 .light-mode [class*="ring-[#07191c" i],
-.light-mode [class*="ring-[#081318" i],
-.light-mode [class*="ring-[#0b1c1e" i] {
+.light-mode [class*="ring-[#081318" i] {
   --tw-ring-color: var(--nv-surface-1) !important;
 }
 

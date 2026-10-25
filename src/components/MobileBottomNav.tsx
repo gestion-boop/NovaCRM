@@ -59,37 +59,41 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   return (
     <nav
-      className={`md:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pt-0 pb-[calc(0.35rem+env(safe-area-inset-bottom,0px))] select-none pointer-events-none transition-transform duration-300 ease-out ${
+      className={`md:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pt-0 pb-[calc(0.45rem+env(safe-area-inset-bottom,0px))] select-none pointer-events-none transition-transform duration-300 ease-out ${
         visible ? 'translate-y-0' : 'translate-y-[calc(100%+1rem+env(safe-area-inset-bottom,0px))]'
       }`}
     >
-      <div className="pointer-events-auto mx-auto max-w-sm rounded-full bg-[#081318]/80 backdrop-blur-xl border border-white/15 shadow-[0_8px_24px_-10px_rgba(0,0,0,0.8)] px-5 py-1 flex items-center justify-between">
-      <button
-        onClick={() => onNavigate('accueil')}
-        className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all cursor-pointer ${
-          currentNav === 'accueil' ? 'text-[#F7BC5F] font-bold bg-white/10' : 'text-gray-400 hover:text-gray-200'
-        }`}
-      >
-        <Home className="w-5 h-5" />
-        <span className="text-[11px] font-semibold mt-0.5">Accueil</span>
-      </button>
+      <div className="pointer-events-auto mx-auto max-w-[280px] sm:max-w-xs rounded-full bg-gradient-to-r from-[#081f23]/95 via-[#0a272c]/95 to-[#081f23]/95 backdrop-blur-2xl border border-teal-500/30 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.9),0_0_20px_rgba(247,188,95,0.1)] px-4 py-1.5 flex items-center justify-between relative overflow-hidden">
+        {/* Liseré supérieur doré */}
+        <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
 
-      <button
-        onClick={onOpenNova}
-        title="Nova"
-        aria-label="Nova"
-        className="flex items-center justify-center h-10 w-12 active:scale-95 transition-transform"
-      >
-        <NovaMascotte taille={44} fixe />
-      </button>
+        <button
+          onClick={() => onNavigate('accueil')}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all cursor-pointer active:scale-95 ${
+            currentNav === 'accueil' ? 'text-[#F7BC5F] font-black' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Home className="w-5 h-5 stroke-[2.2]" />
+          <span className="text-[10px] font-bold mt-0.5 tracking-tight">Accueil</span>
+        </button>
 
-      <button
-        onClick={onOpenMobileMenu}
-        className="flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all cursor-pointer text-gray-400 hover:text-gray-200"
-      >
-        <Menu className="w-5 h-5" />
-        <span className="text-[11px] font-semibold mt-0.5">Menu</span>
-      </button>
+        <button
+          onClick={onOpenNova}
+          title="Nova"
+          aria-label="Nova"
+          className="relative flex items-center justify-center h-10 w-12 active:scale-90 transition-transform group cursor-pointer"
+        >
+          <div className="absolute inset-0 rounded-full bg-[#F7BC5F]/20 blur-md group-hover:bg-[#F7BC5F]/35 transition-colors" />
+          <NovaMascotte taille={42} fixe />
+        </button>
+
+        <button
+          onClick={onOpenMobileMenu}
+          className="flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all cursor-pointer text-slate-400 hover:text-slate-200 active:scale-95"
+        >
+          <Menu className="w-5 h-5 stroke-[2.2]" />
+          <span className="text-[10px] font-bold mt-0.5 tracking-tight">Menu</span>
+        </button>
       </div>
     </nav>
   );
