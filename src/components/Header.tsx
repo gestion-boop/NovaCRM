@@ -2,11 +2,17 @@ import React, { useMemo, useRef, useState } from 'react';
 
 import {
   Bell,
+  Calendar,
+  CornerDownLeft,
+  FileText,
+  Folder,
   HelpCircle,
   Home,
+  Layers,
   Loader2,
   Maximize,
   Menu as MenuIcon,
+  MessageSquare,
   Mic,
   Minimize,
   Moon,
@@ -23,7 +29,7 @@ import {
 } from '@/hooks/useContacts';
 import {
   chercherClients, chercherAccueil, chercherADistance, grouper, demanderAgendaAllerA,
-  demanderOuvrirDossierAccueil, type Resultat,
+  demanderOuvrirDossierAccueil, type Resultat, type TypeResultat,
 } from '@/lib/rechercheGlobale';
 
 import {
@@ -67,6 +73,29 @@ interface HeaderProps {
   // uniquement à l'accessibilité (aria-expanded) du bouton "Menu" du header.
   menuOpen?: boolean;
 }
+
+const getResultIcon = (type: TypeResultat) => {
+  switch (type) {
+    case 'client':
+      return <Users className="w-4 h-4 text-emerald-400" />;
+    case 'pipeline':
+      return <Layers className="w-4 h-4 text-amber-400" />;
+    case 'message':
+      return <MessageSquare className="w-4 h-4 text-sky-400" />;
+    case 'rdv':
+      return <Calendar className="w-4 h-4 text-rose-400" />;
+    case 'rappel':
+      return <Bell className="w-4 h-4 text-orange-400" />;
+    case 'dossier':
+      return <Folder className="w-4 h-4 text-purple-400" />;
+    case 'document':
+      return <FileText className="w-4 h-4 text-teal-400" />;
+    case 'note':
+      return <FileText className="w-4 h-4 text-yellow-400" />;
+    default:
+      return <Search className="w-4 h-4 text-[#F7BC5F]" />;
+  }
+};
 
 export const Header: React.FC<
   HeaderProps
@@ -138,6 +167,9 @@ export const Header: React.FC<
   // que partout ailleurs dans l'app (onSelectContact → setSelectedClientProfileId).
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [activeResultIndex, setActiveResultIndex] = useState(0);
+  const modalInputRef = useRef<HTMLInputElement>(null);
 
   // Plein écran navigateur (Fullscreen API) — équivalent desktop de
   // l'affichage "app installée" sans barre du navigateur qu'on a sur
@@ -184,6 +216,65 @@ export const Header: React.FC<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, activeAgency?.id]);
   const groupes = useMemo(() => grouper([...resultatsLocaux, ...resultatsDistants]), [resultatsLocaux, resultatsDistants]);
+
+  const flatResults = useMemo(() => {
+    return groupes.flatMap((g) => g.items);
+  }, [groupes]);
+
+  React.useEffect(() => {
+    if (isSearchModalOpen) {
+      setActiveResultIndex(0);
+      const timer = window.setTimeout(() => {
+        modalInputRef.current?.focus();
+      }, 60);
+      return () => window.clearTimeout(timer);
+    }
+  }, [isSearchModalOpen]);
+
+  React.useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // ⌘K (Mac) ou Ctrl+K (Windows/Linux) pour ouvrir/fermer la recherche
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchModalOpen((open) => !open);
+      } else if (e.key === 'Escape' && isSearchModalOpen) {
+        setIsSearchModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isSearchModalOpen]);
+
+  const handleModalKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsSearchModalOpen(false);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (flatResults.length > 0) {
+        setActiveResultIndex((prev) => (prev + 1) % flatResults.length);
+      }
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (flatResults.length > 0) {
+        setActiveResultIndex((prev) => (prev - 1 + flatResults.length) % flatResults.length);
+      }
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (flatResults[activeResultIndex]) {
+        ouvrirResultat(flatResults[activeResultIndex]);
+      } else if (flatResults.length > 0) {
+        ouvrirResultat(flatResults[0]);
+      }
+    }
+  };
+
   const ouvrirResultat = (r: Resultat) => {
     const a = r.action;
     if (a.genre === 'client') onSelectContact?.(a.contactId);
@@ -194,6 +285,7 @@ export const Header: React.FC<
     else if (a.genre === 'message') onOpenMessage?.(a.messageId);
     setSearchQuery('');
     setSearchFocused(false);
+    setIsSearchModalOpen(false);
   };
 
   const displayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'Utilisateur';
@@ -278,63 +370,32 @@ export const Header: React.FC<
         </div>
       </div>
 
-      {/* RECHERCHE */}
-      <div data-tour="header-search" className="hidden md:block flex-1 max-w-md mx-4 relative">
-        <Search className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onFocus={() => setSearchFocused(true)}
-          onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') { setSearchQuery(''); (e.currentTarget as HTMLInputElement).blur(); }
-            if (e.key === 'Enter' && groupes.length > 0) ouvrirResultat(groupes[0].items[0]);
+      {/* RECHERCHE - BOUTON D'ACCÈS RAPIDE QUI OUVRE LA GRANDE BARRE SPOTLIGHT */}
+      <div data-tour="header-search" className="hidden md:flex items-center flex-1 max-w-[200px] xl:max-w-xs mx-2 relative shrink min-w-[42px]">
+        <button
+          type="button"
+          onClick={() => {
+            setIsSearchModalOpen(true);
           }}
-          placeholder="Rechercher : client, pipeline, message…"
-          className="w-full bg-[#0b1c1e] border border-white/10 focus:border-[#F7BC5F]/50 rounded-xl pl-10 pr-9 py-2 text-sm text-white placeholder-gray-500 outline-none transition-colors"
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            onClick={() => setSearchQuery('')}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-gray-500 hover:text-white hover:bg-white/10"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-
-        {searchFocused && searchQuery.trim() && (
-          <div className="absolute left-0 right-0 top-full mt-2 bg-[#0E1A20] border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 max-h-[70vh] overflow-y-auto custom-scrollbar">
-            {groupes.map((g) => (
-              <div key={g.type} className="py-1">
-                <div className="px-3.5 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F]/80">{g.libelle}</div>
-                {g.items.map((r) => (
-                  <button
-                    key={r.cle}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => ouvrirResultat(r)}
-                    className="w-full text-left px-3.5 py-1.5 hover:bg-white/5 transition-colors"
-                  >
-                    <div className="text-sm text-gray-100 truncate">{r.titre}</div>
-                    {r.sousTitre && <div className="text-[11px] text-gray-500 truncate">{r.sousTitre}</div>}
-                  </button>
-                ))}
-              </div>
-            ))}
-            {rechercheEnCours && (
-              <div className="px-3.5 py-2 text-[11px] text-gray-500 flex items-center gap-2">
-                <Loader2 className="w-3 h-3 animate-spin" /> Recherche dans le pipeline, les messages, l'agenda…
-              </div>
-            )}
-            {!rechercheEnCours && groupes.length === 0 && (
-              <div className="px-3.5 py-2 text-xs text-gray-500">
-                {searchQuery.trim().length < 2 ? 'Tape au moins deux lettres.' : `Aucun résultat pour « ${searchQuery.trim()} ».`}
-              </div>
-            )}
+          className="w-full flex items-center justify-between gap-2 h-9 sm:h-10 px-3 rounded-xl bg-[#0b1c1e] hover:bg-[#102a2d] border border-white/10 hover:border-[#F7BC5F]/50 text-gray-400 hover:text-white transition-all shadow-inner group cursor-pointer"
+          title="Ouvrir la recherche globale (⌘K ou Ctrl+K)"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Search className="w-4 h-4 text-gray-400 group-hover:text-[#F7BC5F] transition-colors shrink-0" />
+            <span className="hidden xl:inline text-xs text-gray-400 group-hover:text-gray-200 truncate">
+              Rechercher partout…
+            </span>
+            <span className="xl:hidden hidden sm:inline text-xs text-gray-400 group-hover:text-gray-200 truncate">
+              Recherche…
+            </span>
           </div>
-        )}
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-black/50 border border-white/10 text-[10px] font-mono font-bold text-gray-400 group-hover:text-[#F7BC5F] shrink-0">
+            <span>⌘</span>K
+          </kbd>
+        </button>
       </div>
+
+
 
       {/* OUTILS HEADER */}
       <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
@@ -438,6 +499,155 @@ export const Header: React.FC<
         </button>
 
       </div>
+
+      {/* GRANDE BARRE DE RECHERCHE SPOTLIGHT (PLEINE LARGEUR, MODALE CENTRÉE) */}
+      {isSearchModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-start justify-center pt-[8vh] sm:pt-[12vh] px-3 sm:px-4 animate-in fade-in duration-150"
+          onClick={() => setIsSearchModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-2xl nv-card-hero rounded-2xl shadow-2xl border border-[#F7BC5F]/40 overflow-hidden relative flex flex-col max-h-[78vh] backdrop-blur-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Liseré supérieur lumineux doré */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-[2.5px] bg-gradient-to-r from-transparent via-[#F7BC5F] to-transparent opacity-95" />
+
+            {/* Barre de recherche grand format */}
+            <div className="flex items-center gap-3 px-4 sm:px-5 py-3.5 sm:py-4 border-b border-white/10 bg-black/40">
+              <Search className="w-5 h-5 text-[#F7BC5F] shrink-0" />
+              <input
+                ref={modalInputRef}
+                autoFocus
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setActiveResultIndex(0);
+                }}
+                onKeyDown={handleModalKeyDown}
+                placeholder="Rechercher un client, pipeline, message, note, agenda..."
+                className="flex-1 bg-transparent text-sm sm:text-base text-white placeholder-gray-400 outline-none font-medium"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                  title="Effacer la saisie"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsSearchModalOpen(false)}
+                className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white text-xs font-mono font-semibold transition-colors"
+                title="Fermer (Échap)"
+              >
+                Échap
+              </button>
+            </div>
+
+            {/* Corps des résultats / suggestions */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
+              {searchQuery.trim().length === 0 ? (
+                <div className="py-8 px-4 text-center space-y-2">
+                  <p className="text-xs sm:text-sm text-gray-300 font-medium">
+                    Tapez un nom, prénom, numéro, dossier, message ou événement...
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Recherche instantanée dans l'ensemble des données de <span className="text-[#F7BC5F] font-semibold">{activeAgencyLabel}</span>.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {rechercheEnCours && (
+                    <div className="px-4 py-2 text-xs text-gray-400 flex items-center gap-2 bg-white/[0.02] rounded-xl border border-white/5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#F7BC5F]" />
+                      Recherche dans les affaires, messages et l'agenda…
+                    </div>
+                  )}
+
+                  {!rechercheEnCours && flatResults.length === 0 && (
+                    <div className="py-10 text-center text-sm text-gray-400">
+                      {searchQuery.trim().length < 2
+                        ? 'Tapez au moins deux lettres pour lancer la recherche.'
+                        : `Aucun résultat trouvé pour « ${searchQuery.trim()} ».`}
+                    </div>
+                  )}
+
+                  {groupes.map((g) => (
+                    <div key={g.type} className="space-y-1">
+                      <div className="px-3 pt-1.5 pb-1 text-[11px] font-bold uppercase tracking-wider text-[#F7BC5F]/80 flex items-center justify-between">
+                        <span>{g.libelle}</span>
+                        <span className="text-[10px] text-gray-500 font-normal">{g.items.length} résultat{g.items.length > 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="space-y-1">
+                        {g.items.map((r) => {
+                          const itemIndex = flatResults.indexOf(r);
+                          const isSelected = itemIndex === activeResultIndex;
+                          return (
+                            <button
+                              key={r.cle}
+                              type="button"
+                              onMouseEnter={() => setActiveResultIndex(itemIndex)}
+                              onClick={() => ouvrirResultat(r)}
+                              className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-[#F7BC5F]/15 border-[#F7BC5F]/40 shadow-sm'
+                                  : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] hover:border-white/10'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+                                  isSelected ? 'bg-[#F7BC5F]/20 border-[#F7BC5F]/40 shadow-sm' : 'bg-black/40 border-white/10'
+                                }`}>
+                                  {getResultIcon(r.type)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm font-semibold text-white truncate flex items-center gap-2">
+                                    <span>{r.titre}</span>
+                                  </div>
+                                  {r.sousTitre && (
+                                    <div className="text-xs text-gray-400 truncate mt-0.5">{r.sousTitre}</div>
+                                  )}
+                                </div>
+                              </div>
+                              <CornerDownLeft className={`w-3.5 h-3.5 text-gray-500 shrink-0 transition-opacity ${isSelected ? 'opacity-100 text-[#F7BC5F]' : 'opacity-0'}`} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Pied de page avec raccourcis clavier */}
+            <div className="px-4 py-2.5 border-t border-white/10 bg-black/50 flex items-center justify-between text-[11px] text-gray-400">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-mono text-gray-300">↑</kbd>
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-mono text-gray-300">↓</kbd>
+                  Naviguer
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-mono text-gray-300">↵</kbd>
+                  Ouvrir
+                </span>
+              </div>
+              <span className="flex items-center gap-1">
+                <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-mono text-gray-300">Échap</kbd>
+                Fermer
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
