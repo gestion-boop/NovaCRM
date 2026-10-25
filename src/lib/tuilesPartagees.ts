@@ -147,7 +147,7 @@ function tuileVisible(tuile: TuilePartagee, visibilite: VisibiliteTuiles): boole
   if (tuile.id === 'carte-novavisio' && !visibilite.novavisio) return false;
   if (tuile.id === 'conseils-aura' && !visibilite.conseilsFinances) return false;
   if ((tuile.id === 'annonce' || tuile.id === 'nova-lock-spacer') && !visibilite.annonce) return false;
-  if (visibilite.masquees.has(tuile.id) && !tuile.locked) return false;
+  if (visibilite.masquees.has(tuile.id) && !tuile.locked && !(tuile.id === 'reserver-camera' && !visibilite.conseilsFinances)) return false;
   return true;
 }
 

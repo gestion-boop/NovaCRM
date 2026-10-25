@@ -1487,7 +1487,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   };
   const retirerTuilesMasqueesRecursif = (items: TileItemNode[], hiddenIds: Set<string>): TileItemNode[] =>
     items
-      .filter((t) => !hiddenIds.has(t.id))
+      .filter((t) => !hiddenIds.has(t.id) || (t.id === 'reserver-camera' && !estAgenceConseilsFinances(activeAgency)))
       .map((t) => (t.children ? { ...t, children: retirerTuilesMasqueesRecursif(t.children, hiddenIds) } : t));
 
   // Signalé (23 septembre) : « Lucie et peut-être les autres courtiers n'ont
@@ -1521,6 +1521,20 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     return items.map((t) =>
       t.id === 'folder-business' ? { ...t, children: [...(t.children || []), pipelineTile] } : t
     );
+  };
+
+  // Réserve caméra (Immosphera & Novavisio) : sur un compte dont la grille
+  // serveur (user_ui_settings.home_tiles) a été enregistrée sans cette tuile
+  // ou l'avait masquée, la réconciliation serveur ne repasse jamais par
+  // reconcilierGrille. On la réinjecte systématiquement ici pour Immosphera
+  // et Novavisio si elle est absente de la grille.
+  const reinjecterReserverCamera = (items: TileItemNode[]): TileItemNode[] => {
+    if (estAgenceConseilsFinances(activeAgency)) return items;
+    if (existsRecursive(items, 'reserver-camera') || idsCouvertsParVerrou('reserver-camera')) {
+      return items;
+    }
+    const cameraTile = findInitialTile('reserver-camera');
+    return cameraTile ? [...items, cameraTile] : items;
   };
 
   // Demande explicite (23 septembre) : « le dossier Communication ne sert
@@ -1572,7 +1586,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // sans jamais passer par ici — voir idsCouvertsParVerrou plus haut) ET
     // pas emporté par un dossier que l'utilisateur a lui-même masqué.
     const estAbsent = (id: string) =>
-      !existsRecursive(base, id) && !idsCouvertsParVerrou(id) && !hiddenIds.has(id);
+      !existsRecursive(base, id) && !idsCouvertsParVerrou(id) && (!hiddenIds.has(id) || (id === 'reserver-camera' && !estAgenceConseilsFinances(activeAgency)));
     // Nouvelle tuile "Immosphera 360" : l'ajouter aussi pour les grilles déjà
     // personnalisées/enregistrées qui ne l'ont pas encore, sinon changer
     // seulement INITIAL_TILES n'a aucun effet (cf. commentaire normalizeTile
@@ -1606,6 +1620,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     if (missingNovavisio.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingNovavisio.includes(t.id));
       base = [...base, ...extraTiles];
+    }
+    // Réserver caméra (Immosphera & Novavisio) — visible uniquement hors
+    // Conseils Finances ; s'assurer qu'elle existe dans les grilles déjà enregistrées.
+    if (!estAgenceConseilsFinances(activeAgency) && estAbsent('reserver-camera')) {
+      const cameraTile = findInitialTile('reserver-camera');
+      if (cameraTile) base = [...base, cameraTile];
     }
     // Nouvelle tuile "Pipeline interne" (raccourci vers Projets internes) —
     // même principe, pour les grilles déjà personnalisées/enregistrées.
@@ -1705,7 +1725,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       if (hiddenIds.size > 0) {
         const stripHidden = (items: TileItemNode[]): TileItemNode[] =>
           items
-            .filter((t) => !hiddenIds.has(t.id) || findInitialTile(t.id)?.locked === true)
+            .filter((t) => !hiddenIds.has(t.id) || findInitialTile(t.id)?.locked === true || (t.id === 'reserver-camera' && !estAgenceConseilsFinances(activeAgency)))
             .map((t) => (t.children ? { ...t, children: stripHidden(t.children) } : t));
         base = stripHidden(base);
       }
@@ -2027,15 +2047,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           // hidden_tiles_v1`) — sans toucher au contenu des dossiers
           // verrouillés, qui vit ailleurs (agency_ui_settings), jamais dans
           // cette liste.
-          const normalisees = retirerTuilesMasqueesRecursif(
-            retirerDossierCommunication(
-              reinjecterPipelineDansSonDossier(
-                removeQuickBarDuplicates(
-                  (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+          const normalisees = reinjecterReserverCamera(
+            retirerTuilesMasqueesRecursif(
+              retirerDossierCommunication(
+                reinjecterPipelineDansSonDossier(
+                  removeQuickBarDuplicates(
+                    (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+                  )
                 )
-              )
-            ),
-            listerIdsMasquesAplatis()
+              ),
+              listerIdsMasquesAplatis()
+            )
           );
           try { localStorage.setItem(cleTuiles, JSON.stringify(normalisees)); } catch { /* ignore */ }
           if (lectureTuiles.maj) ecrireHorodatageLocal(cleTuiles, lectureTuiles.maj);
@@ -2171,6 +2193,19 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAgency?.id],
   );
+
+  // Démasquage automatique de Réserver caméra sur Immosphera et Novavisio si elle
+  // a été marquée masquée globalement (ex: masquée depuis Conseils Finances).
+  useEffect(() => {
+    if (!canSeeConseilsFinances) {
+      const masques = lireMasquees();
+      if (masques.some((t) => t.id === 'reserver-camera')) {
+        void reafficherTuile(currentUser?.uid, 'reserver-camera').then(() => {
+          setVersionMasquees((v) => v + 1);
+        });
+      }
+    }
+  }, [canSeeConseilsFinances, currentUser?.uid]);
 
   // Tuile "Annonce" (30/08/2026) : "que pour les super admin... Philippe,
   // Mélanie et Sylvain qui resteront toujours super admin" — déjà couvert
@@ -3384,7 +3419,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     && (!NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
     && (!CONSEILS_EXTRA_TILE_IDS.includes(t.id) || canSeeConseilsFinances)
     && ((t.id !== 'annonce' && t.id !== 'nova-lock-spacer') || canSeeAnnonceTile)
-    && (!idsMasques.has(t.id) || findInitialTile(t.id)?.locked === true);
+    && (!idsMasques.has(t.id) || findInitialTile(t.id)?.locked === true || (t.id === 'reserver-camera' && !canSeeConseilsFinances));
 
   const filtrerEnProfondeur = (items: TileItemNode[]): TileItemNode[] =>
     items
@@ -3560,7 +3595,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           (t) =>
             !existsRecursive(tiles, t.id) &&
             !idsImposesParUnDossier.has(t.id) &&
-            !idsMasques.has(t.id) &&
+            (!idsMasques.has(t.id) || (t.id === 'reserver-camera' && !canSeeConseilsFinances)) &&
             // Un dossier verrouillé absent est déjà reposé juste au-dessus :
             // sans ce garde-fou, il apparaîtrait deux fois.
             !dejaReposes.has(t.id) &&

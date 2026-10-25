@@ -469,6 +469,17 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
       .map(versEspacePartage)
       .filter((espace): espace is SpaceDef => !!espace);
     const dejaLa = new Set(convertis.map((espace) => espace.id));
+    if (!estAgenceConseilsFinances(activeAgency) && !dejaLa.has('reserver-camera')) {
+      const cameraSpace: SpaceDef = {
+        id: 'reserver-camera',
+        label: 'Réserver caméra',
+        icon: Camera,
+        nav: 'reserver-camera',
+        gradient: 'from-[#9333ea] to-[#581c87]',
+      };
+      convertis.push(cameraSpace);
+      dejaLa.add('reserver-camera');
+    }
     const notesVerrouille = lockedMobileSpaces.find((espace) =>
       estBlocNotes({ id: espace.id, title: espace.label, navTarget: espace.nav }));
     const remplaces = convertis
@@ -484,6 +495,16 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   useEffect(() => {
     setArrangement(lireArrangement(localStorage.getItem(cleArrangementTelephone(currentUser?.uid, activeAgency?.id))));
   }, [currentUser?.uid, activeAgency?.id]);
+
+  useEffect(() => {
+    if (!estAgenceConseilsFinances(activeAgency) && arrangement?.masquees?.includes('reserver-camera')) {
+      const nextArrangement = {
+        ...arrangement,
+        masquees: arrangement.masquees.filter((id) => id !== 'reserver-camera'),
+      };
+      memoriserArrangement(nextArrangement);
+    }
+  }, [activeAgency, arrangement]);
   const memoriserArrangement = (next: ArrangementTelephone) => {
     setArrangement(next);
     try {
@@ -529,8 +550,10 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     // Signalé (8 septembre) : absente du catalogue mobile — sur téléphone,
     // impossible d'ajouter cette tuile à "Mes espaces" faute d'exister ici,
     // alors qu'elle est disponible depuis toujours sur AccueilGrid (desktop).
-    // Même violet que sur l'agenda (voir AgendaView.tsx, #9333ea).
-    { id: 'reserver-camera', label: 'Réserver caméra', icon: Camera, nav: 'reserver-camera', gradient: 'from-[#9333ea] to-[#581c87]' },
+    // Masquée pour Conseils Finances, visible sur Immosphera et Novavisio.
+    ...(!estAgenceConseilsFinances(activeAgency)
+      ? [{ id: 'reserver-camera', label: 'Réserver caméra', icon: Camera, nav: 'reserver-camera', gradient: 'from-[#9333ea] to-[#581c87]' }]
+      : []),
     // Ticket #255 : accès rapide à la création d'annonce, réservé aux
     // administrateurs (même règle que ParametresView.tsx : role === 'super_admin').
     ...(userProfile?.role === 'super_admin'
@@ -541,7 +564,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     // `fillMissing` existant, qui les place automatiquement dans une case
     // vide chez tout le monde sans déplacer les tuiles déjà en place.
     ...lockedMobileSpaces,
-  ], [unreadMessagesCount, unreadRemindersCount, userProfile?.role, lockedMobileSpaces]);
+  ], [unreadMessagesCount, unreadRemindersCount, userProfile?.role, lockedMobileSpaces, activeAgency]);
 
   // Grille à positions libres (façon écran d'accueil iPhone) : chaque case
   // contient soit un id de tuile, soit `null` (case vide) — contrairement à
