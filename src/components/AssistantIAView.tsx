@@ -2375,6 +2375,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     // Signalé : le micro de dictée restait actif si on envoyait le message
     // pendant qu'on parlait encore, sans l'avoir explicitement coupé.
     if (heroListening) { heroRecognitionRef.current?.stop(); setHeroListening(false); }
+    if (dicteeAgent) {
+      dicteeAgentEnvoyeeRef.current = true;
+      terminerDicteeAgent(false);
+    }
 
     setErrorStatus(null);
     const userMsg: Message = {
@@ -2840,13 +2844,18 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   const [dicteeAgentTexte, setDicteeAgentTexte] = useState('');
   const dicteeAgentRecoRef = useRef<any>(null);
   const dicteeAgentTexteRef = useRef('');
+  const dicteeAgentBaseRef = useRef('');
   const dicteeAgentEnvoyeeRef = useRef(false);
   const dicteeAgentAnnuleeRef = useRef(false);
   const dicteeAgentSilenceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // handleSendMessage change à chaque rendu : la reconnaissance (créée une
   // fois au démarrage) appelle toujours la version à jour via ce miroir.
   const envoyerDicteeRef = useRef<(t: string) => void>(() => {});
-  envoyerDicteeRef.current = (t: string) => { void handleSendMessage(t); };
+  envoyerDicteeRef.current = (t: string) => {
+    setPromptInput('');
+    if (promptTextareaRef.current) promptTextareaRef.current.style.height = 'auto';
+    void handleSendMessage(t);
+  };
 
   const effacerSilenceDictee = () => {
     if (dicteeAgentSilenceRef.current) { clearTimeout(dicteeAgentSilenceRef.current); dicteeAgentSilenceRef.current = null; }
@@ -2854,6 +2863,10 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
   const terminerDicteeAgent = (envoyer: boolean) => {
     effacerSilenceDictee();
     dicteeAgentAnnuleeRef.current = !envoyer;
+    if (!envoyer) {
+      setDicteeAgent(false);
+      setDicteeAgentTexte('');
+    }
     try { dicteeAgentRecoRef.current?.stop(); } catch { /* déjà arrêtée */ }
   };
   const demarrerDicteeAgent = () => {
@@ -2870,21 +2883,33 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     recognition.lang = 'fr-FR';
     recognition.continuous = true;
     recognition.interimResults = true;
-    dicteeAgentTexteRef.current = '';
+    const baseInitiale = promptInput.trim();
+    dicteeAgentBaseRef.current = baseInitiale;
+    dicteeAgentTexteRef.current = baseInitiale;
     dicteeAgentEnvoyeeRef.current = false;
     dicteeAgentAnnuleeRef.current = false;
-    setDicteeAgentTexte('');
+    setDicteeAgentTexte(baseInitiale);
     recognition.onresult = (e: any) => {
-      const texte = assemblerDictee(e.results, '');
+      const texte = assemblerDictee(e.results, dicteeAgentBaseRef.current);
       dicteeAgentTexteRef.current = texte;
       setDicteeAgentTexte(texte);
+      setPromptInput(texte);
+      autoResizePrompt();
       // 1,8 s de silence après la dernière parole = fin de l'ordre → envoi.
       effacerSilenceDictee();
       dicteeAgentSilenceRef.current = setTimeout(() => terminerDicteeAgent(true), 1800);
     };
     recognition.onerror = (e: any) => {
-      if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') {
-        setErrorStatus("Micro refusé : autorisez l'accès au micro pour dicter à Nova.");
+      const code = e?.error;
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        setErrorStatus("Micro refusé : autorisez l'accès au microphone dans votre navigateur pour dicter à Nova.");
+        setDicteeAgent(false);
+      } else if (code === 'audio-capture') {
+        setErrorStatus("Aucun microphone détecté sur cet appareil.");
+        setDicteeAgent(false);
+      } else if (code === 'network') {
+        setErrorStatus("Erreur réseau du service de reconnaissance vocale du navigateur.");
+        setDicteeAgent(false);
       }
     };
     recognition.onend = () => {
@@ -2898,7 +2923,12 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       setDicteeAgentTexte('');
     };
     setDicteeAgent(true);
-    try { recognition.start(); } catch { setDicteeAgent(false); }
+    try {
+      recognition.start();
+    } catch {
+      setDicteeAgent(false);
+      setErrorStatus("Impossible de démarrer le microphone. Vérifiez les permissions du navigateur.");
+    }
   };
   useEffect(() => () => {
     effacerSilenceDictee();
@@ -3177,25 +3207,6 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
               Comment ça va, {firstName} ?
             </h1>
           )}
-
-          {/* Gros micro rouge : dicter une note ou une action d'un geste. */}
-          <div className="flex flex-col items-center gap-2">
-            <button
-              type="button"
-              onClick={demarrerDicteeAgent}
-              title={dicteeAgent ? 'Envoyer maintenant' : 'Dicter une note ou une action'}
-              aria-label={dicteeAgent ? 'Envoyer maintenant' : 'Dicter une note ou une action'}
-              className={`relative w-20 h-20 rounded-full flex items-center justify-center text-white shadow-[0_12px_30px_-6px_rgba(225,29,72,0.65)] transition-all active:scale-95 cursor-pointer ${
-                dicteeAgent ? 'bg-rose-600 scale-105' : 'bg-gradient-to-br from-rose-500 to-red-600 hover:brightness-110'
-              }`}
-            >
-              {dicteeAgent && <span className="absolute inset-0 rounded-full bg-rose-500/50 animate-ping" />}
-              {dicteeAgent ? <Square className="relative w-7 h-7 fill-current" /> : <Mic className="relative w-9 h-9" />}
-            </button>
-            <p className="text-xs font-semibold text-[#1a1230]/70">
-              {dicteeAgent ? 'Je vous écoute… arrêtez de parler pour envoyer' : 'Touchez pour dicter une note, une tâche, un RDV…'}
-            </p>
-          </div>
 
           {activeClient ? (
             <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 w-full">

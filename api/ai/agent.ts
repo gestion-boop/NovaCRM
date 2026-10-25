@@ -21,10 +21,9 @@ const NOVA_SUPER_ASSISTANT_USER_ID = '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29';
 let preferredGeminiModel = 'gemini-2.5-flash';
 const candidateGeminiModels = [
   'gemini-2.5-flash',
-  'gemini-flash-latest',
   'gemini-2.5-flash-lite',
-  'gemini-3.6-flash',
-  'gemini-3.7-flash',
+  'gemini-2.0-flash',
+  'gemini-flash-latest',
 ];
 
 async function resolveIsNovaSuperAssistant(req: any): Promise<boolean> {
@@ -1192,50 +1191,68 @@ ${
     if (geminiApiKey) {
       try {
         const toGeminiSchema = (schema: any): any => {
-          if (!schema || typeof schema !== 'object') return { type: 'OBJECT' };
+          if (!schema || typeof schema !== 'object') return undefined;
+          const rawType = (schema.type || 'object').toUpperCase();
+          const propEntries = schema.properties && typeof schema.properties === 'object'
+            ? Object.entries(schema.properties)
+            : [];
+          // Gemini v1beta rejette (HTTP 400 INVALID_ARGUMENT) tout schéma OBJECT
+          // dont `properties` est vide (ex. get_overdue_tasks). Dans ce cas on
+          // omet complètement `parameters` sur la déclaration de fonction.
+          if (rawType === 'OBJECT' && propEntries.length === 0) {
+            return undefined;
+          }
           const res: any = {
-            type: (schema.type || 'object').toUpperCase(),
+            type: rawType,
           };
           if (schema.description) res.description = schema.description;
           if (schema.enum) res.enum = schema.enum;
-          if (schema.properties) {
+          if (propEntries.length > 0) {
             res.properties = {};
-            for (const [k, v] of Object.entries(schema.properties)) {
-              res.properties[k] = toGeminiSchema(v);
+            for (const [k, v] of propEntries) {
+              const converted = toGeminiSchema(v);
+              if (converted) res.properties[k] = converted;
             }
           }
-          if (schema.required && Array.isArray(schema.required)) {
+          if (schema.required && Array.isArray(schema.required) && schema.required.length > 0) {
             res.required = schema.required;
           }
           if (schema.items) {
-            res.items = toGeminiSchema(schema.items);
+            const convertedItems = toGeminiSchema(schema.items);
+            if (convertedItems) res.items = convertedItems;
           }
           return res;
         };
 
         const geminiFunctionDeclarations = activeTools
           .filter((t: any) => t.name !== 'web_search')
-          .map((t: any) => ({
-            name: t.name,
-            description: t.description || '',
-            parameters: toGeminiSchema(t.input_schema || t.parameters),
-          }));
+          .map((t: any) => {
+            const parameters = toGeminiSchema(t.input_schema || t.parameters);
+            return {
+              name: t.name,
+              description: t.description || '',
+              ...(parameters ? { parameters } : {}),
+            };
+          });
 
         const geminiContents: { role: string; parts: any[] }[] = [];
         for (const m of messages as any[]) {
+          const msgText = String(m?.text || '').trim();
+          if (!msgText) continue;
           const role = m.sender === 'user' ? 'user' : 'model';
           if (geminiContents.length === 0 && role !== 'user') continue;
           if (geminiContents.length > 0 && geminiContents[geminiContents.length - 1].role === role) {
-            geminiContents[geminiContents.length - 1].parts[0].text += `\n${m.text}`;
+            geminiContents[geminiContents.length - 1].parts[0].text += `\n${msgText}`;
           } else {
-            geminiContents.push({ role, parts: [{ text: m.text }] });
+            geminiContents.push({ role, parts: [{ text: msgText }] });
           }
         }
-        if (prompt) {
+        const trimmedPrompt = String(prompt || '').trim();
+        if (trimmedPrompt) {
           if (geminiContents.length > 0 && geminiContents[geminiContents.length - 1].role === 'user') {
-            geminiContents[geminiContents.length - 1].parts[0].text += `\n${prompt}`;
+            geminiContents[geminiContents.length - 1].parts[0].text += `\n${trimmedPrompt}`;
           } else {
-            geminiContents.push({ role: 'user', parts: [{ text: prompt }] });
+            geminiContents.push({ role: 'user', parts: [{ text: trimmedPrompt }] });
           }
         }
 
@@ -1272,7 +1289,19 @@ ${
               if (data?.error) {
                 lastErr = data.error;
                 const msg = (data.error.message || '').toLowerCase();
-                if (data.error.status === 'NOT_FOUND' || msg.includes('not found') || msg.includes('no longer available')) {
+                const status = String(data.error.status || '');
+                if (
+                  r.status === 404 ||
+                  r.status === 429 ||
+                  r.status >= 500 ||
+                  status === 'NOT_FOUND' ||
+                  status === 'RESOURCE_EXHAUSTED' ||
+                  status === 'UNAVAILABLE' ||
+                  msg.includes('not found') ||
+                  msg.includes('no longer available') ||
+                  msg.includes('quota') ||
+                  msg.includes('overloaded')
+                ) {
                   continue;
                 }
                 return { ok: false, error: data.error };
@@ -1290,6 +1319,49 @@ ${
           let parts: any[] = geminiRes.data.candidates[0].content?.parts || [];
           let properties: any[] | undefined;
           let generatedImage: { dataUrl: string; intent: string; label: string } | undefined;
+
+          // Relance multi-outils (même filet de sécurité que Claude) : si la
+          // consigne dictée contient plusieurs actions ("et", "puis", "aussi")
+          // mais que Gemini n'a appelé qu'un seul outil au 1er tour.
+          const lastUserContent = [...geminiContents].reverse().find((c) => c.role === 'user');
+          const lastUserText = (lastUserContent?.parts || []).map((p: any) => p.text || '').join(' ');
+          const demandeMultipleGemini = /\b(et|puis|ainsi que|également|aussi)\b/i.test(lastUserText);
+          const initialFnCalls = parts.filter((p: any) => p.functionCall);
+          if (
+            demandeMultipleGemini &&
+            initialFnCalls.length === 1 &&
+            !['search_properties', 'generate_image', 'search_kdrive_documents'].includes(initialFnCalls[0].functionCall.name)
+          ) {
+            const firstFn = initialFnCalls[0].functionCall;
+            const relanceGem = await callGemini([
+              ...geminiContents,
+              { role: 'model', parts: initialFnCalls },
+              {
+                role: 'user',
+                parts: [
+                  {
+                    functionResponse: {
+                      name: firstFn.name,
+                      response: { success: true },
+                    },
+                  },
+                  {
+                    text:
+                      `Tu n'as appelé qu'un seul outil (${firstFn.name}) alors que ma demande en contenait plusieurs. ` +
+                      `Appelle MAINTENANT les outils correspondant aux actions restantes sans refaire celle déjà faite.`,
+                  },
+                ],
+              },
+            ]);
+            if (relanceGem?.ok && relanceGem.data?.candidates?.[0]) {
+              const extraParts = (relanceGem.data.candidates[0].content?.parts || []).filter(
+                (p: any) => (p.functionCall && p.functionCall.name !== firstFn.name) || typeof p.text === 'string'
+              );
+              if (extraParts.length > 0) {
+                parts = [...parts, ...extraParts];
+              }
+            }
+          }
 
           // 1. search_properties
           const propCall = parts.find((p: any) => p.functionCall?.name === 'search_properties');
