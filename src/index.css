@@ -1443,4 +1443,165 @@ textarea[class]:not([class~="bg-transparent"]) {
   border-bottom: 1px solid var(--nv-border-1) !important;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   11. CHARTE GRAPHIQUE NOVAVISIO — DÉGRADÉS TEAL-CYAN & BLEU COBALT
+   ──────────────────────────────────────────────────────────────────────────
+   Inspirée directement du nouveau logo NovaVisio (cercle boussole & œil en
+   dégradé Teal-Cyan #1B7D8F / #22D3EE ↔ Bleu Cobalt-Indigo #264C8A / #1E3A8A,
+   perle centrale blanche #FFFFFF). S'applique automatiquement dès que la
+   société active est NovaVisio (html.agency-novavisio), sans modifier aucune
+   fonctionnalité.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+html.agency-novavisio:not(.light-mode) {
+  --accent-color: #22B8CF;
+  --accent-color-rgb: 34, 184, 207;
+  --accent-text-color: #ffffff;
+  --nv-surface-app: #061826;
+  --nv-veil-rgb: 5, 22, 38;
+  --nv-surface-chrome: #082032;
+  --nv-surface-1: #0c2b40;
+  --nv-surface-1-hover: #113852;
+  --nv-surface-2: #0a2538;
+  --nv-border-1: rgba(56, 189, 248, 0.28);
+  --nv-field: #061a29;
+  --nv-field-border: #1d4e6e;
+  --ink-gold: #67e8f9;
+}
+
+/* Fond principal & coquille plein écran NovaVisio (dégradé abyssal Teal → Cobalt) */
+html.agency-novavisio:not(.light-mode),
+html.agency-novavisio:not(.light-mode) body,
+html.agency-novavisio:not(.light-mode) [class*="bg-[#071015" i] {
+  background-color: #051624 !important;
+  background-image:
+    radial-gradient(ellipse 75% 60% at 12% 8%, rgba(27, 125, 143, 0.36) 0%, transparent 65%),
+    radial-gradient(ellipse 70% 65% at 88% 90%, rgba(38, 76, 138, 0.42) 0%, transparent 65%),
+    linear-gradient(145deg, #04131f 0%, #072133 48%, #0b1c38 100%) !important;
+}
+
+/* Barre du haut, barre latérale & navigation mobile en dégradé Teal-Cyan → Bleu Cobalt */
+html.agency-novavisio:not(.light-mode) [class*="bg-[#081318" i],
+html.agency-novavisio:not(.light-mode) header,
+html.agency-novavisio:not(.light-mode) aside {
+  background-color: #071d2e !important;
+  background-image:
+    radial-gradient(ellipse 80% 100% at 0% 0%, rgba(27, 125, 143, 0.25) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(7, 30, 46, 0.96) 0%, rgba(9, 36, 56, 0.96) 52%, rgba(15, 33, 67, 0.96) 100%) !important;
+  border-color: rgba(56, 189, 248, 0.22) !important;
+}
+
+/* Cartes, panneaux, tuiles du Tableau de bord, colonnes Pipeline & modales */
+html.agency-novavisio:not(.light-mode) .dash-card,
+html.agency-novavisio:not(.light-mode) .nv-panel,
+html.agency-novavisio:not(.light-mode) [class*="bg-[#07191b" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-[#07191c" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-[#081b1e" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-[#0a1e20" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-[#0a2226" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-[#0b1c1e" i],
+html.agency-novavisio:not(.light-mode) [class*="bg-[#0e1a20" i] {
+  background-color: #0b283d !important;
+  background-image:
+    radial-gradient(circle at 100% 0%, rgba(34, 211, 238, 0.14) 0%, transparent 58%),
+    linear-gradient(135deg, rgba(21, 94, 117, 0.42) 0%, rgba(11, 40, 64, 0.94) 50%, rgba(28, 56, 108, 0.52) 100%) !important;
+  border-color: rgba(56, 189, 248, 0.26) !important;
+}
+
+html.agency-novavisio:not(.light-mode) .dash-card:hover {
+  box-shadow: 0 12px 32px -8px rgba(3, 12, 26, 0.8), 0 0 0 1px rgba(56, 189, 248, 0.48), 0 0 26px rgba(27, 125, 143, 0.35) !important;
+}
+
+/* Fiche Client en mode NovaVisio : dégradés Teal-Cyan & Bleu Cobalt du logo */
+html.agency-novavisio:not(.light-mode) .nv-client-hero {
+  background:
+    radial-gradient(ellipse 65% 120% at 8% -10%, rgba(34, 211, 238, 0.26) 0%, rgba(38, 76, 138, 0.16) 45%, transparent 75%),
+    radial-gradient(ellipse 50% 90% at 92% 0%, rgba(38, 76, 138, 0.28) 0%, transparent 65%),
+    linear-gradient(180deg, #071e2f 0%, #061828 58%, #0b1c36 100%) !important;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.32) !important;
+}
+
+html.agency-novavisio:not(.light-mode) .nv-bento-gold {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(56, 189, 248, 0.25) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(27, 125, 143, 0.48) 0%, rgba(12, 43, 71, 0.95) 50%, rgba(38, 76, 138, 0.55) 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.48) !important;
+  box-shadow: 0 12px 32px -10px rgba(3, 12, 26, 0.8), inset 0 1px 0 rgba(125, 211, 252, 0.28) !important;
+}
+
+html.agency-novavisio:not(.light-mode) .nv-bento-dark {
+  background:
+    radial-gradient(circle at 95% 100%, rgba(38, 76, 138, 0.28) 0%, transparent 60%),
+    linear-gradient(145deg, rgba(13, 52, 74, 0.92) 0%, rgba(8, 29, 48, 0.96) 62%, rgba(27, 56, 107, 0.88) 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.28) !important;
+  box-shadow: 0 10px 28px -10px rgba(3, 12, 26, 0.75), inset 0 1px 0 rgba(56, 189, 248, 0.16) !important;
+}
+
+html.agency-novavisio:not(.light-mode) .nv-copilot-banner {
+  background:
+    radial-gradient(ellipse 55% 130% at 10% 50%, rgba(27, 125, 143, 0.42) 0%, rgba(38, 76, 138, 0.22) 45%, transparent 75%),
+    linear-gradient(90deg, #0d3b4e 0%, #092238 52%, #162f5c 100%) !important;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.38) !important;
+}
+
+html.agency-novavisio:not(.light-mode) .nv-activity-shell {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(34, 211, 238, 0.12) 0%, transparent 70%),
+    linear-gradient(180deg, #082032 0%, #061826 70%, #0c1f3d 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.30) !important;
+  box-shadow: 0 20px 50px -12px rgba(2, 10, 22, 0.85), 0 0 28px -8px rgba(34, 211, 238, 0.16) !important;
+}
+
+/* Boutons d'action principaux, pastilles actives & avatars initiales en dégradé Logo NovaVisio */
+html.agency-novavisio .bg-\[\#F7BC5F\],
+html.agency-novavisio .hover\:bg-\[\#F7BC5F\]:hover,
+html.agency-novavisio [class*="from-[#FDE047]" i],
+html.agency-novavisio [class*="from-[#F7BC5F]" i]:not([class*="/1"]):not([class*="/2"]):not([class*="/3"]) {
+  background-image: linear-gradient(135deg, #1FA2B8 0%, #1B7D8F 46%, #264C8A 100%) !important;
+  background-color: #1B7D8F !important;
+  color: #ffffff !important;
+  border-color: rgba(103, 232, 249, 0.45) !important;
+  box-shadow: 0 6px 20px -4px rgba(27, 125, 143, 0.5) !important;
+}
+
+/* Textes et icônes d'accentuation harmonisés avec le Cyan-Bleu du logo */
+html.agency-novavisio:not(.light-mode) [class*="text-[#f7bc5f" i],
+html.agency-novavisio:not(.light-mode) [class*="text-[#f9c977" i],
+html.agency-novavisio:not(.light-mode) [class*="text-[#fad592" i],
+html.agency-novavisio:not(.light-mode) [class*="text-[#fde68a" i],
+html.agency-novavisio:not(.light-mode) [class*="text-[#fde047" i] {
+  color: #67e8f9 !important;
+}
+
+/* Mode Jour NovaVisio : dégradés Perle, Eau & Bleu Cobalt doux */
+html.agency-novavisio.light-mode {
+  --accent-color: #168AAD;
+  --accent-color-rgb: 22, 138, 173;
+  --accent-text-color: #ffffff;
+  --nv-surface-app: #eaf4fb;
+  --nv-veil-rgb: 234, 244, 251;
+  --nv-surface-chrome: #ffffff;
+  --nv-surface-1: #ffffff;
+  --nv-surface-1-hover: #f0f8ff;
+  --nv-surface-2: #edf6fc;
+  --nv-border-1: #bae6fd;
+  --nv-field: #f4faff;
+  --nv-field-border: #93c5fd;
+  --ink-gold: #0369a1;
+}
+
+html.agency-novavisio.light-mode,
+html.agency-novavisio.light-mode body {
+  background-image: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #e8eeff 100%) !important;
+}
+
+html.agency-novavisio.light-mode .dash-card,
+html.agency-novavisio.light-mode .nv-bento-gold,
+html.agency-novavisio.light-mode .nv-bento-dark,
+html.agency-novavisio.light-mode .nv-activity-shell {
+  background-image: linear-gradient(135deg, #ffffff 0%, #f5fbff 55%, #eef4ff 100%) !important;
+  border-color: #bae6fd !important;
+}
+
+
 

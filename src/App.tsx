@@ -98,6 +98,9 @@ function App() {
   // Agence active = Immosphera ? Sert au cloisonnement des écrans réservés à
   // cette agence (voir la vue Statistiques plus bas).
   const estAgenceImmosphera = /immosphera/i.test(activeAgency?.name ?? '');
+  const estAgenceNovavisio =
+    /novavisio/i.test(activeAgency?.name ?? '') ||
+    activeAgency?.id === '0cd9362c-316e-4b57-af0b-b6cea092961b';
 
   const unreadRemindersCount = countTodayAndOverdueTasks(tasks);
 
@@ -348,8 +351,16 @@ function App() {
   // claire en mode sombre, et repasser à la valeur d'origine en mode clair
   // (une fois filtrée, elle redonne exactement le rendu actuel, inchangé).
   useEffect(() => {
+    document.documentElement.classList.toggle('agency-novavisio', estAgenceNovavisio);
+  }, [estAgenceNovavisio]);
+
+  useEffect(() => {
     const isDefaultGold = accentColor === '#F7BC5F';
-    const effectiveColor = isDefaultGold ? (isDarkMode ? '#F0C860' : '#F7BC5F') : accentColor;
+    const effectiveColor = isDefaultGold
+      ? estAgenceNovavisio
+        ? (isDarkMode ? '#22B8CF' : '#168AAD')
+        : (isDarkMode ? '#F0C860' : '#F7BC5F')
+      : accentColor;
     if (effectiveColor) {
       updateCssAccentVars(effectiveColor);
     }
@@ -362,7 +373,13 @@ function App() {
       if (detail.accentColor !== undefined) {
         setAccentColor(detail.accentColor);
         const nextIsDefault = detail.accentColor === '#F7BC5F';
-        updateCssAccentVars(nextIsDefault ? (isDarkMode ? '#F0C860' : '#F7BC5F') : detail.accentColor);
+        updateCssAccentVars(
+          nextIsDefault
+            ? estAgenceNovavisio
+              ? (isDarkMode ? '#22B8CF' : '#168AAD')
+              : (isDarkMode ? '#F0C860' : '#F7BC5F')
+            : detail.accentColor
+        );
       }
     };
 
@@ -370,7 +387,7 @@ function App() {
     return () => {
       window.removeEventListener('novasphere:appearance-changed', handleAppearanceChanged);
     };
-  }, [accentColor, isDarkMode]);
+  }, [accentColor, isDarkMode, estAgenceNovavisio]);
 
   // Ticket #117 : même mécanisme que la couleur d'accent générale, mais
   // pour la couleur du calendrier (Agenda) uniquement.
