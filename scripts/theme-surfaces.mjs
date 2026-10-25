@@ -219,7 +219,7 @@ ${list(sorted(found.ring), 'ring', '', '.light-mode ')} {
    \`[class~=…]\` (mot exact) et non \`[class*=…]\` : \`bg-emerald-500\` doit
    correspondre, mais surtout PAS \`bg-emerald-500/10\`, qui est une teinte
    pâle sur laquelle il faut au contraire du texte foncé. */
-.light-mode :is([class*="bg-gradient-to-"],
+.light-mode :is([class*="bg-gradient-to-"]:not(.pipeline-column-bg):not(.pipeline-column-header):not(.pipeline-card):not(.support-card):not(.support-column):not(.nv-client-hero):not(.nv-card-hero):not(.nv-bento-gold):not(.nv-bento-dark):not(.nv-copilot-banner):not(.nv-activity-shell):not(.bg-clip-text):not([class*="from-white"]):not([class*="to-transparent"]):not([class*="to-black"]):not([class*="from-transparent"]),
 ${solidList.map((c) => `[class~="${c}"]`).join(',\n')}) {
   --ink-1: #ffffff;
   --ink-2: rgba(255, 255, 255, 0.82);

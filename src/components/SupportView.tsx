@@ -713,7 +713,7 @@ export const SupportView: React.FC = () => {
                 setDraggedTicketId(null);
                 if (ticket) void setTicketStatus(ticket, col.value);
               }}
-              className={`nv-bento-dark border rounded-2xl p-3.5 space-y-2.5 min-h-[220px] transition-all shadow-md relative overflow-hidden ${
+              className={`support-column nv-bento-dark border rounded-2xl p-3.5 space-y-2.5 min-h-[220px] transition-all shadow-md relative overflow-hidden ${
                 dragOverColumn === col.value ? 'border-[#F7BC5F] ring-2 ring-[#F7BC5F]/40 bg-[#F7BC5F]/20' : 'border-white/10'
               }`}
             >
@@ -740,7 +740,7 @@ export const SupportView: React.FC = () => {
                       setDragOverColumn(null);
                     }}
                     onClick={() => setSelectedTicketId(ticket.id)}
-                    className={`group relative w-full text-left p-3.5 rounded-xl bg-gradient-to-b from-white/[0.07] via-white/[0.02] to-black/60 border border-white/10 hover:border-[#F7BC5F]/50 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.6),0_0_16px_rgba(247,188,95,0.14)] transition-all cursor-grab active:cursor-grabbing backdrop-blur-md overflow-hidden ${
+                    className={`support-card group relative w-full text-left p-3.5 rounded-xl bg-gradient-to-b from-white/[0.07] via-white/[0.02] to-black/60 border border-white/10 hover:border-[#F7BC5F]/50 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.6),0_0_16px_rgba(247,188,95,0.14)] transition-all cursor-grab active:cursor-grabbing backdrop-blur-md overflow-hidden ${
                       draggedTicketId === ticket.id ? 'opacity-40' : ''
                     }`}
                   >
@@ -788,7 +788,7 @@ export const SupportView: React.FC = () => {
               <button
                 key={ticket.id}
                 onClick={() => setSelectedTicketId(ticket.id)}
-                className="group relative w-full text-left p-4 sm:p-5 nv-bento-dark border border-white/10 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-[#F7BC5F]/50 hover:shadow-[0_10px_30px_-5px_rgba(0,0,0,0.6),0_0_18px_rgba(247,188,95,0.12)] transition-all overflow-hidden"
+                className="support-card group relative w-full text-left p-4 sm:p-5 nv-bento-dark border border-white/10 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-[#F7BC5F]/50 hover:shadow-[0_10px_30px_-5px_rgba(0,0,0,0.6),0_0_18px_rgba(247,188,95,0.12)] transition-all overflow-hidden"
               >
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/40 to-transparent" />
                 <div className="relative z-10">

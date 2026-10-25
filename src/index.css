@@ -900,7 +900,7 @@ main[class*="bg-[#071015]/55" i] {
    `[class~=…]` (mot exact) et non `[class*=…]` : `bg-emerald-500` doit
    correspondre, mais surtout PAS `bg-emerald-500/10`, qui est une teinte
    pâle sur laquelle il faut au contraire du texte foncé. */
-.light-mode :is([class*="bg-gradient-to-"],
+.light-mode :is([class*="bg-gradient-to-"]:not(.pipeline-column-bg):not(.pipeline-column-header):not(.pipeline-card):not(.support-card):not(.support-column):not(.nv-client-hero):not(.nv-card-hero):not(.nv-bento-gold):not(.nv-bento-dark):not(.nv-copilot-banner):not(.nv-activity-shell):not(.bg-clip-text):not([class*="from-white"]):not([class*="to-transparent"]):not([class*="to-black"]):not([class*="from-transparent"]),
 [class~="bg-[#0083B0]"],
 [class~="bg-[#059669]"],
 [class~="bg-[#0E7490]"],
@@ -1094,9 +1094,18 @@ main[class*="bg-[#071015]/55" i] {
 .light-mode [class*="text-[#e5ab4c" i],
 .light-mode [class*="text-[#d4af37" i],
 .light-mode [class*="text-[#8b7355" i],
-.light-mode [class*="text-[#9c7a2e" i] { color: var(--ink-gold) !important; }
+.light-mode [class*="text-[#9c7a2e" i],
+.light-mode [class*="text-[#fde68a" i],
+.light-mode [class*="text-[#fde047" i],
+.light-mode [class*="text-[#fef08a" i],
+.light-mode [class*="text-[#fef9c3" i],
+.light-mode [class*="text-[#fffbeb" i],
+.light-mode [class*="text-amber-2" i],
+.light-mode [class*="text-yellow-2" i] { color: var(--ink-gold) !important; }
 .light-mode [class*="fill-[#f7bc5f" i],
-.light-mode [class*="fill-[#f9c977" i] { fill: var(--ink-gold) !important; }
+.light-mode [class*="fill-[#f9c977" i],
+.light-mode [class*="fill-[#fde68a" i],
+.light-mode [class*="fill-[#fde047" i] { fill: var(--ink-gold) !important; }
 
 /* ── 7. Voiles et liserés translucides ───────────────────────────────────── */
 /* bg-white/5, border-white/10… : pensés comme un éclaircissement sur fond
@@ -1433,18 +1442,295 @@ textarea[class]:not([class~="bg-transparent"]) {
   box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.85), 0 0 28px -8px rgba(247, 188, 95, 0.12);
 }
 
+/* ── Mode Jour : Surfaces Bento, Héros, Fiche Client, Pipeline & Support ── */
 .light-mode .nv-client-hero,
 .light-mode .nv-card-hero,
 .light-mode .nv-bento-gold,
 .light-mode .nv-bento-dark,
 .light-mode .nv-activity-shell {
-  background-color: var(--nv-surface-1) !important;
-  border-color: var(--nv-border-1) !important;
+  background-image: none !important;
+  background-color: var(--nv-surface-1, #ffffff) !important;
+  border-color: var(--nv-border-1, #dde3e9) !important;
+  color: var(--ink-1, #1b2126);
 }
 
+/* En-tête Client & Navigation */
+.light-mode .nv-client-hero {
+  border-bottom: 1px solid var(--nv-border-1, #dde3e9) !important;
+  box-shadow: 0 4px 16px -4px rgba(15, 23, 42, 0.05) !important;
+}
+
+.light-mode .nv-client-hero h1 {
+  color: #0f172a !important;
+}
+
+.light-mode .nv-client-hero button[title="Retour"],
+.light-mode .nv-client-hero button[aria-label="Partager"],
+.light-mode .nv-client-hero button[aria-label*="Partagé"] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1b2126 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+}
+
+/* Bento Doré (Montant estimé & coordonnées) */
+.light-mode .nv-bento-gold {
+  border-color: rgba(247, 188, 95, 0.45) !important;
+  box-shadow: 0 4px 18px -4px rgba(247, 188, 95, 0.16), 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+.light-mode .nv-bento-gold:hover {
+  border-color: rgba(247, 188, 95, 0.75) !important;
+  box-shadow: 0 8px 24px -4px rgba(247, 188, 95, 0.22) !important;
+}
+
+.light-mode .nv-bento-gold span[class*="text-[#FAD592]" i],
+.light-mode .nv-bento-dark span[class*="text-[#FAD592]" i] {
+  color: var(--ink-gold, #8a6417) !important;
+}
+
+/* Boîtes coordonnées (email & tél) */
+.light-mode .nv-coord-box,
+.light-mode .nv-bento-gold [class*="bg-black/50" i] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-mode .nv-coord-box a,
+.light-mode .nv-bento-gold [class*="bg-black/50" i] a {
+  color: #0f172a !important;
+}
+
+.light-mode .nv-coord-box a:hover,
+.light-mode .nv-bento-gold [class*="bg-black/50" i] a:hover {
+  color: var(--ink-gold, #8a6417) !important;
+}
+
+.light-mode .nv-coord-box svg,
+.light-mode .nv-bento-gold [class*="bg-black/50" i] svg {
+  color: #b45309 !important;
+}
+
+/* Bento Sombre (Structure, Attribution, Commentaire, Pipeline) */
+.light-mode .nv-bento-dark {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 16px -4px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+.light-mode .nv-bento-dark:hover {
+  border-color: rgba(247, 188, 95, 0.6) !important;
+  box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.09) !important;
+}
+
+.light-mode .nv-bento-dark select,
+.light-mode .nv-bento-dark textarea {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light-mode .nv-bento-dark select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.light-mode .nv-bento-dark label {
+  color: #475569 !important;
+}
+
+/* Cadre Copilote Nova & Dictée Vocale */
 .light-mode .nv-copilot-banner {
-  background: linear-gradient(90deg, rgba(247, 188, 95, 0.18) 0%, var(--nv-surface-2) 60%, rgba(247, 188, 95, 0.10) 100%) !important;
-  border-bottom: 1px solid var(--nv-border-1) !important;
+  background: linear-gradient(135deg, rgba(247, 188, 95, 0.14) 0%, #fdfbf7 55%, rgba(247, 188, 95, 0.08) 100%) !important;
+  border-bottom: 1px solid rgba(247, 188, 95, 0.35) !important;
+}
+
+.light-mode .nv-copilot-banner p {
+  color: #475569 !important;
+}
+
+.light-mode .nv-copilot-banner button:not(:last-child) {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+}
+
+.light-mode .nv-copilot-banner button:not(:last-child):hover {
+  background-color: #f8fafc !important;
+  border-color: rgba(247, 188, 95, 0.6) !important;
+  color: #0f172a !important;
+}
+
+.light-mode .nv-copilot-banner button:not(:last-child) svg {
+  color: #b45309 !important;
+}
+
+/* Onglets de la fiche client (Tâches, RDV, Notes, Emails, Documents) */
+.light-mode [data-tour="client-tabs"] {
+  background-color: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.light-mode [data-tour="client-tabs"] button {
+  color: #64748b !important;
+}
+
+.light-mode [data-tour="client-tabs"] button:hover {
+  color: #0f172a !important;
+  background-color: rgba(247, 188, 95, 0.08) !important;
+}
+
+.light-mode [data-tour="client-tabs"] button.border-\[\#F7BC5F\] {
+  color: var(--ink-gold, #8a6417) !important;
+  background-color: rgba(247, 188, 95, 0.14) !important;
+  border-bottom-color: #d97706 !important;
+  font-weight: 800 !important;
+}
+
+/* Titres dans le contenu d'activité */
+.light-mode .nv-activity-shell h2 {
+  color: #0f172a !important;
+}
+
+/* ── Mode Jour : Colonnes & Cartes Pipeline (Kanban) ── */
+.light-mode .pipeline-column-bg {
+  background-color: rgba(226, 232, 240, 0.92) !important;
+  border-color: #cbd5e1 !important;
+  --nv-surface-2: #ffffff;
+}
+
+.light-mode .pipeline-column-header {
+  background-image: none !important;
+  background-color: rgba(219, 226, 234, 0.96) !important;
+  border-bottom: 1px solid #cbd5e1 !important;
+}
+
+.light-mode .pipeline-column-header h3 {
+  color: #0f172a !important;
+}
+
+.light-mode .pipeline-column-header [class*="text-slate-3" i],
+.light-mode .pipeline-column-header [class*="text-slate-4" i] {
+  color: #475569 !important;
+}
+
+.light-mode .pipeline-column-header [class*="bg-white/" i] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-mode .pipeline-column-header [class*="text-[#fad592" i],
+.light-mode .pipeline-column-header [class*="text-[#f7bc5f" i] {
+  color: var(--ink-gold, #8a6417) !important;
+}
+
+.light-mode .pipeline-column-header [class*="bg-[#F7BC5F]/" i] {
+  background-color: rgba(247, 188, 95, 0.22) !important;
+  border-color: rgba(247, 188, 95, 0.5) !important;
+}
+
+.light-mode .pipeline-card {
+  background-image: none !important;
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 2px 6px -1px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+.light-mode .pipeline-card:hover {
+  border-color: rgba(247, 188, 95, 0.75) !important;
+  box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.12), 0 0 14px rgba(247, 188, 95, 0.18) !important;
+}
+
+.light-mode .pipeline-card h4 {
+  color: #0f172a !important;
+}
+
+.light-mode .pipeline-card h4:hover,
+.light-mode .pipeline-card:hover h4 {
+  color: var(--ink-gold, #8a6417) !important;
+}
+
+.light-mode .pipeline-card p {
+  color: #64748b !important;
+}
+
+.light-mode .pipeline-card [class*="border-t"] {
+  border-top-color: #f1f5f9 !important;
+}
+
+.light-mode .pipeline-card [class*="text-slate-4" i] {
+  color: #64748b !important;
+}
+
+.light-mode .pipeline-card [class*="bg-[#F7BC5F]/" i] {
+  background-color: rgba(247, 188, 95, 0.18) !important;
+  background-image: none !important;
+  border-color: rgba(247, 188, 95, 0.45) !important;
+  color: var(--ink-gold, #8a6417) !important;
+}
+
+.light-mode .pipeline-card [class*="bg-white/[0.04]" i] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #64748b !important;
+}
+
+/* ── Mode Jour : Colonnes & Cartes Support ── */
+.light-mode .support-column {
+  background-color: rgba(241, 245, 249, 0.95) !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-mode .support-column h3 {
+  color: #0f172a !important;
+}
+
+.light-mode .support-column [class*="bg-white/10" i] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+.light-mode .support-card {
+  background-image: none !important;
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 2px 6px -1px rgba(15, 23, 42, 0.08) !important;
+}
+
+.light-mode .support-card:hover {
+  border-color: rgba(247, 188, 95, 0.75) !important;
+  box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.12), 0 0 14px rgba(247, 188, 95, 0.18) !important;
+}
+
+.light-mode .support-card h4,
+.light-mode .support-card h3 {
+  color: #0f172a !important;
+}
+
+.light-mode .support-card:hover h4,
+.light-mode .support-card:hover h3 {
+  color: var(--ink-gold, #8a6417) !important;
+}
+
+.light-mode .support-card p,
+.light-mode .support-card [class*="text-gray-4" i] {
+  color: #64748b !important;
+}
+
+.light-mode .support-card [class*="text-[#F7BC5F]" i] {
+  color: var(--ink-gold, #8a6417) !important;
+}
+
+/* Titres et chiffres en dégradé (bg-clip-text) en Mode Jour */
+.light-mode .bg-clip-text {
+  background-image: linear-gradient(135deg, #8a6417 0%, #b45309 60%, #1b2126 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+  filter: none !important;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1577,9 +1863,16 @@ html.agency-novavisio [class*="from-[#F7BC5F]" i]:not([class*="/1"]):not([class*
   box-shadow: 0 6px 20px -4px rgba(27, 125, 143, 0.5) !important;
 }
 
-/* Textes en dégradé (bg-clip-text) sur NovaVisio : Blanc → Cyan → Bleu Azur (zéro jaune) */
-html.agency-novavisio .bg-clip-text {
+/* Textes en dégradé (bg-clip-text) sur NovaVisio : Blanc → Cyan → Bleu Azur en mode sombre, Cyan foncé → Cobalt en mode clair */
+html.agency-novavisio:not(.light-mode) .bg-clip-text {
   background-image: linear-gradient(90deg, #ffffff 0%, #67e8f9 52%, #60a5fa 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+}
+
+html.agency-novavisio.light-mode .bg-clip-text {
+  background-image: linear-gradient(90deg, #0369a1 0%, #0e7490 52%, #1e3a8a 100%) !important;
   -webkit-background-clip: text !important;
   background-clip: text !important;
   color: transparent !important;

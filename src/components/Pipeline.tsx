@@ -354,7 +354,7 @@ const PipelineCard = React.memo<{
       {...listeners}
       onClick={() => { if (contact && onSelectContact) onSelectContact(contact.id); }}
       style={couleur ? { borderLeft: `4px solid ${couleur}`, backgroundColor: `${couleur}15` } : undefined}
-      className={`group relative p-3.5 rounded-2xl bg-gradient-to-b from-white/[0.07] via-white/[0.02] to-black/60 border transition-all duration-200 touch-auto select-none backdrop-blur-md shadow-md overflow-hidden ${
+      className={`pipeline-card group relative p-3.5 rounded-2xl bg-gradient-to-b from-white/[0.07] via-white/[0.02] to-black/60 border transition-all duration-200 touch-auto select-none backdrop-blur-md shadow-md overflow-hidden ${
         contact ? 'cursor-pointer hover:-translate-y-0.5' : ''
       } ${
         isDragging
@@ -457,7 +457,7 @@ const PipelineColumn: React.FC<{
         isDragging ? 'scale-[1.01] opacity-70 z-30' : ''
       }`}
     >
-      <div className="pipeline-column-bg bg-gradient-to-b from-white/[0.06] to-transparent sticky top-0 z-10 rounded-t-2xl p-3.5 border-b border-white/10 flex items-center justify-between gap-2 backdrop-blur-md">
+      <div className="pipeline-column-header pipeline-column-bg bg-gradient-to-b from-white/[0.06] to-transparent sticky top-0 z-10 rounded-t-2xl p-3.5 border-b border-white/10 flex items-center justify-between gap-2 backdrop-blur-md">
         <div className="flex items-center gap-2 min-w-0">
           {canManageStructure && (
             <span {...attributes} {...listeners} className="text-slate-500 hover:text-[#F7BC5F] cursor-grab active:cursor-grabbing touch-none p-0.5">

@@ -2521,7 +2521,7 @@ export default function ClientProfileView({
           visible en permanence : le geste de retour au doigt (bord gauche)
           fonctionne depuis n'importe quelle position de défilement. */}
       {/* En-tête unifié de la fiche client (Identité, Coordonnées, Attribution, Commentaire & Pipeline) */}
-      <div className={`relative z-30 nv-client-hero bg-gradient-to-b from-[#090b0d]/95 to-[#06080a]/95 border-b border-[#F7BC5F]/25 p-4 sm:p-6 flex flex-col gap-4 backdrop-blur-xl ${showHalo ? 'target-halo-bounce' : ''}`}>
+      <div className={`relative z-30 nv-client-hero border-b border-[#F7BC5F]/25 p-4 sm:p-6 flex flex-col gap-4 backdrop-blur-xl ${showHalo ? 'target-halo-bounce' : ''}`}>
         {/* Liseré lumineux supérieur Noir & Or */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F] to-transparent opacity-80" />
         {/* Ligne 1 : Identité client, température interactive & Actions principales */}
@@ -2709,7 +2709,7 @@ export default function ClientProfileView({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center gap-2 min-w-0 p-2 rounded-xl bg-black/50 border border-[#F7BC5F]/20 hover:border-[#F7BC5F]/45 transition-colors">
+              <div className="nv-coord-box flex items-center gap-2 min-w-0 p-2 rounded-xl bg-black/50 border border-[#F7BC5F]/20 hover:border-[#F7BC5F]/45 transition-colors">
                 <Mail className="w-3.5 h-3.5 text-[#FDE047] shrink-0" />
                 {client.email ? (
                   <a
@@ -2724,7 +2724,7 @@ export default function ClientProfileView({
                   <span className="text-slate-500">Aucun e-mail</span>
                 )}
               </div>
-              <div className="flex items-center gap-2 min-w-0 p-2 rounded-xl bg-black/50 border border-[#F7BC5F]/20 hover:border-[#F7BC5F]/45 transition-colors">
+              <div className="nv-coord-box flex items-center gap-2 min-w-0 p-2 rounded-xl bg-black/50 border border-[#F7BC5F]/20 hover:border-[#F7BC5F]/45 transition-colors">
                 <Phone className="w-3.5 h-3.5 text-[#FDE047] shrink-0" />
                 {client.phone ? (
                   <a
