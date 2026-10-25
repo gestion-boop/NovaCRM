@@ -1411,24 +1411,27 @@ function App() {
                   className="relative w-full max-w-xl h-[80vh] max-h-[720px] rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-[#050d0f]"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <button
-                    type="button"
-                    onClick={() => { setNovaPopupOpen(false); setNovaExpandedFromPopup(true); setNovaOpen(true); }}
-                    title="Agrandir en plein écran"
-                    className="absolute z-30 w-8 h-8 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors"
-                    style={{ top: 'calc(0.75rem + env(safe-area-inset-top, 0px))', left: '3.25rem' }}
-                  >
-                    <Maximize2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNovaPopupOpen(false)}
-                    title="Fermer"
-                    className="absolute z-30 w-8 h-8 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-[#1a1230] flex items-center justify-center transition-colors"
+                  <div
+                    className="absolute z-30 flex items-center gap-1.5 p-1 rounded-full bg-white/80 hover:bg-white backdrop-blur-md border border-white/90 shadow-md transition-all"
                     style={{ top: 'calc(0.75rem + env(safe-area-inset-top, 0px))', left: '0.75rem' }}
                   >
-                    <X className="w-4 h-4" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setNovaPopupOpen(false)}
+                      title="Fermer"
+                      className="w-7 h-7 rounded-full bg-black/5 hover:bg-rose-500/20 text-[#1a1230] hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setNovaPopupOpen(false); setNovaExpandedFromPopup(true); setNovaOpen(true); }}
+                      title="Agrandir en plein écran"
+                      className="w-7 h-7 rounded-full bg-black/5 hover:bg-black/10 text-[#1a1230] flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                   <EcranErrorBoundary resetKey="nova-popup" plein>
                   <AssistantIAView
                     currentClientId={selectedClientProfileId}

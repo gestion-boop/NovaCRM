@@ -256,6 +256,52 @@ const QUICK_PROMPTS = [
   }
 ];
 
+// Raccourcis contextuels quand Nova est ouvert depuis une fiche client (ClientProfileView)
+const getClientQuickPrompts = (clientName: string) => [
+  {
+    icon: FileText,
+    label: 'Ajouter une note',
+    prompt: `Ajoute une note sur le dossier de ${clientName} : `,
+    isPrefill: true,
+    color: 'bg-teal-500/15 text-teal-700 border-teal-500/30'
+  },
+  {
+    icon: Calendar,
+    label: 'Fixer un RDV',
+    prompt: `Planifie un rendez-vous avec ${clientName}`,
+    isPrefill: false,
+    color: 'bg-[#F7BC5F]/20 text-[#B8863F] border-[#F7BC5F]/40'
+  },
+  {
+    icon: CheckSquare,
+    label: 'Créer une tâche',
+    prompt: `Crée une tâche de suivi pour ${clientName} : `,
+    isPrefill: true,
+    color: 'bg-purple-500/15 text-purple-700 border-purple-500/30'
+  },
+  {
+    icon: Sparkles,
+    label: 'Synthèse du dossier',
+    prompt: `Fais-moi une synthèse complète du dossier de ${clientName} (situation, profil, historique et points clés).`,
+    isPrefill: false,
+    color: 'bg-amber-500/15 text-amber-700 border-amber-500/30'
+  },
+  {
+    icon: Mail,
+    label: 'Rédiger un e-mail',
+    prompt: `Rédige un projet d'e-mail professionnel et chaleureux pour ${clientName} concernant son dossier.`,
+    isPrefill: false,
+    color: 'bg-sky-500/15 text-sky-700 border-sky-500/30'
+  },
+  {
+    icon: RefreshCw,
+    label: 'Prochaine étape',
+    prompt: `Quelle est la prochaine étape recommandée pour faire avancer le dossier de ${clientName} ?`,
+    isPrefill: false,
+    color: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30'
+  }
+];
+
 // Fonds d'écran dédiés à l'écran Nova IA (images fournies par Sylvain,
 // optimisées en JPEG léger + miniature). Choix stocké en local par
 // navigateur, indépendant du fond d'écran général du CRM (Paramètres).
@@ -293,7 +339,8 @@ const SortableQuickPrompt: React.FC<{
   label: string;
   Icon: React.FC<{ className?: string }>;
   onSelect: () => void;
-}> = ({ label, Icon, onSelect }) => {
+  color?: string;
+}> = ({ label, Icon, onSelect, color }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: label });
   return (
     <button
@@ -302,16 +349,18 @@ const SortableQuickPrompt: React.FC<{
       {...listeners}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       onClick={onSelect}
-      className={`w-full px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-2xl bg-white/70 hover:bg-white/90 border border-white/80 shadow-sm text-left flex items-center gap-2 sm:gap-2.5 text-[#1a1230] text-xs sm:text-sm font-semibold transition-colors touch-none cursor-grab active:cursor-grabbing ${
+      className={`w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-white/80 hover:bg-white border border-white/90 shadow-sm hover:shadow text-left flex items-center gap-2.5 sm:gap-3 text-[#1a1230] text-xs sm:text-sm font-semibold transition-all touch-none cursor-grab active:cursor-grabbing group hover:scale-[1.01] ${
         isDragging ? 'opacity-40 z-50 shadow-lg' : ''
       }`}
     >
+      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${color || 'bg-[#F7BC5F]/20 text-[#B8863F] border-[#F7BC5F]/30'}`}>
+        <Icon className="w-4 h-4" />
+      </div>
       {/* Demande explicite (30/08/2026) : "sur desktop, avoir les textes en
           entiers" — `truncate` coupait "Prochains RDV & Tâches"/"Ajouter
           une note client" en "...". Retiré : le texte passe à la ligne au
           besoin plutôt que d'être coupé. */}
-      <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-      <span className="leading-tight">{label}</span>
+      <span className="leading-tight font-bold">{label}</span>
     </button>
   );
 };
@@ -438,6 +487,7 @@ const NEBULA_SPARKS = Array.from({ length: 16 }, (_, i) => {
 export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt, onInitialPromptConsumed, onFoundProperties, onClose, onOpenContact, currentClientId, prefillPrompt, onPrefillPromptConsumed, autoVoiceMode, onAutoVoiceModeConsumed, startFresh = true }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const { allContacts = [], addContact } = useContacts();
+  const activeClient = currentClientId ? allContacts.find((c) => c.id === currentClientId) : null;
   const { tasks = [], addTask, updateTask } = useTasks();
   const { deals = [] } = useDeals();
   // Réutilisé plus bas : (1) compacter l'en-tête Nova sur mobile pour ne
@@ -2881,31 +2931,68 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
       <div className="novaai-dots" aria-hidden="true" />
 
       {!hasConversation ? (
-        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar flex flex-col items-center justify-center text-center gap-6 z-10 w-full max-w-2xl">
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar flex flex-col items-center justify-center text-center gap-5 sm:gap-6 z-10 w-full max-w-2xl px-2">
           <span className="text-xs font-black uppercase tracking-[0.3em] text-[#1a1230]/60">Nova</span>
-          <NovaMascotte taille={140} />
-          <h1 className="text-3xl sm:text-4xl font-black text-[#1a1230] tracking-tight">
-            Comment ça va, {firstName} ?
-          </h1>
-
-          {/* Demande explicite (ticket #283, KO sur les flèches) : réordonner
-              ces raccourcis au glisser-déposer, ordre mémorisé par appareil.
-              Ticket #281 (suite) : texte et icône également agrandis sur
-              ordinateur. */}
-          <DndContext sensors={quickPromptSensors} collisionDetection={closestCenter} onDragEnd={handleQuickPromptDragEnd}>
-            <SortableContext items={orderedQuickPrompts.map((p) => p.label)} strategy={rectSortingStrategy}>
-              {/* Signalé en revue : cette grille est réordonnable au
-                  glisser-déposer (dnd-kit) et commence au même bord que la
-                  zone de déclenchement du geste de retour (swipe-back) —
-                  sans exclusion, glisser une tuile de la 1ère colonne
-                  pourrait aussi fermer tout l'écran Nova. */}
-              <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
-                {orderedQuickPrompts.map((p) => (
-                  <SortableQuickPrompt key={p.label} label={p.label} Icon={p.icon} onSelect={() => handleSendMessage(p.prompt)} />
-                ))}
+          <NovaMascotte taille={130} />
+          {activeClient ? (
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#F7BC5F]/25 border border-[#F7BC5F]/40 text-slate-900 text-xs font-black shadow-sm">
+                <User className="w-3.5 h-3.5 text-[#B8863F]" />
+                <span>Fiche client · {activeClient.name}</span>
+                {activeClient.clientType && (
+                  <span className="opacity-75 font-semibold">({activeClient.clientType})</span>
+                )}
               </div>
-            </SortableContext>
-          </DndContext>
+              <h1 className="text-2xl sm:text-3xl font-black text-[#1a1230] tracking-tight">
+                Que souhaitez-vous faire sur ce dossier ?
+              </h1>
+              <p className="text-xs sm:text-sm text-[#1a1230]/75 max-w-md mx-auto">
+                Toutes les notes, tâches, rendez-vous et actions seront automatiquement reliés à la fiche de <strong>{activeClient.name}</strong>.
+              </p>
+            </div>
+          ) : (
+            <h1 className="text-3xl sm:text-4xl font-black text-[#1a1230] tracking-tight">
+              Comment ça va, {firstName} ?
+            </h1>
+          )}
+
+          {activeClient ? (
+            <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 w-full">
+              {getClientQuickPrompts(activeClient.name).map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => {
+                    if (p.isPrefill) {
+                      setPromptInput(p.prompt);
+                      if (promptTextareaRef.current) {
+                        promptTextareaRef.current.focus();
+                        autoResizePrompt();
+                      }
+                    } else {
+                      handleSendMessage(p.prompt);
+                    }
+                  }}
+                  className="w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-white/80 hover:bg-white border border-white/90 shadow-sm hover:shadow text-left flex items-center gap-2.5 sm:gap-3 text-[#1a1230] text-xs sm:text-sm font-semibold transition-all cursor-pointer group hover:scale-[1.01]"
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${p.color}`}>
+                    <p.icon className="w-4 h-4" />
+                  </div>
+                  <span className="truncate leading-tight font-bold">{p.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <DndContext sensors={quickPromptSensors} collisionDetection={closestCenter} onDragEnd={handleQuickPromptDragEnd}>
+              <SortableContext items={orderedQuickPrompts.map((p) => p.label)} strategy={rectSortingStrategy}>
+                <div data-swipe-back-exclude="true" className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
+                  {orderedQuickPrompts.map((p) => (
+                    <SortableQuickPrompt key={p.label} label={p.label} Icon={p.icon} color={p.color} onSelect={() => handleSendMessage(p.prompt)} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
         </div>
       ) : (
         <div ref={messagesScrollRef} className="flex-1 min-h-0 z-10 w-full max-w-3xl mx-auto overflow-y-auto custom-scrollbar py-4 space-y-4">
@@ -3501,7 +3588,13 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
           ref={promptTextareaRef}
           value={promptInput}
           onChange={(e) => { setPromptInput(e.target.value); autoResizePrompt(); }}
-          placeholder={loading ? 'Demander autre chose à Nova (pas besoin d\'attendre)...' : 'Demander à Nova...'}
+          placeholder={
+            loading
+              ? 'Demander autre chose à Nova (pas besoin d\'attendre)...'
+              : activeClient
+              ? `Demander à Nova pour ${activeClient.name}... (note, tâche, RDV, mail)`
+              : 'Demander à Nova...'
+          }
           rows={1}
           className="flex-1 bg-transparent outline-none text-sm text-[#1a1230] placeholder-[#1a1230]/50 resize-none py-1.5 max-h-[45vh] custom-scrollbar"
         />
