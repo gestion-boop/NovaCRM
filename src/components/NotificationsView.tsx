@@ -161,16 +161,6 @@ type NotificationItem = {
 // Notifications factices pour tester la différenciation visuelle et les couleurs dans la clochette
 const MOCK_NOTIFICATIONS: NotificationItem[] = [
   {
-    id: 'mock-update-1',
-    type: 'project',
-    rawType: 'app_update',
-    priority: 'important',
-    title: '🚀 Mise à jour disponible : Nova CRM',
-    description: 'Une nouvelle version a été déployée avec l\'optimisation des formulaires et la nouvelle clochette colorée.',
-    date: new Date().toISOString(),
-    navTarget: 'update',
-  },
-  {
     id: 'mock-urgent-1',
     type: 'project',
     rawType: 'urgent_deadline',
@@ -753,7 +743,10 @@ export const NotificationsView: React.FC<
     [dismissedMockIds]
   );
   const allNotifications = useMemo(
-    () => [...mockNotifications, ...notifications],
+    () =>
+      [...mockNotifications, ...notifications].filter(
+        (n) => n.rawType !== 'app_update' && n.navTarget !== 'update'
+      ),
     [mockNotifications, notifications]
   );
   const mobileNotifications = useMemo(
@@ -761,6 +754,20 @@ export const NotificationsView: React.FC<
     [allNotifications],
   );
   const visibleNotifications = isMobile ? mobileNotifications : allNotifications;
+
+  const buildStampText = useMemo(() => {
+    if (typeof __BUILD_INFO__ === 'undefined' || !__BUILD_INFO__?.sha) return '';
+    const sha = __BUILD_INFO__.sha;
+    const dateStr = __BUILD_INFO__.at
+      ? new Date(__BUILD_INFO__.at).toLocaleDateString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '';
+    return [sha, dateStr].filter(Boolean).join(' · ');
+  }, []);
 
   // Ticket #220 (v4) : pas juste "la même icône" mais la miniature de la
   // VRAIE tuile d'accueil correspondante (AccueilGrid.tsx) — même dégradé
@@ -802,7 +809,17 @@ export const NotificationsView: React.FC<
                 {visibleNotifications.length}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 truncate">{activeAgency.name}</p>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 truncate mt-0.5">
+              <span className="truncate">{activeAgency.name}</span>
+              {buildStampText && (
+                <>
+                  <span className="text-slate-600">·</span>
+                  <span className="font-mono text-[10px] text-teal-300 bg-teal-950/70 border border-teal-700/50 px-1.5 py-0.5 rounded-md shrink-0 shadow-sm" title="Version active">
+                    v.{buildStampText}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1130,42 +1147,10 @@ export const NotificationsView: React.FC<
                 </p>
               )}
 
-              {isAppUpdate ? (
-                <button
-                  type="button"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    if (notification.id.startsWith('mock-')) {
-                      void dismissNotification(notification.id);
-                      toast.success('Mise à jour simulée avec succès !');
-                      return;
-                    }
-                    try {
-                      await dismissNotification(notification.id);
-                      if (currentUser?.uid) {
-                        await supabase
-                          .from('notifications')
-                          .update({ dismissed_at: new Date().toISOString() })
-                          .eq('user_id', currentUser.uid)
-                          .eq('type', 'app_update')
-                          .is('dismissed_at', null);
-                      }
-                    } catch {
-                      /* best effort */
-                    }
-                    window.location.reload();
-                  }}
-                  className="px-3 py-1 rounded-full bg-gradient-to-r from-[#FDE047] via-[#F7BC5F] to-amber-500 hover:from-amber-400 hover:to-yellow-500 text-slate-950 font-black text-xs shadow-[0_0_14px_rgba(247,188,95,0.35)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ml-auto"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  Rafraîchir maintenant
-                </button>
-              ) : (
-                <div className="flex items-center gap-1 text-[11px] text-[#F7BC5F] font-semibold opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
-                  <span>Consulter</span>
-                  <MoveRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
-                </div>
-              )}
+              <div className="flex items-center gap-1 text-[11px] text-[#F7BC5F] font-semibold opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
+                <span>Consulter</span>
+                <MoveRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
+              </div>
             </div>
           </div>
         </div>

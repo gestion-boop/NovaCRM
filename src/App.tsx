@@ -77,7 +77,24 @@ const ChargementEcran = () => (
   </div>
 );
 
+function getRestoredNavigation(): { nav: string; clientId: string | null } | null {
+  try {
+    const raw = sessionStorage.getItem('novasphere:restore-nav');
+    if (raw) {
+      sessionStorage.removeItem('novasphere:restore-nav');
+      const data = JSON.parse(raw);
+      if (data && (!data.timestamp || Date.now() - data.timestamp < 10 * 60 * 1000)) {
+        return data;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 function App() {
+  const [restoredNav] = useState(() => getRestoredNavigation());
   const { currentUser, userProfile, activeAgency, setActiveAgency, authLoading, internGateMessage, logout } = useAuth();
   const { unreadNotificationsCount, unreadMobileNotificationsCount, unreadMessagesCount, unreadMailCount, openSupportTicketsCount, refreshUnreadNotifications, refreshUnreadMail } = useDashboardStats();
   const { addContact, contacts } = useContacts();
@@ -146,9 +163,10 @@ function App() {
   // Enveloppé ici, au niveau du setter, plutôt qu'aux 20 endroits qui
   // l'appellent : impossible d'en oublier un.
   const [currentNav, setCurrentNavImmediat] = useState(
-    (initialHighlightMessageId || cibleMessagerieInitiale.conversationId || cibleMessagerieInitiale.channelId)
+    restoredNav?.nav ||
+    ((initialHighlightMessageId || cibleMessagerieInitiale.conversationId || cibleMessagerieInitiale.channelId)
       ? 'chat'
-      : initialNavFromUrl || 'accueil'
+      : initialNavFromUrl || 'accueil')
   );
   const setCurrentNav = React.useCallback((valeur: React.SetStateAction<string>) => {
     React.startTransition(() => setCurrentNavImmediat(valeur));
@@ -682,7 +700,9 @@ function App() {
   // Client Profile Full View state
   // Même raison que setCurrentNav ci-dessus : ouvrir une fiche client charge
   // ClientProfileView à la demande, donc suspend.
-  const [selectedClientProfileId, setSelectedClientProfileIdImmediat] = useState<string | null>(null);
+  const [selectedClientProfileId, setSelectedClientProfileIdImmediat] = useState<string | null>(
+    restoredNav?.clientId || null
+  );
   const setSelectedClientProfileId = React.useCallback((valeur: React.SetStateAction<string | null>) => {
     React.startTransition(() => setSelectedClientProfileIdImmediat(valeur));
   }, []);
@@ -718,7 +738,7 @@ function App() {
   const [tabs, setTabs] = useState<AppTab[]>(() => [{
     id: 'tab-initial',
     nav: currentNav,
-    selectedClientProfileId: null,
+    selectedClientProfileId: restoredNav?.clientId || null,
     selectedClientProfileTab: undefined,
     title: NAV_ITEMS.find((i) => i.id === currentNav)?.label || 'Accueil',
   }]);
@@ -915,7 +935,7 @@ function App() {
     // overflow-hidden. `dvh` suit la hauteur réellement visible.
     <div className="h-[100dvh] bg-[#071015] text-gray-100 flex flex-col font-sans overflow-hidden select-none">
       <Toaster />
-      <UpdateBanner />
+      <UpdateBanner currentNav={currentNav} selectedClientProfileId={selectedClientProfileId} />
       <GoogleWorkspaceStatus />
       <AutoEnablePush />
       <EnablePushPrompt />

@@ -579,7 +579,7 @@ main[class*="bg-[#071015]/55" i] {
    dire s'il est périmé — à lancer après avoir ajouté un écran. */
 /* @generated:theme-surfaces:start — ne pas éditer à la main, voir scripts/theme-surfaces.mjs */
 /* ── Fonds sombres écrits en dur dans les composants → jeton de surface ──
-   68 teintes recensées automatiquement dans src/ (voir
+   67 teintes recensées automatiquement dans src/ (voir
    scripts/theme-surfaces.mjs). Le sélecteur ne cite PAS la valeur finale :
    il pose un jeton, redéfini une seule fois par thème plus haut dans ce
    fichier. Une même liste sert donc au mode nuit et au mode jour. */
@@ -615,7 +615,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#092226" i],
 [class*="bg-[#0a1e10" i],
 [class*="bg-[#0a1e20" i],
-[class*="bg-[#0a2226" i],
 [class*="bg-[#0a2326" i],
 [class*="bg-[#0a2528" i],
 [class*="bg-[#0b1416" i],
@@ -704,7 +703,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#092226" i],
 [class*="bg-[#0a1e10" i],
 [class*="bg-[#0a1e20" i],
-[class*="bg-[#0a2226" i],
 [class*="bg-[#0a2326" i],
 [class*="bg-[#0a2528" i],
 [class*="bg-[#0b1416" i],
@@ -775,7 +773,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#092226" i],
 [class*="bg-[#0a1e10" i],
 [class*="bg-[#0a1e20" i],
-[class*="bg-[#0a2226" i],
 [class*="bg-[#0a2326" i],
 [class*="bg-[#0a2528" i],
 [class*="bg-[#0b1416" i],
@@ -821,7 +818,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="hover:bg-[#0b2429" i]:hover,
 [class*="hover:bg-[#0c2e32" i]:hover,
 [class*="hover:bg-[#0c2e33" i]:hover,
-[class*="hover:bg-[#0d2a2f" i]:hover,
 [class*="hover:bg-[#0e3338" i]:hover,
 [class*="hover:bg-[#0f2a2d" i]:hover,
 [class*="hover:bg-[#102a2d" i]:hover,
