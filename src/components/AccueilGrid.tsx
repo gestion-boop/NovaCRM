@@ -38,6 +38,7 @@ import { estAgenceImmosphera, estDossierImmosphera, retirerDoublonsNotes } from 
 import { assemblerDictee } from '@/lib/dictee';
 import {
   lireDispositionAgence, ecrireDispositionAgence, lireHorodatageLocal, ecrireHorodatageLocal,
+  restaurerDispositionDepuisFige,
 } from '@/lib/dispositionAccueil';
 import { EVENEMENT_OUVRIR_DOSSIER_ACCUEIL, consommerOuvrirDossierAccueil } from '@/lib/rechercheGlobale';
 import agencyImmosphera from '@/assets/agency-immosphera.png';
@@ -737,6 +738,12 @@ const IMMOSPHERA_EXTRA_TILE_IDS = [
   // niveau et ne l'aurait jamais trouvée).
   'statistiques-etiquettes',
 ];
+
+const estImmospheraAgency = (a: { name?: string | null; slug?: string | null } | null | undefined) =>
+  /immosphera/i.test(a?.name ?? '') || /immosphera/i.test(a?.slug ?? '');
+
+const estNovavisioAgency = (a: { name?: string | null; slug?: string | null } | null | undefined) =>
+  /novavisio/i.test(a?.name ?? '') || /novavisio/i.test(a?.slug ?? '');
 
 // Tuile de la grille principale, rendue déplaçable via @dnd-kit/sortable
 // (hook useSortable — doit être un composant à part pour respecter les
@@ -1587,43 +1594,39 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // pas emporté par un dossier que l'utilisateur a lui-même masqué.
     const estAbsent = (id: string) =>
       !existsRecursive(base, id) && !idsCouvertsParVerrou(id) && (!hiddenIds.has(id) || (id === 'reserver-camera' && !estAgenceConseilsFinances(activeAgency)));
-    // Nouvelle tuile "Immosphera 360" : l'ajouter aussi pour les grilles déjà
-    // personnalisées/enregistrées qui ne l'ont pas encore, sinon changer
-    // seulement INITIAL_TILES n'a aucun effet (cf. commentaire normalizeTile
-    // plus haut sur ce même principe).
-    if (ajouterManquantes && estAbsent('immosphera360')) {
+    // Cloisonnement strict par agence : aucune tuile réservée à une agence
+    // ne doit être injectée dans la grille d'une autre agence (évite les cases fantômes
+    // invisibles qui repoussent les autres tuiles vers le bas).
+    const isImmo = estImmospheraAgency(activeAgency);
+    const isConseils = estAgenceConseilsFinances(activeAgency);
+    const isNovavisio = estNovavisioAgency(activeAgency);
+
+    // Nouvelle tuile "Immosphera 360" : UNIQUEMENT pour Immosphera
+    if (ajouterManquantes && isImmo && estAbsent('immosphera360')) {
       const immoTile = INITIAL_TILES.find((t) => t.id === 'immosphera360');
       if (immoTile) base = [...base, immoTile];
     }
-    // Même principe pour les nouvelles tuiles Immosphera (Site internet,
-    // Partenaires, Netty, Passerelle, Amanda) — la visibilité réelle est
-    // filtrée plus loin par canSeeImmospheraExtras, ici on s'assure juste
-    // qu'elles existent QUELQUE PART dans la grille sauvegardée (racine ou
-    // dans un dossier).
-    const missingExtras = ajouterManquantes ? IMMOSPHERA_EXTRA_TILE_IDS.filter((id) => estAbsent(id)) : [];
+    // Tuiles Immosphera extras : UNIQUEMENT pour Immosphera
+    const missingExtras = (ajouterManquantes && isImmo) ? IMMOSPHERA_EXTRA_TILE_IDS.filter((id) => estAbsent(id)) : [];
     if (missingExtras.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingExtras.includes(t.id));
       base = [...base, ...extraTiles];
     }
-    // Tuile Aura (Conseils Finances) — visibilité filtrée plus loin par
-    // canSeeConseilsFinances ; ici on garantit seulement sa présence dans
-    // les grilles déjà personnalisées, sans quoi ajouter la tuile à
-    // INITIAL_TILES n'aurait aucun effet pour les comptes existants.
-    const missingConseils = ajouterManquantes ? CONSEILS_EXTRA_TILE_IDS.filter((id) => estAbsent(id)) : [];
+    // Tuile Aura (Conseils Finances) : UNIQUEMENT pour Conseils Finances
+    const missingConseils = (ajouterManquantes && isConseils) ? CONSEILS_EXTRA_TILE_IDS.filter((id) => estAbsent(id)) : [];
     if (missingConseils.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingConseils.includes(t.id));
       base = [...base, ...extraTiles];
     }
-    // Même principe pour la tuile "Carte" (Novavisio) — visibilité réelle
-    // filtrée plus loin par canSeeNovavisio.
-    const missingNovavisio = ajouterManquantes ? NOVAVISIO_EXTRA_TILE_IDS.filter((id) => estAbsent(id)) : [];
+    // Tuile "Carte" (Novavisio) : UNIQUEMENT pour Novavisio
+    const missingNovavisio = (ajouterManquantes && isNovavisio) ? NOVAVISIO_EXTRA_TILE_IDS.filter((id) => estAbsent(id)) : [];
     if (missingNovavisio.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingNovavisio.includes(t.id));
       base = [...base, ...extraTiles];
     }
     // Réserver caméra (Immosphera & Novavisio) — visible uniquement hors
     // Conseils Finances ; s'assurer qu'elle existe dans les grilles déjà enregistrées.
-    if (!estAgenceConseilsFinances(activeAgency) && estAbsent('reserver-camera')) {
+    if (!isConseils && estAbsent('reserver-camera')) {
       const cameraTile = findInitialTile('reserver-camera');
       if (cameraTile) base = [...base, cameraTile];
     }
@@ -1756,6 +1759,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   };
 
   const loadTilesForKey = (key: string, cleAnonRepli?: string): TileItemNode[] => {
+    restaurerDispositionDepuisFige();
     let saved = localStorage.getItem(key);
     // Migration (14 octobre) : rien sous la nouvelle clé par utilisateur ?
     // Reprise unique depuis l'ancienne clé "_anon_" si elle a quelque
@@ -1825,7 +1829,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // haut (demande explicite), et n'est plus une tuile de la grille.
   const ADD_TILE_ID = '__add-tile__';
   const loadRootSlots = (key: string, currentTiles: TileItemNode[], cleAnonRepli?: string): (string | null)[] => {
-    const realIds = currentTiles.filter((t) => t.id !== 'nova-lock-spacer').map((t) => t.id);
+    restaurerDispositionDepuisFige();
+    const realIds = new Set(currentTiles.filter((t) => t.id !== 'nova-lock-spacer').map((t) => t.id));
     let saved: (string | null)[] = [];
     try {
       let raw = localStorage.getItem(key);
@@ -1844,21 +1849,23 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       if (Array.isArray(parsed)) saved = parsed;
     } catch { /* ignore */ }
     const grid: (string | null)[] = Array(ROOT_GRID_SLOTS).fill(null);
-    saved.slice(0, ROOT_GRID_SLOTS).forEach((id, i) => { if (typeof id === 'string' && id !== ADD_TILE_ID) grid[i] = id; });
-    // "Ajoute les tuiles manquantes" — une tuile présente dans `tiles` (ex:
-    // nouveau raccourci créé, ou nouvelle fonctionnalité activée) mais
-    // absente de la grille de positions sauvegardée est ajoutée à la suite
-    // des tuiles déjà placées, SANS jamais combler ni déplacer les cases
-    // vides que l'utilisateur a délibérément laissées pour son agencement.
+    saved.slice(0, ROOT_GRID_SLOTS).forEach((id, i) => {
+      // Filtrer les fantômes d'autres agences ou de tuiles supprimées
+      if (typeof id === 'string' && id !== ADD_TILE_ID && realIds.has(id)) {
+        grid[i] = id;
+      }
+    });
+    // "Ajoute les tuiles manquantes" — remplit les premières cases libres (null)
+    // sans JAMAIS repousser la grille vers le bas ni créer de décalage artificiel.
     const present = new Set(grid.filter(Boolean));
-    const missing = realIds.filter((id) => !present.has(id));
-    const lastPlaced = grid.reduce((last, id, idx) => (id ? idx : last), -1);
-    let insertIdx = Math.max(0, lastPlaced + 1);
+    const missing = Array.from(realIds).filter((id) => !present.has(id));
     for (const id of missing) {
-      while (insertIdx < grid.length && grid[insertIdx] !== null) insertIdx++;
-      if (insertIdx >= grid.length) break;
-      grid[insertIdx] = id;
-      insertIdx++;
+      const emptyIdx = grid.indexOf(null);
+      if (emptyIdx !== -1 && emptyIdx < grid.length) {
+        grid[emptyIdx] = id;
+      } else {
+        break;
+      }
     }
     return grid;
   };
@@ -1902,21 +1909,21 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     setRootSlots(recharges);
   }
   // Nouvelle tuile ajoutée à `tiles` après le montage (raccourci créé,
-  // dossier créé...) et absente des slots déjà en mémoire : même logique
-  // de comblement que loadRootSlots, réappliquée à chaud.
+  // dossier créé...) et absente des slots déjà en mémoire : comble les premières cases
+  // vides disponibles sans jamais décaler la grille vers le bas.
   useEffect(() => {
     setRootSlots((prev) => {
       const present = new Set(prev.filter(Boolean));
       const missing = tiles.filter((t) => t.id !== 'nova-lock-spacer' && !present.has(t.id)).map((t) => t.id);
       if (missing.length === 0) return prev;
       const grid = [...prev];
-      const lastPlaced = grid.reduce((last, id, idx) => (id ? idx : last), -1);
-      let insertIdx = Math.max(0, lastPlaced + 1);
       for (const id of missing) {
-        while (insertIdx < grid.length && grid[insertIdx] !== null) insertIdx++;
-        if (insertIdx >= grid.length) break;
-        grid[insertIdx] = id;
-        insertIdx++;
+        const emptyIdx = grid.indexOf(null);
+        if (emptyIdx !== -1 && emptyIdx < grid.length) {
+          grid[emptyIdx] = id;
+        } else {
+          break;
+        }
       }
       return grid;
     });
@@ -2155,8 +2162,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // TOUJOURS un tableau : le repli sur l'agence active n'était jamais atteint,
   // et il suffisait qu'Immosphera figure quelque part dans la liste des
   // agences connues pour que tout le monde voie ses tuiles.
-  const estImmosphera = (a: { name?: string | null; slug?: string | null } | null | undefined) =>
-    /immosphera/i.test(a?.name ?? '') || /immosphera/i.test(a?.slug ?? '');
+  const estImmosphera = estImmospheraAgency;
 
   const canSeeImmosphera = useMemo(
     () => estImmosphera(activeAgency),
@@ -2194,7 +2200,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Même correctif que canSeeImmosphera juste au-dessus : agence active
   // uniquement, jamais la liste complète des agences.
   const canSeeNovavisio = useMemo(
-    () => /novavisio/i.test(activeAgency?.name ?? '') || /novavisio/i.test((activeAgency as any)?.slug ?? ''),
+    () => estNovavisioAgency(activeAgency),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeAgency?.id],
   );
@@ -3567,6 +3573,12 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         } else if (caseEnfant !== -1) {
           next[caseEnfant] = d.id;
           change = true;
+        } else {
+          const premiereLibre = next.indexOf(null);
+          if (premiereLibre !== -1) {
+            next[premiereLibre] = d.id;
+            change = true;
+          }
         }
       });
       return change ? next : prev;
@@ -3708,16 +3720,17 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     }
   }
   // Défense en profondeur : une tuile réelle présente mais absente de
-  // rootSlots n'est jamais perdue silencieusement — insérée après la
-  // dernière tuile réelle sans jamais combler les cases vides intermédiaires.
+  // rootSlots n'est jamais perdue silencieusement — insérée dans la
+  // première case vide sans repousser la grille vers le bas.
   for (const t of tuilesRacine) {
     if (usedIds.has(t.id)) continue;
     if (realCount >= MAX_VISIBLE_TILES) { overflowTiles.push(t); continue; }
-    const lastFilledIdx = rootDisplaySlots.reduce((last, item, idx) => (item ? idx : last), -1);
-    let emptyIdx = lastFilledIdx + 1;
-    while (emptyIdx < rootDisplaySlots.length && rootDisplaySlots[emptyIdx] !== null) emptyIdx++;
-    if (emptyIdx < rootDisplaySlots.length) rootDisplaySlots[emptyIdx] = t;
-    else rootDisplaySlots.push(t);
+    const emptyIdx = rootDisplaySlots.indexOf(null);
+    if (emptyIdx !== -1) {
+      rootDisplaySlots[emptyIdx] = t;
+    } else {
+      rootDisplaySlots.push(t);
+    }
     realCount++;
   }
   // Ne jamais rendre les 36 slots en entier (ça repousserait le bouton
@@ -3755,18 +3768,15 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     setRootSlots((prev) => {
       const next: (string | null)[] = Array.from({ length: ROOT_GRID_SLOTS }, (_, i) => prev[i] ?? null);
       let change = false;
-      const lastOccupied = next.reduce((last, val, idx) => (val ? idx : last), -1);
-      let fallback = lastOccupied + 1;
       for (const id of aAncrer) {
         if (next.includes(id)) continue;
         // De préférence la case où elle s'affiche déjà (aucun saut visible).
         const ici = positions.get(id);
-        while (fallback < next.length && next[fallback] !== null) fallback++;
-        const cible = typeof ici === 'number' && next[ici] === null ? ici : (fallback < next.length ? fallback : -1);
-        if (cible === -1) continue;
-        next[cible] = id;
-        change = true;
-        if (cible === fallback) fallback++;
+        const cible = typeof ici === 'number' && next[ici] === null ? ici : next.indexOf(null);
+        if (cible >= 0 && cible < next.length) {
+          next[cible] = id;
+          change = true;
+        }
       }
       return change ? next : prev;
     });

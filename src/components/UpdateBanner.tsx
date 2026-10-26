@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { fetchServerVersion, setBootVersion, setServerVersion, isSafeToAutoReload } from '@/lib/updateStatus';
+import { figerDispositionAvantMiseAJour } from '@/lib/dispositionAccueil';
 
 // Vérification toutes les 25 secondes en arrière-plan
 const POLL_INTERVAL_MS = 25 * 1000;
@@ -80,7 +81,12 @@ export default function UpdateBanner({ currentNav, selectedClientProfileId }: Up
         /* ignore */
       }
 
-      window.location.reload();
+      // Figer immédiatement les tuiles à l'instant T avant le reload silencieux
+      figerDispositionAvantMiseAJour()
+        .catch((err) => console.warn('[Freeze before silent reload]', err))
+        .finally(() => {
+          window.location.reload();
+        });
     };
 
     const checkForUpdate = async () => {

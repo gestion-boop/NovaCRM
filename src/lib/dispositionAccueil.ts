@@ -83,6 +83,7 @@ interface EcritureEnAttente {
 const clefLot = (userId: string, agencyId: string) => `${userId}::${agencyId}`;
 const enVol: Partial<Record<ColonneDisposition, Promise<void>>> = {};
 const enAttente: Partial<Record<ColonneDisposition, Map<string, EcritureEnAttente>>> = {};
+const timerDebounce: Partial<Record<ColonneDisposition, ReturnType<typeof setTimeout>>> = {};
 
 async function ecrireMaintenant(colonne: ColonneDisposition, lot: Map<string, EcritureEnAttente>) {
   for (const e of lot.values()) {
@@ -134,6 +135,93 @@ function vider(colonne: ColonneDisposition): Promise<void> {
 }
 
 /**
+ * Force l'écriture immédiate de tous les lots en attente vers Supabase
+ * sans attendre le debounce de 300ms (essentiel avant un rechargement de page).
+ */
+export async function forcerSynchronisationDisposition(): Promise<void> {
+  const colonnes: ColonneDisposition[] = ['home_tiles', 'home_root_slots'];
+  const promesses: Promise<void>[] = [];
+
+  for (const col of colonnes) {
+    if (timerDebounce[col]) {
+      clearTimeout(timerDebounce[col]);
+      delete timerDebounce[col];
+    }
+    const lot = enAttente[col];
+    if (lot && lot.size > 0) {
+      promesses.push(vider(col));
+    } else if (enVol[col]) {
+      promesses.push(enVol[col]!);
+    }
+  }
+
+  if (promesses.length > 0) {
+    try {
+      await Promise.race([
+        Promise.all(promesses),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Fige les tuiles et leurs positions racine à l'instant T avant le passage d'une mise à jour.
+ * Sauvegarde un instantané persistant et flashe les horodatages locaux pour empêcher
+ * tout glissement, décalage ou écrasement par une version serveur ancienne.
+ */
+export async function figerDispositionAvantMiseAJour(): Promise<void> {
+  try {
+    // 1. Vider immédiatement toutes les files d'attente vers Supabase
+    await forcerSynchronisationDisposition();
+
+    // 2. Figer toutes les clés de disposition dans un instantané immuable
+    const snapshot: Record<string, string> = {};
+    const now = Date.now();
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('novasphere_home_slots_v5_') || k.startsWith('novasphere_home_tiles_v3_'))) {
+        const val = localStorage.getItem(k);
+        if (val) {
+          snapshot[k] = val;
+          ecrireHorodatageLocal(k, now);
+        }
+      }
+    }
+
+    localStorage.setItem(
+      'novasphere_frozen_layout_snapshot_v1',
+      JSON.stringify({ timestamp: now, keys: snapshot })
+    );
+  } catch (err) {
+    console.warn('[figerDispositionAvantMiseAJour]', err);
+  }
+}
+
+/**
+ * Restaure l'instantané figé si une clé locale s'avérait manquante après rechargement.
+ */
+export function restaurerDispositionDepuisFige(): void {
+  try {
+    const raw = localStorage.getItem('novasphere_frozen_layout_snapshot_v1');
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed?.keys && typeof parsed.keys === 'object') {
+      for (const [key, val] of Object.entries(parsed.keys)) {
+        if (typeof val === 'string' && !localStorage.getItem(key)) {
+          localStorage.setItem(key, val);
+          ecrireHorodatageLocal(key, parsed.timestamp || Date.now());
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * Enregistre la disposition d'une agence côté serveur, sans jamais effacer
  * celle des autres agences. Les appels rapprochés sont fusionnés : seule la
  * dernière valeur part, une fois l'écriture précédente terminée.
@@ -159,7 +247,13 @@ export function ecrireDispositionAgence(
     if (!enVol[colonne]) {
       // Petit délai : une rafale de changements (dossier créé puis rempli)
       // ne déclenche qu'une écriture.
-      enVol[colonne] = new Promise<void>((r) => setTimeout(r, 300)).then(() => vider(colonne));
+      if (timerDebounce[colonne]) clearTimeout(timerDebounce[colonne]);
+      enVol[colonne] = new Promise<void>((r) => {
+        timerDebounce[colonne] = setTimeout(r, 300);
+      }).then(() => {
+        delete timerDebounce[colonne];
+        return vider(colonne);
+      });
     }
   });
 }

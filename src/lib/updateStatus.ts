@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { figerDispositionAvantMiseAJour } from '@/lib/dispositionAccueil';
 
 export interface ServerVersion {
   version: string;
@@ -126,6 +127,12 @@ export function applyUpdateOnNavigation(destination: {
     /* ignore */
   }
 
-  window.location.reload();
+  // Figer immédiatement la disposition des tuiles à l'instant T avant le reload
+  figerDispositionAvantMiseAJour()
+    .catch((err) => console.warn('[Freeze before nav update]', err))
+    .finally(() => {
+      window.location.reload();
+    });
+
   return true;
 }
