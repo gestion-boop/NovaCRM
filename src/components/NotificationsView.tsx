@@ -41,6 +41,7 @@ import {
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { isStandaloneApp } from '@/hooks/useIsStandalone';
+import { UpdateStatusBadge } from './UpdateStatusBadge';
 
 interface RealNotificationRow {
   id: string;
@@ -809,30 +810,23 @@ export const NotificationsView: React.FC<
                 {visibleNotifications.length}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 truncate mt-0.5">
-              <span className="truncate">{activeAgency.name}</span>
-              {buildStampText && (
-                <>
-                  <span className="text-slate-600">·</span>
-                  <span className="font-mono text-[10px] text-teal-300 bg-teal-950/70 border border-teal-700/50 px-1.5 py-0.5 rounded-md shrink-0 shadow-sm" title="Version active">
-                    v.{buildStampText}
-                  </span>
-                </>
-              )}
-            </div>
+            <p className="text-[11px] text-slate-400 truncate">{activeAgency.name}</p>
           </div>
         </div>
 
-        {visibleNotifications.length > 0 && (
-          <button
-            type="button"
-            onClick={dismissAllNotifications}
-            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
-            title="Effacer toutes les alertes de cette liste"
-          >
-            Tout effacer
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <UpdateStatusBadge showDetails />
+          {visibleNotifications.length > 0 && (
+            <button
+              type="button"
+              onClick={dismissAllNotifications}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+              title="Effacer toutes les alertes de cette liste"
+            >
+              Tout effacer
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Mobile Push & PWA Notifications Card — repliée par défaut */}

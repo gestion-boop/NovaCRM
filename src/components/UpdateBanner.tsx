@@ -1,28 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { fetchServerVersion, setBootVersion, setServerVersion } from '@/lib/updateStatus';
 
 // Vérification toutes les 25 secondes en arrière-plan
 const POLL_INTERVAL_MS = 25 * 1000;
-
-interface ServerVersion {
-  version: string;
-  ref?: string;
-  sha?: string;
-  builtAt?: string;
-}
-
-async function fetchServerVersion(): Promise<ServerVersion | null> {
-  try {
-    const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) return null;
-    const json = await res.json();
-    if (!json.version) return null;
-    return json;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Vérifie si un modal de saisie en cours (lead, note, tâche) contient du texte tapé non sauvegardé.
@@ -78,6 +60,8 @@ export default function UpdateBanner({ currentNav, selectedClientProfileId }: Up
       const v = await fetchServerVersion();
       if (!cancelled && v) {
         bootVersionRef.current = v.version;
+        setBootVersion(v.version);
+        setServerVersion(v);
         if (currentUser?.uid) {
           try {
             await supabase
@@ -125,11 +109,14 @@ export default function UpdateBanner({ currentNav, selectedClientProfileId }: Up
     const checkForUpdate = async () => {
       if (!bootVersionRef.current) return;
       const v = await fetchServerVersion();
-      if (v && v.version && v.version !== bootVersionRef.current) {
-        updateDetectedRef.current = true;
-        // Si l'onglet ou la fenêtre est déjà inactif/en arrière-plan, recharger tout de suite en silence
-        if (document.visibilityState === 'hidden' || !document.hasFocus()) {
-          triggerSilentReload();
+      if (v) {
+        setServerVersion(v);
+        if (v.version && v.version !== bootVersionRef.current) {
+          updateDetectedRef.current = true;
+          // Si l'onglet ou la fenêtre est déjà inactif/en arrière-plan, recharger tout de suite en silence
+          if (document.visibilityState === 'hidden' || !document.hasFocus()) {
+            triggerSilentReload();
+          }
         }
       }
     };

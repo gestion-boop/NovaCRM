@@ -41,6 +41,7 @@ import { AGENCIES } from '@/types';
 
 import { supabase } from '@/lib/supabase';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
+import { UpdateStatusBadge } from './UpdateStatusBadge';
 
 interface HeaderProps {
   onOpenNouveauLead: () => void;
@@ -439,6 +440,9 @@ export const Header: React.FC<
         >
           <Settings className="w-4 h-4" />
         </button>
+
+        {/* Statut Mise à jour (Vert = Appliquée, Orange = En attente) */}
+        <UpdateStatusBadge className="hidden md:inline-flex" />
 
         {/* CLOCHETTE : CENTRE NOTIFICATIONS — tout à droite du header
             (après l'avatar), demandé pour rester visible en dernier sur
