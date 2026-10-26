@@ -413,7 +413,10 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName.trim() && !lastName.trim()) return;
+    if (!firstName.trim() && !lastName.trim()) {
+      toast.error('Veuillez renseigner au moins un prénom ou un nom pour enregistrer.');
+      return;
+    }
     if (submitting) return;
 
     const formattedFirstName = formatFirstName(firstName.trim());
@@ -492,7 +495,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <div className="relative w-full max-w-5xl bg-[#061a1d] border border-[#144447] rounded-2xl shadow-2xl my-auto overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="relative w-full max-w-5xl bg-[#061a1d] border border-[#144447] rounded-2xl shadow-2xl my-auto overflow-hidden flex flex-col max-h-[92vh] h-full sm:h-auto">
         
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-3.5 bg-[#07191b] border-b border-[#144447]/80 shrink-0">
@@ -507,14 +510,33 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-white bg-black/30 hover:bg-black/60 transition-colors"
-            title="Fermer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Bouton d'action directe en en-tête pour ne jamais le perdre de vue sur petit écran */}
+            <button
+              type="submit"
+              form="new-lead-form"
+              disabled={submitting}
+              className="px-3.5 py-1.5 bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-60"
+              title={modification ? 'Enregistrer les modifications' : 'Créer le lead'}
+            >
+              {submitting ? (
+                <Loader2 className="w-3.5 h-3.5 stroke-[2.5] animate-spin" />
+              ) : modification ? (
+                <Save className="w-3.5 h-3.5 stroke-[2.5]" />
+              ) : (
+                <UserPlus className="w-3.5 h-3.5 stroke-[2.5]" />
+              )}
+              <span>{submitting ? '...' : modification ? 'Enregistrer' : 'Créer'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-full text-slate-400 hover:text-white bg-black/30 hover:bg-black/60 transition-colors cursor-pointer"
+              title="Fermer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Form Body - Compact, Minimal Scrolling */}
@@ -1157,8 +1179,8 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
           </form>
         </div>
 
-        {/* Modal Footer Actions */}
-        <div className="px-5 py-3.5 bg-[#07191b] border-t border-[#144447]/80 flex items-center justify-end gap-3 shrink-0">
+        {/* Modal Footer Actions - Toujours épinglé en bas */}
+        <div className="px-5 py-3.5 bg-[#07191b] border-t border-[#144447]/80 flex items-center justify-end gap-3 shrink-0 sticky bottom-0 z-20 shadow-[0_-10px_20px_rgba(0,0,0,0.4)]">
           <button
             type="button"
             onClick={onClose}

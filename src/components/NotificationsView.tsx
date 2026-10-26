@@ -158,6 +158,70 @@ type NotificationItem = {
     | 'urgent';
 };
 
+// Notifications factices pour tester la différenciation visuelle et les couleurs dans la clochette
+const MOCK_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: 'mock-urgent-1',
+    type: 'project',
+    rawType: 'urgent_deadline',
+    priority: 'urgent',
+    title: 'Offre de prêt expirant aujourd’hui',
+    description: 'Dossier M. Dupont : la banque attend l’accord signé avant 18h00 pour finaliser le prêt.',
+    date: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+    navTarget: 'pipeline',
+  },
+  {
+    id: 'mock-chat-1',
+    type: 'chat',
+    rawType: 'chat_message',
+    priority: 'important',
+    title: 'Message de Natacha (Canal Général)',
+    description: '« Peux-tu vérifier les pièces justificatives manquantes pour le dossier ImmoSphera ? »',
+    date: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
+    navTarget: 'chat',
+  },
+  {
+    id: 'mock-lead-1',
+    type: 'project',
+    rawType: 'lead_assigned',
+    priority: 'important',
+    title: 'Nouveau lead attribué : Sophie Martin',
+    description: 'Recherche appartement 3 pièces centre-ville avec balcon (Budget max 320 000 €).',
+    date: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+    navTarget: 'clients',
+  },
+  {
+    id: 'mock-task-1',
+    type: 'project',
+    rawType: 'internal_task',
+    priority: 'normal',
+    title: 'Rappel : Relance commerciale investisseurs',
+    description: 'Prévoir un appel de suivi pour 5 clients prioritaires avant la fin de semaine.',
+    date: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
+    navTarget: 'projets-internes',
+  },
+  {
+    id: 'mock-support-1',
+    type: 'support',
+    rawType: 'support_ticket',
+    priority: 'normal',
+    title: 'Ticket Support #1042 résolu',
+    description: 'Votre demande d’export comptable a été traitée et validée avec succès.',
+    date: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
+    navTarget: 'support',
+  },
+  {
+    id: 'mock-camera-1',
+    type: 'camera',
+    rawType: 'camera_reservation',
+    priority: 'normal',
+    title: 'Réservation Caméra 360 confirmée',
+    description: 'Matériel réservé pour demain 10h00 - Visite virtuelle Villa Cannes.',
+    date: new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
+    navTarget: 'reserver-camera',
+  },
+];
+
 function safeDate(
   value?: string
 ) {
@@ -344,6 +408,7 @@ export const NotificationsView: React.FC<
   };
 
   const [realNotifications, setRealNotifications] = useState<RealNotificationRow[]>([]);
+  const [dismissedMockIds, setDismissedMockIds] = useState<string[]>([]);
   // Ticket #40 (nouvelle base) : la carte "Rappels & Alertes sur mobile"
   // prenait toute la place en haut du panneau — repliée par défaut, elle ne
   // s'ouvre qu'au clic (ou reste dépliée automatiquement une seule fois
@@ -498,6 +563,10 @@ export const NotificationsView: React.FC<
   // notification via `dismissed_at` plutôt qu'un DELETE, ce qui l'exclut
   // immédiatement de `loadNotifications()` (filtre `.is('dismissed_at', null)`).
   const dismissNotification = async (id: string) => {
+    if (id.startsWith('mock-')) {
+      setDismissedMockIds((prev) => [...prev, id]);
+      return;
+    }
     const row = realNotifications.find((n) => n.id === id);
     if (row) fermerNotificationsSysteme([row]);
     setRealNotifications((prev) => prev.filter((n) => n.id !== id));
@@ -505,7 +574,8 @@ export const NotificationsView: React.FC<
   };
 
   const dismissAllNotifications = async () => {
-    const ids = visibleNotifications.map((n) => n.id);
+    setDismissedMockIds(MOCK_NOTIFICATIONS.map((m) => m.id));
+    const ids = visibleNotifications.map((n) => n.id).filter((id) => !id.startsWith('mock-'));
     if (!ids.length) return;
     const rows = realNotifications.filter((n) => ids.includes(n.id));
     fermerNotificationsSysteme(rows);
@@ -668,11 +738,19 @@ export const NotificationsView: React.FC<
   // mobile ci-dessous. C'est une notification personnelle et ponctuelle
   // (pas du bruit récurrent comme les autres notifications 'project'), on
   // l'autorise donc explicitement sur mobile sans élargir tout le bucket.
-  const mobileNotifications = useMemo(
-    () => notifications.filter((n) => n.type === 'chat' || n.type === 'camera' || n.rawType === 'share'),
-    [notifications],
+  const mockNotifications = useMemo(
+    () => MOCK_NOTIFICATIONS.filter((m) => !dismissedMockIds.includes(m.id)),
+    [dismissedMockIds]
   );
-  const visibleNotifications = isMobile ? mobileNotifications : notifications;
+  const allNotifications = useMemo(
+    () => [...mockNotifications, ...notifications],
+    [mockNotifications, notifications]
+  );
+  const mobileNotifications = useMemo(
+    () => allNotifications.filter((n) => n.type === 'chat' || n.type === 'camera' || n.rawType === 'share' || n.id.startsWith('mock-')),
+    [allNotifications],
+  );
+  const visibleNotifications = isMobile ? mobileNotifications : allNotifications;
 
   // Ticket #220 (v4) : pas juste "la même icône" mais la miniature de la
   // VRAIE tuile d'accueil correspondante (AccueilGrid.tsx) — même dégradé
@@ -858,20 +936,109 @@ export const NotificationsView: React.FC<
     </div>
   );
 
+  function getNotificationTheme(notification: NotificationItem) {
+    const isAppUpdate = notification.rawType === 'app_update';
+    if (notification.priority === 'urgent' || notification.rawType.includes('urgent')) {
+      return {
+        cardBorder: 'border-rose-500/50 hover:border-rose-400/80',
+        cardBg: 'bg-gradient-to-r from-rose-950/50 via-[#220a13]/90 to-[#071317]/95',
+        cardShadow: 'shadow-[0_4px_24px_rgba(244,63,94,0.2)]',
+        leftAccent: 'border-l-[5px] border-l-rose-500',
+        badgeBg: 'bg-rose-500/25 text-rose-200 border border-rose-500/40',
+        badgeText: 'Urgent',
+        iconBg: 'from-rose-500 via-rose-600 to-red-700',
+        iconBorder: 'border-rose-400/50 shadow-[0_0_14px_rgba(244,63,94,0.4)]',
+        Icon: AlertCircle,
+      };
+    }
+    if (isAppUpdate) {
+      return {
+        cardBorder: 'border-[#F7BC5F]/50 hover:border-[#F7BC5F]/80',
+        cardBg: 'bg-gradient-to-r from-amber-950/45 via-[#1d1808]/90 to-[#071317]/95',
+        cardShadow: 'shadow-[0_4px_20px_rgba(247,188,95,0.2)]',
+        leftAccent: 'border-l-[5px] border-l-[#F7BC5F]',
+        badgeBg: 'bg-[#F7BC5F]/20 text-[#F7BC5F] border border-[#F7BC5F]/40',
+        badgeText: 'Système',
+        iconBg: 'from-amber-500 to-yellow-600',
+        iconBorder: 'border-[#F7BC5F]/40 shadow-[0_0_12px_rgba(247,188,95,0.3)]',
+        Icon: BellRing,
+      };
+    }
+    if (notification.type === 'chat' || notification.rawType.includes('chat') || notification.rawType.includes('message')) {
+      return {
+        cardBorder: 'border-sky-500/45 hover:border-sky-400/80',
+        cardBg: 'bg-gradient-to-r from-sky-950/45 via-[#081e2b]/90 to-[#071317]/95',
+        cardShadow: 'shadow-[0_4px_20px_rgba(56,189,248,0.18)]',
+        leftAccent: 'border-l-[5px] border-l-sky-400',
+        badgeBg: 'bg-sky-500/25 text-sky-200 border border-sky-400/40',
+        badgeText: 'Messagerie',
+        iconBg: 'from-sky-500 via-sky-600 to-blue-700',
+        iconBorder: 'border-sky-400/40 shadow-[0_0_12px_rgba(56,189,248,0.35)]',
+        Icon: MessageSquare,
+      };
+    }
+    if (notification.rawType.includes('lead') || notification.rawType.includes('contact') || notification.contactId) {
+      return {
+        cardBorder: 'border-emerald-500/45 hover:border-emerald-400/80',
+        cardBg: 'bg-gradient-to-r from-emerald-950/45 via-[#08241b]/90 to-[#071317]/95',
+        cardShadow: 'shadow-[0_4px_20px_rgba(52,211,153,0.18)]',
+        leftAccent: 'border-l-[5px] border-l-emerald-400',
+        badgeBg: 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40',
+        badgeText: 'Client & Lead',
+        iconBg: 'from-emerald-500 via-emerald-600 to-teal-700',
+        iconBorder: 'border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.35)]',
+        Icon: CheckCircle2,
+      };
+    }
+    if (notification.type === 'support' || notification.rawType.includes('support') || notification.rawType.includes('ticket')) {
+      return {
+        cardBorder: 'border-purple-500/45 hover:border-purple-400/80',
+        cardBg: 'bg-gradient-to-r from-purple-950/45 via-[#1a0e2a]/90 to-[#071317]/95',
+        cardShadow: 'shadow-[0_4px_20px_rgba(192,132,252,0.18)]',
+        leftAccent: 'border-l-[5px] border-l-purple-400',
+        badgeBg: 'bg-purple-500/25 text-purple-200 border border-purple-400/40',
+        badgeText: 'Support',
+        iconBg: 'from-purple-500 via-purple-600 to-indigo-700',
+        iconBorder: 'border-purple-400/40 shadow-[0_0_12px_rgba(192,132,252,0.35)]',
+        Icon: Headphones,
+      };
+    }
+    if (notification.type === 'camera' || notification.rawType.includes('camera')) {
+      return {
+        cardBorder: 'border-teal-500/45 hover:border-teal-400/80',
+        cardBg: 'bg-gradient-to-r from-teal-950/45 via-[#072528]/90 to-[#071317]/95',
+        cardShadow: 'shadow-[0_4px_20px_rgba(45,212,191,0.18)]',
+        leftAccent: 'border-l-[5px] border-l-teal-400',
+        badgeBg: 'bg-teal-500/25 text-teal-200 border border-teal-400/40',
+        badgeText: 'Caméra 360',
+        iconBg: 'from-teal-400 via-teal-500 to-cyan-700',
+        iconBorder: 'border-teal-400/40 shadow-[0_0_12px_rgba(45,212,191,0.35)]',
+        Icon: Camera,
+      };
+    }
+    // Tâches internes & projets par défaut
+    return {
+      cardBorder: 'border-amber-500/45 hover:border-amber-400/80',
+      cardBg: 'bg-gradient-to-r from-amber-950/45 via-[#231a0a]/90 to-[#071317]/95',
+      cardShadow: 'shadow-[0_4px_20px_rgba(251,191,36,0.18)]',
+      leftAccent: 'border-l-[5px] border-l-amber-400',
+      badgeBg: 'bg-amber-500/25 text-amber-200 border border-amber-400/40',
+      badgeText: 'Tâche & Projet',
+      iconBg: 'from-amber-500 via-amber-600 to-orange-700',
+      iconBorder: 'border-amber-400/40 shadow-[0_0_12px_rgba(251,191,36,0.35)]',
+      Icon: CheckSquare,
+    };
+  }
+
   function renderNotificationRow(notification: NotificationItem) {
     const isAppUpdate = notification.rawType === 'app_update';
+    const theme = getNotificationTheme(notification);
+    const IconComponent = theme.Icon;
+
     return (
       <div
         key={notification.id}
-        className={`group relative w-full rounded-2xl border transition-all duration-200 overflow-hidden shadow-md ${
-          notification.priority === 'urgent'
-            ? 'bg-rose-950/25 border-rose-500/35 hover:border-rose-400/60'
-            : isAppUpdate
-            ? 'bg-gradient-to-br from-amber-950/30 via-[#0a2327]/85 to-[#061417]/95 border-[#F7BC5F]/40 hover:border-[#F7BC5F]/70 shadow-[0_0_20px_rgba(247,188,95,0.15)]'
-            : notification.priority === 'important'
-            ? 'bg-gradient-to-br from-[#F7BC5F]/10 via-[#0a2327]/80 to-[#061417]/95 border-[#F7BC5F]/25 hover:border-[#F7BC5F]/50'
-            : 'bg-[#0a2226]/60 border-teal-500/15 hover:border-teal-500/40 hover:bg-[#0d2a2f]/70'
-        }`}
+        className={`group relative w-full rounded-2xl border transition-all duration-200 overflow-hidden ${theme.leftAccent} ${theme.cardBorder} ${theme.cardBg} ${theme.cardShadow} hover:scale-[1.01]`}
       >
         {/* Bouton supprimer (croix) en haut à droite */}
         <button
@@ -880,13 +1047,17 @@ export const NotificationsView: React.FC<
             void dismissNotification(notification.id);
           }}
           title="Supprimer cette alerte"
-          className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
+          className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
         >
           <X className="w-3.5 h-3.5" />
         </button>
 
         <div
           onClick={() => {
+            if (notification.id.startsWith('mock-')) {
+              if (notification.navTarget) onNavigate(notification.navTarget);
+              return;
+            }
             if (notification.rawType.startsWith('support_ticket')) {
               void dismissNotification(notification.id);
             } else if (notification.rawType.startsWith('camera_reservation')) {
@@ -923,33 +1094,23 @@ export const NotificationsView: React.FC<
               />
               <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-[#07191b] animate-pulse" />
             </div>
-          ) : (() => {
-            const { Icon, gradient } = tileFor(notification.type);
-            return (
-              <div
-                className={`w-9 h-9 rounded-xl shrink-0 mt-0.5 flex items-center justify-center bg-gradient-to-br ${gradient} border border-white/10 shadow-md`}
-              >
-                <Icon className="w-4 h-4 text-white" />
-              </div>
-            );
-          })()}
+          ) : (
+            <div
+              className={`w-9 h-9 rounded-xl shrink-0 mt-0.5 flex items-center justify-center bg-gradient-to-br ${theme.iconBg} border ${theme.iconBorder}`}
+            >
+              <IconComponent className="w-4 h-4 text-white" />
+            </div>
+          )}
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
               <h3 className="text-xs sm:text-sm font-bold text-white leading-snug">{notification.title}</h3>
-              {notification.priority === 'urgent' && (
-                <span className="text-[9px] uppercase tracking-wider font-extrabold text-rose-300 bg-rose-500/15 border border-rose-500/25 px-2 py-0.2 rounded-full">
-                  Urgent
-                </span>
-              )}
-              {isAppUpdate && (
-                <span className="text-[9px] uppercase tracking-wider font-extrabold text-[#F7BC5F] bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 px-2 py-0.2 rounded-full">
-                  Système
-                </span>
-              )}
+              <span className={`text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full ${theme.badgeBg}`}>
+                {theme.badgeText}
+              </span>
             </div>
 
-            <p className="text-xs text-slate-300/85 mt-1 leading-relaxed line-clamp-2">{notification.description}</p>
+            <p className="text-xs text-slate-200/90 mt-1 leading-relaxed line-clamp-2">{notification.description}</p>
 
             <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap">
               {notification.date && (
