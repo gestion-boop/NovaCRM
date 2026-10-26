@@ -23,6 +23,25 @@ describe('barre du bas mobile', () => {
     expect(screen.getAllByRole('button')).toHaveLength(3);
   });
 
+  it('affiche le bouton micro de dictée vocale au-dessus de Nova quand fourni', () => {
+    const onOpenDictation = vi.fn();
+    render(
+      <MobileBottomNav
+        currentNav="accueil"
+        onNavigate={vi.fn()}
+        onOpenMobileMenu={vi.fn()}
+        onOpenNotifications={vi.fn()}
+        onOpenNova={vi.fn()}
+        onOpenClientDictation={onOpenDictation}
+      />,
+    );
+    const micBtn = screen.getByRole('button', { name: 'Dictée vocale client' });
+    expect(micBtn).toBeTruthy();
+    fireEvent.click(micBtn);
+    expect(onOpenDictation).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole('button')).toHaveLength(4);
+  });
+
   it('ouvre la création d’un lead depuis le plus en haut', () => {
     const onClick = vi.fn();
     render(<MobileTopPlus onClick={onClick} label="Créer un lead" />);

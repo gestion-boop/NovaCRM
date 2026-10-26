@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Home, Menu, Plus } from 'lucide-react';
+import { Home, Menu, Mic, Plus } from 'lucide-react';
 import NovaMascotte from './NovaMascotte';
 
 interface MobileBottomNavProps {
@@ -11,19 +11,20 @@ interface MobileBottomNavProps {
   // directement — plus rapide sur mobile, pas de changement d'écran complet
   // avant même d'avoir tapé/dicté une demande.
   onOpenNova: () => void;
+  onOpenClientDictation?: () => void;
   unreadMessagesCount?: number;
   unreadNotificationsCount?: number;
   unreadRemindersCount?: number;
 }
 
-// Barre du bas : trois éléments seulement (Accueil, Nova, Menu). Le « + »
-// est remonté en haut de l'écran. La capsule est volontairement basse pour
-// ne plus couvrir la flèche « Réduire » des tuiles.
+// Barre du bas : trois éléments seulement (Accueil, Nova, Menu) et un bouton
+// micro rouge discret placé juste au-dessus du logo central Nova pour la dictée vocale.
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   currentNav,
   onNavigate,
   onOpenMobileMenu,
   onOpenNova,
+  onOpenClientDictation,
 }) => {
   // Demande explicite (24 octobre) : « quand on scroll vers le bas, la
   // barre du bas disparaît et dès qu'on scroll vers le haut elle
@@ -90,40 +91,55 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   return (
     <nav
       className={`md:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pt-0 pb-[calc(0.45rem+env(safe-area-inset-bottom,0px))] select-none pointer-events-none transition-transform duration-300 ease-out ${
-        visible ? 'translate-y-0' : 'translate-y-[calc(100%+1rem+env(safe-area-inset-bottom,0px))]'
+        visible ? 'translate-y-0' : 'translate-y-[calc(100%+2.5rem+env(safe-area-inset-bottom,0px))]'
       }`}
     >
-      <div className="pointer-events-auto mx-auto max-w-[280px] sm:max-w-xs rounded-full bg-gradient-to-r from-[#081f23]/95 via-[#0a272c]/95 to-[#081f23]/95 backdrop-blur-2xl border border-teal-500/30 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.9),0_0_20px_rgba(247,188,95,0.1)] px-4 py-1.5 flex items-center justify-between relative overflow-hidden">
-        {/* Liseré supérieur doré */}
-        <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
+      <div className="relative mx-auto max-w-[280px] sm:max-w-xs flex flex-col items-center">
+        {/* Micro dictée vocale client — placé au-dessus du logo central en rouge discret */}
+        {onOpenClientDictation && (
+          <button
+            type="button"
+            onClick={onOpenClientDictation}
+            title="Dictée vocale client"
+            aria-label="Dictée vocale client"
+            className="pointer-events-auto mb-1.5 w-9 h-9 rounded-full bg-gradient-to-b from-[#2a0e14]/90 via-[#20090d]/90 to-[#160609]/90 border border-rose-500/40 hover:border-rose-400/70 text-rose-300 hover:text-white flex items-center justify-center shadow-[0_2px_12px_rgba(244,63,94,0.35)] backdrop-blur-xl active:scale-90 transition-all cursor-pointer group"
+          >
+            <Mic className="w-4 h-4 text-rose-400 group-hover:text-rose-200 transition-colors" />
+          </button>
+        )}
 
-        <button
-          onClick={() => onNavigate('accueil')}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all cursor-pointer active:scale-95 ${
-            currentNav === 'accueil' ? 'text-[#F7BC5F] font-black' : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Home className="w-5 h-5 stroke-[2.2]" />
-          <span className="text-[10px] font-bold mt-0.5 tracking-tight">Accueil</span>
-        </button>
+        <div className="pointer-events-auto w-full rounded-full bg-gradient-to-r from-[#081f23]/95 via-[#0a272c]/95 to-[#081f23]/95 backdrop-blur-2xl border border-teal-500/30 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.9),0_0_20px_rgba(247,188,95,0.1)] px-4 py-1.5 flex items-center justify-between relative overflow-hidden">
+          {/* Liseré supérieur doré */}
+          <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
 
-        <button
-          onClick={onOpenNova}
-          title="Nova"
-          aria-label="Nova"
-          className="relative flex items-center justify-center h-10 w-12 active:scale-90 transition-transform group cursor-pointer"
-        >
-          <div className="absolute inset-0 rounded-full bg-[#F7BC5F]/20 blur-md group-hover:bg-[#F7BC5F]/35 transition-colors" />
-          <NovaMascotte taille={42} fixe />
-        </button>
+          <button
+            onClick={() => onNavigate('accueil')}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all cursor-pointer active:scale-95 ${
+              currentNav === 'accueil' ? 'text-[#F7BC5F] font-black' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Home className="w-5 h-5 stroke-[2.2]" />
+            <span className="text-[10px] font-bold mt-0.5 tracking-tight">Accueil</span>
+          </button>
 
-        <button
-          onClick={onOpenMobileMenu}
-          className="flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all cursor-pointer text-slate-400 hover:text-slate-200 active:scale-95"
-        >
-          <Menu className="w-5 h-5 stroke-[2.2]" />
-          <span className="text-[10px] font-bold mt-0.5 tracking-tight">Menu</span>
-        </button>
+          <button
+            onClick={onOpenNova}
+            title="Nova"
+            aria-label="Nova"
+            className="relative flex items-center justify-center h-10 w-12 active:scale-90 transition-transform group cursor-pointer"
+          >
+            <div className="absolute inset-0 rounded-full bg-[#F7BC5F]/20 blur-md group-hover:bg-[#F7BC5F]/35 transition-colors" />
+            <NovaMascotte taille={42} fixe />
+          </button>
+
+          <button
+            onClick={onOpenMobileMenu}
+            className="flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all cursor-pointer text-slate-400 hover:text-slate-200 active:scale-95"
+          >
+            <Menu className="w-5 h-5 stroke-[2.2]" />
+            <span className="text-[10px] font-bold mt-0.5 tracking-tight">Menu</span>
+          </button>
+        </div>
       </div>
     </nav>
   );

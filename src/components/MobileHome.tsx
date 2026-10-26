@@ -10,7 +10,7 @@ import {
   Bell, MessageSquare, Users, GitFork, FileText, Mail, BarChart2,
   Headphones, Calendar, FileEdit, UserPlus, Folder, Plus, X,
   ChevronDown, ChevronUp, ChevronRight, Megaphone, Camera, Lock, Zap, Home as HomeIcon, Globe,
-  ExternalLink, Bookmark, Target, Shield, Award, Sparkles, CheckSquare, Image as ImageIcon, MapPin, Settings, Mic,
+  ExternalLink, Bookmark, Target, Shield, Award, Sparkles, CheckSquare, Image as ImageIcon, MapPin, Settings,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
@@ -911,17 +911,6 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {onOpenClientDictation && (
-            <button
-              type="button"
-              onClick={onOpenClientDictation}
-              title="Dicter une note vocale dans une fiche client"
-              aria-label="Dicter dans une fiche client"
-              className="w-11 h-11 rounded-full bg-[#081e22]/90 border border-[#F7BC5F]/40 text-[#FAD592] hover:bg-[#F7BC5F]/15 flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer"
-            >
-              <Mic className="w-5 h-5 text-[#F7BC5F]" />
-            </button>
-          )}
           {onOpenNouveauLead && (
             <button
               type="button"

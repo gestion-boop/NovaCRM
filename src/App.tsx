@@ -1805,6 +1805,7 @@ function App() {
           // ensuite : "mode Commercial/Bureau" — openNovaMobile respecte le
           // dernier mode choisi (voir plus haut).
           onOpenNova={() => openNovaMobile()}
+          onOpenClientDictation={() => setShowQuickClientDictation(true)}
           unreadMessagesCount={unreadMessagesCount}
           unreadNotificationsCount={unreadMobileNotificationsCount}
           unreadRemindersCount={unreadRemindersCount}
