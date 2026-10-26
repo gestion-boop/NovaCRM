@@ -530,6 +530,9 @@ interface AssistantIAViewProps {
   // selon la préférence mémorisée — voir openNovaMobile).
   autoVoiceMode?: boolean;
   onAutoVoiceModeConsumed?: () => void;
+  // Ouvre directement en mode dictée vocale directe (un clic sur le micro mobile = Nova s'ouvre et écoute immédiatement)
+  autoDictation?: boolean;
+  onAutoDictationConsumed?: () => void;
   // Demande explicite (30/08/2026) : "quand on clique sur le bonhomme ne
   // met pas l'historique à chaque fois... sauvegarde l'historique, mais
   // crée une nouvelle interface à chaque fois qu'on clique dessus" — l'accès
@@ -573,7 +576,7 @@ const NEBULA_SPARKS = Array.from({ length: 16 }, (_, i) => {
   };
 });
 
-export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt, onInitialPromptConsumed, onFoundProperties, onClose, onOpenContact, currentClientId, prefillPrompt, onPrefillPromptConsumed, autoVoiceMode, onAutoVoiceModeConsumed, startFresh = true, isPopup = false }) => {
+export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt, onInitialPromptConsumed, onFoundProperties, onClose, onOpenContact, currentClientId, prefillPrompt, onPrefillPromptConsumed, autoVoiceMode, onAutoVoiceModeConsumed, autoDictation, onAutoDictationConsumed, startFresh = true, isPopup = false }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const { allContacts = [], addContact } = useContacts();
   const [selectedClientOverrideId, setSelectedClientOverrideId] = useState<string | null>(null);
@@ -3072,6 +3075,17 @@ export const AssistantIAView: React.FC<AssistantIAViewProps> = ({ initialPrompt,
     dicteeAgentAnnuleeRef.current = true;
     try { dicteeAgentRecoRef.current?.stop(); } catch { /* rien */ }
   }, []);
+
+  // Démarre directement la dictée vocale si demandé (ex. clic sur le micro de la barre mobile)
+  useEffect(() => {
+    if (!autoDictation) return;
+    const timer = setTimeout(() => {
+      demarrerDicteeAgent();
+      onAutoDictationConsumed?.();
+    }, 120);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDictation]);
 
   const firstName = (userProfile?.displayName || currentUser?.displayName || '').split(' ')[0] || 'Sylvain';
 

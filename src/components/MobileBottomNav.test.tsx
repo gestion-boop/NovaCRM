@@ -32,10 +32,10 @@ describe('barre du bas mobile', () => {
         onOpenMobileMenu={vi.fn()}
         onOpenNotifications={vi.fn()}
         onOpenNova={vi.fn()}
-        onOpenClientDictation={onOpenDictation}
+        onOpenDictation={onOpenDictation}
       />,
     );
-    const micBtn = screen.getByRole('button', { name: 'Dictée vocale client' });
+    const micBtn = screen.getByRole('button', { name: /Dictée vocale/i });
     expect(micBtn).toBeTruthy();
     fireEvent.click(micBtn);
     expect(onOpenDictation).toHaveBeenCalledTimes(1);

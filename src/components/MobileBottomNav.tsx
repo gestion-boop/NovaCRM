@@ -11,6 +11,7 @@ interface MobileBottomNavProps {
   // directement — plus rapide sur mobile, pas de changement d'écran complet
   // avant même d'avoir tapé/dicté une demande.
   onOpenNova: () => void;
+  onOpenDictation?: () => void;
   onOpenClientDictation?: () => void;
   unreadMessagesCount?: number;
   unreadNotificationsCount?: number;
@@ -18,14 +19,16 @@ interface MobileBottomNavProps {
 }
 
 // Barre du bas : trois éléments seulement (Accueil, Nova, Menu) et un bouton
-// micro rouge discret placé juste au-dessus du logo central Nova pour la dictée vocale.
+// micro rouge discret placé juste au-dessus du logo central Nova pour la dictée vocale directe.
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   currentNav,
   onNavigate,
   onOpenMobileMenu,
   onOpenNova,
+  onOpenDictation,
   onOpenClientDictation,
 }) => {
+  const handleDictation = onOpenDictation || onOpenClientDictation;
   // Demande explicite (24 octobre) : « quand on scroll vers le bas, la
   // barre du bas disparaît et dès qu'on scroll vers le haut elle
   // réapparaît de suite ». Le défilement de toute l'appli se fait dans
@@ -95,13 +98,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       }`}
     >
       <div className="relative mx-auto max-w-[280px] sm:max-w-xs flex flex-col items-center">
-        {/* Micro dictée vocale client — placé au-dessus du logo central en rouge discret */}
-        {onOpenClientDictation && (
+        {/* Micro dictée vocale directe Nova — placé au-dessus du logo central en rouge discret */}
+        {handleDictation && (
           <button
             type="button"
-            onClick={onOpenClientDictation}
-            title="Dictée vocale client"
-            aria-label="Dictée vocale client"
+            onClick={handleDictation}
+            title="Dictée vocale directe Nova"
+            aria-label="Dictée vocale directe Nova"
             className="pointer-events-auto mb-1.5 w-9 h-9 rounded-full bg-gradient-to-b from-[#2a0e14]/90 via-[#20090d]/90 to-[#160609]/90 border border-rose-500/40 hover:border-rose-400/70 text-rose-300 hover:text-white flex items-center justify-center shadow-[0_2px_12px_rgba(244,63,94,0.35)] backdrop-blur-xl active:scale-90 transition-all cursor-pointer group"
           >
             <Mic className="w-4 h-4 text-rose-400 group-hover:text-rose-200 transition-colors" />

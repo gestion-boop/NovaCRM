@@ -246,6 +246,7 @@ function App() {
   // dans Nova (voir AssistantIAView.tsx) permet de basculer et met ce
   // stockage à jour pour la prochaine ouverture.
   const [novaAutoVoice, setNovaAutoVoice] = useState(false);
+  const [novaAutoDictation, setNovaAutoDictation] = useState(false);
   const openNovaMobile = () => {
     setNovaExpandedFromPopup(false);
     // Demande explicite (8 septembre) : « désactive le système vocal de
@@ -255,6 +256,13 @@ function App() {
     // tant que le vocal est désactivé (voir VOICE_FEATURES_ENABLED dans
     // AssistantIAView.tsx), quelle que soit la préférence déjà enregistrée.
     setNovaAutoVoice(false);
+    setNovaAutoDictation(false);
+    setNovaOpen(true);
+  };
+  const openNovaMobileWithDictation = () => {
+    setNovaExpandedFromPopup(false);
+    setNovaAutoVoice(false);
+    setNovaAutoDictation(true);
     setNovaOpen(true);
   };
   const openNovaForDeal = (dealTitle: string) => {
@@ -1604,6 +1612,7 @@ function App() {
                     onInitialPromptConsumed={() => setNovaAIPrompt(null)}
                     onClose={() => {
                       setNovaOpen(false);
+                      setNovaAutoDictation(false);
                       // Même retour contextuel que sur desktop (voir plus
                       // haut) si on vient d'agrandir depuis la mini-popup.
                       if (novaExpandedFromPopup) { setNovaExpandedFromPopup(false); setNovaPopupOpen(true); }
@@ -1613,6 +1622,8 @@ function App() {
                     onPrefillPromptConsumed={() => setNovaPrefillPrompt(null)}
                     autoVoiceMode={novaAutoVoice}
                     onAutoVoiceModeConsumed={() => setNovaAutoVoice(false)}
+                    autoDictation={novaAutoDictation}
+                    onAutoDictationConsumed={() => setNovaAutoDictation(false)}
                     // Voir commentaire équivalent côté bureau plus haut.
                     startFresh={!novaExpandedFromPopup}
                     onFoundProperties={(ids, queryText) => {
@@ -1805,7 +1816,7 @@ function App() {
           // ensuite : "mode Commercial/Bureau" — openNovaMobile respecte le
           // dernier mode choisi (voir plus haut).
           onOpenNova={() => openNovaMobile()}
-          onOpenClientDictation={() => setShowQuickClientDictation(true)}
+          onOpenDictation={() => openNovaMobileWithDictation()}
           unreadMessagesCount={unreadMessagesCount}
           unreadNotificationsCount={unreadMobileNotificationsCount}
           unreadRemindersCount={unreadRemindersCount}
