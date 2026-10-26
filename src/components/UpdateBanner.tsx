@@ -1,19 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { RefreshCw, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 
-// Signalé : le bandeau "mise à jour disponible" ne remontait qu'au bout de
-// 5 minutes sur mobile (l'appli reste ouverte en arrière-plan sans jamais
-// re-déclencher visibilitychange sur certains navigateurs mobiles/PWA) —
-// ramené à 45s pour que ça se voie quasi instantanément après un déploiement.
 const POLL_INTERVAL_MS = 45 * 1000; // 45 secondes
-const SNOOZE_MS = 60 * 60 * 1000; // 1 heure ("Plus tard")
 
-// Signalé (01/09/2026) : « le panneau, c'est ma preuve ». Il annonçait
-// qu'une version était disponible sans jamais dire LAQUELLE — impossible
-// donc de vérifier qu'on venait bien de recevoir le déploiement attendu.
-// version.json contient déjà la branche et le commit : on les affiche.
 interface ServerVersion {
   version: string;
   ref?: string;
@@ -33,32 +23,62 @@ async function fetchServerVersion(): Promise<ServerVersion | null> {
 }
 
 /**
- * Bandeau discret "mise à jour disponible" — PAS de notification push
- * navigateur (Notification API), juste un panneau in-app + une entrée dans
- * la clochette, pour ne pas déranger l'utilisateur avec une notif système.
- *
- * Détection : compare le `version.json` chargé au démarrage de l'app à celui
- * re-fetché périodiquement (toutes les 5 min + au retour d'onglet). Un clic
- * sur "Plus tard" masque le bandeau pendant 1h avant qu'il ne puisse
- * réapparaître.
+ * Vérifie si le rechargement peut se faire sans risque de perte de données.
+ * Ne recharge pas si l'utilisateur a de la saisie active ou un vocal en cours.
  */
-export default function UpdateBanner() {
+function isSafeToAutoReload(): boolean {
+  try {
+    // 1. Ne pas recharger si un champ de texte est en cours d'édition avec du texte saisi
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+      const val = (active as HTMLInputElement | HTMLTextAreaElement).value;
+      if (val && val.trim().length > 0) return false;
+    }
+    // 2. Ne pas recharger si une modale avec formulaire de saisie est ouverte
+    const modals = document.querySelectorAll('[role="dialog"], dialog');
+    for (const modal of Array.from(modals)) {
+      const inputs = modal.querySelectorAll('input, textarea');
+      for (const input of Array.from(inputs)) {
+        if ((input as HTMLInputElement).value?.trim()?.length > 0) return false;
+      }
+    }
+    // 3. Ne pas recharger si un enregistrement audio/vocal est en cours
+    if ((window as any).__novaIsRecordingAudio) return false;
+  } catch {
+    // En cas de doute, autoriser prudemment
+  }
+  return true;
+}
+
+interface UpdateBannerProps {
+  currentNav?: string;
+  selectedClientProfileId?: string | null;
+}
+
+/**
+ * Gestionnaire de mise à jour transparente et silencieuse :
+ * - Détecte en arrière-plan la disponibilité d'une nouvelle version (version.json).
+ * - Nettoie les anciennes notifications système d'app_update pour ne pas polluer la clochette.
+ * - Dès que l'onglet passe en arrière-plan (changement d'onglet, minimisation, écran verrouillé),
+ *   sauvegarde l'état de navigation et recharge automatiquement la page de façon transparente.
+ * - L'utilisateur retrouve son écran et sa session intacts dès son retour, sans déconnexion.
+ */
+export default function UpdateBanner({ currentNav, selectedClientProfileId }: UpdateBannerProps) {
   const { currentUser } = useAuth();
   const [bootVersion, setBootVersion] = useState<string | null>(null);
-  const [nouvelle, setNouvelle] = useState<ServerVersion | null>(null);
-  const [visible, setVisible] = useState(false);
-  const snoozedUntilRef = useRef<number>(0);
+  const pendingVersionRef = useRef<string | null>(null);
+  const reloadingRef = useRef(false);
+  const navStateRef = useRef({ currentNav, selectedClientProfileId });
+  navStateRef.current = { currentNav, selectedClientProfileId };
 
-  // Version au chargement de l'app
+  // 1. Découverte de la version initiale au démarrage
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const v = await fetchServerVersion();
       if (!cancelled && v) {
         setBootVersion(v.version);
-        // Au démarrage sur la version à jour : si une ancienne notification "app_update"
-        // était en attente (après rafraîchissement du navigateur ou du popup), on la marque
-        // comme traitée pour nettoyer immédiatement la pastille de la clochette.
+        // Nettoyer toute notification app_update résiduelle dans Supabase pour garder la clochette propre
         if (currentUser?.uid) {
           try {
             await supabase
@@ -78,135 +98,62 @@ export default function UpdateBanner() {
     };
   }, [currentUser?.uid]);
 
+  // 2. Surveillance périodique & application transparente au changement d'onglet
   useEffect(() => {
     if (!bootVersion) return;
 
-    const notifyBell = async (newVersion: string) => {
-      if (!currentUser?.uid) return;
-      const key = `novasphere:notified-version:${currentUser.uid}`;
-      if (localStorage.getItem(key) === newVersion) return;
-      localStorage.setItem(key, newVersion);
+    const performSilentReload = () => {
+      if (reloadingRef.current) return;
+      if (!isSafeToAutoReload()) return;
 
-      // Signalé : chaque déploiement ajoutait une nouvelle notification
-      // "Mise à jour disponible" sans jamais retirer les précédentes — pour
-      // 10 déploiements, 10 notifications identiques et inutiles. On
-      // masque désormais celles déjà en attente avant de poser la nouvelle,
-      // pour qu'il n'y en ait jamais plus d'une à la fois.
+      reloadingRef.current = true;
       try {
-        await supabase
-          .from('notifications')
-          .update({ dismissed_at: new Date().toISOString() })
-          .eq('user_id', currentUser.uid)
-          .eq('type', 'app_update')
-          .is('dismissed_at', null);
+        const state = navStateRef.current;
+        sessionStorage.setItem(
+          'novasphere:restore-nav',
+          JSON.stringify({
+            nav: state.currentNav,
+            clientId: state.selectedClientProfileId,
+            timestamp: Date.now(),
+          })
+        );
       } catch {
         /* best-effort */
       }
 
-      supabase
-        .rpc('create_notification', {
-          _user_id: currentUser.uid,
-          _type: 'app_update',
-          _title: '🚀 Mise à jour disponible',
-          _message: 'Une nouvelle version de Nova CRM a été déployée. Rafraîchissez pour en profiter.',
-          _entity_type: 'system',
-          _entity_id: null,
-          _agency_id: null,
-          _metadata: {},
-        } as any)
-        .then(
-          () => {},
-          () => {}
-        );
+      window.location.reload();
     };
 
     const checkForUpdate = async () => {
-      if (Date.now() < snoozedUntilRef.current) return;
       const v = await fetchServerVersion();
       if (v && v.version !== bootVersion) {
-        setNouvelle(v);
-        setVisible(true);
-        notifyBell(v.version);
+        pendingVersionRef.current = v.version;
+        // Si l'onglet est déjà masqué/en arrière-plan quand la MAJ est détectée, appliquer tout de suite
+        if (document.visibilityState === 'hidden') {
+          performSilentReload();
+        }
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && pendingVersionRef.current) {
+        // L'utilisateur vient de quitter l'onglet ou de minimiser : mise à jour transparente immédiate
+        performSilentReload();
+      } else if (document.visibilityState === 'visible') {
+        // Au retour sur l'onglet, vérifier si une version est sortie pendant son absence
+        checkForUpdate();
       }
     };
 
     const interval = setInterval(checkForUpdate, POLL_INTERVAL_MS);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') checkForUpdate();
-    };
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootVersion, currentUser?.uid]);
+  }, [bootVersion]);
 
-  const handleLater = () => {
-    setVisible(false);
-    snoozedUntilRef.current = Date.now() + SNOOZE_MS;
-  };
-
-  const handleRefresh = async () => {
-    if (currentUser?.uid) {
-      try {
-        await supabase
-          .from('notifications')
-          .update({ dismissed_at: new Date().toISOString() })
-          .eq('user_id', currentUser.uid)
-          .eq('type', 'app_update')
-          .is('dismissed_at', null);
-      } catch {
-        /* best effort */
-      }
-    }
-    window.location.reload();
-  };
-
-  if (!visible) return null;
-
-  return (
-    <div className="fixed bottom-6 right-6 z-[200] max-w-sm w-[calc(100vw-3rem)] sm:w-96 animate-fade-in">
-      <div className="bg-[#07191b] border border-[#F7BC5F]/40 rounded-2xl shadow-2xl p-4 flex items-start gap-3">
-        {/* Ticket #220 : même logo Nova CRM que partout ailleurs dans
-            l'appli (en-tête, clochette) au lieu d'une icône générique. */}
-        <img
-          src="/nova-mascotte.png"
-          alt="Nova CRM"
-          className="w-9 h-9 rounded-xl shrink-0 object-cover border border-[#F7BC5F]/40 bg-[#0a2528]"
-        />
-
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-white">Mise à jour disponible</p>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Une nouvelle version de Nova CRM a été déployée.
-          </p>
-          {(nouvelle?.ref || nouvelle?.sha) && (
-            <p className="text-[10px] font-mono text-slate-500 mt-1 truncate">
-              {[nouvelle.ref, nouvelle.sha].filter(Boolean).join(' · ')}
-            </p>
-          )}
-          <div className="flex items-center gap-2 mt-3">
-            <button
-              onClick={handleRefresh}
-              className="px-3 py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Rafraîchir
-            </button>
-            <button
-              onClick={handleLater}
-              className="px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/5 font-semibold text-xs"
-            >
-              Plus tard
-            </button>
-          </div>
-        </div>
-        <button onClick={handleLater} className="text-slate-500 hover:text-white p-1 rounded-lg hover:bg-white/10 shrink-0" title="Fermer">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  );
+  // Plus de bandeau flottant intempestif : tout se fait de manière transparente
+  return null;
 }

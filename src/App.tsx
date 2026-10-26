@@ -145,10 +145,25 @@ function App() {
   //
   // Enveloppé ici, au niveau du setter, plutôt qu'aux 20 endroits qui
   // l'appellent : impossible d'en oublier un.
+  // Restauration de l'écran après une mise à jour transparente en arrière-plan
+  const savedRestoreNav = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem('novasphere:restore-nav');
+      if (raw) {
+        sessionStorage.removeItem('novasphere:restore-nav');
+        const parsed = JSON.parse(raw);
+        if (Date.now() - (parsed.timestamp || 0) < 15 * 60 * 1000) {
+          return parsed;
+        }
+      }
+    } catch { /* ignore */ }
+    return null;
+  }, []);
+
   const [currentNav, setCurrentNavImmediat] = useState(
     (initialHighlightMessageId || cibleMessagerieInitiale.conversationId || cibleMessagerieInitiale.channelId)
       ? 'chat'
-      : initialNavFromUrl || 'accueil'
+      : savedRestoreNav?.nav || initialNavFromUrl || 'accueil'
   );
   const setCurrentNav = React.useCallback((valeur: React.SetStateAction<string>) => {
     React.startTransition(() => setCurrentNavImmediat(valeur));
@@ -290,6 +305,20 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
+  // Étiquette de version et date de build affichée en haut du panneau de notifications
+  const buildInfoBadge = useMemo(() => {
+    const info = typeof __BUILD_INFO__ !== 'undefined' ? __BUILD_INFO__ : null;
+    if (!info) return null;
+    const quand = info.at
+      ? new Date(info.at).toLocaleString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '';
+    return `MAJ ${info.sha}${quand ? ` · ${quand}` : ''}`;
+  }, []);
   // Signalé : "pense à mettre le mode jour sur le téléphone portable" — en
   // creusant, deux mécanismes de thème coexistaient sans être synchronisés :
   // ce booléen ici (jamais persisté, remis à `true` à chaque rechargement,
@@ -682,7 +711,9 @@ function App() {
   // Client Profile Full View state
   // Même raison que setCurrentNav ci-dessus : ouvrir une fiche client charge
   // ClientProfileView à la demande, donc suspend.
-  const [selectedClientProfileId, setSelectedClientProfileIdImmediat] = useState<string | null>(null);
+  const [selectedClientProfileId, setSelectedClientProfileIdImmediat] = useState<string | null>(
+    savedRestoreNav?.clientId || null
+  );
   const setSelectedClientProfileId = React.useCallback((valeur: React.SetStateAction<string | null>) => {
     React.startTransition(() => setSelectedClientProfileIdImmediat(valeur));
   }, []);
@@ -915,7 +946,10 @@ function App() {
     // overflow-hidden. `dvh` suit la hauteur réellement visible.
     <div className="h-[100dvh] bg-[#071015] text-gray-100 flex flex-col font-sans overflow-hidden select-none">
       <Toaster />
-      <UpdateBanner />
+      <UpdateBanner
+        currentNav={currentNav}
+        selectedClientProfileId={selectedClientProfileId}
+      />
       <GoogleWorkspaceStatus />
       <AutoEnablePush />
       <EnablePushPrompt />
@@ -1673,11 +1707,22 @@ function App() {
             <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/60 to-transparent pointer-events-none" />
 
             <div className="min-h-14 shrink-0 px-4.5 sm:px-5 flex items-center justify-between border-b border-teal-500/15 bg-gradient-to-r from-[#081b1e]/95 via-[#0b2427]/95 to-[#081b1e]/95 pt-[env(safe-area-inset-top,0px)]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#F7BC5F]/25 to-amber-600/30 border border-[#F7BC5F]/40 flex items-center justify-center text-[#FAD592] shadow-[0_0_12px_rgba(247,188,95,0.25)]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#F7BC5F]/25 to-amber-600/30 border border-[#F7BC5F]/40 flex items-center justify-center text-[#FAD592] shadow-[0_0_12px_rgba(247,188,95,0.25)] shrink-0">
                   <Bell className="w-4 h-4" />
                 </div>
-                <h2 className="text-sm font-bold text-white tracking-wide">Rappels &amp; Alertes</h2>
+                <div className="flex items-center gap-2 min-w-0">
+                  <h2 className="text-sm font-bold text-white tracking-wide shrink-0">Rappels &amp; Alertes</h2>
+                  {buildInfoBadge && (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-500/15 border border-teal-500/30 text-[10px] font-mono text-teal-300 font-semibold shadow-xs shrink-0"
+                      title="Version actuelle de NovaSphere et date de déploiement"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                      <span className="truncate">{buildInfoBadge}</span>
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 type="button"
