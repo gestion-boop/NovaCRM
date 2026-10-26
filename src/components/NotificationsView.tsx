@@ -755,20 +755,6 @@ export const NotificationsView: React.FC<
   );
   const visibleNotifications = isMobile ? mobileNotifications : allNotifications;
 
-  const buildStampText = useMemo(() => {
-    if (typeof __BUILD_INFO__ === 'undefined' || !__BUILD_INFO__?.sha) return '';
-    const sha = __BUILD_INFO__.sha;
-    const dateStr = __BUILD_INFO__.at
-      ? new Date(__BUILD_INFO__.at).toLocaleDateString('fr-FR', {
-          day: '2-digit',
-          month: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : '';
-    return [sha, dateStr].filter(Boolean).join(' · ');
-  }, []);
-
   // Ticket #220 (v4) : pas juste "la même icône" mais la miniature de la
   // VRAIE tuile d'accueil correspondante (AccueilGrid.tsx) — même dégradé
   // de couleur ET même icône, comme un mini-clone de la tuile, exactement
@@ -809,17 +795,7 @@ export const NotificationsView: React.FC<
                 {visibleNotifications.length}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 truncate mt-0.5">
-              <span className="truncate">{activeAgency.name}</span>
-              {buildStampText && (
-                <>
-                  <span className="text-slate-600">·</span>
-                  <span className="font-mono text-[10px] text-teal-300 bg-teal-950/70 border border-teal-700/50 px-1.5 py-0.5 rounded-md shrink-0 shadow-sm" title="Version active">
-                    v.{buildStampText}
-                  </span>
-                </>
-              )}
-            </div>
+            <p className="text-[11px] text-slate-400 truncate">{activeAgency.name}</p>
           </div>
         </div>
 

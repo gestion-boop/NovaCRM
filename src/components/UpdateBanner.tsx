@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 
-// Vérification toutes les 45 secondes en arrière-plan
-const POLL_INTERVAL_MS = 45 * 1000;
+// Vérification toutes les 25 secondes en arrière-plan
+const POLL_INTERVAL_MS = 25 * 1000;
 
 interface ServerVersion {
   version: string;
@@ -25,23 +25,18 @@ async function fetchServerVersion(): Promise<ServerVersion | null> {
 }
 
 /**
- * Vérifie si l'utilisateur est en train de taper dans un champ ou d'éditer un formulaire
- * pour ne pas recharger brutalement en pleine saisie.
+ * Vérifie si un modal de saisie en cours (lead, note, tâche) contient du texte tapé non sauvegardé.
+ * Ne bloque JAMAIS un rechargement pour une simple barre de recherche ou navigation passive.
  */
 function isSafeToAutoReload(): boolean {
   try {
-    const active = document.activeElement;
-    if (active) {
-      const tag = active.tagName.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || (active as HTMLElement).isContentEditable) {
-        return false;
-      }
-    }
-    // Si un modal avec formulaire critique est ouvert
     const openModals = document.querySelectorAll('[role="dialog"], .modal-active');
-    if (openModals.length > 0) {
-      for (const modal of Array.from(openModals)) {
-        if (modal.querySelector('input:not([type="hidden"]), textarea')) {
+    for (const modal of Array.from(openModals)) {
+      const inputs = modal.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+        'input:not([type="hidden"]), textarea'
+      );
+      for (const input of Array.from(inputs)) {
+        if (input.value && input.value.trim().length > 0) {
           return false;
         }
       }
@@ -58,15 +53,14 @@ interface UpdateBannerProps {
 }
 
 /**
- * Gestionnaire de mise à jour 100% silencieuse "en sous-marin" :
- * - Aucun panneau ni bandeau "rafraîchir" visible (retourne null).
- * - Ne génère aucune notification intrusive dans la clochette.
- * - Nettoie les anciennes notifications système `app_update` en BDD.
- * - Détecte en arrière-plan l'arrivée d'une nouvelle version (/version.json).
- * - Dès que l'utilisateur quitte l'onglet, minimise ou change d'application
- *   (document.visibilityState === 'hidden'), l'application sauvegarde son
- *   état de navigation (sessionStorage) et recharge la page en toute discrétion.
- * - L'utilisateur retrouve son écran immédiatement sans déconnexion.
+ * Déploiement 100% transparent et invisible ("en sous-marin") :
+ * - Aucune mise à jour visible, aucun bandeau, aucun bouton rafraîchir (retourne null).
+ * - Nettoie silencieusement toute ancienne notification système.
+ * - Scrute les nouveaux déploiements en coulisses.
+ * - Dès que l'utilisateur change d'onglet (visibilitychange) ou de fenêtre (blur/pagehide),
+ *   la mise à jour s'applique instantanément en arrière-plan sans déconnexion.
+ * - Si l'onglet est déjà en arrière-plan au moment où une mise à jour arrive,
+ *   elle s'applique immédiatement en silence.
  */
 export default function UpdateBanner({ currentNav, selectedClientProfileId }: UpdateBannerProps) {
   const { currentUser } = useAuth();
@@ -77,7 +71,7 @@ export default function UpdateBanner({ currentNav, selectedClientProfileId }: Up
   const selectedClientIdRef = useRef(selectedClientProfileId);
   selectedClientIdRef.current = selectedClientProfileId;
 
-  // 1. Détection de la version au chargement de l'app et nettoyage des anciennes alertes 'app_update'
+  // 1. Initialisation de la version au démarrage et purge des anciennes alertes système
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -103,58 +97,90 @@ export default function UpdateBanner({ currentNav, selectedClientProfileId }: Up
     };
   }, [currentUser?.uid]);
 
-  // 2. Surveillance périodique et déclenchement automatique lors du changement d'onglet
+  // 2. Surveillance et rechargement automatique dès changement d'onglet ou de fenêtre
   useEffect(() => {
+    const triggerSilentReload = () => {
+      if (!updateDetectedRef.current) return;
+      if (!isSafeToAutoReload()) return;
+
+      // Sauvegarde de l'état de navigation courant
+      try {
+        if (currentNavRef.current) {
+          sessionStorage.setItem(
+            'novasphere:restore-nav',
+            JSON.stringify({
+              nav: currentNavRef.current,
+              clientId: selectedClientIdRef.current || null,
+              timestamp: Date.now(),
+            })
+          );
+        }
+      } catch {
+        /* ignore */
+      }
+
+      window.location.reload();
+    };
+
     const checkForUpdate = async () => {
       if (!bootVersionRef.current) return;
       const v = await fetchServerVersion();
       if (v && v.version && v.version !== bootVersionRef.current) {
         updateDetectedRef.current = true;
-      }
-    };
-
-    const applyUpdateIfHidden = () => {
-      if (document.visibilityState === 'hidden' && updateDetectedRef.current) {
-        if (!isSafeToAutoReload()) return;
-
-        // Sauvegarde de l'état de navigation pour reprise transparente
-        try {
-          if (currentNavRef.current) {
-            sessionStorage.setItem(
-              'novasphere:restore-nav',
-              JSON.stringify({
-                nav: currentNavRef.current,
-                clientId: selectedClientIdRef.current || null,
-                timestamp: Date.now(),
-              })
-            );
-          }
-        } catch {
-          /* ignore */
+        // Si l'onglet ou la fenêtre est déjà inactif/en arrière-plan, recharger tout de suite en silence
+        if (document.visibilityState === 'hidden' || !document.hasFocus()) {
+          triggerSilentReload();
         }
-
-        // Rechargement immédiat en arrière-plan pendant que l'onglet n'est pas vu
-        window.location.reload();
       }
     };
 
     const interval = setInterval(checkForUpdate, POLL_INTERVAL_MS);
+
+    // Changement d'onglet ou minimisation du navigateur
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        applyUpdateIfHidden();
+        triggerSilentReload();
       } else {
         checkForUpdate();
       }
     };
 
+    // Sortie de page mobile ou changement de vue
+    const onPageHide = () => {
+      triggerSilentReload();
+    };
+
+    // Changement de fenêtre ou perte de focus sur desktop
+    let blurTimer: any = null;
+    const onWindowBlur = () => {
+      clearTimeout(blurTimer);
+      blurTimer = setTimeout(() => {
+        if (!document.hasFocus() || document.visibilityState === 'hidden') {
+          triggerSilentReload();
+        }
+      }, 800);
+    };
+
+    const onWindowFocus = () => {
+      clearTimeout(blurTimer);
+      checkForUpdate();
+    };
+
     document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('blur', onWindowBlur);
+    window.addEventListener('focus', onWindowFocus);
 
     return () => {
       clearInterval(interval);
+      clearTimeout(blurTimer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('blur', onWindowBlur);
+      window.removeEventListener('focus', onWindowFocus);
     };
   }, []);
 
-  // Aucune présence visuelle dans l'interface ("en sous-marin")
+  // 0 apparence / 0 rafraîchissement manuel
   return null;
 }
