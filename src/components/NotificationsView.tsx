@@ -161,6 +161,16 @@ type NotificationItem = {
 // Notifications factices pour tester la différenciation visuelle et les couleurs dans la clochette
 const MOCK_NOTIFICATIONS: NotificationItem[] = [
   {
+    id: 'mock-update-1',
+    type: 'project',
+    rawType: 'app_update',
+    priority: 'important',
+    title: '🚀 Mise à jour disponible : Nova CRM',
+    description: 'Une nouvelle version a été déployée avec l\'optimisation des formulaires et la nouvelle clochette colorée.',
+    date: new Date().toISOString(),
+    navTarget: 'update',
+  },
+  {
     id: 'mock-urgent-1',
     type: 'project',
     rawType: 'urgent_deadline',
@@ -1125,6 +1135,11 @@ export const NotificationsView: React.FC<
                   type="button"
                   onClick={async (e) => {
                     e.stopPropagation();
+                    if (notification.id.startsWith('mock-')) {
+                      void dismissNotification(notification.id);
+                      toast.success('Mise à jour simulée avec succès !');
+                      return;
+                    }
                     try {
                       await dismissNotification(notification.id);
                       if (currentUser?.uid) {
