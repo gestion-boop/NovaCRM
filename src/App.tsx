@@ -60,6 +60,7 @@ import PublicVisiteImmosphera from './immosphera/pages/TourView';
 import { EVENEMENT_COMPOSER_MAIL } from './lib/composerMail';
 import { EcranErrorBoundary } from './components/EcranErrorBoundary';
 import UpdateBanner from './components/UpdateBanner';
+import { applyUpdateOnNavigation } from './lib/updateStatus';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
 import EnablePushPrompt from './components/EnablePushPrompt';
@@ -77,7 +78,7 @@ const ChargementEcran = () => (
   </div>
 );
 
-function getRestoredNavigation(): { nav: string; clientId: string | null } | null {
+function getRestoredNavigation(): { nav: string; clientId: string | null; tab?: 'espace-client' } | null {
   try {
     const raw = sessionStorage.getItem('novasphere:restore-nav');
     if (raw) {
@@ -168,7 +169,17 @@ function App() {
       ? 'chat'
       : initialNavFromUrl || 'accueil')
   );
+  const currentNavRef = React.useRef(currentNav);
+  currentNavRef.current = currentNav;
+  const selectedClientIdRef = React.useRef<string | null>(restoredNav?.clientId || null);
+
   const setCurrentNav = React.useCallback((valeur: React.SetStateAction<string>) => {
+    const nextNav = typeof valeur === 'function' ? (valeur as any)(currentNavRef.current) : valeur;
+    if (nextNav !== currentNavRef.current) {
+      if (applyUpdateOnNavigation({ nav: nextNav, clientId: selectedClientIdRef.current })) {
+        return;
+      }
+    }
     React.startTransition(() => setCurrentNavImmediat(valeur));
   }, []);
   // Demande explicite (30/08/2026) : Chat reste monté en permanence une
@@ -703,18 +714,28 @@ function App() {
   const [selectedClientProfileId, setSelectedClientProfileIdImmediat] = useState<string | null>(
     restoredNav?.clientId || null
   );
+  selectedClientIdRef.current = selectedClientProfileId;
+
   const setSelectedClientProfileId = React.useCallback((valeur: React.SetStateAction<string | null>) => {
+    const nextId = typeof valeur === 'function' ? (valeur as any)(selectedClientIdRef.current) : valeur;
+    if (nextId !== selectedClientIdRef.current) {
+      if (applyUpdateOnNavigation({ nav: currentNavRef.current, clientId: nextId })) {
+        return;
+      }
+    }
     React.startTransition(() => setSelectedClientProfileIdImmediat(valeur));
   }, []);
-  // Signalé : "le clic sur la notif du message du client doit envoyer sur
-  // le chat Espace Client de la fiche" — onglet à ouvrir en plus du client
-  // lui-même (undefined = comportement par défaut, onglet RDV).
-  const [selectedClientProfileTab, setSelectedClientProfileTab] = useState<'espace-client' | undefined>(undefined);
-  // Chaque ouverture "générique" d'une fiche (recherche, liste de contacts,
-  // Nova...) doit réinitialiser l'onglet ciblé — sinon un onglet "Espace
-  // client" resté actif après un clic sur une notif pourrait s'appliquer à
-  // tort à la fiche suivante ouverte.
+
+  const [selectedClientProfileTab, setSelectedClientProfileTab] = useState<'espace-client' | undefined>(
+    restoredNav?.tab
+  );
+
   const openClientProfile = (contactId: string | null, tab?: 'espace-client') => {
+    if (contactId !== selectedClientIdRef.current || tab !== selectedClientProfileTab) {
+      if (applyUpdateOnNavigation({ nav: currentNavRef.current, clientId: contactId, tab })) {
+        return;
+      }
+    }
     setSelectedClientProfileId(contactId);
     setSelectedClientProfileTab(contactId ? tab : undefined);
   };
@@ -783,6 +804,9 @@ function App() {
     );
     const cible = tabsAJour.find((t) => t.id === tabId);
     if (!cible) return;
+    if (applyUpdateOnNavigation({ nav: cible.nav, clientId: cible.selectedClientProfileId, tab: cible.selectedClientProfileTab })) {
+      return;
+    }
     setTabs(tabsAJour);
     setNovaOpen(false);
     setCurrentNav(cible.nav);

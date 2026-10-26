@@ -1,33 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { fetchServerVersion, setBootVersion, setServerVersion } from '@/lib/updateStatus';
+import { fetchServerVersion, setBootVersion, setServerVersion, isSafeToAutoReload } from '@/lib/updateStatus';
 
 // Vérification toutes les 25 secondes en arrière-plan
 const POLL_INTERVAL_MS = 25 * 1000;
-
-/**
- * Vérifie si un modal de saisie en cours (lead, note, tâche) contient du texte tapé non sauvegardé.
- * Ne bloque JAMAIS un rechargement pour une simple barre de recherche ou navigation passive.
- */
-function isSafeToAutoReload(): boolean {
-  try {
-    const openModals = document.querySelectorAll('[role="dialog"], .modal-active');
-    for (const modal of Array.from(openModals)) {
-      const inputs = modal.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
-        'input:not([type="hidden"]), textarea'
-      );
-      for (const input of Array.from(inputs)) {
-        if (input.value && input.value.trim().length > 0) {
-          return false;
-        }
-      }
-    }
-  } catch {
-    /* fallback safe */
-  }
-  return true;
-}
 
 interface UpdateBannerProps {
   currentNav?: string;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAppUpdateStatus } from '@/lib/updateStatus';
+import { useAppUpdateStatus, applyUpdateOnNavigation } from '@/lib/updateStatus';
 
 interface UpdateStatusBadgeProps {
   className?: string;
@@ -10,6 +10,7 @@ interface UpdateStatusBadgeProps {
  * Badge d'état de mise à jour tout en haut :
  * - VERT quand la dernière mise à jour est bien appliquée
  * - ORANGE quand une nouvelle mise à jour est prête / en attente d'application
+ * (S'applique automatiquement au prochain changement de dossier ou d'onglet)
  */
 export const UpdateStatusBadge: React.FC<UpdateStatusBadgeProps> = ({ className = '', showDetails = false }) => {
   const { isUpdatePending, bootVersion } = useAppUpdateStatus();
@@ -18,16 +19,18 @@ export const UpdateStatusBadge: React.FC<UpdateStatusBadgeProps> = ({ className 
 
   if (isUpdatePending) {
     return (
-      <div
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all duration-300 bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)] select-none shrink-0 ${className}`}
-        title="Une mise à jour a été déployée. Elle s'appliquera automatiquement dès que vous changerez d'onglet ou de fenêtre."
+      <button
+        type="button"
+        onClick={() => applyUpdateOnNavigation({})}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all duration-300 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)] select-none shrink-0 cursor-pointer ${className}`}
+        title="Une mise à jour a été déployée. Elle s'appliquera automatiquement dès que vous changerez de dossier, d'onglet ou de fenêtre."
       >
         <span className="relative flex h-2 w-2 shrink-0">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
         </span>
         <span className="tracking-wide">Mise à jour : En attente</span>
-      </div>
+      </button>
     );
   }
 
