@@ -971,27 +971,27 @@ export const LeadDialog = ({
             </div>
           )}
 
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-border/40 mt-4">
             {lead ? (
               <Button
                 type="button"
                 onClick={() => handleOpenChange(false)}
-                className="gradient-gold text-primary-foreground shadow-md"
+                className="gradient-gold text-primary-foreground shadow-md font-bold"
               >
                 Fermer
               </Button>
             ) : (
               <>
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
+                  Annuler
+                </Button>
                 <Button
                   type="submit"
                   disabled={saving}
-                  className="gradient-gold text-primary-foreground gap-2 shadow-md"
+                  className="gradient-gold text-primary-foreground gap-2 shadow-md font-black cursor-pointer"
                 >
                   <UserPlus className="h-4 w-4" />
-                  {saving ? "Enregistrement…" : "Créer le lead"}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                  Annuler
+                  {saving ? "Enregistrement…" : "Créer un Lead"}
                 </Button>
               </>
             )}

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useContacts, matchesAgency } from '@/hooks/useContacts';
 import { NovaSphereUserProfile, useAuth } from '@/context/AuthContext';
+import { toast } from 'sonner';
 
 import { TEAM_MEMBERS, getAssignedUser } from '@/data/teamMembers';
 import { useAssignableUsers } from '@/hooks/useAssignableUsers';
@@ -272,7 +273,7 @@ export default function Contacts({
 
     setCreatingContact(true);
     try {
-      await addContact.mutateAsync({
+      const created = await addContact.mutateAsync({
         name: newName,
         email: newEmail,
         phone: newPhone,
@@ -285,9 +286,13 @@ export default function Contacts({
       setNewEmail('');
       setNewPhone('');
       setShowAddForm(false);
+      toast.success('Lead créé avec succès !');
+      if (created?.id && onSelectContact) {
+        onSelectContact(created.id);
+      }
     } catch (error: any) {
       console.error('Erreur création contact :', error);
-      alert(error?.message || "Impossible de créer ce contact. Réessayez.");
+      toast.error(error?.message || "Impossible de créer ce contact. Réessayez.");
     } finally {
       setCreatingContact(false);
     }
@@ -512,14 +517,26 @@ export default function Contacts({
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#153c3f]/80">
+              <button
+                type="button"
+                onClick={() => setShowAddForm(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
               <button
                 type="submit"
                 disabled={creatingContact}
-                className="px-5 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-xs cursor-pointer shadow-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-5 py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 font-black text-xs cursor-pointer shadow-lg transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                title="Créer un Lead"
               >
-                {creatingContact && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>{creatingContact ? 'Création...' : 'Valider et Créer'}</span>
+                {creatingContact ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <UserPlus className="w-4 h-4 stroke-[2.5]" />
+                )}
+                <span>{creatingContact ? 'Création en cours…' : 'Créer un Lead'}</span>
               </button>
             </div>
           </form>

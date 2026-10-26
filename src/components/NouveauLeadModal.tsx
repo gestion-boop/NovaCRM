@@ -515,9 +515,15 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
             <button
               type="submit"
               form="new-lead-form"
+              onClick={(e) => {
+                const form = document.getElementById('new-lead-form') as HTMLFormElement | null;
+                if (form && !e.defaultPrevented && typeof form.requestSubmit === 'function') {
+                  form.requestSubmit();
+                }
+              }}
               disabled={submitting}
               className="px-3.5 py-1.5 bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-60"
-              title={modification ? 'Enregistrer les modifications' : 'Créer le lead'}
+              title={modification ? 'Enregistrer les modifications' : 'Créer un Lead'}
             >
               {submitting ? (
                 <Loader2 className="w-3.5 h-3.5 stroke-[2.5] animate-spin" />
@@ -526,7 +532,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
               ) : (
                 <UserPlus className="w-3.5 h-3.5 stroke-[2.5]" />
               )}
-              <span>{submitting ? '...' : modification ? 'Enregistrer' : 'Créer'}</span>
+              <span>{submitting ? '...' : modification ? 'Enregistrer' : 'Créer un Lead'}</span>
             </button>
             <button
               type="button"
@@ -1192,11 +1198,17 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
             data-tour="lead-submit-button"
             type="submit"
             form="new-lead-form"
+            onClick={(e) => {
+              const form = document.getElementById('new-lead-form') as HTMLFormElement | null;
+              if (form && !e.defaultPrevented && typeof form.requestSubmit === 'function') {
+                form.requestSubmit();
+              }
+            }}
             disabled={submitting}
             className="px-5 py-2.5 bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {submitting ? <Loader2 className="w-4 h-4 stroke-[2.5] animate-spin" /> : modification ? <Save className="w-4 h-4 stroke-[2.5]" /> : <UserPlus className="w-4 h-4 stroke-[2.5]" />}
-            <span>{submitting ? (modification ? 'Enregistrement…' : 'Création...') : modification ? 'Enregistrer' : 'Créer le lead'}</span>
+            <span>{submitting ? (modification ? 'Enregistrement…' : 'Création...') : modification ? 'Enregistrer' : 'Créer un Lead'}</span>
           </button>
         </div>
 
