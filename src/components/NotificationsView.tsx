@@ -161,6 +161,16 @@ type NotificationItem = {
 // Notifications factices pour tester la différenciation visuelle et les couleurs dans la clochette
 const MOCK_NOTIFICATIONS: NotificationItem[] = [
   {
+    id: 'mock-camera-1',
+    type: 'camera',
+    rawType: 'camera_reservation',
+    priority: 'urgent',
+    title: 'Réservation Caméra 360 confirmée',
+    description: 'Matériel réservé pour demain 10h00 - Visite virtuelle Villa Cannes.',
+    date: new Date().toISOString(),
+    navTarget: 'reserver-camera',
+  },
+  {
     id: 'mock-urgent-1',
     type: 'project',
     rawType: 'urgent_deadline',
@@ -209,16 +219,6 @@ const MOCK_NOTIFICATIONS: NotificationItem[] = [
     description: 'Votre demande d’export comptable a été traitée et validée avec succès.',
     date: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
     navTarget: 'support',
-  },
-  {
-    id: 'mock-camera-1',
-    type: 'camera',
-    rawType: 'camera_reservation',
-    priority: 'normal',
-    title: 'Réservation Caméra 360 confirmée',
-    description: 'Matériel réservé pour demain 10h00 - Visite virtuelle Villa Cannes.',
-    date: new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
-    navTarget: 'reserver-camera',
   },
 ];
 
@@ -755,6 +755,20 @@ export const NotificationsView: React.FC<
   );
   const visibleNotifications = isMobile ? mobileNotifications : allNotifications;
 
+  const buildStampText = useMemo(() => {
+    if (typeof __BUILD_INFO__ === 'undefined' || !__BUILD_INFO__?.sha) return '';
+    const sha = __BUILD_INFO__.sha;
+    const dateStr = __BUILD_INFO__.at
+      ? new Date(__BUILD_INFO__.at).toLocaleDateString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '';
+    return [sha, dateStr].filter(Boolean).join(' · ');
+  }, []);
+
   // Ticket #220 (v4) : pas juste "la même icône" mais la miniature de la
   // VRAIE tuile d'accueil correspondante (AccueilGrid.tsx) — même dégradé
   // de couleur ET même icône, comme un mini-clone de la tuile, exactement
@@ -795,7 +809,17 @@ export const NotificationsView: React.FC<
                 {visibleNotifications.length}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 truncate">{activeAgency.name}</p>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 truncate mt-0.5">
+              <span className="truncate">{activeAgency.name}</span>
+              {buildStampText && (
+                <>
+                  <span className="text-slate-600">·</span>
+                  <span className="font-mono text-[10px] text-teal-300 bg-teal-950/70 border border-teal-700/50 px-1.5 py-0.5 rounded-md shrink-0 shadow-sm" title="Version active">
+                    v.{buildStampText}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
