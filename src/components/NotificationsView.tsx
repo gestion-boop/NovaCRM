@@ -739,9 +739,23 @@ export const NotificationsView: React.FC<
   // mobile ci-dessous. C'est une notification personnelle et ponctuelle
   // (pas du bruit récurrent comme les autres notifications 'project'), on
   // l'autorise donc explicitement sur mobile sans élargir tout le bucket.
+  // Les notifications factices ne s'affichent que sur les environnements de test / préproduction
+  // pour ne pas polluer les vrais comptes utilisateurs en production sur main.
+  const isTestEnv = useMemo(() => {
+    try {
+      if (typeof window === 'undefined') return false;
+      const host = window.location.hostname;
+      if (host.includes('test') || host.includes('localhost') || host === '127.0.0.1') return true;
+      if (typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref && __BUILD_INFO__.ref !== 'main') return true;
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }, []);
+
   const mockNotifications = useMemo(
-    () => MOCK_NOTIFICATIONS.filter((m) => !dismissedMockIds.includes(m.id)),
-    [dismissedMockIds]
+    () => (isTestEnv ? MOCK_NOTIFICATIONS.filter((m) => !dismissedMockIds.includes(m.id)) : []),
+    [dismissedMockIds, isTestEnv]
   );
   const allNotifications = useMemo(
     () =>
