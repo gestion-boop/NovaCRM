@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Phone, Mail, MapPin, Building2, Edit, Trash2, Users, ChevronsUpDown, Check, X, FileText, Globe, ChevronDown, ArrowUpDown } from "lucide-react";
+import { Plus, Search, Phone, Mail, MapPin, Building2, Edit, Trash2, Users, ChevronsUpDown, Check, X, FileText, Globe, ChevronDown, ChevronRight, ArrowUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -345,11 +345,11 @@ export default function Partners() {
         </div>
       </div>
 
-      {/* Grille des partenaires moderne — Effet glace sombre */}
+      {/* Grille des partenaires moderne — Cartes spacieuses effet glace sombre */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-48 rounded-2xl bg-white/5 animate-pulse border border-white/5" />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-7">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-64 rounded-3xl bg-white/5 animate-pulse border border-white/10" />
           ))}
         </div>
       ) : sorted.length === 0 ? (
@@ -377,116 +377,135 @@ export default function Partners() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-7">
           {sorted.map((p) => {
             const initials = `${p.first_name?.charAt(0) || ""}${p.last_name?.charAt(0) || ""}`.toUpperCase() || "P";
             const docCount = Array.isArray((p as any).documents) ? (p as any).documents.length : 0;
             return (
               <div
                 key={p.id}
-                className="group relative bg-[#09171b]/65 backdrop-blur-xl border border-white/10 hover:border-[#F7BC5F]/60 rounded-2xl p-4.5 flex flex-col justify-between transition-all duration-300 hover:shadow-[0_8px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 cursor-pointer"
+                className="group relative bg-[#09171b]/75 backdrop-blur-2xl border border-white/15 hover:border-[#F7BC5F] rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all duration-300 hover:shadow-[0_16px_40px_rgba(0,0,0,0.5),0_0_24px_rgba(247,188,95,0.18)] hover:-translate-y-1.5 cursor-pointer min-h-[300px]"
                 onClick={() => setSelectedPartner(p)}
               >
                 <div>
-                  {/* Top card : avatar + nom + catégorie */}
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F7BC5F]/20 to-amber-700/30 border border-[#F7BC5F]/35 text-[#FAD592] font-black text-sm flex items-center justify-center shrink-0">
+                  {/* Top card : avatar large + nom + entreprise */}
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/25 via-amber-600/30 to-amber-700/40 border-2 border-[#F7BC5F]/45 text-[#FAD592] font-black text-xl sm:text-2xl flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(247,188,95,0.25)] group-hover:scale-105 transition-transform">
                         {initials}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="font-bold text-sm text-white truncate group-hover:text-[#F7BC5F] transition-colors">
+                        <h4 className="font-extrabold text-base sm:text-lg text-white truncate group-hover:text-[#F7BC5F] transition-colors leading-snug">
                           {[(p.first_name || "").charAt(0).toUpperCase() + (p.first_name || "").slice(1).toLowerCase(), (p.last_name || "").toUpperCase()].filter(Boolean).join(" ") || "Partenaire"}
                         </h4>
                         {p.company ? (
-                          <p className="text-xs text-slate-400 truncate flex items-center gap-1 mt-0.5">
-                            <Building2 className="h-3 w-3 shrink-0 text-[#F7BC5F]/80" />
+                          <p className="text-xs sm:text-sm text-slate-300 truncate flex items-center gap-1.5 mt-1 font-semibold">
+                            <Building2 className="h-4 w-4 shrink-0 text-[#F7BC5F]" />
                             <span>{p.company}</span>
                           </p>
                         ) : (
-                          <p className="text-[11px] text-slate-500 italic">Indépendant</p>
+                          <p className="text-xs text-slate-400 italic mt-0.5">Indépendant</p>
                         )}
                       </div>
                     </div>
-                  </div>
 
-                  {/* Badge Catégorie */}
-                  <div className="mb-3">
-                    <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#F7BC5F]/15 text-[#FAD592] border border-[#F7BC5F]/30 tracking-wide">
+                    {/* Badge Catégorie / Métier */}
+                    <span className="shrink-0 inline-flex items-center px-3.5 py-1.5 rounded-xl text-xs font-black bg-[#F7BC5F]/15 text-[#FAD592] border border-[#F7BC5F]/35 shadow-sm uppercase tracking-wider">
                       {CATEGORY_MAP[p.category] || p.category}
                     </span>
                   </div>
 
-                  {/* Coordonnées rapides */}
-                  <div className="space-y-1.5 text-xs text-slate-300">
+                  {/* Coordonnées rapides bien aérées et lisibles */}
+                  <div className="space-y-2.5 my-4">
                     {p.phone && (
                       <a
                         href={`tel:${p.phone}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-2 hover:text-[#F7BC5F] transition-colors truncate"
+                        className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-emerald-500/15 border border-white/5 hover:border-emerald-500/35 text-slate-200 hover:text-emerald-300 transition-all truncate group/tel"
+                        title="Appeler ce partenaire"
                       >
-                        <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span className="font-mono">{p.phone}</span>
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                          <Phone className="h-4 w-4" />
+                        </div>
+                        <span className="font-mono text-sm sm:text-base font-bold tracking-wide truncate group-hover/tel:underline">{p.phone}</span>
                       </a>
                     )}
                     {p.email && (
                       <a
                         href={`mailto:${p.email}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-2 hover:text-[#F7BC5F] transition-colors truncate"
+                        className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-sky-500/15 border border-white/5 hover:border-sky-500/35 text-slate-200 hover:text-sky-300 transition-all truncate group/mail"
+                        title="Envoyer un e-mail"
                       >
-                        <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{p.email}</span>
+                        <div className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 shrink-0">
+                          <Mail className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium truncate group-hover/mail:underline">{p.email}</span>
                       </a>
                     )}
                     {p.intervention_area && (
-                      <p className="flex items-center gap-2 text-slate-400 truncate">
-                        <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                        <span className="truncate">{p.intervention_area}</span>
-                      </p>
+                      <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/5 text-slate-300 truncate">
+                        <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                          <MapPin className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider leading-none">Zone / Secteur</p>
+                          <p className="text-xs sm:text-sm font-semibold truncate mt-0.5">{p.intervention_area}</p>
+                        </div>
+                      </div>
                     )}
                   </div>
 
                   {p.notes && (
-                    <p className="text-[11px] text-slate-400 mt-2.5 line-clamp-2 italic bg-white/[0.03] p-2 rounded-lg border border-white/5">
+                    <div className="mt-3 p-3 rounded-xl bg-white/[0.03] border border-white/10 text-xs sm:text-sm text-slate-300 italic line-clamp-2 leading-relaxed">
                       « {p.notes} »
-                    </p>
+                    </div>
                   )}
                 </div>
 
                 {/* Footer card : indicateur doc & actions */}
-                <div className="pt-3 mt-3 border-t border-white/5 flex items-center justify-between gap-2">
-                  <div className="text-[11px] text-slate-400">
+                <div className="pt-4 mt-4 border-t border-white/10 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
                     {docCount > 0 ? (
-                      <span className="flex items-center gap-1 text-sky-400 font-medium">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
                         <FileText className="h-3.5 w-3.5" />
                         <span>{docCount} doc{docCount > 1 ? "s" : ""}</span>
                       </span>
                     ) : (
-                      <span className="text-slate-600">Aucun doc</span>
+                      <span className="text-xs text-slate-500">Aucun document joint</span>
                     )}
                   </div>
 
-                  {canEdit(p) && (
-                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => openEdit(p)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                        title="Modifier le partenaire"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteMutation.mutate(p.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                        title="Supprimer le partenaire"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPartner(p)}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-[#F7BC5F] hover:text-slate-950 text-white transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <span>Fiche</span>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                    {canEdit(p) && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(p)}
+                          className="w-8 h-8 rounded-xl text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center transition-colors cursor-pointer"
+                          title="Modifier le partenaire"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteMutation.mutate(p.id)}
+                          className="w-8 h-8 rounded-xl text-slate-300 hover:text-rose-400 hover:bg-rose-500/15 flex items-center justify-center transition-colors cursor-pointer"
+                          title="Supprimer le partenaire"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             );

@@ -70,22 +70,22 @@ export function PartnerDetailPanel({ partner: p, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-[#0E1A20] text-white rounded-3xl border border-white/20 shadow-2xl w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+        className="bg-[#0E1A20] text-white rounded-3xl border border-white/20 shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header de la fiche */}
-        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-[#0B151A]">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/25 to-amber-600/30 border border-[#F7BC5F]/40 flex items-center justify-center text-[#FAD592] font-black text-sm shrink-0 shadow-[0_0_12px_rgba(247,188,95,0.25)]">
-              {initials || <Building2 className="w-5 h-5 text-[#F7BC5F]" />}
+        <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-[#0B151A]">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/25 to-amber-600/35 border-2 border-[#F7BC5F]/40 flex items-center justify-center text-[#FAD592] font-black text-xl shrink-0 shadow-[0_0_16px_rgba(247,188,95,0.25)]">
+              {initials || <Building2 className="w-6 h-6 text-[#F7BC5F]" />}
             </div>
             <div className="min-w-0">
-              <h3 className="font-extrabold text-base text-white tracking-wide truncate">
+              <h3 className="font-extrabold text-lg sm:text-xl text-white tracking-wide truncate">
                 {fullName}
               </h3>
               {p.company && (
-                <p className="text-xs text-[#FAD592] flex items-center gap-1.5 mt-0.5 truncate font-medium">
-                  <Building2 className="h-3.5 w-3.5 text-[#F7BC5F] shrink-0" /> {p.company}
+                <p className="text-sm text-[#FAD592] flex items-center gap-1.5 mt-0.5 truncate font-semibold">
+                  <Building2 className="h-4 w-4 text-[#F7BC5F] shrink-0" /> {p.company}
                 </p>
               )}
             </div>
@@ -93,7 +93,7 @@ export function PartnerDetailPanel({ partner: p, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors shrink-0 cursor-pointer"
+            className="w-9 h-9 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors shrink-0 cursor-pointer"
             title="Fermer"
           >
             <X className="h-5 w-5" />
