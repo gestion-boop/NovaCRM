@@ -2418,8 +2418,6 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       .order('scheduled_at', { ascending: true });
     return (data as MessageProgramme[] | null) || [];
   };
-    return (data as MessageProgramme[] | null) || [];
-  };
   useEffect(() => {
     if (!activeChannel?.id) { setChannelScheduled([]); return; }
     void chargerMessagesProgrammes('channel_id', activeChannel.id).then(setChannelScheduled);
