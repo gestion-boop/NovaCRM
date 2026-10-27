@@ -116,6 +116,7 @@ interface MessageProgramme {
   id: string;
   body: string;
   scheduled_at: string;
+  kind?: string;
 }
 
 interface ConversationRow {
@@ -285,6 +286,63 @@ async function compresserImage(file: File, maxDimension = 1600, quality = 0.82):
     reader.onerror = () => resolve('');
     reader.readAsDataURL(file);
   });
+}
+
+interface ScheduledMediaPayload {
+  __media__: true;
+  kind: 'image' | 'video';
+  attachmentUrl: string;
+  attachmentMime?: string;
+  fileName?: string;
+  text?: string;
+}
+
+function decoderMessageProgramme(row: { id?: string; body: string; scheduled_at?: string; kind?: string }): {
+  kind: 'text' | 'image' | 'video';
+  text: string;
+  attachmentUrl?: string;
+  attachmentMime?: string;
+  fileName?: string;
+} {
+  let kind: 'text' | 'image' | 'video' = (row.kind as any) || 'text';
+  let text = row.body || '';
+  let attachmentUrl: string | undefined = undefined;
+  let attachmentMime: string | undefined = undefined;
+  let fileName: string | undefined = undefined;
+
+  if (row.body && row.body.startsWith('{"__media__":true')) {
+    try {
+      const parsed: ScheduledMediaPayload = JSON.parse(row.body);
+      kind = parsed.kind || kind;
+      text = parsed.text || '';
+      attachmentUrl = parsed.attachmentUrl;
+      attachmentMime = parsed.attachmentMime;
+      fileName = parsed.fileName;
+    } catch (_) {}
+  }
+
+  return { kind, text, attachmentUrl, attachmentMime, fileName };
+}
+
+async function preparerFichierVideo(file: File, contextName: string): Promise<string> {
+  if (file.size > MAX_VIDEO_SIZE) {
+    throw new Error('Vidéo trop volumineuse (150 Mo maximum).');
+  }
+  let token = getCachedAccessToken();
+  if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
+  if (token) {
+    const res = await uploadVideoToDriveFolder(token, file, contextName);
+    return res.fileUrl;
+  }
+  if (file.size <= 15 * 1024 * 1024) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve((reader.result as string) || '');
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+  return URL.createObjectURL(file);
 }
 
 export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, initialConversationId, onConversationTargetConsumed, initialChannelId, onChannelTargetConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
@@ -2220,6 +2278,120 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [convScheduleTime, setConvScheduleTime] = useState('');
   const [channelScheduled, setChannelScheduled] = useState<MessageProgramme[]>([]);
   const [convScheduled, setConvScheduled] = useState<MessageProgramme[]>([]);
+
+  // Pièces jointes multimédias (photos & vidéos) pour les messages programmés
+  const [channelScheduleMedia, setChannelScheduleMedia] = useState<{
+    kind: 'image' | 'video';
+    url: string;
+    fileName: string;
+    mime?: string;
+  } | null>(null);
+  const [channelScheduleLoadingMedia, setChannelScheduleLoadingMedia] = useState(false);
+  const channelSchedulePhotoInputRef = useRef<HTMLInputElement>(null);
+  const channelScheduleVideoInputRef = useRef<HTMLInputElement>(null);
+
+  const [convScheduleMedia, setConvScheduleMedia] = useState<{
+    kind: 'image' | 'video';
+    url: string;
+    fileName: string;
+    mime?: string;
+  } | null>(null);
+  const [convScheduleLoadingMedia, setConvScheduleLoadingMedia] = useState(false);
+  const convSchedulePhotoInputRef = useRef<HTMLInputElement>(null);
+  const convScheduleVideoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleChannelSchedulePhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setChannelScheduleLoadingMedia(true);
+    try {
+      const url = await compresserImage(file);
+      if (!url) {
+        toast.error("Impossible de charger la photo sélectionnée.");
+        return;
+      }
+      setChannelScheduleMedia({
+        kind: 'image',
+        url,
+        fileName: file.name,
+        mime: file.type || 'image/jpeg',
+      });
+      toast.success('Photo attachée au message programmé.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erreur lors du traitement de la photo.');
+    } finally {
+      setChannelScheduleLoadingMedia(false);
+    }
+  };
+
+  const handleChannelScheduleVideoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setChannelScheduleLoadingMedia(true);
+    try {
+      const url = await preparerFichierVideo(file, `Canal - ${activeChannel?.name || 'Messagerie'}`);
+      setChannelScheduleMedia({
+        kind: 'video',
+        url,
+        fileName: file.name,
+        mime: file.type || 'video/mp4',
+      });
+      toast.success('Vidéo attachée au message programmé.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erreur lors du traitement de la vidéo.');
+    } finally {
+      setChannelScheduleLoadingMedia(false);
+    }
+  };
+
+  const handleConvSchedulePhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setConvScheduleLoadingMedia(true);
+    try {
+      const url = await compresserImage(file);
+      if (!url) {
+        toast.error("Impossible de charger la photo sélectionnée.");
+        return;
+      }
+      setConvScheduleMedia({
+        kind: 'image',
+        url,
+        fileName: file.name,
+        mime: file.type || 'image/jpeg',
+      });
+      toast.success('Photo attachée au message programmé.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erreur lors du traitement de la photo.');
+    } finally {
+      setConvScheduleLoadingMedia(false);
+    }
+  };
+
+  const handleConvScheduleVideoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setConvScheduleLoadingMedia(true);
+    try {
+      const url = await preparerFichierVideo(file, 'Messagerie directe');
+      setConvScheduleMedia({
+        kind: 'video',
+        url,
+        fileName: file.name,
+        mime: file.type || 'video/mp4',
+      });
+      toast.success('Vidéo attachée au message programmé.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erreur lors du traitement de la vidéo.');
+    } finally {
+      setConvScheduleLoadingMedia(false);
+    }
+  };
+
   useEffect(() => {
     if (!showChannelEmoji && !showChannelNovaPicker && !showConvEmoji && !showConvNovaPicker && !showChannelSchedule && !showConvSchedule) return;
     const handleOutsideClick = (e: MouseEvent) => {
@@ -2240,10 +2412,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const chargerMessagesProgrammes = async (colonne: 'channel_id' | 'conversation_id', id: string): Promise<MessageProgramme[]> => {
     const { data } = await supabase
       .from('scheduled_messages' as any)
-      .select('id, body, scheduled_at')
+      .select('id, body, scheduled_at, kind')
       .eq(colonne, id)
       .eq('status', 'pending')
       .order('scheduled_at', { ascending: true });
+    return (data as MessageProgramme[] | null) || [];
+  };
     return (data as MessageProgramme[] | null) || [];
   };
   useEffect(() => {
@@ -2469,7 +2643,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (!currentUser) return;
     const { data: dues } = await supabase
       .from('scheduled_messages' as any)
-      .select('id, body, channel_id, conversation_id')
+      .select('id, body, channel_id, conversation_id, kind')
       .eq('user_id', currentUser.uid)
       .eq('status', 'pending')
       .lte('scheduled_at', new Date().toISOString());
@@ -2504,13 +2678,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       if (!reservee) continue;
 
       let erreur: string | null = null;
+      const decoded = decoderMessageProgramme(reservee);
 
       if (ligne.conversation_id) {
         const { error } = await supabase.from('messages').insert({
           conversation_id: ligne.conversation_id,
           user_id: currentUser.uid,
-          kind: 'text',
-          body: ligne.body,
+          kind: decoded.kind,
+          body: decoded.text || (decoded.kind === 'text' ? '' : (decoded.fileName || '')),
+          attachment_url: decoded.attachmentUrl || null,
+          attachment_mime: decoded.attachmentMime || (decoded.kind === 'image' ? 'image/jpeg' : (decoded.kind === 'video' ? 'video/mp4' : null)),
         } as any);
         erreur = error?.message ?? null;
         if (!erreur) {
@@ -2520,18 +2697,25 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         }
       } else if (ligne.channel_id) {
         const messageId = crypto.randomUUID();
+        const dataPayload: any = {
+          body: decoded.text || (decoded.kind === 'text' ? '' : (decoded.fileName || '')),
+          kind: decoded.kind,
+          sender_id: currentUser.uid,
+          sender_name: displayName,
+          created_at: new Date().toISOString(),
+        };
+        if (decoded.attachmentUrl) {
+          dataPayload.attachmentUrl = decoded.attachmentUrl;
+          dataPayload.attachment_url = decoded.attachmentUrl;
+          dataPayload.attachmentMime = decoded.attachmentMime || (decoded.kind === 'image' ? 'image/jpeg' : (decoded.kind === 'video' ? 'video/mp4' : null));
+        }
         const { error } = await supabase.from('chat_messages').insert({
           id: messageId,
           channel: ligne.channel_id,
           sender_id: currentUser.uid,
           is_deleted: false,
           read_by: [{ userId: currentUser.uid, userName: displayName, readAt: new Date().toISOString() }],
-          data: {
-            body: ligne.body,
-            sender_id: currentUser.uid,
-            sender_name: displayName,
-            created_at: new Date().toISOString(),
-          },
+          data: dataPayload,
         } as any);
         erreur = error?.message ?? null;
         if (!erreur) {
@@ -2543,7 +2727,10 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           // `messages` (conversations directes), où la base s'en charge.
           const { data: canal } = await supabase
             .from('chat_channels').select('*').eq('id', ligne.channel_id).maybeSingle();
-          if (canal) await notifierMembresDuDossier(canal as ChatChannel, ligne.body, messageId);
+          if (canal) {
+            const notifTexte = decoded.text || (decoded.kind === 'image' ? '📷 Photo' : decoded.kind === 'video' ? '🎥 Vidéo' : 'Message');
+            await notifierMembresDuDossier(canal as ChatChannel, notifTexte, messageId);
+          }
         }
       } else {
         erreur = 'Ni canal ni conversation.';
@@ -2609,15 +2796,27 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     toast.info('Message programmé annulé.');
   };
   const programmerMessageCanal = async () => {
-    if (!draft.trim() || !activeChannel || !currentUser) return;
+    const textDraft = draft.trim();
+    if ((!textDraft && !channelScheduleMedia) || !activeChannel || !currentUser) return;
     const scheduledAt = combinerDateHeure(channelScheduleDate, channelScheduleTime);
     if (!scheduledAt) { toast.error('Choisissez une date et une heure dans le futur.'); return; }
-    const body = draft.trim();
+    const kind = channelScheduleMedia?.kind || 'text';
+    const body = channelScheduleMedia
+      ? JSON.stringify({
+          __media__: true,
+          kind: channelScheduleMedia.kind,
+          attachmentUrl: channelScheduleMedia.url,
+          attachmentMime: channelScheduleMedia.mime,
+          fileName: channelScheduleMedia.fileName,
+          text: textDraft,
+        })
+      : textDraft;
     const { error } = await supabase
       .from('scheduled_messages' as any)
-      .insert({ user_id: currentUser.uid, channel_id: activeChannel.id, body, scheduled_at: scheduledAt });
+      .insert({ user_id: currentUser.uid, channel_id: activeChannel.id, body, kind, scheduled_at: scheduledAt });
     if (error) { toast.error(`Programmation impossible : ${error.message}`); return; }
     setDraft('');
+    setChannelScheduleMedia(null);
     setShowChannelSchedule(false);
     setChannelScheduleDate('');
     setChannelScheduleTime('');
@@ -2625,15 +2824,27 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     toast.success(`Message programmé pour le ${formaterEcheance(scheduledAt)}.`);
   };
   const programmerMessageConversation = async () => {
-    const body = convDraft.trim();
-    if (!body || !activeConversationId || !currentUser) return;
+    const textDraft = convDraft.trim();
+    if ((!textDraft && !convScheduleMedia) || !activeConversationId || !currentUser) return;
     const scheduledAt = combinerDateHeure(convScheduleDate, convScheduleTime);
     if (!scheduledAt) { toast.error('Choisissez une date et une heure dans le futur.'); return; }
+    const kind = convScheduleMedia?.kind || 'text';
+    const body = convScheduleMedia
+      ? JSON.stringify({
+          __media__: true,
+          kind: convScheduleMedia.kind,
+          attachmentUrl: convScheduleMedia.url,
+          attachmentMime: convScheduleMedia.mime,
+          fileName: convScheduleMedia.fileName,
+          text: textDraft,
+        })
+      : textDraft;
     const { error } = await supabase
       .from('scheduled_messages' as any)
-      .insert({ user_id: currentUser.uid, conversation_id: activeConversationId, body, scheduled_at: scheduledAt });
+      .insert({ user_id: currentUser.uid, conversation_id: activeConversationId, body, kind, scheduled_at: scheduledAt });
     if (error) { toast.error(`Programmation impossible : ${error.message}`); return; }
     setConvDraft('');
+    setConvScheduleMedia(null);
     setShowConvSchedule(false);
     setConvScheduleDate('');
     setConvScheduleTime('');
@@ -5816,22 +6027,52 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                         )}
                       </button>
                       {showConvSchedule && (
-                        <div className="absolute z-20 bottom-full mb-2 right-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-72 space-y-3">
+                        <div className="absolute z-20 bottom-full mb-2 right-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3.5 shadow-2xl w-80 space-y-3.5">
                           {convScheduled.length > 0 && (
-                            <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
-                              <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmés</p>
-                              {convScheduled.map((m) => (
-                                <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg px-2 py-1.5">
-                                  <span className="truncate flex-1" title={m.body}>{formaterEcheance(m.scheduled_at)} — {m.body}</span>
-                                  <button type="button" onClick={() => void annulerMessageProgramme(m.id, 'conversation')} className="text-slate-400 hover:text-white shrink-0" title="Annuler">
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ))}
+                            <div className="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar">
+                              <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">
+                                Programmés ({convScheduled.length})
+                              </p>
+                              {convScheduled.map((m) => {
+                                const decoded = decoderMessageProgramme(m);
+                                return (
+                                  <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg p-2 border border-white/5">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 text-[10px] text-[#F7BC5F] font-medium">
+                                        <Clock className="w-3 h-3 shrink-0" />
+                                        <span>{formaterEcheance(m.scheduled_at)}</span>
+                                        {decoded.kind === 'image' && (
+                                          <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-semibold flex items-center gap-1">
+                                            <ImageIcon className="w-2.5 h-2.5" /> Photo
+                                          </span>
+                                        )}
+                                        {decoded.kind === 'video' && (
+                                          <span className="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 text-[9px] font-semibold flex items-center gap-1">
+                                            <VideoIcon className="w-2.5 h-2.5" /> Vidéo
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="truncate text-slate-300 mt-0.5" title={decoded.text || decoded.fileName || ''}>
+                                        {decoded.text || (decoded.kind === 'image' ? 'Photo jointe' : decoded.kind === 'video' ? 'Vidéo jointe' : 'Message')}
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => void annulerMessageProgramme(m.id, 'conversation')}
+                                      className="text-slate-400 hover:text-white shrink-0 p-1 hover:bg-white/10 rounded"
+                                      title="Annuler"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
-                          <div className="space-y-2">
-                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmer ce message</p>
+                          <div className="space-y-2.5">
+                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">
+                              Programmer un message ou média
+                            </p>
                             <div className="flex gap-2">
                               <input
                                 type="date"
@@ -5847,13 +6088,90 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                 className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
                               />
                             </div>
+
+                            {/* Aperçu du média attaché */}
+                            {convScheduleMedia && (
+                              <div className="relative p-2 rounded-lg bg-white/5 border border-white/10 flex items-center gap-2.5">
+                                {convScheduleMedia.kind === 'image' ? (
+                                  <img
+                                    src={convScheduleMedia.url}
+                                    alt="Aperçu photo"
+                                    className="w-11 h-11 rounded-md object-cover border border-white/10 bg-black/40 shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-11 h-11 rounded-md bg-black/50 border border-white/10 flex items-center justify-center shrink-0">
+                                    <VideoIcon className="w-5 h-5 text-sky-400" />
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0 text-left">
+                                  <p className="text-xs text-white font-medium truncate flex items-center gap-1.5">
+                                    {convScheduleMedia.kind === 'image' ? '📷 Photo attachée' : '🎥 Vidéo attachée'}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 truncate">{convScheduleMedia.fileName}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setConvScheduleMedia(null)}
+                                  className="w-6 h-6 rounded-md hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white shrink-0"
+                                  title="Retirer le média"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Boutons d'ajout de photo ou vidéo */}
+                            <div className="flex items-center gap-2">
+                              <input
+                                ref={convSchedulePhotoInputRef}
+                                type="file"
+                                accept="image/*"
+                                hidden
+                                onChange={handleConvSchedulePhotoPick}
+                              />
+                              <input
+                                ref={convScheduleVideoInputRef}
+                                type="file"
+                                accept="video/*"
+                                hidden
+                                onChange={handleConvScheduleVideoPick}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => convSchedulePhotoInputRef.current?.click()}
+                                disabled={convScheduleLoadingMedia}
+                                className="flex-1 py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-slate-200 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40"
+                                title="Joindre une photo au message programmé"
+                              >
+                                <ImageIcon className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                                <span>Photo</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => convScheduleVideoInputRef.current?.click()}
+                                disabled={convScheduleLoadingMedia}
+                                className="flex-1 py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-slate-200 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40"
+                                title="Joindre une vidéo au message programmé"
+                              >
+                                <VideoIcon className="w-3.5 h-3.5 text-sky-400" />
+                                <span>Vidéo</span>
+                              </button>
+                            </div>
+
+                            {convScheduleLoadingMedia && (
+                              <p className="text-[11px] text-[#F7BC5F] animate-pulse text-center">
+                                Préparation du média en cours...
+                              </p>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => void programmerMessageConversation()}
-                              disabled={!convDraft.trim()}
-                              className="w-full py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-semibold"
+                              disabled={(!convDraft.trim() && !convScheduleMedia) || convScheduleLoadingMedia}
+                              className="w-full py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                             >
-                              Programmer
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>Programmer</span>
                             </button>
                           </div>
                         </div>
@@ -6504,22 +6822,52 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     )}
                   </button>
                   {showChannelSchedule && (
-                    <div className="absolute z-20 bottom-full mb-2 right-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-72 space-y-3">
+                    <div className="absolute z-20 bottom-full mb-2 right-0 bg-[#0b1c1e] border border-white/20 rounded-xl p-3.5 shadow-2xl w-80 space-y-3.5">
                       {channelScheduled.length > 0 && (
-                        <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
-                          <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmés</p>
-                          {channelScheduled.map((m) => (
-                            <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg px-2 py-1.5">
-                              <span className="truncate flex-1" title={m.body}>{formaterEcheance(m.scheduled_at)} — {m.body}</span>
-                              <button type="button" onClick={() => void annulerMessageProgramme(m.id, 'channel')} className="text-slate-400 hover:text-white shrink-0" title="Annuler">
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
+                        <div className="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar">
+                          <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">
+                            Programmés ({channelScheduled.length})
+                          </p>
+                          {channelScheduled.map((m) => {
+                            const decoded = decoderMessageProgramme(m);
+                            return (
+                              <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg p-2 border border-white/5">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 text-[10px] text-[#F7BC5F] font-medium">
+                                    <Clock className="w-3 h-3 shrink-0" />
+                                    <span>{formaterEcheance(m.scheduled_at)}</span>
+                                    {decoded.kind === 'image' && (
+                                      <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-semibold flex items-center gap-1">
+                                        <ImageIcon className="w-2.5 h-2.5" /> Photo
+                                      </span>
+                                    )}
+                                    {decoded.kind === 'video' && (
+                                      <span className="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 text-[9px] font-semibold flex items-center gap-1">
+                                        <VideoIcon className="w-2.5 h-2.5" /> Vidéo
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="truncate text-slate-300 mt-0.5" title={decoded.text || decoded.fileName || ''}>
+                                    {decoded.text || (decoded.kind === 'image' ? 'Photo jointe' : decoded.kind === 'video' ? 'Vidéo jointe' : 'Message')}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => void annulerMessageProgramme(m.id, 'channel')}
+                                  className="text-slate-400 hover:text-white shrink-0 p-1 hover:bg-white/10 rounded"
+                                  title="Annuler"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
-                      <div className="space-y-2">
-                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Programmer ce message</p>
+                      <div className="space-y-2.5">
+                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">
+                          Programmer un message ou média
+                        </p>
                         <div className="flex gap-2">
                           <input
                             type="date"
@@ -6535,13 +6883,90 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             className="flex-1 bg-[#081318] border border-white/20 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F7BC5F]"
                           />
                         </div>
+
+                        {/* Aperçu du média attaché */}
+                        {channelScheduleMedia && (
+                          <div className="relative p-2 rounded-lg bg-white/5 border border-white/10 flex items-center gap-2.5">
+                            {channelScheduleMedia.kind === 'image' ? (
+                              <img
+                                src={channelScheduleMedia.url}
+                                alt="Aperçu photo"
+                                className="w-11 h-11 rounded-md object-cover border border-white/10 bg-black/40 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-md bg-black/50 border border-white/10 flex items-center justify-center shrink-0">
+                                <VideoIcon className="w-5 h-5 text-sky-400" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0 text-left">
+                              <p className="text-xs text-white font-medium truncate flex items-center gap-1.5">
+                                {channelScheduleMedia.kind === 'image' ? '📷 Photo attachée' : '🎥 Vidéo attachée'}
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">{channelScheduleMedia.fileName}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setChannelScheduleMedia(null)}
+                              className="w-6 h-6 rounded-md hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white shrink-0"
+                              title="Retirer le média"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Boutons d'ajout de photo ou vidéo */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            ref={channelSchedulePhotoInputRef}
+                            type="file"
+                            accept="image/*"
+                            hidden
+                            onChange={handleChannelSchedulePhotoPick}
+                          />
+                          <input
+                            ref={channelScheduleVideoInputRef}
+                            type="file"
+                            accept="video/*"
+                            hidden
+                            onChange={handleChannelScheduleVideoPick}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => channelSchedulePhotoInputRef.current?.click()}
+                            disabled={channelScheduleLoadingMedia}
+                            className="flex-1 py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-slate-200 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40"
+                            title="Joindre une photo au message programmé"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                            <span>Photo</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => channelScheduleVideoInputRef.current?.click()}
+                            disabled={channelScheduleLoadingMedia}
+                            className="flex-1 py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-slate-200 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40"
+                            title="Joindre une vidéo au message programmé"
+                          >
+                            <VideoIcon className="w-3.5 h-3.5 text-sky-400" />
+                            <span>Vidéo</span>
+                          </button>
+                        </div>
+
+                        {channelScheduleLoadingMedia && (
+                          <p className="text-[11px] text-[#F7BC5F] animate-pulse text-center">
+                            Préparation du média en cours...
+                          </p>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => void programmerMessageCanal()}
-                          disabled={!draft.trim()}
-                          className="w-full py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-semibold"
+                          disabled={(!draft.trim() && !channelScheduleMedia) || channelScheduleLoadingMedia}
+                          className="w-full py-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                         >
-                          Programmer
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Programmer</span>
                         </button>
                       </div>
                     </div>

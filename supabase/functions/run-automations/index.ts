@@ -179,6 +179,20 @@ async function runScheduledMessages(admin: any): Promise<number> {
       const senderName = profile?.full_name || profile?.email || "Utilisateur";
 
       let sentMessageId: string | null = null;
+      let bodyText = row.body || "";
+      let mediaKind = row.kind || "text";
+      let attachmentUrl: string | null = null;
+      let attachmentMime: string | null = null;
+
+      if (row.body && row.body.startsWith('{"__media__":true')) {
+        try {
+          const parsed = JSON.parse(row.body);
+          bodyText = parsed.text || "";
+          mediaKind = parsed.kind || mediaKind;
+          attachmentUrl = parsed.attachmentUrl || null;
+          attachmentMime = parsed.attachmentMime || (mediaKind === "image" ? "image/jpeg" : mediaKind === "video" ? "video/mp4" : null);
+        } catch (_) {}
+      }
 
       if (row.channel_id) {
         const { data: channel } = await admin
@@ -189,10 +203,23 @@ async function runScheduledMessages(admin: any): Promise<number> {
         if (!channel) throw new Error("Canal introuvable (supprimé depuis la programmation ?).");
 
         sentMessageId = crypto.randomUUID();
+        const dataPayload: any = {
+          body: bodyText,
+          kind: mediaKind,
+          sender_id: row.user_id,
+          sender_name: senderName,
+          created_at: new Date().toISOString(),
+        };
+        if (attachmentUrl) {
+          dataPayload.attachmentUrl = attachmentUrl;
+          dataPayload.attachment_url = attachmentUrl;
+          dataPayload.attachmentMime = attachmentMime;
+        }
+
         const { error: insertError } = await admin.from("chat_messages").insert({
           id: sentMessageId,
           channel: channel.id,
-          data: { body: row.body, sender_id: row.user_id, sender_name: senderName, created_at: new Date().toISOString() },
+          data: dataPayload,
           sender_id: row.user_id,
           is_deleted: false,
           read_by: [{ userId: row.user_id, userName: senderName, readAt: new Date().toISOString() }],
@@ -216,13 +243,14 @@ async function runScheduledMessages(admin: any): Promise<number> {
         const destinataires = Array.from(
           new Set(((membres ?? []) as { user_id: string }[]).map((m) => m.user_id).filter((uid) => uid && uid !== row.user_id))
         );
+        const notifTexte = bodyText || (mediaKind === "image" ? "📷 Photo" : mediaKind === "video" ? "🎥 Vidéo" : "Message");
         await Promise.all(
           destinataires.map((uid) =>
             admin.rpc("create_notification", {
               _user_id: uid,
               _type: "message",
               _title: `💬 ${chatProject?.name || "Projet interne"} · ${channel.name}`,
-              _message: `${senderName} : ${row.body}`.slice(0, 180),
+              _message: `${senderName} : ${notifTexte}`.slice(0, 180),
               _entity_type: "chat_channel",
               _entity_id: channel.id,
               _agency_id: chatProject?.agency_id ?? null,
@@ -231,9 +259,20 @@ async function runScheduledMessages(admin: any): Promise<number> {
           )
         );
       } else if (row.conversation_id) {
+        const messageInsert: any = {
+          conversation_id: row.conversation_id,
+          user_id: row.user_id,
+          kind: mediaKind,
+          body: bodyText,
+        };
+        if (attachmentUrl) {
+          messageInsert.attachment_url = attachmentUrl;
+          messageInsert.attachment_mime = attachmentMime;
+        }
+
         const { data: inserted, error: insertError } = await admin
           .from("messages")
-          .insert({ conversation_id: row.conversation_id, user_id: row.user_id, kind: "text", body: row.body })
+          .insert(messageInsert)
           .select("id")
           .single();
         if (insertError) throw insertError;
