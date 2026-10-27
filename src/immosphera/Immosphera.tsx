@@ -92,61 +92,56 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
 
   return (
     <div className="immosphera-root">
-      {/* Sur la page Biens (isHome), ce bandeau est rendu par Index.tsx lui-même,
-          sous la photo d'accueil — voir Index.tsx. Ici, on ne garde le bandeau
-          que pour les autres pages du module (Propals, Partenaires, fiche bien). */}
-      {!isHome && (
-        <div className="border-b border-border">
-          <div className="flex flex-wrap items-center gap-2 px-3 pt-3 pb-2">
-            {/* Signalé : "Retour" ramenait parfois jusqu'à l'accueil
-                principal du CRM (Conseils Finances) au lieu du panneau
-                précédent DANS Immosphera360. Cause : navigate(-1) dépend de
-                l'historique du navigateur, qui n'a pas forcément d'entrée
-                pour chaque panneau interne (ex. arrivée directe sur une
-                fiche bien depuis une recherche Nova IA) — il pouvait alors
-                sauter par-dessus tout Immosphera360. Remplacé par une
-                destination fixe et prévisible : la page Biens, page
-                d'accueil du module — SAUF depuis Partenaires (accessible
-                directement via sa propre tuile d'accueil), où "Retour" doit
-                ressortir directement vers l'accueil du CRM. */}
-            <button
-              onClick={() => {
-                if (location.pathname.startsWith("/immosphera/partenaires") && onExitToCrm) {
-                  onExitToCrm();
-                } else {
-                  navigate("/immosphera");
-                }
-              }}
-              className={`${PILL_BASE} ${PILL_IDLE}`}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Retour
-            </button>
-
+      {/* Barre d'onglets de façade Immosphera 360 — toujours visible et claire pour s'y retrouver */}
+      <div className="sticky top-0 z-30 bg-[#07171B]/95 backdrop-blur-md border-b border-white/10 px-3 sm:px-6 py-2.5 shadow-sm">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {navItems.map(({ label, icon: Icon, path }) => {
               const active = path === "/immosphera" ? isHome : location.pathname.startsWith(path);
               return (
                 <button
                   key={label}
+                  type="button"
                   onClick={() => navigate(path)}
-                  className={`${PILL_BASE} ${active ? PILL_ACTIVE : PILL_IDLE}`}
+                  className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                    active
+                      ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/20 font-extrabold"
+                      : "bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5"
+                  }`}
                 >
-                  <Icon className={`h-4 w-4 ${active ? "text-primary" : ""}`} />
-                  {label}
+                  <Icon className={`h-4 w-4 ${active ? "text-slate-950" : "text-[#F7BC5F]"}`} />
+                  <span>{label}</span>
                 </button>
               );
             })}
+          </div>
 
-            <div className="ml-auto flex items-center gap-2">
-              {isAdmin && (
-                <button className="primary-gold text-xs" onClick={() => setFormOpen(true)}>
-                  <Plus className="h-4 w-4 mr-1" /> Ajouter un bien
-                </button>
-              )}
-            </div>
+          <div className="flex items-center gap-2 ml-auto">
+            {isHome && isAdmin && (
+              <button
+                type="button"
+                onClick={() => setFormOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Ajouter un bien</span>
+              </button>
+            )}
+
+            {onExitToCrm && (
+              <button
+                type="button"
+                onClick={onExitToCrm}
+                className="px-3 py-2 rounded-xl border border-white/10 hover:bg-white/5 text-slate-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Revenir à l'accueil du CRM"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span>Retour CRM</span>
+              </button>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       <ErrorBoundary>
         <Routes>
