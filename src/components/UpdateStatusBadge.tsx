@@ -18,11 +18,13 @@ export const UpdateStatusBadge: React.FC<UpdateStatusBadgeProps> = ({ className 
   const sha = typeof __BUILD_INFO__ !== 'undefined' ? __BUILD_INFO__.sha : bootVersion?.slice(0, 7);
 
   if (isUpdatePending) {
+    // Si une mise à jour est en attente, le voyant orange doit TOUJOURS être visible
+    const pendingClass = className.replace(/\bhidden\b/g, '').trim();
     return (
       <button
         type="button"
         onClick={() => applyUpdateOnNavigation({})}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all duration-300 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)] select-none shrink-0 cursor-pointer ${className}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all duration-300 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)] select-none shrink-0 cursor-pointer ${pendingClass}`}
         title="Une mise à jour a été déployée. Elle s'appliquera automatiquement dès que vous changerez de dossier, d'onglet ou de fenêtre."
       >
         <span className="relative flex h-2 w-2 shrink-0">
