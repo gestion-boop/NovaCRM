@@ -441,8 +441,8 @@ export const Header: React.FC<
           <Settings className="w-4 h-4" />
         </button>
 
-        {/* Statut Mise à jour (Vert = Appliquée, Orange = En attente) */}
-        <UpdateStatusBadge className="hidden sm:inline-flex" />
+        {/* Voyant Mise à jour : discret, s'affiche en orange uniquement si une mise à jour est en attente */}
+        <UpdateStatusBadge onlyWhenPending className="inline-flex" />
 
         {/* CLOCHETTE : CENTRE NOTIFICATIONS — tout à droite du header
             (après l'avatar), demandé pour rester visible en dernier sur

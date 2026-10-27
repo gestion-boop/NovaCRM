@@ -5,16 +5,25 @@ import { toast } from 'sonner';
 interface UpdateStatusBadgeProps {
   className?: string;
   showDetails?: boolean;
+  onlyWhenPending?: boolean;
 }
 
 /**
- * Badge d'état de mise à jour tout en haut :
+ * Badge d'état de mise à jour :
  * - VERT quand la dernière mise à jour est bien appliquée, avec date et heure de déploiement
  * - ORANGE quand une nouvelle mise à jour est prête / en attente d'application
- * (S'applique automatiquement au prochain changement de dossier ou d'onglet, ou clic direct)
+ * - Si onlyWhenPending est activé : ne s'affiche que s'il y a une mise à jour en attente (masqué sinon)
  */
-export const UpdateStatusBadge: React.FC<UpdateStatusBadgeProps> = ({ className = '', showDetails = false }) => {
+export const UpdateStatusBadge: React.FC<UpdateStatusBadgeProps> = ({
+  className = '',
+  showDetails = false,
+  onlyWhenPending = false,
+}) => {
   const { isUpdatePending, bootVersion } = useAppUpdateStatus();
+
+  if (onlyWhenPending && !isUpdatePending) {
+    return null;
+  }
 
   const sha = typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.sha !== 'inconnu'
     ? __BUILD_INFO__.sha

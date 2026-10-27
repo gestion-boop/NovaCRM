@@ -43,7 +43,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { isStandaloneApp } from '@/hooks/useIsStandalone';
 import { UpdateStatusBadge } from './UpdateStatusBadge';
-import { formatBuildDate } from '@/lib/updateStatus';
+import { formatBuildDate, useAppUpdateStatus, applyUpdateOnNavigation } from '@/lib/updateStatus';
 
 interface RealNotificationRow {
   id: string;
@@ -772,9 +772,12 @@ export const NotificationsView: React.FC<
   );
   const visibleNotifications = isMobile ? mobileNotifications : allNotifications;
 
-  const buildStampText = useMemo(() => {
-    return formatBuildDate({ withYear: false });
-  }, []);
+  const { isUpdatePending, bootVersion } = useAppUpdateStatus();
+  const buildStampText = useMemo(() => formatBuildDate({ withYear: false }), []);
+  const buildDateFull = useMemo(() => formatBuildDate({ withYear: true }), []);
+  const buildSha = typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__?.sha !== 'inconnu'
+    ? __BUILD_INFO__.sha
+    : bootVersion?.slice(0, 7);
 
   // Ticket #220 (v4) : pas juste "la même icône" mais la miniature de la
   // VRAIE tuile d'accueil correspondante (AccueilGrid.tsx) — même dégradé
@@ -816,15 +819,7 @@ export const NotificationsView: React.FC<
                 {visibleNotifications.length}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 truncate flex items-center gap-1.5">
-              <span>{activeAgency.name}</span>
-              {buildStampText && (
-                <>
-                  <span className="text-slate-600">·</span>
-                  <span className="text-emerald-400/90 font-mono text-[10px]">MàJ : {buildStampText}</span>
-                </>
-              )}
-            </p>
+            <p className="text-[11px] text-slate-400 truncate">{activeAgency.name}</p>
           </div>
         </div>
 
@@ -966,9 +961,38 @@ export const NotificationsView: React.FC<
         </div>
       )}
 
-      {/* État système & version — positionné proprement en bas du panneau */}
-      <div className="pt-2 pb-1 flex items-center justify-center">
-        <UpdateStatusBadge showDetails />
+      {/* État système & version — positionné discrètement tout en bas du panneau de notifications */}
+      <div className="pt-3 pb-1 border-t border-white/5 space-y-2">
+        {isUpdatePending && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!applyUpdateOnNavigation({})) {
+                window.location.reload();
+              }
+            }}
+            className="w-full py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-md"
+          >
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+            </span>
+            <span>Mise à jour prête — Cliquer pour l'installer</span>
+          </button>
+        )}
+
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px] text-slate-400 px-1">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+            <span>Dernière mise à jour appliquée :</span>
+            <span className="font-mono text-emerald-300 font-semibold">{buildDateFull || buildStampText || 'À jour'}</span>
+          </div>
+          {buildSha && (
+            <span className="text-[10px] text-slate-500 font-mono">
+              Build {buildSha}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
