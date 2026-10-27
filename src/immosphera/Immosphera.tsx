@@ -116,14 +116,14 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
   }
 
   return (
-    <div className="immosphera-root">
-      {/* Barre de navigation et filtres de façade Immosphera 360 — tout en haut, fluide et accessible */}
-      <div className="sticky top-0 z-30 bg-[#07171B]/95 backdrop-blur-md border-b border-white/10 px-3 sm:px-6 py-2 shadow-sm">
+    <div className="immosphera-root min-h-screen bg-gradient-to-b from-[#071317] via-[#091a20] to-[#050e11] text-white">
+      {/* Barre de navigation et filtres de façade Immosphera 360 — Effet glace dépoli tout en haut */}
+      <div className="sticky top-0 z-40 bg-[#071317]/80 backdrop-blur-2xl border-b border-white/15 px-3 sm:px-6 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
         <div className="flex items-center justify-between gap-2.5 flex-wrap">
-          {/* Piliers du module + Filtres rapides */}
+          {/* Piliers du module + Séparation marquée + Filtres Catégories */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             {/* 3 grands piliers */}
-            <div className="flex items-center gap-1 bg-black/40 p-1 rounded-2xl border border-white/10">
+            <div className="flex items-center gap-1 bg-black/45 p-1 rounded-2xl border border-white/15 shadow-inner">
               {navItems.map(({ label, icon: Icon, path }) => {
                 const active = path === "/immosphera" ? isHome : location.pathname.startsWith(path);
                 return (
@@ -138,8 +138,8 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
                     }}
                     className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                       active
-                        ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/20 font-extrabold"
-                        : "text-slate-300 hover:text-white hover:bg-white/5"
+                        ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/25 font-extrabold"
+                        : "text-slate-300 hover:text-white hover:bg-white/10"
                     }`}
                   >
                     <Icon className={`h-4 w-4 ${active ? "text-slate-950" : "text-[#F7BC5F]"}`} />
@@ -149,9 +149,13 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
               })}
             </div>
 
-            {/* Raccourcis directs Ventes, Locations, Nouveautés... (sur la vue Biens) */}
+            {/* SÉPARATION NETTE AVEC LES CATÉGORIES */}
             {isHome && (
-              <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap pl-1 border-l border-white/10 ml-1">
+              <div className="flex items-center gap-1.5 flex-wrap pl-3 border-l-2 border-[#F7BC5F]/40 ml-1.5">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#FAD592]/80 select-none hidden lg:inline-flex items-center gap-1">
+                  <Tag className="w-3 h-3 text-[#F7BC5F]" /> Catégories :
+                </span>
+
                 {PROPERTY_QUICK_FILTERS.map(({ chip, label, icon: Icon }) => {
                   const active = activeChip === chip;
                   return (
@@ -159,7 +163,7 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
                       key={chip}
                       type="button"
                       onClick={() => {
-                        setShowHero(false); // Clic sur un filtre rapide : la photo disparaît, la recherche remonte
+                        setShowHero(false); // Clic sur une catégorie : la photo disparaît, la recherche remonte
                         handleChipClick(chip);
                       }}
                       className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${

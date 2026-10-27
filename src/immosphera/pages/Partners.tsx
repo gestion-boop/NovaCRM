@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Phone, Mail, MapPin, Building2, Edit, Trash2, Users, ChevronsUpDown, Check, X, FileText, Globe, ChevronDown } from "lucide-react";
+import { Plus, Search, Phone, Mail, MapPin, Building2, Edit, Trash2, Users, ChevronsUpDown, Check, X, FileText, Globe, ChevronDown, ArrowUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -74,6 +74,7 @@ export default function Partners() {
   const [search, setSearch] = useState("");
   const [searchCity, setSearchCity] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [sortBy, setSortBy] = useState<"category" | "name" | "company">("category");
   const [saving, setSaving] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
 
@@ -234,21 +235,38 @@ export default function Partners() {
     return matchCat && matchSearch && matchCity;
   });
 
+  // Classement alphabétique des métiers (Multiservices, Jardinier, etc.) ou par nom / entreprise
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === "category") {
+      const catA = CATEGORY_MAP[a.category] || a.category || "";
+      const catB = CATEGORY_MAP[b.category] || b.category || "";
+      const cmp = catA.localeCompare(catB, "fr", { sensitivity: "base" });
+      if (cmp !== 0) return cmp;
+      return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, "fr");
+    }
+    if (sortBy === "company") {
+      const compA = a.company || "zzz";
+      const compB = b.company || "zzz";
+      return compA.localeCompare(compB, "fr", { sensitivity: "base" });
+    }
+    return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, "fr");
+  });
+
   const canEdit = (p: Partner) => isAdmin || p.created_by === user?.id;
 
   return (
-    <div className="w-full py-5 sm:py-7 px-4 sm:px-8 max-w-7xl mx-auto space-y-6">
-      {/* En-tête de la page Partenaires */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-[#07191b]/95 via-[#0c262a]/90 to-[#07191b]/95 border border-[#F7BC5F]/20 shadow-xl">
+    <div className="w-full py-4 sm:py-6 px-4 sm:px-8 max-w-7xl mx-auto space-y-5">
+      {/* En-tête de la page Partenaires — Effet glace sombre (Glassmorphism) */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-[#07191b]/80 via-[#0c262a]/70 to-[#07191b]/80 backdrop-blur-2xl border border-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
         <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-[#F7BC5F]/15 border border-[#F7BC5F]/35 text-[#FAD592] flex items-center justify-center shadow-[0_0_15px_rgba(247,188,95,0.2)]">
+          <div className="w-12 h-12 rounded-2xl bg-[#F7BC5F]/20 border border-[#F7BC5F]/40 text-[#FAD592] flex items-center justify-center shadow-[0_0_20px_rgba(247,188,95,0.25)]">
             <Users className="h-6 w-6 text-[#F7BC5F]" />
           </div>
           <div>
             <div className="flex items-center gap-2.5">
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">Annuaire Partenaires</h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#F7BC5F]/20 text-[#F7BC5F] border border-[#F7BC5F]/30">
-                {filtered.length} contact{filtered.length > 1 ? "s" : ""}
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#F7BC5F]/20 text-[#F7BC5F] border border-[#F7BC5F]/35 shadow-sm">
+                {sorted.length} contact{sorted.length > 1 ? "s" : ""}
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -266,34 +284,37 @@ export default function Partners() {
         </button>
       </div>
 
-      {/* Barre de filtres et recherche */}
-      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 p-3.5 rounded-2xl bg-[#0a181c]/80 border border-white/10 backdrop-blur-md">
-        <div className="sm:col-span-5 relative">
+      {/* Barre de filtres et recherche — Effet glace sombre avec tri alphabétique */}
+      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 p-3.5 rounded-2xl bg-[#07171b]/75 backdrop-blur-2xl border border-white/15 shadow-xl">
+        {/* Recherche par nom / entreprise */}
+        <div className="sm:col-span-4 relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             placeholder="Rechercher par nom, entreprise..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#051114] border border-white/15 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+            className="w-full bg-[#051114]/80 backdrop-blur-md border border-white/15 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
           />
         </div>
 
-        <div className="sm:col-span-4 relative">
+        {/* Filtrer par ville ou secteur */}
+        <div className="sm:col-span-3 relative">
           <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
-            placeholder="Filtrer par ville ou secteur..."
+            placeholder="Filtrer par ville..."
             value={searchCity}
             onChange={(e) => setSearchCity(e.target.value)}
-            className="w-full bg-[#051114] border border-white/15 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+            className="w-full bg-[#051114]/80 backdrop-blur-md border border-white/15 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
           />
         </div>
 
+        {/* Filtrer par catégorie */}
         <div className="sm:col-span-3 relative">
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
             style={{ colorScheme: "dark" }}
-            className={`w-full bg-[#051114] border border-white/15 rounded-xl px-3.5 py-2 pr-9 text-xs sm:text-sm focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none ${
+            className={`w-full bg-[#051114]/80 backdrop-blur-md border border-white/15 rounded-xl px-3.5 py-2 pr-9 text-xs sm:text-sm focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none ${
               filterCategory === "all" ? "text-slate-500" : "text-white font-medium"
             }`}
           >
@@ -306,17 +327,33 @@ export default function Partners() {
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
         </div>
+
+        {/* Classer par ordre alphabétique des métiers */}
+        <div className="sm:col-span-2 relative">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            style={{ colorScheme: "dark" }}
+            className="w-full bg-[#051114]/80 backdrop-blur-md border border-[#F7BC5F]/35 rounded-xl px-3 py-2 pr-8 text-xs sm:text-xs font-bold text-[#FAD592] focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none shadow-sm"
+            title="Classer les partenaires"
+          >
+            <option value="category" className="bg-[#0B151A] text-white">Métiers (A → Z)</option>
+            <option value="name" className="bg-[#0B151A] text-white">Noms (A → Z)</option>
+            <option value="company" className="bg-[#0B151A] text-white">Entreprises (A → Z)</option>
+          </select>
+          <ArrowUpDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#F7BC5F] pointer-events-none" />
+        </div>
       </div>
 
-      {/* Grille des partenaires moderne */}
+      {/* Grille des partenaires moderne — Effet glace sombre */}
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="h-48 rounded-2xl bg-white/5 animate-pulse border border-white/5" />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-2xl p-12 text-center border border-white/10 bg-[#07191b]/50 flex flex-col items-center justify-center gap-3">
+      ) : sorted.length === 0 ? (
+        <div className="rounded-3xl p-12 text-center border border-white/10 bg-[#07191b]/50 backdrop-blur-xl flex flex-col items-center justify-center gap-3">
           <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-500">
             <Users className="h-7 w-7" />
           </div>
@@ -333,7 +370,7 @@ export default function Partners() {
                 setSearchCity("");
                 setFilterCategory("all");
               }}
-              className="mt-2 text-xs text-[#F7BC5F] hover:underline"
+              className="mt-2 text-xs text-[#F7BC5F] hover:underline cursor-pointer"
             >
               Réinitialiser les filtres
             </button>
@@ -341,13 +378,13 @@ export default function Partners() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((p) => {
+          {sorted.map((p) => {
             const initials = `${p.first_name?.charAt(0) || ""}${p.last_name?.charAt(0) || ""}`.toUpperCase() || "P";
             const docCount = Array.isArray((p as any).documents) ? (p as any).documents.length : 0;
             return (
               <div
                 key={p.id}
-                className="group relative bg-[#09171b] border border-white/10 hover:border-[#F7BC5F]/50 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 cursor-pointer"
+                className="group relative bg-[#09171b]/65 backdrop-blur-xl border border-white/10 hover:border-[#F7BC5F]/60 rounded-2xl p-4.5 flex flex-col justify-between transition-all duration-300 hover:shadow-[0_8px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 cursor-pointer"
                 onClick={() => setSelectedPartner(p)}
               >
                 <div>
