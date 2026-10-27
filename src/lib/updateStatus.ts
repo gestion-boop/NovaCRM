@@ -8,6 +8,38 @@ export interface ServerVersion {
   builtAt?: string;
 }
 
+export function getBuildInfo(): { ref: string; sha: string; at: string } {
+  if (typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__) {
+    return __BUILD_INFO__;
+  }
+  return { ref: 'dev', sha: 'dev', at: '' };
+}
+
+export function formatBuildDate(options?: { withYear?: boolean; withSha?: boolean }): string {
+  const info = getBuildInfo();
+  if (!info.at) return '';
+  try {
+    const d = new Date(info.at);
+    if (Number.isNaN(d.getTime())) return '';
+    const datePart = d.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      ...(options?.withYear ? { year: 'numeric' } : {}),
+    });
+    const timePart = d.toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const formatted = `${datePart} à ${timePart}`;
+    if (options?.withSha && info.sha && info.sha !== 'inconnu') {
+      return `${formatted} (${info.sha})`;
+    }
+    return formatted;
+  } catch {
+    return '';
+  }
+}
+
 export async function fetchServerVersion(): Promise<ServerVersion | null> {
   try {
     const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });

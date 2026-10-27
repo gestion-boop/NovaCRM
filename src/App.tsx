@@ -60,7 +60,7 @@ import PublicVisiteImmosphera from './immosphera/pages/TourView';
 import { EVENEMENT_COMPOSER_MAIL } from './lib/composerMail';
 import { EcranErrorBoundary } from './components/EcranErrorBoundary';
 import UpdateBanner from './components/UpdateBanner';
-import { applyUpdateOnNavigation } from './lib/updateStatus';
+import { applyUpdateOnNavigation, formatBuildDate, getBuildInfo } from './lib/updateStatus';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
 import EnablePushPrompt from './components/EnablePushPrompt';
@@ -1724,11 +1724,23 @@ function App() {
             <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/60 to-transparent pointer-events-none" />
 
             <div className="min-h-14 shrink-0 px-4.5 sm:px-5 flex items-center justify-between border-b border-teal-500/15 bg-gradient-to-r from-[#081b1e]/95 via-[#0b2427]/95 to-[#081b1e]/95 pt-[env(safe-area-inset-top,0px)]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#F7BC5F]/25 to-amber-600/30 border border-[#F7BC5F]/40 flex items-center justify-center text-[#FAD592] shadow-[0_0_12px_rgba(247,188,95,0.25)]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#F7BC5F]/25 to-amber-600/30 border border-[#F7BC5F]/40 flex items-center justify-center text-[#FAD592] shadow-[0_0_12px_rgba(247,188,95,0.25)] shrink-0">
                   <Bell className="w-4 h-4" />
                 </div>
-                <h2 className="text-sm font-bold text-white tracking-wide">Rappels &amp; Alertes</h2>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-white tracking-wide truncate">Rappels &amp; Alertes</h2>
+                  {formatBuildDate() && (
+                    <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 truncate mt-0.5" title={`Déployé le ${formatBuildDate({ withYear: true, withSha: true })}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                      <span className="text-emerald-400 font-semibold">MàJ :</span>
+                      <span>{formatBuildDate({ withYear: true })}</span>
+                      {getBuildInfo().sha && getBuildInfo().sha !== 'inconnu' && (
+                        <span className="text-slate-500 border-l border-white/10 pl-1.5">{getBuildInfo().sha}</span>
+                      )}
+                    </p>
+                  )}
+                </div>
               </div>
               <button
                 type="button"

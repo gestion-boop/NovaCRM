@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAppUpdateStatus, applyUpdateOnNavigation } from '@/lib/updateStatus';
+import { useAppUpdateStatus, applyUpdateOnNavigation, formatBuildDate } from '@/lib/updateStatus';
 
 interface UpdateStatusBadgeProps {
   className?: string;
@@ -8,7 +8,7 @@ interface UpdateStatusBadgeProps {
 
 /**
  * Badge d'état de mise à jour tout en haut :
- * - VERT quand la dernière mise à jour est bien appliquée
+ * - VERT quand la dernière mise à jour est bien appliquée, avec date et heure de déploiement
  * - ORANGE quand une nouvelle mise à jour est prête / en attente d'application
  * (S'applique automatiquement au prochain changement de dossier ou d'onglet)
  */
@@ -16,6 +16,8 @@ export const UpdateStatusBadge: React.FC<UpdateStatusBadgeProps> = ({ className 
   const { isUpdatePending, bootVersion } = useAppUpdateStatus();
 
   const sha = typeof __BUILD_INFO__ !== 'undefined' ? __BUILD_INFO__.sha : bootVersion?.slice(0, 7);
+  const buildDateShort = formatBuildDate({ withYear: false });
+  const buildDateFull = formatBuildDate({ withYear: true });
 
   if (isUpdatePending) {
     // Si une mise à jour est en attente, le voyant orange doit TOUJOURS être visible
@@ -39,12 +41,17 @@ export const UpdateStatusBadge: React.FC<UpdateStatusBadgeProps> = ({ className 
   return (
     <div
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all duration-300 bg-emerald-500/15 text-emerald-300 border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.2)] select-none shrink-0 ${className}`}
-      title="Votre application tourne sur la dernière version déployée."
+      title={buildDateFull ? `Version déployée le ${buildDateFull}${sha ? ` (${sha})` : ''}. Votre application tourne sur la dernière version.` : "Votre application tourne sur la dernière version déployée."}
     >
       <span className="relative flex h-2 w-2 shrink-0">
         <span className="inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
       </span>
-      <span className="tracking-wide">Mise à jour : Appliquée</span>
+      <span className="tracking-wide">MàJ : Appliquée</span>
+      {buildDateShort && (
+        <span className="text-[10px] font-mono text-emerald-400/90 border-l border-emerald-500/30 pl-1.5 ml-0.5">
+          {buildDateShort}
+        </span>
+      )}
       {sha && showDetails && (
         <span className="text-[10px] font-mono text-emerald-400/70 border-l border-emerald-500/30 pl-1.5 ml-0.5">
           {sha}
