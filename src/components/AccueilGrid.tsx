@@ -1849,9 +1849,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       if (Array.isArray(parsed)) saved = parsed;
     } catch { /* ignore */ }
     const grid: (string | null)[] = Array(ROOT_GRID_SLOTS).fill(null);
+    // RÈGLE ABSOLUE : si une position est sauvegardée, elle est préservée intacte.
     saved.slice(0, ROOT_GRID_SLOTS).forEach((id, i) => {
-      // Filtrer les fantômes d'autres agences ou de tuiles supprimées
-      if (typeof id === 'string' && id !== ADD_TILE_ID && realIds.has(id)) {
+      if (typeof id === 'string' && id !== ADD_TILE_ID) {
         grid[i] = id;
       }
     });
@@ -2030,35 +2030,26 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         const cleTuiles = `novasphere_home_tiles_v3_${currentUser.uid}_${agencyId}`;
         const cleSlots = `novasphere_home_slots_v5_${currentUser.uid}_${agencyId}`;
         const toujoursActive = () => homeTilesKeyRef.current === cleTuiles;
-        const lectureTuiles = lireDispositionAgence((data as any)?.home_tiles, agencyId);
-        const tuilesServeur = lectureTuiles.items;
-        const majLocaleTuiles = lireHorodatageLocal(cleTuiles) ?? 0;
-        const localeTuilesPlusFraiche = majLocaleTuiles > (lectureTuiles.maj ?? 0);
-        if (localeTuilesPlusFraiche) {
+        // ── RÈGLE ABSOLUE ANTI-DÉPLACEMENT LORS DES MISES À JOUR ──────────
+        // Si l'utilisateur possède déjà une grille de positions locale (localStorage)
+        // avec des tuiles enregistrées pour cette agence :
+        // CETTE DISPOSITION LOCALE EST LA VÉRITÉ ABSOLUE.
+        // Le serveur NE DOIT JAMAIS écraser ou décaler les tuiles locales de l'utilisateur !
+        // C'est le navigateur qui synchronise et met à jour le serveur, JAMAIS l'inverse.
+        // Le serveur ne sert que de repli (fallback) sur un appareil STRICTEMENT vierge.
+        const brutTuilesLocal = localStorage.getItem(cleTuiles);
+        let tuilesLocales: TileItemNode[] = [];
+        try { if (brutTuilesLocal) tuilesLocales = JSON.parse(brutTuilesLocal); } catch { /* ignore */ }
+        const aDesTuilesLocales = Array.isArray(tuilesLocales) && tuilesLocales.length > 0;
+
+        if (aDesTuilesLocales) {
           homeSyncReadyAgencies.add(clefSync);
-          const locales = toujoursActive() ? tilesRef.current : JSON.parse(localStorage.getItem(cleTuiles) || '[]');
-          void ecrireDispositionAgence('home_tiles', currentUser.uid, agencyId, locales, majLocaleTuiles);
+          const locales = toujoursActive() ? tilesRef.current : tuilesLocales;
+          const maj = Date.now();
+          ecrireHorodatageLocal(cleTuiles, maj);
+          void ecrireDispositionAgence('home_tiles', currentUser.uid, agencyId, locales, maj);
         } else if (tuilesServeur && tuilesServeur.length > 0) {
-          // Signalé (capture d'une grille synchronisée depuis le serveur) :
-          // Agenda & RDV / Rappels & Alertes / Tableau de bord réapparaissaient
-          // malgré leur retrait de la grille (déjà dans le bandeau du haut) —
-          // cette grille-ci vient du SERVEUR et ne passe jamais par
-          // `reconcilierGrille` (voir la note juste en dessous), donc un
-          // retrait qui n'aurait vécu que là-bas restait sans effet ici. Même
-          // filtre, sûr sur une grille venue du serveur (ne touche que ces
-          // identifiants précis, jamais le contenu d'un dossier verrouillé).
-          //
-          // Complété (19/09/2026) : cette liste fixe ne couvrait que 3 ids
-          // précis (Agenda/Rappels/Tableau de bord) — une tuile MASQUÉE par
-          // l'utilisateur (ex. tout un dossier "Communication", supprimé
-          // localement mais dont la suppression n'avait pas encore atteint
-          // le serveur au moment de cette lecture) réapparaissait donc quand
-          // même dès que la version serveur, plus ancienne, l'emportait.
-          // `retirerTuilesMasqueesRecursif` applique le MÊME filtre général
-          // que `reconcilierGrille` (masquage utilisateur, `novasphere_
-          // hidden_tiles_v1`) — sans toucher au contenu des dossiers
-          // verrouillés, qui vit ailleurs (agency_ui_settings), jamais dans
-          // cette liste.
+          // Premier chargement sur un appareil vierge uniquement
           const normalisees = reinjecterReserverCamera(
             retirerTuilesMasqueesRecursif(
               retirerDossierCommunication(
@@ -2076,25 +2067,25 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
           if (!toujoursActive()) return;
           skipNextTilesSaveRef.current = true;
           derniersTilesRef.current = JSON.stringify(normalisees);
-          // ATTENTION — ne pas repasser cette grille par reconcilierGrille.
-          // Essayé le 2 septembre, pour que les nouveaux modules
-          // apparaissent aussi sur les grilles synchronisées : les tuiles
-          // ImmoSphera sont ressorties de leur dossier. Le contenu d'un
-          // dossier VERROUILLÉ n'est pas stocké dans la grille (il est
-          // imposé à l'affichage par applyLocks, à partir de
-          // agency_ui_settings) : la réconciliation ne les trouve donc pas,
-          // les croit disparues, et les repose à la racine. Même piège que
-          // les « cinq Immosphera » du 1er septembre.
           setTiles(normalisees);
         }
+
         const lectureSlots = lireDispositionAgence((data as any)?.home_root_slots, agencyId);
         const slotsServeur = lectureSlots.items;
-        const majLocaleSlots = lireHorodatageLocal(cleSlots) ?? 0;
-        if (majLocaleSlots > (lectureSlots.maj ?? 0)) {
+        const brutSlotsLocal = localStorage.getItem(cleSlots);
+        let slotsLocaux: (string | null)[] = [];
+        try { if (brutSlotsLocal) slotsLocaux = JSON.parse(brutSlotsLocal); } catch { /* ignore */ }
+        const aDesSlotsLocaux = Array.isArray(slotsLocaux) && slotsLocaux.some(Boolean);
+
+        if (aDesSlotsLocaux) {
+          // RÈGLE ABSOLUE : sanctuarise les positions de cases locales, pas d'écrasement serveur
           homeSyncReadyAgencies.add(clefSync);
-          const locaux = toujoursActive() ? rootSlotsRef.current : JSON.parse(localStorage.getItem(cleSlots) || '[]');
-          void ecrireDispositionAgence('home_root_slots', currentUser.uid, agencyId, locaux, majLocaleSlots);
-        } else if (slotsServeur) {
+          const locaux = toujoursActive() ? rootSlotsRef.current : slotsLocaux;
+          const maj = Date.now();
+          ecrireHorodatageLocal(cleSlots, maj);
+          void ecrireDispositionAgence('home_root_slots', currentUser.uid, agencyId, locaux, maj);
+        } else if (slotsServeur && Array.isArray(slotsServeur) && slotsServeur.some(Boolean)) {
+          // Premier chargement sur un appareil vierge uniquement
           const valeur = slotsServeur as (string | null)[];
           try { localStorage.setItem(cleSlots, JSON.stringify(valeur)); } catch { /* ignore */ }
           if (lectureSlots.maj) ecrireHorodatageLocal(cleSlots, lectureSlots.maj);

@@ -5,7 +5,7 @@ import {
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Mic2, Square, Eye, ArrowLeft, Check, CheckCheck,
   Clock, Camera, Lock, Paperclip, FileText, Loader2, Video as VideoIcon,
-  Bold, Italic, Underline,
+  Bold, Italic, Underline, GripVertical,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -238,6 +238,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const isSuperAdmin = userProfile?.role === 'super_admin';
   // Les invitations / gestion des membres sont réservées aux admins (et super admin)
   const isAdmin = isSuperAdmin || userProfile?.role === 'admin';
+  // Sylvain et Mélanie peuvent réorganiser les dossiers et déplacer les canaux par drag and drop
+  const isSylvainOrMelanie =
+    isSuperAdmin ||
+    isAdmin ||
+    /sylvain/i.test(userProfile?.full_name || '') ||
+    /sylvain/i.test(currentUser?.email || '') ||
+    /m[eé]lanie/i.test(userProfile?.full_name || '') ||
+    /m[eé]lanie/i.test(currentUser?.email || '') ||
+    currentUser?.uid === '15bcec53-de3e-40b8-8b7e-bb6874836f29';
+
+  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
+  const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
+  const [draggedChannelInfo, setDraggedChannelInfo] = useState<{ id: string; projectId: string } | null>(null);
+  const [dragOverChannelId, setDragOverChannelId] = useState<string | null>(null);
+  const [dragOverTargetProjectId, setDragOverTargetProjectId] = useState<string | null>(null);
 
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('projets');
   const [projects, setProjects] = useState<ChatProject[]>([]);
@@ -3438,10 +3453,25 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       .map((r) => r.chat_projects)
       .filter(Boolean) as ChatProject[])
       .filter((p) => p.agency_id && !agencesJoignables.has(p.agency_id));
+    const isLes3Agences = (p: ChatProject) => p.agency_id === null || /3\s*agences/i.test(p.name);
     const dejaVus = new Set<string>();
     const list = [...parAgence, ...parAppartenance]
       .filter((p) => (dejaVus.has(p.id) ? false : (dejaVus.add(p.id), true)))
-      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      .sort((a, b) => {
+        // "Le dossier des 3 agences doit etre tout en haut c'est une obligation"
+        const a3 = isLes3Agences(a);
+        const b3 = isLes3Agences(b);
+        if (a3 && !b3) return -1;
+        if (!a3 && b3) return 1;
+        return (a.position ?? 0) - (b.position ?? 0);
+      });
+
+    // Règle obligatoire : "Les 3 agences" a la position 0
+    const les3 = list.find(isLes3Agences);
+    if (les3 && les3.position !== 0) {
+      les3.position = 0;
+      void supabase.from('chat_projects').update({ position: 0 }).eq('id', les3.id);
+    }
     setProjects(list);
 
     if (list.length > 0) {
@@ -3920,6 +3950,170 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     ]);
   };
 
+  const isLes3AgencesProj = (p: { name?: string | null; agency_id?: string | null }) =>
+    p.agency_id === null || /3\s*agences/i.test(p.name || '');
+
+  // Réordonner les dossiers (projets) en drag and drop (Sylvain et Mélanie)
+  const handleDropProject = async (targetProjectId: string) => {
+    if (!draggedProjectId || draggedProjectId === targetProjectId) {
+      setDraggedProjectId(null);
+      setDragOverProjectId(null);
+      return;
+    }
+    const target = projects.find((p) => p.id === targetProjectId);
+    if (target && isLes3AgencesProj(target)) {
+      setDraggedProjectId(null);
+      setDragOverProjectId(null);
+      return;
+    }
+
+    const currentList = [...projects];
+    const fromIdx = currentList.findIndex((p) => p.id === draggedProjectId);
+    const toIdx = currentList.findIndex((p) => p.id === targetProjectId);
+    if (fromIdx < 0 || toIdx < 0) {
+      setDraggedProjectId(null);
+      setDragOverProjectId(null);
+      return;
+    }
+
+    const [moved] = currentList.splice(fromIdx, 1);
+    currentList.splice(toIdx, 0, moved);
+
+    // Obligation : "Les 3 agences" reste TOUT EN HAUT (index 0)
+    const idx3 = currentList.findIndex(isLes3AgencesProj);
+    if (idx3 > 0) {
+      const [les3] = currentList.splice(idx3, 1);
+      currentList.unshift(les3);
+    }
+
+    currentList.forEach((p, idx) => { p.position = idx; });
+    setProjects(currentList);
+    setDraggedProjectId(null);
+    setDragOverProjectId(null);
+
+    try {
+      await Promise.all(
+        currentList.map((p) =>
+          supabase.from('chat_projects').update({ position: p.position }).eq('id', p.id)
+        )
+      );
+      toast.success('Ordre des dossiers mis à jour');
+    } catch (err) {
+      console.error('Erreur réordonnancement dossiers:', err);
+    }
+  };
+
+  // Déplacer un canal vers un dossier complet (glisser-déposer sur l'en-tête du dossier)
+  const handleDropChannelOnProject = async (targetProjectId: string) => {
+    if (!draggedChannelInfo) return;
+    const { id: channelId, projectId: sourceProjectId } = draggedChannelInfo;
+    setDraggedChannelInfo(null);
+    setDragOverTargetProjectId(null);
+
+    if (sourceProjectId === targetProjectId) return;
+
+    const sourceChannels = channelsByProject[sourceProjectId] || [];
+    const movedChannel = sourceChannels.find((c) => c.id === channelId);
+    if (!movedChannel) return;
+
+    const targetChannels = channelsByProject[targetProjectId] || [];
+    const newPosition = targetChannels.length;
+
+    const updatedChannel = { ...movedChannel, project_id: targetProjectId, position: newPosition, parent_channel_id: null };
+
+    setChannelsByProject((prev) => ({
+      ...prev,
+      [sourceProjectId]: (prev[sourceProjectId] || []).filter((c) => c.id !== channelId),
+      [targetProjectId]: [...(prev[targetProjectId] || []), updatedChannel],
+    }));
+
+    setExpanded((p) => ({ ...p, [targetProjectId]: true }));
+
+    try {
+      await supabase
+        .from('chat_channels')
+        .update({ project_id: targetProjectId, position: newPosition, parent_channel_id: null })
+        .eq('id', channelId);
+      const targetProj = projects.find((p) => p.id === targetProjectId);
+      toast.success(`Canal déplacé dans "${targetProj?.name || 'le dossier'}"`);
+    } catch (err) {
+      console.error('Erreur déplacement canal:', err);
+    }
+  };
+
+  // Déplacer / réordonner un canal sur un autre canal (même dossier ou dossier différent)
+  const handleDropChannelOnChannel = async (targetChannel: ChatChannel) => {
+    if (!draggedChannelInfo || draggedChannelInfo.id === targetChannel.id) {
+      setDraggedChannelInfo(null);
+      setDragOverChannelId(null);
+      return;
+    }
+    const { id: channelId, projectId: sourceProjectId } = draggedChannelInfo;
+    const targetProjectId = targetChannel.project_id;
+    setDraggedChannelInfo(null);
+    setDragOverChannelId(null);
+
+    if (sourceProjectId === targetProjectId) {
+      const list = [...(channelsByProject[sourceProjectId] || [])];
+      const fromIdx = list.findIndex((c) => c.id === channelId);
+      const toIdx = list.findIndex((c) => c.id === targetChannel.id);
+      if (fromIdx < 0 || toIdx < 0) return;
+
+      const [moved] = list.splice(fromIdx, 1);
+      list.splice(toIdx, 0, moved);
+      list.forEach((c, idx) => { c.position = idx; });
+
+      setChannelsByProject((prev) => ({ ...prev, [sourceProjectId]: list }));
+
+      try {
+        await Promise.all(
+          list.map((c) => supabase.from('chat_channels').update({ position: c.position }).eq('id', c.id))
+        );
+      } catch (err) {
+        console.error('Erreur réordonnancement canaux:', err);
+      }
+    } else {
+      const sourceChannels = channelsByProject[sourceProjectId] || [];
+      const movedChannel = sourceChannels.find((c) => c.id === channelId);
+      if (!movedChannel) return;
+
+      const targetChannels = [...(channelsByProject[targetProjectId] || [])];
+      const toIdx = targetChannels.findIndex((c) => c.id === targetChannel.id);
+
+      const updatedChannel = {
+        ...movedChannel,
+        project_id: targetProjectId,
+        parent_channel_id: targetChannel.parent_channel_id || null,
+      };
+
+      targetChannels.splice(toIdx >= 0 ? toIdx : targetChannels.length, 0, updatedChannel);
+      targetChannels.forEach((c, idx) => { c.position = idx; });
+
+      setChannelsByProject((prev) => ({
+        ...prev,
+        [sourceProjectId]: (prev[sourceProjectId] || []).filter((c) => c.id !== channelId),
+        [targetProjectId]: targetChannels,
+      }));
+
+      setExpanded((p) => ({ ...p, [targetProjectId]: true }));
+
+      try {
+        await Promise.all(
+          targetChannels.map((c) =>
+            supabase
+              .from('chat_channels')
+              .update({ project_id: targetProjectId, position: c.position, parent_channel_id: c.parent_channel_id })
+              .eq('id', c.id)
+          )
+        );
+        const targetProj = projects.find((p) => p.id === targetProjectId);
+        toast.success(`Canal déplacé dans "${targetProj?.name || 'le dossier'}"`);
+      } catch (err) {
+        console.error('Erreur déplacement canal entre dossiers:', err);
+      }
+    }
+  };
+
   // Sous-dossiers (4 septembre) : un canal peut désormais en contenir
   // d'autres (parent_channel_id, migration 20260904130000). Rendu
   // récursif — un canal qui a des enfants prend l'icône Folder (au lieu de
@@ -3942,9 +4136,53 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     const enfants = (channelsByProject[c.project_id] || []).filter((e) => e.parent_channel_id === c.id);
     const aDesEnfants = enfants.length > 0;
     const canalUnread = unreadCanalRecursif(c.id);
+    const isChannelDragged = draggedChannelInfo?.id === c.id;
+    const isChannelDragOver = dragOverChannelId === c.id;
+
     return (
-      <div key={c.id} className="space-y-1">
+      <div
+        key={c.id}
+        className={`space-y-1 rounded-xl transition-all ${
+          isChannelDragOver ? 'ring-2 ring-[#F7BC5F] bg-[#F7BC5F]/15' : ''
+        } ${isChannelDragged ? 'opacity-40' : ''}`}
+        onDragOver={(e) => {
+          if (isSylvainOrMelanie && draggedChannelInfo && draggedChannelInfo.id !== c.id) {
+            e.preventDefault();
+            e.stopPropagation();
+            setDragOverChannelId(c.id);
+          }
+        }}
+        onDragLeave={() => {
+          if (dragOverChannelId === c.id) setDragOverChannelId(null);
+        }}
+        onDrop={(e) => {
+          if (isSylvainOrMelanie && draggedChannelInfo) {
+            e.preventDefault();
+            e.stopPropagation();
+            void handleDropChannelOnChannel(c);
+          }
+        }}
+      >
         <div className="group flex items-center gap-1">
+          {isSylvainOrMelanie && (
+            <div
+              draggable
+              onDragStart={(e) => {
+                e.stopPropagation();
+                setDraggedChannelInfo({ id: c.id, projectId: c.project_id });
+                e.dataTransfer.setData('text/plain', c.id);
+              }}
+              onDragEnd={() => {
+                setDraggedChannelInfo(null);
+                setDragOverChannelId(null);
+                setDragOverTargetProjectId(null);
+              }}
+              className="p-1 cursor-grab active:cursor-grabbing text-slate-500 hover:text-[#F7BC5F] shrink-0"
+              title="Glisser pour déplacer le canal ou changer de dossier"
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+            </div>
+          )}
           {aDesEnfants && (
             <button
               onClick={() => setExpandedChannels((p) => ({ ...p, [c.id]: !p[c.id] }))}
@@ -4587,22 +4825,76 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             {projects.map((project, pi) => {
               const isSpecialGroup = project.agency_id === null;
               const isOpen = Boolean(expanded[project.id]);
+              const canDragThisProject = isSylvainOrMelanie && !isSpecialGroup;
+              const isDragOver = dragOverProjectId === project.id || dragOverTargetProjectId === project.id;
+              const isBeingDragged = draggedProjectId === project.id;
+
               return (
               <React.Fragment key={project.id}>
               {isMobile && pi > 0 && <div className="h-px bg-white/5 mx-1 my-1" />}
-              <div className="space-y-1">
+              <div
+                draggable={canDragThisProject}
+                onDragStart={(e) => {
+                  if (!canDragThisProject) return;
+                  setDraggedProjectId(project.id);
+                  e.dataTransfer.setData('text/plain', project.id);
+                }}
+                onDragEnd={() => {
+                  setDraggedProjectId(null);
+                  setDragOverProjectId(null);
+                  setDragOverTargetProjectId(null);
+                }}
+                onDragOver={(e) => {
+                  if (draggedProjectId && draggedProjectId !== project.id && !isSpecialGroup) {
+                    e.preventDefault();
+                    if (dragOverProjectId !== project.id) setDragOverProjectId(project.id);
+                  } else if (draggedChannelInfo && draggedChannelInfo.projectId !== project.id) {
+                    e.preventDefault();
+                    if (dragOverTargetProjectId !== project.id) setDragOverTargetProjectId(project.id);
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverProjectId === project.id) setDragOverProjectId(null);
+                  if (dragOverTargetProjectId === project.id) setDragOverTargetProjectId(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (draggedProjectId && draggedProjectId !== project.id && !isSpecialGroup) {
+                    handleDropProject(project.id);
+                  } else if (draggedChannelInfo && draggedChannelInfo.projectId !== project.id) {
+                    handleDropChannelOnProject(project.id);
+                  }
+                }}
+                className={`space-y-1 transition-all ${isBeingDragged ? 'opacity-40' : ''}`}
+              >
                 <div
                   className={`w-full flex items-center gap-1 rounded-xl transition-all ${
-                    isSpecialGroup
+                    isDragOver
+                      ? 'ring-2 ring-[#F7BC5F] bg-[#F7BC5F]/20'
+                      : isSpecialGroup
                       ? 'bg-[#F7BC5F]/10 border border-[#F7BC5F]/40'
                       : isOpen
                       ? 'bg-white/[0.06] border border-white/10'
                       : 'hover:bg-white/[0.04] border border-transparent'
                   }`}
                 >
+                  {canDragThisProject && (
+                    <div
+                      className="pl-2 py-2 text-slate-500 hover:text-white cursor-grab active:cursor-grabbing shrink-0"
+                      title="Glisser-déposer pour réordonner le dossier"
+                    >
+                      <GripVertical className="w-3.5 h-3.5" />
+                    </div>
+                  )}
                   <button
                     onClick={() => setExpanded((p) => ({ ...p, [project.id]: !p[project.id] }))}
-                    className={`flex-1 flex items-center justify-between min-w-0 font-semibold cursor-pointer ${isMobile ? 'px-3 py-3 text-sm' : 'px-2.5 py-2 text-xs'}`}
+                    className={`flex-1 flex items-center justify-between min-w-0 font-semibold cursor-pointer ${
+                      isMobile
+                        ? 'px-3 py-3 text-sm'
+                        : canDragThisProject
+                        ? 'pr-2.5 py-2 pl-1 text-xs'
+                        : 'px-2.5 py-2 text-xs'
+                    }`}
                   >
                     <span className="flex items-center gap-2 truncate">
                       {isOpen ? (
