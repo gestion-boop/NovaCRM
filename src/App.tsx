@@ -1693,26 +1693,33 @@ function App() {
         )}
       </div>
 
-      {/* Panneau latéral droit des notifications — effet tiroir aller/retour fluide et rapide */}
-      <>
-        <button
-          type="button"
-          aria-label="Fermer les notifications"
-          onClick={() => setNotificationsPanelOpen(false)}
-          className={`fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm cursor-default transition-opacity duration-150 ${
-            notificationsPanelOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-          }`}
-        />
-        <aside
-          className={`fixed right-3 sm:right-4 top-3 sm:top-4 bottom-3 sm:bottom-4 z-[80] w-[calc(100%-1.5rem)] sm:w-[440px] lg:w-[480px] bg-[#071317]/95 backdrop-blur-2xl border border-teal-500/25 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_30px_rgba(247,188,95,0.1)] flex flex-col overflow-hidden will-change-transform ${
-            notificationsPanelOpen ? 'translate-x-0' : 'translate-x-[110%] pointer-events-none'
-          }`}
-          style={{
-            top: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
-            bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
-            transition: 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-        >
+      {/* Panneau latéral droit des notifications — effet tiroir fluide avec AnimatePresence et createPortal */}
+      {createPortal(
+        <AnimatePresence>
+          {notificationsPanelOpen && (
+            <>
+              <motion.div
+                key="notifications-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                onClick={() => setNotificationsPanelOpen(false)}
+                className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm cursor-default"
+                aria-label="Fermer les notifications"
+              />
+              <motion.aside
+                key="notifications-drawer"
+                initial={{ x: '100%', opacity: 0.5 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: '100%', opacity: 0.5 }}
+                transition={{ type: 'spring', damping: 28, stiffness: 280, mass: 0.7 }}
+                className="fixed right-3 sm:right-4 top-3 sm:top-4 bottom-3 sm:bottom-4 z-[80] w-[calc(100%-1.5rem)] sm:w-[440px] lg:w-[480px] bg-[#071317]/95 backdrop-blur-2xl border border-teal-500/25 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_30px_rgba(247,188,95,0.1)] flex flex-col overflow-hidden will-change-transform"
+                style={{
+                  top: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
+                  bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
+                }}
+              >
             {/* Liseré supérieur or lumineux */}
             <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F]/60 to-transparent pointer-events-none" />
 
@@ -1766,8 +1773,12 @@ function App() {
                 }}
               />
             </div>
-          </aside>
-      </>
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>,
+    document.body
+  )}
 
       {/* Nouveau Lead Modal */}
       <NouveauLeadModal

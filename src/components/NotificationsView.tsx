@@ -828,19 +828,16 @@ export const NotificationsView: React.FC<
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <UpdateStatusBadge showDetails />
-          {visibleNotifications.length > 0 && (
-            <button
-              type="button"
-              onClick={dismissAllNotifications}
-              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
-              title="Effacer toutes les alertes de cette liste"
-            >
-              Tout effacer
-            </button>
-          )}
-        </div>
+        {visibleNotifications.length > 0 && (
+          <button
+            type="button"
+            onClick={dismissAllNotifications}
+            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+            title="Effacer toutes les alertes de cette liste"
+          >
+            Tout effacer
+          </button>
+        )}
       </div>
 
       {/* Mobile Push & PWA Notifications Card — repliée par défaut */}
@@ -968,6 +965,11 @@ export const NotificationsView: React.FC<
           {visibleNotifications.map((notification) => renderNotificationRow(notification))}
         </div>
       )}
+
+      {/* État système & version — positionné proprement en bas du panneau */}
+      <div className="pt-2 pb-1 flex items-center justify-center">
+        <UpdateStatusBadge showDetails />
+      </div>
     </div>
   );
 
