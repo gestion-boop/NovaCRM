@@ -236,17 +236,17 @@ function forcerDefilementBas(pane: HTMLElement | null, behavior: ScrollBehavior 
 export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, initialConversationId, onConversationTargetConsumed, initialChannelId, onChannelTargetConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const isSuperAdmin = userProfile?.role === 'super_admin';
-  // Les invitations / gestion des membres sont réservées aux admins (et super admin)
-  const isAdmin = isSuperAdmin || userProfile?.role === 'admin';
-  // Sylvain et Mélanie peuvent réorganiser les dossiers et déplacer les canaux par drag and drop
-  const isSylvainOrMelanie =
+  // Seuls les admins (super admin, admin, ou Sylvain & Mélanie) peuvent créer des dossiers et gérer les membres
+  const isAdmin =
     isSuperAdmin ||
-    isAdmin ||
+    userProfile?.role === 'admin' ||
     /sylvain/i.test(userProfile?.full_name || '') ||
     /sylvain/i.test(currentUser?.email || '') ||
     /m[eé]lanie/i.test(userProfile?.full_name || '') ||
     /m[eé]lanie/i.test(currentUser?.email || '') ||
     currentUser?.uid === '15bcec53-de3e-40b8-8b7e-bb6874836f29';
+  // Sylvain et Mélanie peuvent réorganiser les dossiers et déplacer les canaux par drag and drop
+  const isSylvainOrMelanie = isAdmin;
 
   const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
   const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
@@ -4346,7 +4346,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
    */
   const createProject = async () => {
     const nom = newProjectName.trim();
-    if (!nom || !currentUser) return;
+    if (!nom || !currentUser || !isAdmin) {
+      if (!isAdmin) {
+        toast.error('Seuls les administrateurs peuvent créer des dossiers.');
+      }
+      return;
+    }
     setCreatingProject(true);
     setProjectError(null);
     try {
@@ -4373,19 +4378,24 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         return;
       }
 
-      const participants = Array.from(newProjectMemberIds);
+      // Inclure les participants choisis ainsi que le créateur, sans doublons
+      const participants = Array.from(new Set([...Array.from(newProjectMemberIds), currentUser.uid]));
       if (participants.length > 0) {
-        // L'echec de cet ajout etait avale en silence : la fenetre se fermait
-        // comme si tout allait bien, et le dossier se retrouvait sans aucun
-        // participant. On le dit maintenant, comme pour le canal juste avant.
-        const { error: membresError } = await supabase.from('chat_project_members').insert(
+        // RÉSILIENCE ANTI "duplicate key value violates unique constraint chat_project_members_project_id_user_id_key" :
+        // Si un trigger Postgres côté serveur a déjà inséré le créateur ou les membres de l'agence,
+        // on utilise upsert avec ignoreDuplicates pour que le conflit ne lève aucune erreur.
+        const { error: membresError } = await supabase.from('chat_project_members').upsert(
           participants.map((uid) => ({ project_id: projectId, user_id: uid, added_by: currentUser.uid })) as any,
+          { onConflict: 'project_id,user_id', ignoreDuplicates: true }
         );
         if (membresError) {
-          setProjectError(`Participants non ajoutés : ${membresError.message}`);
-          return;
+          const msg = membresError.message || '';
+          if (!msg.includes('duplicate key') && !msg.includes('unique constraint')) {
+            setProjectError(`Participants non ajoutés : ${msg}`);
+            return;
+          }
         }
-        await notifierAjoutAuDossier(projectId, nom, participants);
+        void notifierAjoutAuDossier(projectId, nom, participants);
       }
 
       setShowAddProject(false);
@@ -4393,6 +4403,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       setNewProjectMemberIds(new Set());
       setNewProjectQuery('');
       await loadProjectsAndChannels();
+      toast.success(`Dossier "${nom}" créé avec succès`);
     } finally {
       setCreatingProject(false);
     }
@@ -4402,27 +4413,32 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (!isAdmin || !currentUser) return;
     const { data, error } = await supabase
       .from('chat_project_members')
-      .insert({ project_id: projectId, user_id: userId, added_by: currentUser.uid })
+      .upsert(
+        { project_id: projectId, user_id: userId, added_by: currentUser.uid } as any,
+        { onConflict: 'project_id,user_id', ignoreDuplicates: true }
+      )
       .select()
-      .single();
+      .maybeSingle();
     if (error) {
-      // Signalé (4 septembre, Immosphera) : « je ne peux pas inviter les
-      // autres équipes » — l'ajout d'un membre d'une autre agence était
-      // refusé côté serveur (RLS), mais cet échec restait avalé en
-      // silence : rien ne distinguait ça d'un bouton qui ne fait rien. Le
-      // super admin peut désormais inviter n'importe qui (voir migration
-      // 20260904130000) ; pour toute AUTRE cause de refus, l'erreur est au
-      // moins visible maintenant.
-      toast.error(`Participant non ajouté : ${error.message}`);
-      return;
+      if (!error.message?.includes('duplicate key') && !error.message?.includes('unique constraint')) {
+        toast.error(`Participant non ajouté : ${error.message}`);
+        return;
+      }
     }
-    if (data) {
-      setProjectMembers((prev) => [...prev, data as ChatProjectMember]);
-      // Même règle qu'à la création : on prévient la personne qu'on vient de
-      // l'ajouter, sinon elle découvre le dossier par hasard.
-      const dossier = projects.find((p) => p.id === projectId);
-      await notifierAjoutAuDossier(projectId, dossier ? dossier.name : 'un dossier', [userId]);
-    }
+    setProjectMembers((prev) => {
+      if (prev.some((m) => m.user_id === userId && m.project_id === projectId)) return prev;
+      return [...prev, (data as ChatProjectMember) || {
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        user_id: userId,
+        added_by: currentUser.uid,
+        created_at: new Date().toISOString(),
+      }];
+    });
+    // Même règle qu'à la création : on prévient la personne qu'on vient de
+    // l'ajouter, sinon elle découvre le dossier par hasard.
+    const dossier = projects.find((p) => p.id === projectId);
+    await notifierAjoutAuDossier(projectId, dossier ? dossier.name : 'un dossier', [userId]);
   };
 
   const removeMember = async (member: ChatProjectMember) => {
@@ -6731,9 +6747,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       )}
 
       {/* Modal Nouvelle conversation */}
-      {/* Création d'un dossier de projet — cloisonné à l'agence active, avec
-          ses participants. Voir createProject pour le détail. */}
-      {showAddProject && (
+      {/* Création d'un dossier de projet — réservé aux administrateurs, cloisonné à l'agence active */}
+      {showAddProject && isAdmin && (
         <div
           className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={() => setShowAddProject(false)}
