@@ -233,6 +233,60 @@ function forcerDefilementBas(pane: HTMLElement | null, behavior: ScrollBehavior 
   };
 }
 
+/**
+ * Compresse et redimensionne une image côté client (max 1600px, JPEG 82%)
+ * pour un affichage instantané, ultra net et un stockage léger (<300 Ko).
+ */
+async function compresserImage(file: File, maxDimension = 1600, quality = 0.82): Promise<string> {
+  if (!file.type.startsWith('image/') || file.type.includes('svg') || file.type.includes('gif')) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve((reader.result as string) || '');
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  return new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const src = e.target?.result as string;
+      if (!src) {
+        resolve('');
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(src);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    };
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, initialConversationId, onConversationTargetConsumed, initialChannelId, onChannelTargetConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
   const { currentUser, userProfile, activeAgency } = useAuth();
   const isSuperAdmin = userProfile?.role === 'super_admin';
@@ -2734,22 +2788,24 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     return null;
   };
 
-  const handleConvImageSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleConvImageSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target?.result as string;
-      if (!dataUrl) return;
-      setUploadingConvMedia(true);
-      try {
-        await insertConvMessage('image', dataUrl);
-      } finally {
-        setUploadingConvMedia(false);
+    setUploadingConvMedia(true);
+    try {
+      const dataUrl = await compresserImage(file);
+      if (!dataUrl) {
+        toast.error("Impossible de lire l'image sélectionnée.");
+        return;
       }
-    };
-    reader.readAsDataURL(file);
+      const err = await insertConvMessage('image', dataUrl, undefined, file.type || 'image/jpeg', file.name);
+      if (err) toast.error(`Erreur d'envoi : ${err}`);
+    } catch (err: any) {
+      toast.error(err?.message || "Erreur d'envoi de l'image.");
+    } finally {
+      setUploadingConvMedia(false);
+    }
   };
 
   // Envoi d'un PDF dans une conversation directe — demandé le 5 octobre
@@ -2846,6 +2902,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         body: fileName ?? '',
         kind,
         attachmentUrl,
+        attachment_url: attachmentUrl,
         attachmentMime: attachmentMime ?? undefined,
         attachmentDuration: attachmentDuration ?? undefined,
         sender_id: currentUser.uid,
@@ -2865,6 +2922,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           body: fileName ?? '',
           kind,
           attachmentUrl,
+          attachment_url: attachmentUrl,
           attachmentMime: attachmentMime ?? null,
           attachmentDuration: attachmentDuration ?? null,
           sender_id: currentUser.uid,
@@ -2888,13 +2946,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (!file) return;
     setUploadingChannelMedia(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      await insertChannelMedia('image', dataUrl);
+      const dataUrl = await compresserImage(file);
+      if (!dataUrl) {
+        toast.error("Impossible de lire l'image sélectionnée.");
+        return;
+      }
+      const err = await insertChannelMedia('image', dataUrl, undefined, file.type || 'image/jpeg', file.name);
+      if (err) {
+        toast.error(`Erreur d'envoi de l'image : ${err}`);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erreur lors de l'envoi de l'image.");
     } finally {
       setUploadingChannelMedia(false);
       if (channelImageInputRef.current) channelImageInputRef.current.value = '';
@@ -5688,6 +5750,24 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       onMouseUp={(e) => handleTextSelection(e.currentTarget, 'conv')}
                       onKeyUp={(e) => handleTextSelection(e.currentTarget, 'conv')}
                       onKeyDown={(e) => handleSaisieKeyDown(e, 'conv')}
+                      onPaste={(e) => {
+                        const file = Array.from(e.clipboardData?.items || []).find((item) => item.type.startsWith('image/'))?.getAsFile();
+                        if (file) {
+                          e.preventDefault();
+                          void (async () => {
+                            setUploadingConvMedia(true);
+                            try {
+                              const dataUrl = await compresserImage(file);
+                              if (dataUrl) {
+                                const err = await insertConvMessage('image', dataUrl, undefined, file.type || 'image/jpeg', file.name);
+                                if (err) toast.error(err);
+                              }
+                            } finally {
+                              setUploadingConvMedia(false);
+                            }
+                          })();
+                        }
+                      }}
                       placeholder="Écrire un message..."
                       disabled={isRecordingConv}
                       className="flex-1 min-w-0 resize-none bg-transparent border-0 px-2 py-1.5 text-sm text-white placeholder-slate-400 leading-relaxed focus:outline-none disabled:opacity-40"
@@ -5911,42 +5991,83 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           </div>
                         ) : isNova ? (
                           <img src={m.data?.body} alt="Nova" className="w-14 h-14 object-contain" />
-                        ) : m.data?.kind === 'image' && m.data?.attachmentUrl ? (
-                          /* Images et vocaux dans les canaux (31/08/2026) : le
-                             média est rangé dans le JSONB `data`, les canaux
-                             n'ayant pas les colonnes dédiées des conversations. */
-                          <button type="button" onClick={() => setConvLightboxUrl(m.data.attachmentUrl ?? null)} className="block">
-                            <img src={m.data.attachmentUrl} alt="Pièce jointe" className="max-w-[220px] max-h-[220px] rounded-xl object-cover" />
-                          </button>
-                        ) : m.data?.kind === 'video' && m.data?.attachmentUrl ? (
-                          isDriveEmbedUrl(m.data.attachmentUrl) ? (
-                            <iframe src={m.data.attachmentUrl} allow="autoplay" className="max-w-[220px] w-[220px] h-[160px] rounded-xl bg-black border-0" />
-                          ) : (
-                            <video src={m.data.attachmentUrl} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
-                          )
-                        ) : m.data?.kind === 'voice' && m.data?.attachmentUrl ? (
-                          <div className="flex items-center gap-2">
-                            <audio controls preload="none" src={m.data.attachmentUrl} className="h-9 max-w-[220px]" />
-                            {Boolean(m.data.attachmentDuration) && (
-                              <span className="text-[10px] opacity-70">{m.data.attachmentDuration}s</span>
-                            )}
-                          </div>
-                        ) : m.data?.kind === 'file' && m.data?.attachmentUrl ? (
-                          // PDF dans un canal (5 octobre) : même rendu que les
-                          // conversations directes (voir plus haut, m.kind === 'file').
-                          <button
-                            type="button"
-                            onClick={() => void ouvrirPieceJointe(m.data.attachmentUrl as string)}
-                            className="underline text-xs flex items-center gap-1.5 text-left"
-                          >
-                            <Paperclip className="w-3.5 h-3.5 shrink-0" />
-                            {m.data.body || 'Document'}
-                          </button>
-                        ) : (
-                          // select-text : voir le commentaire équivalent côté conversations
-                          // directes plus haut (même correctif, même cause : select-none racine).
-                          <p className="whitespace-pre-line select-text leading-relaxed">{linkifyText(m.data?.body || '')}</p>
-                        )}
+                        ) : (() => {
+                          const imgUrl =
+                            m.data?.attachmentUrl ||
+                            m.data?.attachment_url ||
+                            (m as any).attachment_url ||
+                            (m as any).attachmentUrl ||
+                            m.data?.url ||
+                            (typeof m.data?.body === 'string' &&
+                            (m.data.body.startsWith('data:image/') ||
+                              m.data.body.startsWith('blob:') ||
+                              /^https?:\/\/.*\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(m.data.body))
+                              ? m.data.body
+                              : null);
+                          const isImg =
+                            m.data?.kind === 'image' ||
+                            (m as any).kind === 'image' ||
+                            Boolean(imgUrl && (!m.data?.kind || m.data?.kind === 'text'));
+                          if (isImg && imgUrl) {
+                            return (
+                              <div className="space-y-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setConvLightboxUrl(imgUrl)}
+                                  className="block cursor-pointer overflow-hidden rounded-xl border border-white/10 hover:opacity-95 transition-opacity"
+                                >
+                                  <img
+                                    src={imgUrl}
+                                    alt="Pièce jointe"
+                                    className="max-w-[240px] max-h-[240px] sm:max-w-[320px] sm:max-h-[320px] rounded-xl object-contain bg-black/30"
+                                    loading="lazy"
+                                  />
+                                </button>
+                                {m.data?.body && m.data.body !== imgUrl && (
+                                  <p className="whitespace-pre-line select-text leading-relaxed">{linkifyText(m.data.body)}</p>
+                                )}
+                              </div>
+                            );
+                          }
+                          const videoUrl = m.data?.kind === 'video' ? (m.data?.attachmentUrl || m.data?.attachment_url || (m as any).attachment_url) : null;
+                          if (videoUrl) {
+                            return isDriveEmbedUrl(videoUrl) ? (
+                              <iframe src={videoUrl} allow="autoplay" className="max-w-[220px] w-[220px] h-[160px] rounded-xl bg-black border-0" />
+                            ) : (
+                              <video src={videoUrl} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
+                            );
+                          }
+                          const voiceUrl = m.data?.kind === 'voice' ? (m.data?.attachmentUrl || m.data?.attachment_url || (m as any).attachment_url) : null;
+                          if (voiceUrl) {
+                            return (
+                              <div className="flex items-center gap-2">
+                                <audio controls preload="none" src={voiceUrl} className="h-9 max-w-[220px]" />
+                                {Boolean(m.data?.attachmentDuration) && (
+                                  <span className="text-[10px] opacity-70">{m.data.attachmentDuration}s</span>
+                                )}
+                              </div>
+                            );
+                          }
+                          const fileUrl = m.data?.kind === 'file' ? (m.data?.attachmentUrl || m.data?.attachment_url || (m as any).attachment_url) : null;
+                          if (fileUrl) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => void ouvrirPieceJointe(fileUrl as string)}
+                                className="underline text-xs flex items-center gap-1.5 text-left"
+                              >
+                                <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                                {m.data?.body || 'Document'}
+                              </button>
+                            );
+                          }
+                          if (m.data?.body?.trim()) {
+                            return <p className="whitespace-pre-line select-text leading-relaxed">{linkifyText(m.data.body)}</p>;
+                          }
+                          return (
+                            <span className="text-xs italic opacity-60">Message multimédia en cours de traitement</span>
+                          );
+                        })()}
                       </div>
                       {/* Demande explicite (30/08/2026) : "chaque utilisateur qui
                           envoie un message [peut] le modifier ou le supprimer,
@@ -6302,6 +6423,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   onMouseUp={(e) => handleTextSelection(e.currentTarget, 'channel')}
                   onKeyUp={(e) => handleTextSelection(e.currentTarget, 'channel')}
                   onKeyDown={(e) => handleSaisieKeyDown(e, 'channel')}
+                  onPaste={(e) => {
+                    const file = Array.from(e.clipboardData?.items || []).find((item) => item.type.startsWith('image/'))?.getAsFile();
+                    if (file) {
+                      e.preventDefault();
+                      void handleChannelImagePick(file);
+                    }
+                  }}
                   placeholder="Écrire un message..."
                   className="flex-1 min-w-0 resize-none bg-transparent border-0 px-2 py-1.5 text-sm text-white placeholder-slate-400 leading-relaxed focus:outline-none"
                 />
