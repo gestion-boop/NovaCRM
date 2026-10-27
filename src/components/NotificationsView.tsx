@@ -43,6 +43,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { isStandaloneApp } from '@/hooks/useIsStandalone';
 import { UpdateStatusBadge } from './UpdateStatusBadge';
+import { formatBuildDate } from '@/lib/updateStatus';
 
 interface RealNotificationRow {
   id: string;
@@ -772,17 +773,7 @@ export const NotificationsView: React.FC<
   const visibleNotifications = isMobile ? mobileNotifications : allNotifications;
 
   const buildStampText = useMemo(() => {
-    if (typeof __BUILD_INFO__ === 'undefined' || !__BUILD_INFO__?.sha) return '';
-    const sha = __BUILD_INFO__.sha;
-    const dateStr = __BUILD_INFO__.at
-      ? new Date(__BUILD_INFO__.at).toLocaleDateString('fr-FR', {
-          day: '2-digit',
-          month: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : '';
-    return [sha, dateStr].filter(Boolean).join(' · ');
+    return formatBuildDate({ withYear: false });
   }, []);
 
   // Ticket #220 (v4) : pas juste "la même icône" mais la miniature de la
@@ -825,7 +816,15 @@ export const NotificationsView: React.FC<
                 {visibleNotifications.length}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 truncate">{activeAgency.name}</p>
+            <p className="text-[11px] text-slate-400 truncate flex items-center gap-1.5">
+              <span>{activeAgency.name}</span>
+              {buildStampText && (
+                <>
+                  <span className="text-slate-600">·</span>
+                  <span className="text-emerald-400/90 font-mono text-[10px]">MàJ : {buildStampText}</span>
+                </>
+              )}
+            </p>
           </div>
         </div>
 

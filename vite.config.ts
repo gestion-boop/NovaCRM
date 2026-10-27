@@ -14,11 +14,23 @@ function writeVersionFile() {
     name: "write-version-json",
     writeBundle() {
       const now = new Date();
-      const version = now.toISOString().replace(/[-:]/g, "").slice(0, 13); // ex: 20260820T0735
-      fs.writeFileSync(
-        path.resolve(__dirname, "dist/version.json"),
-        JSON.stringify({ version, builtAt: now.toISOString(), ref: BUILD_INFO.ref, sha: BUILD_INFO.sha }, null, 2)
+      const version = `${BUILD_INFO.sha && BUILD_INFO.sha !== 'inconnu' ? BUILD_INFO.sha : 'v'}-${now.getTime()}`;
+      const payload = JSON.stringify(
+        {
+          version,
+          builtAt: now.toISOString(),
+          ref: BUILD_INFO.ref,
+          sha: BUILD_INFO.sha,
+        },
+        null,
+        2
       );
+      fs.writeFileSync(path.resolve(__dirname, "dist/version.json"), payload);
+      try {
+        fs.writeFileSync(path.resolve(__dirname, "public/version.json"), payload);
+      } catch {
+        /* ignore */
+      }
     },
   };
 }

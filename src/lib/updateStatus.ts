@@ -8,8 +8,17 @@ export interface ServerVersion {
   builtAt?: string;
 }
 
+export const STORAGE_LAST_APPLIED_TIME = 'novasphere:last-applied-build-time';
+export const STORAGE_LAST_APPLIED_SHA = 'novasphere:last-applied-build-sha';
+
 export function getBuildInfo(): { ref: string; sha: string; at: string } {
   if (typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__) {
+    if (__BUILD_INFO__.at && typeof window !== 'undefined') {
+      try { localStorage.setItem(STORAGE_LAST_APPLIED_TIME, __BUILD_INFO__.at); } catch { /* ignore */ }
+    }
+    if (__BUILD_INFO__.sha && __BUILD_INFO__.sha !== 'inconnu' && typeof window !== 'undefined') {
+      try { localStorage.setItem(STORAGE_LAST_APPLIED_SHA, __BUILD_INFO__.sha); } catch { /* ignore */ }
+    }
     return __BUILD_INFO__;
   }
   return { ref: 'dev', sha: 'dev', at: '' };
@@ -17,9 +26,25 @@ export function getBuildInfo(): { ref: string; sha: string; at: string } {
 
 export function formatBuildDate(options?: { withYear?: boolean; withSha?: boolean }): string {
   const info = getBuildInfo();
-  if (!info.at) return '';
+  let iso = info.at;
+  if (!iso && typeof window !== 'undefined') {
+    try {
+      iso = localStorage.getItem(STORAGE_LAST_APPLIED_TIME) || '';
+    } catch {
+      iso = '';
+    }
+  }
+  if (!iso && typeof window !== 'undefined') {
+    iso = new Date().toISOString();
+    try {
+      localStorage.setItem(STORAGE_LAST_APPLIED_TIME, iso);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!iso) return '';
   try {
-    const d = new Date(info.at);
+    const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '';
     const datePart = d.toLocaleDateString('fr-FR', {
       day: '2-digit',
@@ -31,8 +56,11 @@ export function formatBuildDate(options?: { withYear?: boolean; withSha?: boolea
       minute: '2-digit',
     });
     const formatted = `${datePart} à ${timePart}`;
-    if (options?.withSha && info.sha && info.sha !== 'inconnu') {
-      return `${formatted} (${info.sha})`;
+    const sha = (info.sha && info.sha !== 'inconnu' && info.sha !== 'dev')
+      ? info.sha
+      : (typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_LAST_APPLIED_SHA) || '') : '');
+    if (options?.withSha && sha) {
+      return `${formatted} (${sha})`;
     }
     return formatted;
   } catch {
@@ -42,9 +70,16 @@ export function formatBuildDate(options?: { withYear?: boolean; withSha?: boolea
 
 export async function fetchServerVersion(): Promise<ServerVersion | null> {
   try {
-    const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetch(`/version.json?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
     if (!res.ok) return null;
-    const json = await res.json();
+    const text = await res.text();
+    if (text.trim().startsWith('<')) {
+      return null;
+    }
+    const json = JSON.parse(text);
     if (!json.version) return null;
     return json;
   } catch {
@@ -52,7 +87,9 @@ export async function fetchServerVersion(): Promise<ServerVersion | null> {
   }
 }
 
-let bootVersion: string | null = null;
+let bootVersion: string | null = (typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__?.sha && __BUILD_INFO__.sha !== 'inconnu')
+  ? __BUILD_INFO__.sha
+  : null;
 let latestServerVersion: ServerVersion | null = null;
 let isUpdatePending = false;
 const listeners = new Set<() => void>();
@@ -76,11 +113,43 @@ export function setBootVersion(v: string) {
 
 export function setServerVersion(v: ServerVersion | null) {
   latestServerVersion = v;
-  if (v && bootVersion && v.version && v.version !== bootVersion) {
-    isUpdatePending = true;
-  } else {
-    isUpdatePending = false;
+  if (!v) {
+    notifyListeners();
+    return;
   }
+
+  const buildInfo = getBuildInfo();
+  const currentSha = (buildInfo.sha && buildInfo.sha !== 'inconnu' && buildInfo.sha !== 'dev')
+    ? buildInfo.sha
+    : bootVersion;
+  const currentAt = buildInfo.at;
+
+  let updateFound = false;
+
+  // 1. Détection prioritaire par SHA de commit (100% infaillible lors d'un déploiement)
+  if (v.sha && currentSha && v.sha !== 'inconnu' && currentSha !== 'inconnu' && v.sha !== 'dev') {
+    if (v.sha !== currentSha) {
+      updateFound = true;
+    }
+  }
+  // 2. Détection par horodatage de build (si timestamp serveur > timestamp local)
+  else if (v.builtAt && currentAt) {
+    try {
+      const serverTime = new Date(v.builtAt).getTime();
+      const localTime = new Date(currentAt).getTime();
+      if (!Number.isNaN(serverTime) && !Number.isNaN(localTime) && serverTime > localTime) {
+        updateFound = true;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  // 3. Détection de secours par identifiant de version
+  else if (v.version && bootVersion && v.version !== bootVersion) {
+    updateFound = true;
+  }
+
+  isUpdatePending = updateFound;
   notifyListeners();
 }
 

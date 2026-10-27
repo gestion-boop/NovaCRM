@@ -16,11 +16,24 @@
       "destination": "/api/admin/drive/google-callback"
     },
     {
-      "source": "/((?!api/|assets/).*)",
+      "source": "/((?!api/|assets/|version\\.json|sw\\.js).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/version.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "Content-Type",
+          "value": "application/json; charset=utf-8"
+        }
+      ]
+    },
     {
       "source": "/assets/(.*)",
       "headers": [

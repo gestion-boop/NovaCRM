@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { fetchServerVersion, setBootVersion, setServerVersion, isSafeToAutoReload } from '@/lib/updateStatus';
+import { fetchServerVersion, setBootVersion, setServerVersion, isSafeToAutoReload, getUpdateStatus } from '@/lib/updateStatus';
 import { figerDispositionAvantMiseAJour } from '@/lib/dispositionAccueil';
 
 // Vérification toutes les 25 secondes en arrière-plan
@@ -24,7 +24,9 @@ interface UpdateBannerProps {
  */
 export default function UpdateBanner({ currentNav, selectedClientProfileId }: UpdateBannerProps) {
   const { currentUser } = useAuth();
-  const bootVersionRef = useRef<string | null>(null);
+  const bootVersionRef = useRef<string | null>(
+    typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__?.sha ? __BUILD_INFO__.sha : null
+  );
   const updateDetectedRef = useRef(false);
   const currentNavRef = useRef(currentNav);
   currentNavRef.current = currentNav;
@@ -90,11 +92,11 @@ export default function UpdateBanner({ currentNav, selectedClientProfileId }: Up
     };
 
     const checkForUpdate = async () => {
-      if (!bootVersionRef.current) return;
       const v = await fetchServerVersion();
       if (v) {
         setServerVersion(v);
-        if (v.version && v.version !== bootVersionRef.current) {
+        const { isUpdatePending: pending } = getUpdateStatus();
+        if (pending || (v.version && bootVersionRef.current && v.version !== bootVersionRef.current)) {
           updateDetectedRef.current = true;
           // Si l'onglet ou la fenêtre est déjà inactif/en arrière-plan, recharger tout de suite en silence
           if (document.visibilityState === 'hidden' || !document.hasFocus()) {
