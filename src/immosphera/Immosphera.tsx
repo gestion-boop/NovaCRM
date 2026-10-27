@@ -221,16 +221,28 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
               </button>
             )}
 
-            {onExitToCrm && (
+            {!isHome ? (
               <button
                 type="button"
-                onClick={onExitToCrm}
-                className="px-3 py-1.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                title="Revenir à l'accueil du CRM"
+                onClick={() => navigate("/immosphera")}
+                className="px-3 py-1.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                title="Retourner à la liste des biens"
               >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Retour CRM</span>
+                <ArrowLeft className="h-3.5 w-3.5 text-[#F7BC5F]" />
+                <span>Retour aux biens</span>
               </button>
+            ) : (
+              onExitToCrm && (
+                <button
+                  type="button"
+                  onClick={onExitToCrm}
+                  className="px-3 py-1.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                  title="Revenir à l'accueil du CRM"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Retour CRM</span>
+                </button>
+              )
             )}
           </div>
         </div>

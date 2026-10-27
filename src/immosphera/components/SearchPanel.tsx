@@ -253,62 +253,6 @@ export function SearchPanel({
         </div>
       </div>
 
-      {/* Main property filters and map control */}
-      <div className="mb-5 flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {PANEL_CHIPS.map(({ chip, label, icon: Icon }) => {
-          const active = activeChip === chip || (chip === "" && activeChip === "Recherche");
-          return (
-            <button
-              key={chip || "all"}
-              type="button"
-              onClick={() => onChipClick(chip)}
-              className={`${PILL_BASE} ${active ? PILL_ACTIVE : PILL_IDLE}`}
-            >
-              <Icon className={`h-3.5 w-3.5 ${active ? "text-primary" : ""}`} />
-              {label}
-            </button>
-          );
-        })}
-
-        {mapAvailable && (
-          <>
-            <span className="mx-1 h-7 w-px shrink-0 bg-border" aria-hidden="true" />
-            <button
-              type="button"
-              onClick={() => onChipClick("Carte")}
-              className={`${PILL_BASE} ${activeChip === "Carte" ? PILL_ACTIVE : PILL_IDLE}`}
-            >
-              <MapIcon className={`h-3.5 w-3.5 ${activeChip === "Carte" ? "text-primary" : ""}`} />
-              Carte
-            </button>
-          </>
-        )}
-
-        <span className="mx-1 h-7 w-px shrink-0 bg-border" aria-hidden="true" />
-        <button
-          type="button"
-          onClick={() => navigate("/immosphera/partenaires")}
-          className={`${PILL_BASE} ${PILL_IDLE}`}
-        >
-          <Users className="h-3.5 w-3.5" />
-          Partenaires
-        </button>
-        {/* Demande explicite (14 septembre) : « avoir une carte par
-            secteur » — cette barre (SearchPanel) est le SEUL endroit d'où
-            on peut changer d'onglet depuis la page Biens (le bandeau de
-            navigation d'Immosphera.tsx est volontairement masqué ici,
-            voir isHome) : sans ce bouton, l'onglet Secteurs ajouté par
-            ailleurs restait invisible/inatteignable depuis l'accueil. */}
-        <button
-          type="button"
-          onClick={() => navigate("/immosphera/secteurs")}
-          className={`${PILL_BASE} ${PILL_IDLE}`}
-        >
-          <MapPinned className="h-3.5 w-3.5" />
-          Secteurs
-        </button>
-      </div>
-
       {/* Type pills */}
       <div className="flex flex-wrap gap-2.5 mb-5">
         {VISIBLE_PROPERTY_TYPES.map(({ value, label }) => (

@@ -471,9 +471,16 @@ export default function PropertyDetail() {
 
   return (
     <div className="w-full py-6 max-w-[1400px] mx-auto px-4 sm:px-6 space-y-6">
-      {/* Le bouton "Retour" existe déjà dans la barre de navigation du module
-          (Immosphera.tsx) juste au-dessus — un second ici faisait doublon. */}
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between pb-2 border-b border-white/10">
+        <button
+          type="button"
+          onClick={() => navigate("/immosphera")}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="h-4 w-4 text-[#F7BC5F]" />
+          <span>Retour aux biens</span>
+        </button>
+
         {user && isAdmin && (
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>

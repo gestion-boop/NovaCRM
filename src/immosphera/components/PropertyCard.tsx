@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { MapPin, Maximize, BedDouble, Home, TreePine } from "lucide-react";
 import { VirtualTourIcon, Giraffe360Icon, WebsiteIcon, VrHeadsetIcon } from "@/immosphera/components/PropertyIcons";
@@ -33,6 +33,7 @@ export function PropertyCard({
   onHover,
   onTogglePropal,
 }: Props) {
+  const navigate = useNavigate();
   const imgSrc = property.images?.[0] || "/placeholder.svg";
   const status = property.status || "active";
   const td = (property.tech_details || {}) as Record<string, string>;
@@ -82,10 +83,11 @@ export function PropertyCard({
   return (
     <div className="block h-full" onMouseEnter={() => onHover?.(property.id)} onMouseLeave={() => onHover?.(null)}>
       <div
+        onClick={() => navigate(`/immosphera/bien/${property.id}`)}
         className={`bg-card rounded-[22px] overflow-hidden shadow-[0_18px_35px_hsl(30_30%_8%/0.12)] cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_40px_hsl(30_30%_8%/0.18)] h-full flex flex-col ${isHovered ? "ring-2 ring-primary -translate-y-0.5" : ""}`}
       >
         {/* Image */}
-        <Link to={`/immosphera/bien/${property.id}`} className="block relative aspect-[4/3] overflow-hidden">
+        <div className="block relative aspect-[4/3] overflow-hidden">
           <img
             src={imgSrc}
             alt={property.title}
@@ -154,7 +156,7 @@ export function PropertyCard({
               />
             </button>
           )}
-        </Link>
+        </div>
         {advisor && <AdvisorModal advisor={advisor} open={advisorOpen} onOpenChange={setAdvisorOpen} />}
 
         {/* Body */}
