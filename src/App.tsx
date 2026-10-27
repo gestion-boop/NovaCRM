@@ -1703,17 +1703,17 @@ function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}
+                transition={{ duration: 0.35, ease: 'easeInOut' }}
                 onClick={() => setNotificationsPanelOpen(false)}
                 className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm cursor-default"
                 aria-label="Fermer les notifications"
               />
               <motion.aside
                 key="notifications-drawer"
-                initial={{ x: '100%', opacity: 0.5 }}
+                initial={{ x: '100%', opacity: 0.3 }}
                 animate={{ x: 0, opacity: 1 }}
-                exit={{ x: '100%', opacity: 0.5 }}
-                transition={{ type: 'spring', damping: 28, stiffness: 280, mass: 0.7 }}
+                exit={{ x: '100%', opacity: 0.3 }}
+                transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
                 className="fixed right-3 sm:right-4 top-3 sm:top-4 bottom-3 sm:bottom-4 z-[80] w-[calc(100%-1.5rem)] sm:w-[440px] lg:w-[480px] bg-[#071317]/95 backdrop-blur-2xl border border-teal-500/25 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_30px_rgba(247,188,95,0.1)] flex flex-col overflow-hidden will-change-transform"
                 style={{
                   top: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
