@@ -59,7 +59,10 @@ export function PartnerDetailPanel({ partner: p, onClose }: Props) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [lightboxIndex, onClose]);
 
-  const initials = `${p.first_name?.[0] || ""}${p.last_name?.[0] || ""}`.toUpperCase();
+  const firstName = p.first_name || "";
+  const lastName = p.last_name || "";
+  const fullName = [firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase(), lastName.toUpperCase()].filter(Boolean).join(" ") || "Partenaire";
+  const initials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase() || "P";
 
   return createPortal(
     <div
@@ -78,8 +81,7 @@ export function PartnerDetailPanel({ partner: p, onClose }: Props) {
             </div>
             <div className="min-w-0">
               <h3 className="font-extrabold text-base text-white tracking-wide truncate">
-                {p.first_name.charAt(0).toUpperCase() + p.first_name.slice(1).toLowerCase()}{" "}
-                {p.last_name.toUpperCase()}
+                {fullName}
               </h3>
               {p.company && (
                 <p className="text-xs text-[#FAD592] flex items-center gap-1.5 mt-0.5 truncate font-medium">

@@ -281,8 +281,6 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
         </Routes>
       </ErrorBoundary>
 
-      {isAdmin && <PropertyFormModal open={formOpen} onOpenChange={setFormOpen} />}
-
       {/* Demande explicite : "un bouton Nova qui permet d'avoir simplement
           une barre horizontale de recherche... texte ou dictée vocale." */}
       <NovaSearchBar onResults={(ids, text) => { setAiResultIds(ids); setAiQueryText(text); }} />

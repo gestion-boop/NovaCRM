@@ -396,7 +396,7 @@ export default function Partners() {
                       </div>
                       <div className="min-w-0">
                         <h4 className="font-bold text-sm text-white truncate group-hover:text-[#F7BC5F] transition-colors">
-                          {p.first_name.charAt(0).toUpperCase() + p.first_name.slice(1).toLowerCase()} {p.last_name.toUpperCase()}
+                          {[(p.first_name || "").charAt(0).toUpperCase() + (p.first_name || "").slice(1).toLowerCase(), (p.last_name || "").toUpperCase()].filter(Boolean).join(" ") || "Partenaire"}
                         </h4>
                         {p.company ? (
                           <p className="text-xs text-slate-400 truncate flex items-center gap-1 mt-0.5">
