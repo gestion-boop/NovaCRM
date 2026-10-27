@@ -173,24 +173,45 @@ export function useCameraReservations() {
 
   const notifyRequester = async (res: StoredCameraReservation, approved: boolean, message?: string, title?: string) => {
     if (!res.createdByUserId) return;
+    const finalTitle = title || (approved ? '✅ Réservation caméra acceptée' : '❌ Réservation caméra refusée');
+    const finalMessage =
+      message ||
+      (approved
+        ? `Votre réservation "${res.equipmentName}" du ${formatReservationDateFr(res)} a été validée.`
+        : `Votre réservation "${res.equipmentName}" du ${formatReservationDateFr(res)} a été refusée.`);
+    const statusType = approved ? 'camera_reservation_accepted' : 'camera_reservation_refused';
+    const validAgencyId = res.agencyId && /^[0-9a-f-]{36}$/i.test(res.agencyId) ? res.agencyId : null;
+
+    // 1. Appel RPC create_notification (déclenche aussi le push système sur mobile/web)
     try {
       await supabase.rpc('create_notification', {
         _user_id: res.createdByUserId,
-        _type: approved ? 'camera_reservation_approved' : 'camera_reservation_rejected',
-        _title: title || (approved ? '✅ Réservation confirmée' : '❌ Réservation refusée'),
-        _message:
-          message ||
-          (approved
-            ? `Votre réservation "${res.equipmentName}" du ${formatReservationDateFr(res)} a été validée.`
-            : `Votre réservation "${res.equipmentName}" du ${formatReservationDateFr(res)} a été refusée.`),
+        _type: statusType,
+        _title: finalTitle,
+        _message: finalMessage,
         _entity_type: 'camera_reservation',
         _entity_id: res.id,
-        _agency_id: res.agencyId || null,
+        _agency_id: validAgencyId,
         _metadata: { url: '/reserver-camera' },
       } as any);
     } catch (e) {
-      console.warn('Notification demandeur caméra impossible :', e);
+      console.warn('RPC create_notification demandeur caméra :', e);
     }
+
+    // 2. Insertion directe dans notifications pour garantir l'affichage in-app même si la RPC échoue
+    try {
+      await supabase.from('notifications').insert({
+        user_id: res.createdByUserId,
+        type: statusType,
+        title: finalTitle,
+        body: finalMessage,
+        link: '/reserver-camera',
+        entity_type: 'camera_reservation',
+        entity_id: res.id,
+        agency_id: validAgencyId,
+        is_read: false,
+      } as any);
+    } catch (_) {}
   };
 
   // `alternativeSlots` : jusqu'à 3 propositions de rechange en cas de refus
@@ -228,8 +249,29 @@ export function useCameraReservations() {
         current.map((r) => (r.id === res.id ? { ...r, status: approve ? 'Confirmée' : 'Refusée', refusalReason: refusalReason || undefined } : r))
       );
 
+      // Supprime / masque immédiatement la notification de demande de réservation de la barre
+      try {
+        await supabase
+          .from('notifications')
+          .update({
+            dismissed_at: new Date().toISOString(),
+            is_read: true,
+          })
+          .eq('entity_type', 'camera_reservation')
+          .eq('entity_id', res.id)
+          .eq('type', 'camera_reservation_request');
+      } catch (errNotif) {
+        console.warn('Impossible de masquer la notification de demande :', errNotif);
+      }
+
+      try {
+        await supabase.rpc('dismiss_camera_reservation_notifications' as any, {
+          _reservation_id: res.id,
+        });
+      } catch (_) {}
+
       const message = approve
-        ? undefined
+        ? `Votre réservation "${res.equipmentName}" du ${formatReservationDateFr(res)} a été validée.`
         : `Votre réservation "${res.equipmentName}" du ${formatReservationDateFr(res)} a été refusée.${
             refusalReason ? ` ${refusalReason}` : ''
           }`;
@@ -268,6 +310,24 @@ export function useCameraReservations() {
       if (sbError) throw sbError;
 
       setReservations((current) => current.filter((r) => r.id !== res.id));
+
+      // Supprime également les notifications associées à cette réservation de la barre
+      try {
+        await supabase
+          .from('notifications')
+          .update({
+            dismissed_at: new Date().toISOString(),
+            is_read: true,
+          })
+          .eq('entity_type', 'camera_reservation')
+          .eq('entity_id', res.id);
+      } catch (_) {}
+
+      try {
+        await supabase.rpc('dismiss_camera_reservation_notifications' as any, {
+          _reservation_id: res.id,
+        });
+      } catch (_) {}
 
       await notifyRequester(
         res,

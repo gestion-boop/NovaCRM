@@ -24,6 +24,7 @@ import {
   Send,
   Smartphone,
   X,
+  XCircle,
 } from 'lucide-react';
 
 import {
@@ -1041,6 +1042,34 @@ export const NotificationsView: React.FC<
       };
     }
     if (notification.type === 'camera' || notification.rawType.includes('camera')) {
+      const isAccepted = notification.rawType.includes('accepted') || notification.rawType.includes('approved');
+      const isRefused = notification.rawType.includes('refused') || notification.rawType.includes('rejected');
+      if (isAccepted) {
+        return {
+          cardBorder: 'border-emerald-500/45 hover:border-emerald-400/80',
+          cardBg: 'bg-gradient-to-r from-emerald-950/45 via-[#08241b]/90 to-[#071317]/95',
+          cardShadow: 'shadow-[0_4px_20px_rgba(52,211,153,0.18)]',
+          leftAccent: 'border-l-[5px] border-l-emerald-400',
+          badgeBg: 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40',
+          badgeText: 'Caméra validée',
+          iconBg: 'from-emerald-400 via-emerald-500 to-teal-700',
+          iconBorder: 'border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.35)]',
+          Icon: CheckCircle2,
+        };
+      }
+      if (isRefused) {
+        return {
+          cardBorder: 'border-rose-500/45 hover:border-rose-400/80',
+          cardBg: 'bg-gradient-to-r from-rose-950/45 via-[#220a13]/90 to-[#071317]/95',
+          cardShadow: 'shadow-[0_4px_20px_rgba(244,63,94,0.18)]',
+          leftAccent: 'border-l-[5px] border-l-rose-500',
+          badgeBg: 'bg-rose-500/25 text-rose-200 border border-rose-400/40',
+          badgeText: 'Caméra refusée',
+          iconBg: 'from-rose-500 via-rose-600 to-red-700',
+          iconBorder: 'border-rose-400/40 shadow-[0_0_12px_rgba(244,63,94,0.35)]',
+          Icon: XCircle,
+        };
+      }
       return {
         cardBorder: 'border-teal-500/45 hover:border-teal-400/80',
         cardBg: 'bg-gradient-to-r from-teal-950/45 via-[#072528]/90 to-[#071317]/95',
@@ -1097,8 +1126,8 @@ export const NotificationsView: React.FC<
             }
             if (notification.rawType.startsWith('support_ticket')) {
               void dismissNotification(notification.id);
-            } else if (notification.rawType.startsWith('camera_reservation')) {
-              // Ne pas masquer sur simple clic
+            } else if (notification.rawType === 'camera_reservation_request') {
+              // Ne pas masquer la demande en cours sur simple clic tant qu'elle n'est pas traitée
             } else {
               void markNotificationRead(notification.id);
             }
