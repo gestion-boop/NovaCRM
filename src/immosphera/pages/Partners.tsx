@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Phone, Mail, MapPin, Building2, Edit, Trash2, Users, ChevronsUpDown, Check, X, FileText, Globe, ChevronDown } from "lucide-react";
+import { Plus, Search, Phone, Mail, MapPin, Building2, Edit, Trash2, Users, ChevronsUpDown, Check, X, FileText, Globe, ChevronDown, ArrowDownAZ, Layers } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -74,6 +74,9 @@ export default function Partners() {
   const [search, setSearch] = useState("");
   const [searchCity, setSearchCity] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
+  // "nom" : liste A→Z par nom de famille. "domaine" : regroupée par métier
+  // (Notaire, Plombier…), métiers classés A→Z puis nom A→Z dans chaque groupe.
+  const [sortMode, setSortMode] = useState<"nom" | "domaine">("nom");
   const [saving, setSaving] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
 
@@ -236,10 +239,146 @@ export default function Partners() {
 
   const canEdit = (p: Partner) => isAdmin || p.created_by === user?.id;
 
+  const byName = (a: Partner, b: Partner) =>
+    `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, "fr", { sensitivity: "base" });
+  const sortedByName = [...filtered].sort(byName);
+  const groupedByDomain = (() => {
+    const groups = new Map<string, Partner[]>();
+    for (const p of filtered) {
+      const list = groups.get(p.category) ?? [];
+      list.push(p);
+      groups.set(p.category, list);
+    }
+    return [...groups.entries()]
+      .map(([category, list]) => ({
+        category,
+        label: CATEGORY_MAP[category] || category,
+        partners: list.sort(byName),
+      }))
+      // « Autre » reste en bas : ce n'est pas un domaine de compétence.
+      .sort((a, b) =>
+        a.category === "autre" ? 1 : b.category === "autre" ? -1 : a.label.localeCompare(b.label, "fr", { sensitivity: "base" }),
+      );
+  })();
+
+  const renderCard = (p: Partner) => {
+    const initials = `${p.first_name?.charAt(0) || ""}${p.last_name?.charAt(0) || ""}`.toUpperCase() || "P";
+    const docCount = Array.isArray((p as any).documents) ? (p as any).documents.length : 0;
+    return (
+      <div
+        key={p.id}
+        className="group relative bg-white/[0.07] backdrop-blur-xl border border-white/15 border-t-white/30 hover:bg-white/[0.11] hover:border-[#F7BC5F]/50 rounded-2xl p-4 flex flex-col justify-between shadow-[0_14px_40px_-22px_rgba(0,0,0,0.75)] transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 cursor-pointer"
+        onClick={() => setSelectedPartner(p)}
+      >
+        <div>
+          {/* Top card : avatar + nom + catégorie */}
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F7BC5F]/20 to-amber-700/30 border border-[#F7BC5F]/35 text-[#FAD592] font-black text-sm flex items-center justify-center shrink-0">
+                {initials}
+              </div>
+              <div className="min-w-0">
+                <h4 className="font-bold text-sm text-white truncate group-hover:text-[#F7BC5F] transition-colors">
+                  {p.first_name.charAt(0).toUpperCase() + p.first_name.slice(1).toLowerCase()} {p.last_name.toUpperCase()}
+                </h4>
+                {p.company ? (
+                  <p className="text-xs text-slate-400 truncate flex items-center gap-1 mt-0.5">
+                    <Building2 className="h-3 w-3 shrink-0 text-[#F7BC5F]/80" />
+                    <span>{p.company}</span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-500 italic">Indépendant</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Badge Catégorie */}
+          <div className="mb-3">
+            <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#F7BC5F]/15 text-[#FAD592] border border-[#F7BC5F]/30 tracking-wide">
+              {CATEGORY_MAP[p.category] || p.category}
+            </span>
+          </div>
+
+          {/* Coordonnées rapides */}
+          <div className="space-y-1.5 text-xs text-slate-300">
+            {p.phone && (
+              <a
+                href={`tel:${p.phone}`}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-2 hover:text-[#F7BC5F] transition-colors truncate"
+              >
+                <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span className="font-mono">{p.phone}</span>
+              </a>
+            )}
+            {p.email && (
+              <a
+                href={`mailto:${p.email}`}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-2 hover:text-[#F7BC5F] transition-colors truncate"
+              >
+                <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span className="truncate">{p.email}</span>
+              </a>
+            )}
+            {p.intervention_area && (
+              <p className="flex items-center gap-2 text-slate-400 truncate">
+                <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                <span className="truncate">{p.intervention_area}</span>
+              </p>
+            )}
+          </div>
+
+          {p.notes && (
+            <p className="text-[11px] text-slate-400 mt-2.5 line-clamp-2 italic bg-white/[0.03] p-2 rounded-lg border border-white/5">
+              « {p.notes} »
+            </p>
+          )}
+        </div>
+
+        {/* Footer card : indicateur doc & actions */}
+        <div className="pt-3 mt-3 border-t border-white/5 flex items-center justify-between gap-2">
+          <div className="text-[11px] text-slate-400">
+            {docCount > 0 ? (
+              <span className="flex items-center gap-1 text-sky-400 font-medium">
+                <FileText className="h-3.5 w-3.5" />
+                <span>{docCount} doc{docCount > 1 ? "s" : ""}</span>
+              </span>
+            ) : (
+              <span className="text-slate-600">Aucun doc</span>
+            )}
+          </div>
+
+          {canEdit(p) && (
+            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => openEdit(p)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                title="Modifier le partenaire"
+              >
+                <Edit className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(p.id)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                title="Supprimer le partenaire"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="w-full py-5 sm:py-7 px-4 sm:px-8 max-w-7xl mx-auto space-y-6">
       {/* En-tête de la page Partenaires */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-[#07191b]/95 via-[#0c262a]/90 to-[#07191b]/95 border border-[#F7BC5F]/20 shadow-xl">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-white/[0.10] via-white/[0.06] to-white/[0.10] backdrop-blur-xl border border-white/15 border-t-white/30 shadow-[0_18px_50px_-24px_rgba(0,0,0,0.7)]">
         <div className="flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-2xl bg-[#F7BC5F]/15 border border-[#F7BC5F]/35 text-[#FAD592] flex items-center justify-center shadow-[0_0_15px_rgba(247,188,95,0.2)]">
             <Users className="h-6 w-6 text-[#F7BC5F]" />
@@ -267,14 +406,14 @@ export default function Partners() {
       </div>
 
       {/* Barre de filtres et recherche */}
-      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 p-3.5 rounded-2xl bg-[#0a181c]/80 border border-white/10 backdrop-blur-md">
+      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 p-3.5 rounded-2xl bg-white/[0.07] border border-white/15 border-t-white/30 backdrop-blur-xl shadow-[0_18px_50px_-28px_rgba(0,0,0,0.7)]">
         <div className="sm:col-span-5 relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             placeholder="Rechercher par nom, entreprise..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#051114] border border-white/15 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+            className="w-full bg-white/[0.06] border border-white/15 backdrop-blur-sm rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
           />
         </div>
 
@@ -284,7 +423,7 @@ export default function Partners() {
             placeholder="Filtrer par ville ou secteur..."
             value={searchCity}
             onChange={(e) => setSearchCity(e.target.value)}
-            className="w-full bg-[#051114] border border-white/15 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+            className="w-full bg-white/[0.06] border border-white/15 backdrop-blur-sm rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
           />
         </div>
 
@@ -293,7 +432,7 @@ export default function Partners() {
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
             style={{ colorScheme: "dark" }}
-            className={`w-full bg-[#051114] border border-white/15 rounded-xl px-3.5 py-2 pr-9 text-xs sm:text-sm focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none ${
+            className={`w-full bg-white/[0.06] border border-white/15 backdrop-blur-sm rounded-xl px-3.5 py-2 pr-9 text-xs sm:text-sm focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none ${
               filterCategory === "all" ? "text-slate-500" : "text-white font-medium"
             }`}
           >
@@ -306,6 +445,35 @@ export default function Partners() {
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
         </div>
+
+        {/* Classement : A→Z par nom, ou regroupé par domaine de compétence */}
+        <div className="sm:col-span-12 flex items-center gap-2 flex-wrap pt-2.5 border-t border-white/[0.06]">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Classer</span>
+          <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-white/[0.05] border border-white/10">
+            {([
+              { mode: "nom", label: "Nom A → Z", icon: ArrowDownAZ },
+              { mode: "domaine", label: "Par domaine", icon: Layers },
+            ] as const).map(({ mode, label, icon: Icon }) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setSortMode(mode)}
+                aria-pressed={sortMode === mode}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  sortMode === mode
+                    ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/20"
+                    : "text-slate-300 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+          {sortMode === "domaine" && (
+            <span className="text-[11px] text-slate-500">Domaines classés de A à Z, puis les noms de A à Z</span>
+          )}
+        </div>
       </div>
 
       {/* Grille des partenaires moderne */}
@@ -316,7 +484,7 @@ export default function Partners() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl p-12 text-center border border-white/10 bg-[#07191b]/50 flex flex-col items-center justify-center gap-3">
+        <div className="rounded-2xl p-12 text-center border border-white/15 bg-white/[0.06] backdrop-blur-xl flex flex-col items-center justify-center gap-3">
           <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-500">
             <Users className="h-7 w-7" />
           </div>
@@ -340,121 +508,28 @@ export default function Partners() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((p) => {
-            const initials = `${p.first_name?.charAt(0) || ""}${p.last_name?.charAt(0) || ""}`.toUpperCase() || "P";
-            const docCount = Array.isArray((p as any).documents) ? (p as any).documents.length : 0;
-            return (
-              <div
-                key={p.id}
-                className="group relative bg-[#09171b] border border-white/10 hover:border-[#F7BC5F]/50 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 cursor-pointer"
-                onClick={() => setSelectedPartner(p)}
-              >
-                <div>
-                  {/* Top card : avatar + nom + catégorie */}
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F7BC5F]/20 to-amber-700/30 border border-[#F7BC5F]/35 text-[#FAD592] font-black text-sm flex items-center justify-center shrink-0">
-                        {initials}
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="font-bold text-sm text-white truncate group-hover:text-[#F7BC5F] transition-colors">
-                          {p.first_name.charAt(0).toUpperCase() + p.first_name.slice(1).toLowerCase()} {p.last_name.toUpperCase()}
-                        </h4>
-                        {p.company ? (
-                          <p className="text-xs text-slate-400 truncate flex items-center gap-1 mt-0.5">
-                            <Building2 className="h-3 w-3 shrink-0 text-[#F7BC5F]/80" />
-                            <span>{p.company}</span>
-                          </p>
-                        ) : (
-                          <p className="text-[11px] text-slate-500 italic">Indépendant</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Badge Catégorie */}
-                  <div className="mb-3">
-                    <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#F7BC5F]/15 text-[#FAD592] border border-[#F7BC5F]/30 tracking-wide">
-                      {CATEGORY_MAP[p.category] || p.category}
-                    </span>
-                  </div>
-
-                  {/* Coordonnées rapides */}
-                  <div className="space-y-1.5 text-xs text-slate-300">
-                    {p.phone && (
-                      <a
-                        href={`tel:${p.phone}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-2 hover:text-[#F7BC5F] transition-colors truncate"
-                      >
-                        <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span className="font-mono">{p.phone}</span>
-                      </a>
-                    )}
-                    {p.email && (
-                      <a
-                        href={`mailto:${p.email}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-2 hover:text-[#F7BC5F] transition-colors truncate"
-                      >
-                        <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{p.email}</span>
-                      </a>
-                    )}
-                    {p.intervention_area && (
-                      <p className="flex items-center gap-2 text-slate-400 truncate">
-                        <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                        <span className="truncate">{p.intervention_area}</span>
-                      </p>
-                    )}
-                  </div>
-
-                  {p.notes && (
-                    <p className="text-[11px] text-slate-400 mt-2.5 line-clamp-2 italic bg-white/[0.03] p-2 rounded-lg border border-white/5">
-                      « {p.notes} »
-                    </p>
-                  )}
+        sortMode === "domaine" ? (
+          <div className="space-y-7">
+            {groupedByDomain.map((g) => (
+              <section key={g.category} className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-sm font-extrabold tracking-wide text-[#FAD592]">{g.label}</h2>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/10 text-slate-300 border border-white/10">
+                    {g.partners.length}
+                  </span>
+                  <div className="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent" />
                 </div>
-
-                {/* Footer card : indicateur doc & actions */}
-                <div className="pt-3 mt-3 border-t border-white/5 flex items-center justify-between gap-2">
-                  <div className="text-[11px] text-slate-400">
-                    {docCount > 0 ? (
-                      <span className="flex items-center gap-1 text-sky-400 font-medium">
-                        <FileText className="h-3.5 w-3.5" />
-                        <span>{docCount} doc{docCount > 1 ? "s" : ""}</span>
-                      </span>
-                    ) : (
-                      <span className="text-slate-600">Aucun doc</span>
-                    )}
-                  </div>
-
-                  {canEdit(p) && (
-                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => openEdit(p)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                        title="Modifier le partenaire"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteMutation.mutate(p.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                        title="Supprimer le partenaire"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {g.partners.map(renderCard)}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {sortedByName.map(renderCard)}
+          </div>
+        )
       )}
 
       {/* Modal Ajouter / Modifier Partenaire — TÉLÉPORTÉE SUR document.body AVEC z-[99999] */}

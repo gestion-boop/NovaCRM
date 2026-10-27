@@ -185,3 +185,23 @@
   background: none !important;
   border: none !important;
 }
+
+/* Barre du haut (Biens / Partenaires / Secteurs) : séparation très légère avec
+   le contenu et les catégories en dessous, sans trait appuyé. */
+.immosphera-topbar {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03),
+    0 14px 24px -22px rgba(0, 0, 0, 0.7);
+}
+
+/* Annuaire Partenaires : plus de page blanche, un fond « glace » translucide
+   (lueurs froides + touche dorée) sur lequel les cartes en verre dépoli se
+   détachent. Translucide pour laisser deviner le fond d'écran du CRM. */
+.immosphera-root--glace {
+  background:
+    radial-gradient(ellipse 60% 45% at 12% 0%, rgba(147, 214, 232, 0.22), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 92% 28%, rgba(247, 188, 95, 0.1), transparent 70%),
+    radial-gradient(ellipse 55% 50% at 55% 100%, rgba(110, 190, 214, 0.16), transparent 70%),
+    linear-gradient(180deg, rgba(10, 30, 37, 0.62) 0%, rgba(8, 24, 30, 0.8) 100%);
+  color: #e8f1f4;
+}

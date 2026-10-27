@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   Plus,
@@ -83,11 +83,39 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
     }
   }, []);
 
+  // La barre Biens / Partenaires / Secteurs reste collée tout en haut de la zone
+  // de contenu, juste sous l'en-tête du CRM. Si l'en-tête déborde sur la zone
+  // défilante (la barre passait alors à moitié dessous), on décale d'autant.
+  const barRef = useRef<HTMLDivElement>(null);
+  const [stickyTop, setStickyTop] = useState(0);
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const header = Array.from(document.querySelectorAll("header")).find((h) => !h.closest("main"));
+    let scroller: HTMLElement | null = bar.parentElement;
+    while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    const measure = () => {
+      const headerBottom = header ? header.getBoundingClientRect().bottom : 0;
+      const scrollerTop = scroller ? scroller.getBoundingClientRect().top : 0;
+      setStickyTop(Math.max(0, Math.round(headerBottom - scrollerTop)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (header) observer?.observe(header);
+    return () => {
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, [loading, canAccess]);
+
   const handleChipClick = useCallback((chip: string) => {
     setActiveChip((prev) => (prev === chip ? "" : chip));
   }, []);
 
   const isHome = location.pathname === "/immosphera" || location.pathname === "/immosphera/";
+  // Annuaire Partenaires : fond « glace » au lieu de la page blanche du module.
+  const isPartners = location.pathname.startsWith("/immosphera/partenaires");
   const navItems = [
     { label: "Biens", icon: Building2, path: "/immosphera" },
     { label: "Partenaires", icon: Users, path: "/immosphera/partenaires" },
@@ -116,9 +144,13 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
   }
 
   return (
-    <div className="immosphera-root">
+    <div className={`immosphera-root${isPartners ? " immosphera-root--glace" : ""}`}>
       {/* Barre de navigation et filtres de façade Immosphera 360 — tout en haut, fluide et accessible */}
-      <div className="sticky top-0 z-30 bg-[#07171B]/95 backdrop-blur-md border-b border-white/10 px-3 sm:px-6 py-2 shadow-sm">
+      <div
+        ref={barRef}
+        style={{ top: stickyTop }}
+        className="immosphera-topbar sticky z-30 bg-[#07171B]/85 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-6 py-2"
+      >
         <div className="flex items-center justify-between gap-2.5 flex-wrap">
           {/* Piliers du module + Filtres rapides */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -151,7 +183,7 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
 
             {/* Raccourcis directs Ventes, Locations, Nouveautés... (sur la vue Biens) */}
             {isHome && (
-              <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap pl-1 border-l border-white/10 ml-1">
+              <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap pl-1.5 border-l border-white/[0.08] ml-1">
                 {PROPERTY_QUICK_FILTERS.map(({ chip, label, icon: Icon }) => {
                   const active = activeChip === chip;
                   return (
