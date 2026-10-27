@@ -5,7 +5,7 @@ import {
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Mic2, Square, Eye, ArrowLeft, Check, CheckCheck,
   Clock, Camera, Lock, Paperclip, FileText, Loader2, Video as VideoIcon,
-  Bold, Italic, Underline, GripVertical,
+  Bold, Italic, Underline, GripVertical, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -365,6 +365,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [draggedChannelInfo, setDraggedChannelInfo] = useState<{ id: string; projectId: string } | null>(null);
   const [dragOverChannelId, setDragOverChannelId] = useState<string | null>(null);
   const [dragOverTargetProjectId, setDragOverTargetProjectId] = useState<string | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<ChatProject | null>(null);
+  const [deletingProject, setDeletingProject] = useState(false);
 
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('projets');
   const [projects, setProjects] = useState<ChatProject[]>([]);
@@ -4680,6 +4682,65 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     }
   };
 
+  const handleDeleteProject = async (project: ChatProject) => {
+    if (!project || !isSylvainOrMelanie) {
+      toast.error('Seuls Sylvain et Mélanie peuvent supprimer des dossiers.');
+      return;
+    }
+    if (project.agency_id === null || project.name.toLowerCase().includes('3 agences')) {
+      toast.error('Le dossier des 3 agences ne peut pas être supprimé.');
+      return;
+    }
+
+    setDeletingProject(true);
+    try {
+      // 1. Tenter la suppression via la RPC sécurisée (gère la cascade et les droits)
+      const { error: rpcError } = await supabase.rpc('delete_chat_project', {
+        _project_id: project.id,
+      });
+
+      if (rpcError) {
+        console.warn('RPC delete_chat_project indisponible ou échouée, suppression directe :', rpcError.message);
+        // Fallback côté client si la RPC n'est pas encore enregistrée
+        const pChannels = channelsByProject[project.id] || [];
+        const cIds = pChannels.map((c) => c.id);
+        if (cIds.length > 0) {
+          await supabase.from('chat_messages').delete().in('channel', cIds);
+          await supabase.from('chat_channel_members').delete().in('channel_id', cIds);
+          await supabase.from('chat_channels').delete().eq('project_id', project.id);
+        }
+        await supabase.from('chat_project_members').delete().eq('project_id', project.id);
+        const { error: directErr } = await supabase.from('chat_projects').delete().eq('id', project.id);
+        if (directErr) {
+          throw directErr;
+        }
+      }
+
+      // 2. Nettoyage de l'état local
+      setProjects((prev) => prev.filter((p) => p.id !== project.id));
+      setChannelsByProject((prev) => {
+        const next = { ...prev };
+        delete next[project.id];
+        return next;
+      });
+
+      // Si le canal actif appartenait à ce dossier supprimé, réinitialiser la vue
+      const projectChannelIds = (channelsByProject[project.id] || []).map((c) => c.id);
+      if (activeChannel && projectChannelIds.includes(activeChannel.id)) {
+        setActiveChannel(null);
+        setMessages([]);
+      }
+
+      setProjectToDelete(null);
+      toast.success(`Le dossier "${project.name}" a été supprimé.`);
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression du dossier :', err);
+      toast.error(`Impossible de supprimer le dossier : ${err.message || 'Erreur inconnue'}`);
+    } finally {
+      setDeletingProject(false);
+    }
+  };
+
   const addMember = async (projectId: string, userId: string) => {
     if (!isAdmin || !currentUser) return;
     const { data, error } = await supabase
@@ -5219,6 +5280,18 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   >
                     <Users className="w-3.5 h-3.5" />
                   </button>
+                  {isSylvainOrMelanie && !isSpecialGroup && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setProjectToDelete(project);
+                      }}
+                      className="p-1.5 mr-1 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
+                      title="Supprimer ce dossier"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 {isOpen && (
@@ -7397,6 +7470,70 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
             >
               {creatingProject ? 'Création...' : 'Créer le dossier'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmation Suppression Dossier — réservé à Sylvain et Mélanie */}
+      {projectToDelete && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => !deletingProject && setProjectToDelete(null)}
+        >
+          <div
+            className="bg-[#0E1A20] border border-red-500/30 rounded-2xl max-w-md w-full p-6 text-white space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-bold text-white">Supprimer ce dossier ?</h3>
+                <p className="text-xs text-red-300 font-medium truncate">
+                  « {projectToDelete.name} »
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-red-950/30 border border-red-900/50 space-y-2 text-xs text-slate-300">
+              <p>
+                Cette action est <span className="font-semibold text-red-300">irréversible</span>.
+              </p>
+              <p className="text-slate-400">
+                La suppression de ce dossier supprimera également tous ses canaux associés
+                {channelsByProject[projectToDelete.id]?.length ? ` (${channelsByProject[projectToDelete.id].length} canal/canaux)` : ''} ainsi que l'ensemble des messages et pièces jointes qu'ils contiennent.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setProjectToDelete(null)}
+                disabled={deletingProject}
+                className="px-4 py-2.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 font-medium text-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteProject(projectToDelete)}
+                disabled={deletingProject}
+                className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-lg shadow-red-900/40"
+              >
+                {deletingProject ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Suppression...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Supprimer définitivement</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
