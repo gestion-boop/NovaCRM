@@ -33,6 +33,9 @@ interface IndexProps {
   aiQueryText?: string;
   onClearAiResults?: () => void;
   onAiResults?: (ids: string[], queryText: string) => void;
+  showHero?: boolean;
+  externalFormOpen?: boolean;
+  onCloseExternalForm?: () => void;
 }
 
 export default function Index({
@@ -43,6 +46,9 @@ export default function Index({
   aiQueryText = "",
   onClearAiResults,
   onAiResults,
+  showHero = false,
+  externalFormOpen,
+  onCloseExternalForm,
 }: IndexProps) {
   const isMobile = useIsMobile();
   const { user, isAdmin } = useAuth();
@@ -55,6 +61,13 @@ export default function Index({
   const [hoveredPropertyId, setHoveredPropertyId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(24);
   const [formOpen, setFormOpen] = useState(false);
+  const isFormOpen = externalFormOpen !== undefined ? externalFormOpen : formOpen;
+  const handleSetFormOpen = (open: boolean) => {
+    setFormOpen(open);
+    if (!open && onCloseExternalForm) {
+      onCloseExternalForm();
+    }
+  };
   const [compareOpen, setCompareOpen] = useState(false);
   const [sortByMatch, setSortByMatch] = useState(false);
   const [propalIds, setPropalIds] = useState<Set<string>>(new Set());
@@ -244,10 +257,10 @@ export default function Index({
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero — masqué en mode Carte pour laisser toute la place aux filtres + à la carte */}
-      {!showMap && (
+      {/* Hero — masqué si showHero est false ou en mode Carte pour laisser toute la place aux filtres + grille */}
+      {!showMap && showHero && (
         <div
-          className="relative h-[min(48vh,420px)] bg-cover bg-center grid place-items-center px-6"
+          className="relative h-[min(48vh,420px)] bg-cover bg-center grid place-items-center px-6 transition-all duration-300 animate-in fade-in"
           style={{
             backgroundImage: `linear-gradient(120deg, hsl(30 30% 8% / 0.72), hsl(30 30% 8% / 0.12)), url('${heroVilla.url}')`,
           }}
@@ -461,7 +474,7 @@ export default function Index({
       )}
 
       {/* Property form modal */}
-      <PropertyFormModal open={formOpen} onOpenChange={setFormOpen} />
+      <PropertyFormModal open={isFormOpen} onOpenChange={handleSetFormOpen} />
 
       {/* Propal bar — hidden on mobile */}
       {!isMobile && (

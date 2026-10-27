@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Plus, Users, FileText, Loader2, Building2, ArrowLeft, MapPinned } from "lucide-react";
+import {
+  Plus,
+  Users,
+  FileText,
+  Loader2,
+  Building2,
+  ArrowLeft,
+  MapPinned,
+  Tag,
+  Key,
+  Sparkles,
+  FileSignature,
+  Map as MapIcon,
+  X,
+  Image as ImageIcon,
+} from "lucide-react";
 import "@/immosphera/immosphera.css";
 import { useImmoAuth } from "@/immosphera/lib/access";
 import { PropertyFormModal } from "@/immosphera/components/PropertyFormModal";
@@ -10,6 +25,15 @@ import PropertyDetail from "@/immosphera/pages/PropertyDetail";
 import Partners from "@/immosphera/pages/Partners";
 import Secteurs from "@/immosphera/pages/Secteurs";
 import NovaSearchBar from "@/immosphera/components/NovaSearchBar";
+
+const PROPERTY_QUICK_FILTERS = [
+  { chip: "Ventes", label: "Ventes", icon: Tag },
+  { chip: "Locations", label: "Locations", icon: Key },
+  { chip: "Nouveautés 15J", label: "Nouveautés", icon: Sparkles },
+  { chip: "Sous offre", label: "Sous offre", icon: FileText },
+  { chip: "Sous compromis", label: "Sous compromis", icon: FileSignature },
+  { chip: "Carte", label: "Carte", icon: MapIcon },
+];
 const PILL_BASE =
   "inline-flex items-center gap-2 px-4 h-10 rounded-full text-sm font-semibold transition-all border backdrop-blur-md";
 const PILL_IDLE = "bg-foreground/10 border-border/60 text-foreground/80 hover:text-foreground hover:border-primary/50";
@@ -40,7 +64,8 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
   const { canAccess, isAdmin, loading } = useImmoAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeChip, setActiveChip] = useState("Recherche");
+  const [activeChip, setActiveChip] = useState("");
+  const [showHero, setShowHero] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [aiResultIds, setAiResultIds] = useState<string[] | null>(initialAiResultIds);
   const [aiQueryText, setAiQueryText] = useState(initialAiQueryText);
@@ -92,36 +117,104 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
 
   return (
     <div className="immosphera-root">
-      {/* Barre d'onglets de façade Immosphera 360 — toujours visible et claire pour s'y retrouver */}
-      <div className="sticky top-0 z-30 bg-[#07171B]/95 backdrop-blur-md border-b border-white/10 px-3 sm:px-6 py-2.5 shadow-sm">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {navItems.map(({ label, icon: Icon, path }) => {
-              const active = path === "/immosphera" ? isHome : location.pathname.startsWith(path);
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => navigate(path)}
-                  className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                    active
-                      ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/20 font-extrabold"
-                      : "bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5"
-                  }`}
-                >
-                  <Icon className={`h-4 w-4 ${active ? "text-slate-950" : "text-[#F7BC5F]"}`} />
-                  <span>{label}</span>
-                </button>
-              );
-            })}
+      {/* Barre de navigation et filtres de façade Immosphera 360 — tout en haut, fluide et accessible */}
+      <div className="sticky top-0 z-30 bg-[#07171B]/95 backdrop-blur-md border-b border-white/10 px-3 sm:px-6 py-2 shadow-sm">
+        <div className="flex items-center justify-between gap-2.5 flex-wrap">
+          {/* Piliers du module + Filtres rapides */}
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            {/* 3 grands piliers */}
+            <div className="flex items-center gap-1 bg-black/40 p-1 rounded-2xl border border-white/10">
+              {navItems.map(({ label, icon: Icon, path }) => {
+                const active = path === "/immosphera" ? isHome : location.pathname.startsWith(path);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      navigate(path);
+                      if (path === "/immosphera") {
+                        setShowHero(false); // La photo disparait, tout le bloc remonte
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                      active
+                        ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/20 font-extrabold"
+                        : "text-slate-300 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    <Icon className={`h-4 w-4 ${active ? "text-slate-950" : "text-[#F7BC5F]"}`} />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Raccourcis directs Ventes, Locations, Nouveautés... (sur la vue Biens) */}
+            {isHome && (
+              <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap pl-1 border-l border-white/10 ml-1">
+                {PROPERTY_QUICK_FILTERS.map(({ chip, label, icon: Icon }) => {
+                  const active = activeChip === chip;
+                  return (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => {
+                        setShowHero(false); // Clic sur un filtre rapide : la photo disparaît, la recherche remonte
+                        handleChipClick(chip);
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                        active
+                          ? "bg-amber-400/25 text-amber-300 border border-amber-400/50 shadow-sm font-bold"
+                          : "bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5"
+                      }`}
+                    >
+                      <Icon className={`h-3.5 w-3.5 ${active ? "text-amber-300" : "text-[#F7BC5F]"}`} />
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+
+                {activeChip && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveChip("");
+                      setShowHero(false);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition-colors cursor-pointer"
+                    title="Effacer le filtre actif"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Tous</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
+          {/* Outils et actions de droite */}
           <div className="flex items-center gap-2 ml-auto">
+            {isHome && (
+              <button
+                type="button"
+                onClick={() => setShowHero((prev) => !prev)}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  showHero
+                    ? "bg-[#F7BC5F]/20 border-[#F7BC5F]/40 text-[#FAD592]"
+                    : "border-white/10 hover:bg-white/5 text-slate-400 hover:text-white"
+                }`}
+                title={showHero ? "Masquer la bannière photo pour remonter la recherche" : "Afficher la photo d'accueil 360°"}
+              >
+                <ImageIcon className="h-3.5 w-3.5 text-[#F7BC5F]" />
+                <span className="hidden md:inline">{showHero ? "Masquer photo" : "Photo 360°"}</span>
+              </button>
+            )}
+
             {isHome && isAdmin && (
               <button
                 type="button"
                 onClick={() => setFormOpen(true)}
-                className="px-3.5 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                className="px-3.5 py-1.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer shrink-0"
               >
                 <Plus className="h-4 w-4" />
                 <span>Ajouter un bien</span>
@@ -132,11 +225,11 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
               <button
                 type="button"
                 onClick={onExitToCrm}
-                className="px-3 py-2 rounded-xl border border-white/10 hover:bg-white/5 text-slate-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                 title="Revenir à l'accueil du CRM"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
-                <span>Retour CRM</span>
+                <span className="hidden sm:inline">Retour CRM</span>
               </button>
             )}
           </div>
@@ -151,6 +244,9 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
               <Index
                 activeChip={activeChip}
                 onChipClick={handleChipClick}
+                showHero={showHero}
+                externalFormOpen={formOpen}
+                onCloseExternalForm={() => setFormOpen(false)}
                 aiResultIds={aiResultIds}
                 aiQueryText={aiQueryText}
                 onClearAiResults={() => { setAiResultIds(null); setAiQueryText(""); }}

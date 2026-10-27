@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Phone, Mail, MapPin, Building2, Edit, Trash2, Users, ChevronsUpDown, Check, X, FileText, Globe } from "lucide-react";
+import { Plus, Search, Phone, Mail, MapPin, Building2, Edit, Trash2, Users, ChevronsUpDown, Check, X, FileText, Globe, ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -288,19 +288,23 @@ export default function Partners() {
           />
         </div>
 
-        <div className="sm:col-span-3">
+        <div className="sm:col-span-3 relative">
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
-            className="w-full bg-[#051114] border border-white/15 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer"
+            style={{ colorScheme: "dark" }}
+            className={`w-full bg-[#051114] border border-white/15 rounded-xl px-3.5 py-2 pr-9 text-xs sm:text-sm focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none ${
+              filterCategory === "all" ? "text-slate-500" : "text-white font-medium"
+            }`}
           >
-            <option value="all" className="bg-[#0D1B22] text-white">Toutes catégories</option>
+            <option value="all" className="bg-[#0B151A] text-slate-400">Toutes catégories</option>
             {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value} className="bg-[#0D1B22] text-white">
+              <option key={c.value} value={c.value} className="bg-[#0B151A] text-white">
                 {c.label}
               </option>
             ))}
           </select>
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
         </div>
       </div>
 
@@ -522,10 +526,11 @@ export default function Partners() {
                   <select
                     value={form.category}
                     onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                    style={{ colorScheme: "dark" }}
                     className="w-full bg-[#061216] border border-white/20 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none"
                   >
                     {CATEGORIES.map((c) => (
-                      <option key={c.value} value={c.value} className="bg-[#0D1B22] text-white">
+                      <option key={c.value} value={c.value} className="bg-[#0B151A] text-white">
                         {c.label}
                       </option>
                     ))}
