@@ -370,6 +370,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [projectToRename, setProjectToRename] = useState<ChatProject | null>(null);
   const [renamedProjectName, setRenamedProjectName] = useState('');
   const [renamingProject, setRenamingProject] = useState(false);
+  const [projectMenuOpenId, setProjectMenuOpenId] = useState<string | null>(null);
 
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('projets');
   const [projects, setProjects] = useState<ChatProject[]>([]);
@@ -5321,37 +5322,80 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       </span>
                     </span>
                   </button>
-                  <button
-                    onClick={() => openMembersModal(project.id)}
-                    className="p-1.5 mr-1 rounded-lg text-slate-400 hover:text-[#F7BC5F] hover:bg-white/5 shrink-0 transition-colors cursor-pointer"
-                    title="Gérer les membres"
-                  >
-                    <Users className="w-3.5 h-3.5" />
-                  </button>
                   {isSylvainOrMelanie && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setProjectToRename(project);
-                        setRenamedProjectName(project.name);
-                      }}
-                      className="p-1.5 mr-1 rounded-lg text-slate-400 hover:text-[#F7BC5F] hover:bg-white/5 shrink-0 transition-colors cursor-pointer"
-                      title="Renommer ce dossier"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  {isSylvainOrMelanie && !isSpecialGroup && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setProjectToDelete(project);
-                      }}
-                      className="p-1.5 mr-1 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
-                      title="Supprimer ce dossier"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="relative shrink-0 mr-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setProjectMenuOpenId(projectMenuOpenId === project.id ? null : project.id);
+                        }}
+                        className={`p-1.5 rounded-lg text-slate-400 hover:text-[#F7BC5F] hover:bg-white/10 transition-colors cursor-pointer ${
+                          projectMenuOpenId === project.id ? 'bg-white/10 text-[#F7BC5F]' : ''
+                        }`}
+                        title="Options du dossier (renommer, membres, supprimer)"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+
+                      {projectMenuOpenId === project.id && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProjectMenuOpenId(null);
+                            }}
+                          />
+                          <div
+                            className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-[#0D1B22] border border-white/15 shadow-2xl p-1 z-50 text-xs animate-in fade-in zoom-in-95 duration-100"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProjectMenuOpenId(null);
+                                setProjectToRename(project);
+                                setRenamedProjectName(project.name);
+                              }}
+                              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-slate-200 hover:text-white hover:bg-white/10 transition-colors text-left font-medium cursor-pointer"
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                              <span>Renommer le dossier</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProjectMenuOpenId(null);
+                                openMembersModal(project.id);
+                              }}
+                              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-slate-200 hover:text-white hover:bg-white/10 transition-colors text-left font-medium cursor-pointer"
+                            >
+                              <Users className="w-3.5 h-3.5 text-sky-400" />
+                              <span>Gérer les membres</span>
+                            </button>
+
+                            {!isSpecialGroup && (
+                              <>
+                                <div className="h-px bg-white/10 my-1" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setProjectMenuOpenId(null);
+                                    setProjectToDelete(project);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/15 transition-colors text-left font-medium cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Supprimer le dossier</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
 

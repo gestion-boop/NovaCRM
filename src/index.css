@@ -579,7 +579,7 @@ main[class*="bg-[#071015]/55" i] {
    dire s'il est périmé — à lancer après avoir ajouté un écran. */
 /* @generated:theme-surfaces:start — ne pas éditer à la main, voir scripts/theme-surfaces.mjs */
 /* ── Fonds sombres écrits en dur dans les composants → jeton de surface ──
-   66 teintes recensées automatiquement dans src/ (voir
+   69 teintes recensées automatiquement dans src/ (voir
    scripts/theme-surfaces.mjs). Le sélecteur ne cite PAS la valeur finale :
    il pose un jeton, redéfini une seule fois par thème plus haut dans ce
    fichier. Une même liste sert donc au mode nuit et au mode jour. */
@@ -596,6 +596,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#051417" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
+[class*="bg-[#061216" i],
 [class*="bg-[#061719" i],
 [class*="bg-[#06181b" i],
 [class*="bg-[#06191c" i],
@@ -617,6 +618,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0a2326" i],
 [class*="bg-[#0a2528" i],
 [class*="bg-[#0b1416" i],
+[class*="bg-[#0b151a" i],
 [class*="bg-[#0b1719" i],
 [class*="bg-[#0b171f" i],
 [class*="bg-[#0b1c1e" i],
@@ -625,6 +627,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0b2427" i],
 [class*="bg-[#0b292b" i],
 [class*="bg-[#0c2628" i],
+[class*="bg-[#0d1b22" i],
 [class*="bg-[#0d2a2d" i],
 [class*="bg-[#0e1a20" i],
 [class*="bg-[#0e1d28" i],
@@ -682,6 +685,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#051417" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
+[class*="bg-[#061216" i],
 [class*="bg-[#061719" i],
 [class*="bg-[#06181b" i],
 [class*="bg-[#06191c" i],
@@ -704,6 +708,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0a2326" i],
 [class*="bg-[#0a2528" i],
 [class*="bg-[#0b1416" i],
+[class*="bg-[#0b151a" i],
 [class*="bg-[#0b1719" i],
 [class*="bg-[#0b171f" i],
 [class*="bg-[#0b1c1e" i],
@@ -712,6 +717,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0b2427" i],
 [class*="bg-[#0b292b" i],
 [class*="bg-[#0c2628" i],
+[class*="bg-[#0d1b22" i],
 [class*="bg-[#0d2a2d" i],
 [class*="bg-[#0e1a20" i],
 [class*="bg-[#0e1d28" i],
@@ -750,6 +756,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#051417" i],
 [class*="bg-[#051518" i],
 [class*="bg-[#05191c" i],
+[class*="bg-[#061216" i],
 [class*="bg-[#061719" i],
 [class*="bg-[#06181b" i],
 [class*="bg-[#06191c" i],
@@ -773,6 +780,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0a2326" i],
 [class*="bg-[#0a2528" i],
 [class*="bg-[#0b1416" i],
+[class*="bg-[#0b151a" i],
 [class*="bg-[#0b1719" i],
 [class*="bg-[#0b171f" i],
 [class*="bg-[#0b1c1e" i],
@@ -781,6 +789,7 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0b2427" i],
 [class*="bg-[#0b292b" i],
 [class*="bg-[#0c2628" i],
+[class*="bg-[#0d1b22" i],
 [class*="bg-[#0d2a2d" i],
 [class*="bg-[#0e1a20" i],
 [class*="bg-[#0e1d28" i],

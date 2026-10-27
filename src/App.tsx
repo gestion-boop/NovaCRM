@@ -60,7 +60,7 @@ import PublicVisiteImmosphera from './immosphera/pages/TourView';
 import { EVENEMENT_COMPOSER_MAIL } from './lib/composerMail';
 import { EcranErrorBoundary } from './components/EcranErrorBoundary';
 import UpdateBanner from './components/UpdateBanner';
-import { applyUpdateOnNavigation, formatBuildDate, getBuildInfo } from './lib/updateStatus';
+import { applyUpdateOnNavigation } from './lib/updateStatus';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
 import EnablePushPrompt from './components/EnablePushPrompt';
@@ -1730,16 +1730,6 @@ function App() {
                 </div>
                 <div className="min-w-0">
                   <h2 className="text-sm font-bold text-white tracking-wide truncate">Rappels &amp; Alertes</h2>
-                  {formatBuildDate() && (
-                    <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 truncate mt-0.5" title={`Déployé le ${formatBuildDate({ withYear: true, withSha: true })}`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-                      <span className="text-emerald-400 font-semibold">MàJ :</span>
-                      <span>{formatBuildDate({ withYear: true })}</span>
-                      {getBuildInfo().sha && getBuildInfo().sha !== 'inconnu' && (
-                        <span className="text-slate-500 border-l border-white/10 pl-1.5">{getBuildInfo().sha}</span>
-                      )}
-                    </p>
-                  )}
                 </div>
               </div>
               <button

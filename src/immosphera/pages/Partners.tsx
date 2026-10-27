@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Phone, Mail, MapPin, Building2, Edit, Trash2, Users, ChevronsUpDown, Check } from "lucide-react";
+import { Plus, Search, Phone, Mail, MapPin, Building2, Edit, Trash2, Users, ChevronsUpDown, Check, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -377,155 +377,223 @@ export default function Partners() {
         </div>
       )}
 
-      {/* Add/Edit dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Modifier le partenaire" : "Nouveau partenaire"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+      {/* Modal Ajouter / Modifier Partenaire — ergonomique, contrastée et toujours entièrement visible */}
+      {formOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => !saving && setFormOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg max-h-[92vh] sm:max-h-[88vh] bg-[#0E1A20] border border-white/15 rounded-2xl shadow-2xl flex flex-col text-white overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header fixe — toujours visible */}
+            <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-[#0B151A]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#FAD592] flex items-center justify-center shrink-0">
+                  <Users className="w-4 h-4 text-[#F7BC5F]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-wide">
+                    {editing ? "Modifier le partenaire" : "Nouveau partenaire"}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Annuaire des professionnels et partenaires</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormOpen(false)}
+                disabled={saving}
+                className="w-8 h-8 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors shrink-0 cursor-pointer"
+                title="Fermer"
+              >
+                <X className="w-4.5 h-4.5" />
+              </button>
+            </div>
+
+            {/* Corps défilable — avec contrastes nets et soignés */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4 custom-scrollbar">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-200">Prénom <span className="text-rose-400">*</span></label>
+                  <input
+                    value={form.first_name}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setForm((f) => ({ ...f, first_name: v.charAt(0).toUpperCase() + v.slice(1) }));
+                    }}
+                    placeholder="Prénom"
+                    className="w-full bg-[#061216] border border-white/20 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] focus:ring-1 focus:ring-[#F7BC5F]/50 transition-colors"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-200">Nom <span className="text-rose-400">*</span></label>
+                  <input
+                    value={form.last_name}
+                    onChange={(e) => {
+                      setForm((f) => ({ ...f, last_name: e.target.value.toUpperCase() }));
+                    }}
+                    placeholder="NOM"
+                    className="w-full bg-[#061216] border border-white/20 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] focus:ring-1 focus:ring-[#F7BC5F]/50 transition-colors"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1.5">
-                <Label>Prénom *</Label>
-                <Input
-                  value={form.first_name}
+                <label className="text-xs font-semibold text-slate-200">Catégorie</label>
+                <div className="relative">
+                  <select
+                    value={form.category}
+                    onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                    className="w-full bg-[#061216] border border-white/20 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none"
+                  >
+                    {CATEGORIES.map((c) => (
+                      <option key={c.value} value={c.value} className="bg-[#0D1B22] text-white">
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <ChevronsUpDown className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-200">Entreprise</label>
+                <input
+                  value={form.company}
                   onChange={(e) => {
                     const v = e.target.value;
-                    setForm((f) => ({ ...f, first_name: v.charAt(0).toUpperCase() + v.slice(1) }));
+                    setForm((f) => ({ ...f, company: v.charAt(0).toUpperCase() + v.slice(1) }));
                   }}
+                  placeholder="Nom de l'entreprise"
+                  className="w-full bg-[#061216] border border-white/20 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] focus:ring-1 focus:ring-[#F7BC5F]/50 transition-colors"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>Nom *</Label>
-                <Input
-                  value={form.last_name}
-                  onChange={(e) => {
-                    setForm((f) => ({ ...f, last_name: e.target.value.toUpperCase() }));
-                  }}
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Catégorie</Label>
-              <Select value={form.category} onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Entreprise</Label>
-              <Input
-                value={form.company}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setForm((f) => ({ ...f, company: v.charAt(0).toUpperCase() + v.slice(1) }));
-                }}
-                placeholder="Nom de l'entreprise"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Téléphone</Label>
-                <Input
-                  value={form.phone}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                  placeholder="06 12 34 56 78"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Zone d'intervention</Label>
-              <Input
-                value={form.intervention_area}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setForm((f) => ({ ...f, intervention_area: v.charAt(0).toUpperCase() + v.slice(1) }));
-                }}
-                placeholder="Ex: Béziers, Narbonne, Hérault…"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Site internet</Label>
-              <Input
-                value={form.website}
-                onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
-                placeholder="www.exemple.fr"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Notes</Label>
-              <Textarea
-                rows={2}
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                placeholder="Informations complémentaires…"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Carte de visite / photos / documents</Label>
-              <div className="flex items-center gap-3">
-                <label className="px-3 py-2 rounded-lg bg-muted hover:bg-muted/70 text-sm font-semibold cursor-pointer border border-border transition-colors shrink-0">
-                  {uploadingDoc ? "Envoi…" : "Ajouter un fichier"}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-200">Email</label>
                   <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    multiple
-                    className="hidden"
-                    disabled={uploadingDoc}
-                    onChange={(e) => { void handleUploadDocs(e.target.files); e.target.value = ""; }}
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="email@exemple.fr"
+                    className="w-full bg-[#061216] border border-white/20 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
                   />
-                </label>
-                <p className="text-xs text-muted-foreground">Photos ou PDF — plusieurs possibles, lus en grand ensuite avec navigation.</p>
-              </div>
-              {form.documents.length > 0 && (
-                <div className="grid grid-cols-4 gap-2 pt-1">
-                  {form.documents.map((doc) => (
-                    <div key={doc.url} className="relative group aspect-square rounded-lg overflow-hidden border border-border bg-muted">
-                      {doc.type === "image" ? (
-                        <img src={doc.url} alt={doc.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground p-1 text-center">{doc.name}</div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeDoc(doc.url)}
-                        className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                        title="Retirer"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
                 </div>
-              )}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-200">Téléphone</label>
+                  <input
+                    value={form.phone}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                    placeholder="06 12 34 56 78"
+                    className="w-full bg-[#061216] border border-white/20 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-200">Zone d'intervention</label>
+                <input
+                  value={form.intervention_area}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setForm((f) => ({ ...f, intervention_area: v.charAt(0).toUpperCase() + v.slice(1) }));
+                  }}
+                  placeholder="Ex: Béziers, Narbonne, Hérault…"
+                  className="w-full bg-[#061216] border border-white/20 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-200">Site internet</label>
+                <input
+                  value={form.website}
+                  onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
+                  placeholder="www.exemple.fr"
+                  className="w-full bg-[#061216] border border-white/20 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-200">Notes &amp; Informations complémentaires</label>
+                <textarea
+                  rows={2}
+                  value={form.notes}
+                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Informations complémentaires, spécialités…"
+                  className="w-full bg-[#061216] border border-white/20 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors resize-none"
+                />
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <label className="text-xs font-semibold text-slate-200">Carte de visite / photos / documents</label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white cursor-pointer border border-white/15 transition-colors flex items-center gap-2">
+                    <Plus className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                    <span>{uploadingDoc ? "Envoi…" : "Ajouter un fichier"}</span>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      multiple
+                      className="hidden"
+                      disabled={uploadingDoc}
+                      onChange={(e) => { void handleUploadDocs(e.target.files); e.target.value = ""; }}
+                    />
+                  </label>
+                  <p className="text-[11px] text-slate-400">Photos ou PDF lisibles en grand format.</p>
+                </div>
+
+                {form.documents.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2 pt-1">
+                    {form.documents.map((doc) => (
+                      <div key={doc.url} className="relative group aspect-square rounded-xl overflow-hidden border border-white/15 bg-white/5">
+                        {doc.type === "image" ? (
+                          <img src={doc.url} alt={doc.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-400 p-1 text-center font-mono">
+                            {doc.name}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeDoc(doc.url)}
+                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs cursor-pointer hover:bg-red-600"
+                          title="Retirer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="ghost" onClick={() => setFormOpen(false)}>
+
+            {/* Footer fixe — TOUJOURS visible sans être coupé */}
+            <div className="px-5 py-3.5 border-t border-white/10 flex items-center justify-end gap-3 shrink-0 bg-[#0B151A]">
+              <button
+                type="button"
+                onClick={() => setFormOpen(false)}
+                disabled={saving}
+                className="px-4 py-2.5 rounded-xl border border-white/15 hover:bg-white/10 text-slate-300 font-medium text-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
                 Annuler
-              </Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? "Enregistrement…" : "Enregistrer"}
-              </Button>
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || !form.first_name.trim() || !form.last_name.trim()}
+                className="px-5 py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-md"
+              >
+                {saving ? "Enregistrement…" : "Enregistrer le partenaire"}
+              </button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
       {/* Detail panel */}
       {selectedPartner && <PartnerDetailPanel partner={selectedPartner} onClose={() => setSelectedPartner(null)} />}
