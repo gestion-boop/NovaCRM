@@ -65,7 +65,7 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
   const navigate = useNavigate();
   const location = useLocation();
   const [activeChip, setActiveChip] = useState("");
-  const [showHero, setShowHero] = useState(false);
+  const [showHero, setShowHero] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [aiResultIds, setAiResultIds] = useState<string[] | null>(initialAiResultIds);
   const [aiQueryText, setAiQueryText] = useState(initialAiQueryText);
@@ -130,12 +130,7 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
                   <button
                     key={label}
                     type="button"
-                    onClick={() => {
-                      navigate(path);
-                      if (path === "/immosphera") {
-                        setShowHero(false); // La photo disparait, tout le bloc remonte
-                      }
-                    }}
+                    onClick={() => navigate(path)}
                     className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                       active
                         ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/25 font-extrabold"
@@ -162,10 +157,7 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
                     <button
                       key={chip}
                       type="button"
-                      onClick={() => {
-                        setShowHero(false); // Clic sur une catégorie : la photo disparaît, la recherche remonte
-                        handleChipClick(chip);
-                      }}
+                      onClick={() => handleChipClick(chip)}
                       className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                         active
                           ? "bg-amber-400/25 text-amber-300 border border-amber-400/50 shadow-sm font-bold"
@@ -181,10 +173,7 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
                 {activeChip && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setActiveChip("");
-                      setShowHero(false);
-                    }}
+                    onClick={() => setActiveChip("")}
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition-colors cursor-pointer"
                     title="Effacer le filtre actif"
                   >
@@ -192,11 +181,24 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
                     <span className="hidden sm:inline">Tous</span>
                   </button>
                 )}
+
+                {/* Bouton "+ Ajouter un bien" tout au bout des catégories */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setFormOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs shadow-md shadow-[#F7BC5F]/20 transition-all cursor-pointer shrink-0 ml-1"
+                    title="Ajouter un nouveau bien immobilier"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Ajouter un bien</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
 
-          {/* Outils et actions de droite */}
+          {/* Outils et actions de droite : Photo 360 et retour CRM */}
           <div className="flex items-center gap-2 ml-auto">
             {isHome && (
               <button
@@ -211,17 +213,6 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
               >
                 <ImageIcon className="h-3.5 w-3.5 text-[#F7BC5F]" />
                 <span className="hidden md:inline">{showHero ? "Masquer photo" : "Photo 360°"}</span>
-              </button>
-            )}
-
-            {isHome && isAdmin && (
-              <button
-                type="button"
-                onClick={() => setFormOpen(true)}
-                className="px-3.5 py-1.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer shrink-0"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Ajouter un bien</span>
               </button>
             )}
 

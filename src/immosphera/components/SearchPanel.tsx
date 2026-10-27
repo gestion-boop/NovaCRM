@@ -245,11 +245,6 @@ export function SearchPanel({
           <button className="ghost-btn text-xs" onClick={onToggleCollapse}>
             Réduire
           </button>
-          {canAdd && onAddProperty && (
-            <button className="primary-gold text-xs" onClick={onAddProperty}>
-              <Plus className="h-4 w-4 mr-1" /> Ajouter un bien
-            </button>
-          )}
         </div>
       </div>
 

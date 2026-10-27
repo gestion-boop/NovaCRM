@@ -46,7 +46,7 @@ export default function Index({
   aiQueryText = "",
   onClearAiResults,
   onAiResults,
-  showHero = false,
+  showHero = true,
   externalFormOpen,
   onCloseExternalForm,
 }: IndexProps) {
