@@ -65,6 +65,28 @@ export function pipelineVisiblePour(pipeline: PipelinePourAcces, user: Utilisate
   if (!user.uid && !emailDe(user)) return false;
   if (estPipelineTransactions(pipeline)) return !estCommunitySarah(user);
   if (!user.uid) return false;
+
+  const nomNormalise = sansAccent(pipeline.name || '');
+
+  // Pipeline personnel de Karine : STRICTEMENT visible uniquement par Karine elle-même !
+  // Ni Mélanie, ni aucun autre utilisateur ne doit voir son pipeline personnel.
+  if (/\bkarine\b/.test(nomNormalise)) {
+    const email = emailDe(user);
+    const estKarine =
+      user.uid === 'fd611b54-fced-4c6f-bc27-35dbe1d9cc89' ||
+      email.includes('karine.brebion') ||
+      email.startsWith('karine');
+    return estKarine;
+  }
+
+  // Un pipeline avec un propriétaire défini (ownerId) est STRICTEMENT personnel :
+  // visible uniquement par son créateur/propriétaire.
+  if (pipeline.ownerId && !pipeline.officiel) {
+    return pipeline.ownerId === user.uid;
+  }
+
+  // Pipelines de la société (sans propriétaire, ou marqués officiels) :
+  // restent visibles pour tout le monde au sein de l'agence.
   if (!pipeline.ownerId || pipeline.officiel) return true;
   return pipeline.ownerId === user.uid;
 }

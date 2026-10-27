@@ -880,8 +880,35 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
     // endroit qu'une carte introuvable.
     const colonnes = new Set(activePipeline.stages);
     const premiere = activePipeline.stages[0];
+    const droitPipeline = versDroit(activePipeline);
+    const estTransactions = droitPipeline ? estPipelineTransactions(droitPipeline) : false;
+    const currentUid = currentUser?.uid;
+    const currentEmail = (currentUser?.email || '').toLowerCase().trim();
+    const proprietaire = activePipeline.proprietaire || currentUid;
+
     agencyDeals.forEach((deal) => {
-      if ((deal.pipelineId || activePipeline.id) !== activePipeline.id) return;
+      // Un contact sans pipeline ne doit JAMAIS apparaître dans un pipeline !
+      // Il reste visible uniquement dans le répertoire des contacts / fiches clients.
+      if (!deal.pipelineId || deal.pipelineId !== activePipeline.id) return;
+
+      // Cloisonnement personnel : dans les pipelines personnels (hors Pipelines Transactions Immosphera),
+      // les contacts qui n'appartiennent pas à l'utilisateur sont retirés de ce pipeline.
+      if (!estTransactions) {
+        const contact = contactsById.get(deal.contactId);
+        const appartientAUtilisateur =
+          (deal.advisorId && (deal.advisorId === proprietaire || deal.advisorId === currentUid || deal.advisorId.toLowerCase() === currentEmail)) ||
+          (contact && (
+            contact.ownerUserId === proprietaire ||
+            contact.ownerUserId === currentUid ||
+            contact.assignedTo === proprietaire ||
+            contact.assignedTo === currentUid ||
+            (contact.assignedTo && contact.assignedTo.toLowerCase() === currentEmail) ||
+            (Array.isArray(contact.sharedWithUserIds) && (contact.sharedWithUserIds.includes(proprietaire || '') || contact.sharedWithUserIds.includes(currentUid || '')))
+          ));
+
+        if (!appartientAUtilisateur) return;
+      }
+
       const colonne = colonnes.has(deal.stage) ? deal.stage : premiere;
       if (!colonne) return;
       const existing = map.get(colonne);
@@ -889,7 +916,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
       else map.set(colonne, [deal]);
     });
     return map;
-  }, [agencyDeals, activePipeline]);
+  }, [agencyDeals, activePipeline, contactsById, currentUser?.uid, currentUser?.email]);
   const EMPTY_DEALS: typeof agencyDeals = [];
 
   /*

@@ -249,34 +249,22 @@ export const useContacts = () => {
         null;
       const pipelineUuid = toValidUuidOrNull(newContact.pipeline);
 
-      // Règle Novavisio (Natacha, 3 septembre) : « du moment que la fiche est
-      // créée, par défaut couleur bleue et le contact va dans Prise de
-      // contact ». Sans pipeline choisi, on prend le pipeline principal de
-      // l'agence (nom contenant « principal », sinon celui par défaut), et
-      // l'étape dont le nom contient « contact », sinon la première. La
-      // couleur bleue découle du nom de l'étape (voir Pipeline.tsx).
-      let pipelineParDefaut = pipelineUuid;
+      // Demande explicite : à la création d'un contact, il ne doit PAS aller
+      // automatiquement dans un pipeline. C'est à l'utilisateur de décider
+      // de le mettre dans un pipeline. Sans choix explicite, la fiche reste libre
+      // (fiche client uniquement, sans pipeline ni étape).
       let stageUuid: string | null = null;
-      if (agencyId === NOVAVISIO_ID) {
+      if (pipelineUuid) {
         try {
-          const sansAcc = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-          if (!pipelineParDefaut) {
-            const { data: pipes } = await supabase.from('pipelines').select('id, name, is_default').eq('agency_id', agencyId);
-            const liste = (pipes as { id: string; name: string; is_default?: boolean }[]) || [];
-            pipelineParDefaut =
-              (liste.find((p) => sansAcc(p.name).includes('principal')) || liste.find((p) => p.is_default) || liste[0])?.id || null;
-          }
-          if (pipelineParDefaut) {
-            const { data: etapes } = await supabase
-              .from('pipeline_stages')
-              .select('id, name, position')
-              .eq('pipeline_id', pipelineParDefaut)
-              .order('position', { ascending: true });
-            const l = (etapes as { id: string; name: string }[]) || [];
-            stageUuid = (l.find((e) => sansAcc(e.name).includes('contact')) || l[0])?.id || null;
-          }
+          const { data: etapes } = await supabase
+            .from('pipeline_stages')
+            .select('id, name, position')
+            .eq('pipeline_id', pipelineUuid)
+            .order('position', { ascending: true });
+          const l = (etapes as { id: string; name: string }[]) || [];
+          stageUuid = l[0]?.id || null;
         } catch (e) {
-          console.warn('Étape par défaut Novavisio introuvable :', e);
+          console.warn('Étape du pipeline introuvable :', e);
         }
       }
 
@@ -307,8 +295,8 @@ export const useContacts = () => {
         estimated_value: newContact.honoraires || null,
         sector: newContact.secteur?.trim() || null,
         property_type: newContact.typeBien?.trim() || newContact.projectType?.trim() || null,
-        pipeline_id: pipelineParDefaut,
-        ...(stageUuid ? { stage_id: stageUuid } : {}),
+        pipeline_id: pipelineUuid || null,
+        stage_id: stageUuid || null,
         advisor_commission_ttc: newContact.advisorCommissionTtc ?? null,
         mandate_number: newContact.mandateNumber?.trim() || null,
         secondary_contact: newContact.coBorrower?.trim() || null,

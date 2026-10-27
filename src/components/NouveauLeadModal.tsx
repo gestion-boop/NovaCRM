@@ -118,6 +118,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
 
   // Qualification & Project
   const [clientType, setClientType] = useState('Acquéreur');
+  const [customClientType, setCustomClientType] = useState('');
   const [contactType, setContactType] = useState('Particulier');
   const [budgetMax, setBudgetMax] = useState<number | ''>('');
   const [secteur, setSecteur] = useState('');
@@ -298,7 +299,19 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
     setLastName(nom);
     setEmail(c?.email || '');
     setPhone(c?.phone || '');
-    setClientType(c?.clientType || 'Acquéreur');
+    const STANDARD_CLIENT_TYPES = ['Acquéreur', 'Vendeur', 'Location', 'Conciergerie', 'Locataire', 'Investisseur', 'Bailleur'];
+    if (c?.clientType) {
+      if (STANDARD_CLIENT_TYPES.includes(c.clientType)) {
+        setClientType(c.clientType);
+        setCustomClientType('');
+      } else {
+        setClientType('Autre');
+        setCustomClientType(c.clientType);
+      }
+    } else {
+      setClientType('Acquéreur');
+      setCustomClientType('');
+    }
     setContactType(c?.contactType || 'Particulier');
     setBudgetMax(c?.budgetMax ? Number(c.budgetMax) : '');
     setSecteur(c?.secteur || '');
@@ -434,6 +447,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
       // En modification, un champ vidé doit être effacé en base : on envoie
       // '' / 0 plutôt que `undefined` (que la mise à jour ignore).
       const vide = <T,>(valeurSiModif: T): T | undefined => (modification ? valeurSiModif : undefined);
+      const finalClientType = clientType === 'Autre' ? (customClientType.trim() || 'Autre') : clientType;
       await onSubmit({
         name: `${formattedFirstName} ${formattedLastName}`.trim() || 'Nouveau Prospect',
         email: email.trim(),
@@ -441,7 +455,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         agencyId,
         status: STATUT_LABELS[statutLead] || 'Froid',
         contactType,
-        clientType,
+        clientType: finalClientType,
         budgetMax: budgetMax === '' ? 0 : Number(budgetMax),
         secteur: formatVille(secteur.trim()),
         typeBien: typeBien.trim(),
@@ -630,7 +644,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Type */}
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-200">Type</label>
+                  <label className="block text-xs font-bold text-slate-200">Type de Client</label>
                   <div className="relative">
                     <select
                       value={clientType}
@@ -644,9 +658,22 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                       <option value="Locataire">Locataire</option>
                       <option value="Investisseur">Investisseur</option>
                       {isImmosphera && <option value="Bailleur">Bailleur</option>}
+                      <option value="Autre">Autre</option>
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                   </div>
+                  {clientType === 'Autre' && (
+                    <div className="mt-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <input
+                        type="text"
+                        placeholder="Précisez (ex: Notaire, Diagnostic, Artisan...)"
+                        value={customClientType}
+                        onChange={(e) => setCustomClientType(e.target.value)}
+                        className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
+                        autoFocus
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Apporteur d'affaires : uniquement en Conciergerie — sans
