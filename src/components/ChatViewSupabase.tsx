@@ -367,6 +367,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const [dragOverTargetProjectId, setDragOverTargetProjectId] = useState<string | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<ChatProject | null>(null);
   const [deletingProject, setDeletingProject] = useState(false);
+  const [projectToRename, setProjectToRename] = useState<ChatProject | null>(null);
+  const [renamedProjectName, setRenamedProjectName] = useState('');
+  const [renamingProject, setRenamingProject] = useState(false);
 
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('projets');
   const [projects, setProjects] = useState<ChatProject[]>([]);
@@ -4741,6 +4744,51 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     }
   };
 
+  const handleRenameProject = async () => {
+    if (!projectToRename || !isSylvainOrMelanie) return;
+    const nouveauNom = renamedProjectName.trim();
+    if (!nouveauNom) {
+      toast.error('Le nom du dossier ne peut pas être vide.');
+      return;
+    }
+    if (nouveauNom === projectToRename.name) {
+      setProjectToRename(null);
+      return;
+    }
+
+    setRenamingProject(true);
+    try {
+      // 1. Tenter la RPC sécurisée (gère les droits admin et met à jour chat_projects)
+      const { error: rpcError } = await supabase.rpc('rename_chat_project', {
+        _project_id: projectToRename.id,
+        _new_name: nouveauNom,
+      });
+
+      if (rpcError) {
+        console.warn('RPC rename_chat_project indisponible ou échouée, fallback direct :', rpcError.message);
+        const { error: directErr } = await supabase
+          .from('chat_projects')
+          .update({ name: nouveauNom } as any)
+          .eq('id', projectToRename.id);
+
+        if (directErr) throw directErr;
+      }
+
+      // 2. Mise à jour de l'état local immédiate
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectToRename.id ? { ...p, name: nouveauNom } : p))
+      );
+
+      toast.success(`Dossier renommé en "${nouveauNom}"`);
+      setProjectToRename(null);
+    } catch (err: any) {
+      console.error('Erreur lors du renommage du dossier :', err);
+      toast.error(`Impossible de renommer le dossier : ${err.message || 'Erreur inconnue'}`);
+    } finally {
+      setRenamingProject(false);
+    }
+  };
+
   const addMember = async (projectId: string, userId: string) => {
     if (!isAdmin || !currentUser) return;
     const { data, error } = await supabase
@@ -5280,6 +5328,19 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   >
                     <Users className="w-3.5 h-3.5" />
                   </button>
+                  {isSylvainOrMelanie && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setProjectToRename(project);
+                        setRenamedProjectName(project.name);
+                      }}
+                      className="p-1.5 mr-1 rounded-lg text-slate-400 hover:text-[#F7BC5F] hover:bg-white/5 shrink-0 transition-colors cursor-pointer"
+                      title="Renommer ce dossier"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   {isSylvainOrMelanie && !isSpecialGroup && (
                     <button
                       onClick={(e) => {
@@ -7534,6 +7595,80 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Renommer un dossier — Sylvain et Mélanie, pour tout dossier y compris Les 3 agences */}
+      {projectToRename && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => !renamingProject && setProjectToRename(null)}
+        >
+          <div
+            className="bg-[#0E1A20] border border-white/10 rounded-2xl max-w-md w-full p-6 text-white space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-[#F7BC5F]" />
+                <h3 className="text-base font-bold">Renommer le dossier</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProjectToRename(null)}
+                disabled={renamingProject}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Modifiez le nom du dossier <span className="text-[#F7BC5F] font-semibold">« {projectToRename.name} »</span> :
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleRenameProject();
+              }}
+              className="space-y-4"
+            >
+              <input
+                autoFocus
+                value={renamedProjectName}
+                onChange={(e) => setRenamedProjectName(e.target.value)}
+                placeholder="Nouveau nom du dossier (ex. LES 3 AGENCES...)"
+                disabled={renamingProject}
+                className="w-full bg-[#0b1c1e] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
+              />
+
+              <div className="flex items-center justify-end gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setProjectToRename(null)}
+                  disabled={renamingProject}
+                  className="px-4 py-2.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 font-medium text-xs transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={!renamedProjectName.trim() || renamingProject}
+                  className="px-4 py-2.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {renamingProject ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Enregistrement...</span>
+                    </>
+                  ) : (
+                    <span>Enregistrer</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
