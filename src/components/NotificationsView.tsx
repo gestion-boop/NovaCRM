@@ -43,7 +43,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { isStandaloneApp } from '@/hooks/useIsStandalone';
 import { UpdateStatusBadge } from './UpdateStatusBadge';
-import { formatBuildDate, useAppUpdateStatus, applyUpdateOnNavigation } from '@/lib/updateStatus';
+import { formatBuildDate, useAppUpdateStatus, applyUpdateOnNavigation, fetchServerVersion, setServerVersion } from '@/lib/updateStatus';
 
 interface RealNotificationRow {
   id: string;
@@ -779,6 +779,25 @@ export const NotificationsView: React.FC<
     ? __BUILD_INFO__.sha
     : bootVersion?.slice(0, 7);
 
+  const handleCheckUpdates = async () => {
+    toast.loading('Vérification des mises à jour...', { id: 'manual-update-check-drawer' });
+    try {
+      const v = await fetchServerVersion();
+      if (v) {
+        setServerVersion(v);
+        if (v.sha && buildSha && v.sha !== buildSha) {
+          toast.success('Une nouvelle mise à jour est disponible !', { id: 'manual-update-check-drawer' });
+        } else {
+          toast.success(`Votre version est à jour (${buildDateFull || 'déployée'})`, { id: 'manual-update-check-drawer' });
+        }
+      } else {
+        toast.success(`Votre version est à jour (${buildDateFull || 'déployée'})`, { id: 'manual-update-check-drawer' });
+      }
+    } catch {
+      toast.dismiss('manual-update-check-drawer');
+    }
+  };
+
   // Ticket #220 (v4) : pas juste "la même icône" mais la miniature de la
   // VRAIE tuile d'accueil correspondante (AccueilGrid.tsx) — même dégradé
   // de couleur ET même icône, comme un mini-clone de la tuile, exactement
@@ -961,38 +980,57 @@ export const NotificationsView: React.FC<
         </div>
       )}
 
-      {/* État système & version — positionné discrètement tout en bas du panneau de notifications */}
-      <div className="pt-3 pb-1 border-t border-white/5 space-y-2">
-        {isUpdatePending && (
-          <button
-            type="button"
-            onClick={() => {
-              if (!applyUpdateOnNavigation({})) {
-                window.location.reload();
-              }
-            }}
-            className="w-full py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-md"
-          >
-            <span className="relative flex h-2 w-2 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-            </span>
-            <span>Mise à jour prête — Cliquer pour l'installer</span>
-          </button>
+      {/* État système & version — positionné clairement tout en bas du panneau latéral droit */}
+      <div className="pt-3 pb-1 border-t border-white/10 space-y-2">
+        {isUpdatePending ? (
+          <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 shadow-md">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+              </span>
+              <span className="font-bold text-xs text-amber-300">Mise à jour disponible</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!applyUpdateOnNavigation({})) {
+                  window.location.reload();
+                }
+              }}
+              className="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-md"
+            >
+              Appliquer la mise à jour maintenant
+            </button>
+          </div>
+        ) : (
+          <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-emerald-300 truncate">Mise à jour : OK (À jour)</p>
+                <p className="text-[10px] text-slate-400 font-mono truncate">
+                  Déployée le {buildDateFull || buildStampText || 'récemment'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleCheckUpdates}
+              className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0 border border-white/5"
+              title="Revérifier immédiatement les mises à jour"
+            >
+              Vérifier
+            </button>
+          </div>
         )}
 
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px] text-slate-400 px-1">
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-            <span>Dernière mise à jour appliquée :</span>
-            <span className="font-mono text-emerald-300 font-semibold">{buildDateFull || buildStampText || 'À jour'}</span>
+        {buildSha && (
+          <div className="flex items-center justify-between px-1 text-[10px] text-slate-500 font-mono">
+            <span>Version build :</span>
+            <span>{buildSha}</span>
           </div>
-          {buildSha && (
-            <span className="text-[10px] text-slate-500 font-mono">
-              Build {buildSha}
-            </span>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
