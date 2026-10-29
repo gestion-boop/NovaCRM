@@ -648,7 +648,7 @@ export default function PropertyDetail() {
         <div className="flex-1 space-y-4">
           <div>
             <div className="flex gap-2 mb-2 flex-wrap">
-              <Badge>{PROPERTY_TYPE_LABELS[property.property_type] || property.property_type}</Badge>
+              <Badge className="bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold border-none shadow-sm">{PROPERTY_TYPE_LABELS[property.property_type] || property.property_type}</Badge>
               {property.status !== "active" && (
                 <Badge variant="destructive">
                   {property.status === "under_offer" ? "Sous offre" : "Sous compromis"}

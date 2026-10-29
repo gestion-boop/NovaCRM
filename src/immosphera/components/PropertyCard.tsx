@@ -94,19 +94,21 @@ export function PropertyCard({
             className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
             loading="lazy"
           />
-          {/* Type badge */}
-          <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[11px] font-bold bg-gold-dark text-gold">
+          {/* Type badge (Maison, Appartement, etc. en jaune signature) */}
+          <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-[#F7BC5F] text-slate-950 shadow-md border border-[#F7BC5F]/40 tracking-wide">
             {PROPERTY_TYPE_LABELS[property.property_type] || property.property_type}
           </span>
-          {/* Listing type badge (Vente / Location) */}
+          {/* Listing type badge (Vente / Location — sobre, non-jaune) */}
           <button
             type="button"
             onClick={toggleListingType}
             disabled={!isAdmin || updatingType}
             title={isAdmin ? "Cliquer pour basculer Vente / Location" : listingType === "sale" ? "Vente" : "Location"}
-            className={`absolute top-10 left-3 px-2.5 py-1 rounded-full text-[11px] font-bold shadow ${
-              listingType === "rental" ? "bg-emerald-600 text-white" : "bg-primary text-primary-foreground"
-            } ${isAdmin ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
+            className={`absolute top-10 left-3 px-2.5 py-1 rounded-full text-[11px] font-semibold backdrop-blur-md shadow-sm border transition-all ${
+              listingType === "rental"
+                ? "bg-emerald-600 text-white border-emerald-400/30"
+                : "bg-slate-950/80 text-white border-white/20 hover:bg-slate-900"
+            } ${isAdmin ? "cursor-pointer hover:scale-105" : "cursor-default"}`}
           >
             {listingType === "rental" ? "Location" : "Vente"}
           </button>

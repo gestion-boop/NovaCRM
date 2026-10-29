@@ -85,7 +85,7 @@ export default function PropalView() {
                 <div className="p-6 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <Badge className="mb-2">{PROPERTY_TYPE_LABELS[p.property_type] || p.property_type}</Badge>
+                      <Badge className="mb-2 bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold border-none shadow-sm">{PROPERTY_TYPE_LABELS[p.property_type] || p.property_type}</Badge>
                       {p.status !== "active" && (
                         <Badge variant="destructive" className="ml-2">
                           {p.status === "under_offer" ? "Sous offre" : "Sous compromis"}
