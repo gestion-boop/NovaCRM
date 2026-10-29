@@ -358,7 +358,7 @@ export const DocumentsView: React.FC = () => {
   );
 
   return (
-    <div className="p-2.5 sm:p-6 max-w-7xl mx-auto space-y-3.5 sm:space-y-6 text-white">
+    <div className="px-2.5 sm:px-6 pt-1 sm:pt-2 pb-6 max-w-7xl mx-auto space-y-3.5 sm:space-y-6 text-white">
       {/* Mobile Top Navigation & Controls */}
       <div className="md:hidden space-y-2">
         {currentLeadId ? (

@@ -881,7 +881,7 @@ export const ProjetsInternes: React.FC<
 
   if (openBoard) {
     return (
-      <div className="p-6 max-w-7xl mx-auto text-white">
+      <div className="px-4 sm:px-6 pt-1 sm:pt-2 pb-6 max-w-7xl mx-auto text-white">
         <InternalProjectBoard
           scope={{ type: 'board', boardId: openBoard.id }}
           boardTitle={openBoard.title}
@@ -904,7 +904,7 @@ export const ProjetsInternes: React.FC<
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 text-white">
+    <div className="px-4 sm:px-6 pt-1 sm:pt-2 pb-6 max-w-7xl mx-auto space-y-6 text-white">
       {/* Header — carte opaque dédiée (pas toute la page, voir RappelsView.tsx) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#050f11] rounded-2xl p-4">
         <div className="flex items-center gap-3">

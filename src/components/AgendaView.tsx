@@ -1130,7 +1130,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ createSignal }) => {
   return (
     // `h-[90vh]` dépassait la zone utile : la coquille réserve déjà de la place
     // pour la barre de navigation, le bas de l'agenda passait donc dessous.
-    <div className={`${isMobile ? 'h-full px-2 pt-2' : 'p-4 sm:p-6 h-[90vh]'} max-w-7xl mx-auto flex flex-col text-white`}>
+    <div className={`${isMobile ? 'h-full px-2 pt-1' : 'px-3 sm:px-6 pt-1 sm:pt-2 pb-4 h-[90vh]'} max-w-7xl mx-auto flex flex-col text-white`}>
       {/* EN-TÊTE TÉLÉPHONE — une ligne pour naviguer, une ligne d'onglets.
           L'ancien bloc (titre « Mon Agenda », sous-titre, quatre onglets, Sync
           et Ajouter) occupait trois lignes avant le premier rendez-vous, et

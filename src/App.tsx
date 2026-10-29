@@ -1242,7 +1242,7 @@ function App() {
               )}
 
           {currentNav === 'tableau-de-bord' && (
-            <div className="p-3 sm:p-6">
+            <div className="px-3 sm:px-6 pt-1 sm:pt-2 pb-6">
               <Dashboard
                 onNavigate={setCurrentNav}
                 onNavigateToStage={(stage) => {
@@ -1264,13 +1264,13 @@ function App() {
               menu/agence/rôle est aussi vérifiée côté contenu dans le
               composant lui-même (même principe que CarteProspectionView). */}
           {currentNav === 'comptabilite' && (
-            <div className="p-3 sm:p-6">
+            <div className="px-3 sm:px-6 pt-1 sm:pt-2 pb-6">
               <ComptabiliteView />
             </div>
           )}
 
           {currentNav === 'pipeline' && (
-            <div className="p-3 sm:p-6">
+            <div className="px-3 sm:px-6 pt-1 sm:pt-2 pb-6">
               <Pipeline
                 onSelectContact={(contactId) => openClientProfile(contactId)}
                 initialStage={pipelineInitialStage}

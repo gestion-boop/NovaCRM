@@ -626,7 +626,7 @@ export const SupportView: React.FC = () => {
       });
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 text-white">
+    <div className="px-4 sm:px-6 pt-1 sm:pt-2 pb-6 max-w-7xl mx-auto space-y-6 text-white">
       {/* Signalé (30/08/2026, capture à l'appui) : bandeau d'en-tête Support avec le design unifié Noir & Or / Novavisio */}
       <div className="relative nv-card-hero rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 overflow-hidden backdrop-blur-xl">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F] to-transparent opacity-85" />

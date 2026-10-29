@@ -1332,7 +1332,7 @@ export default function AcademyView() {
         </div>
       )}
 
-      <div className="px-3 sm:px-5 lg:px-6 py-5 relative z-10">
+      <div className="px-3 sm:px-5 lg:px-6 pt-1 sm:pt-2 pb-5 relative z-10">
         {/* Champs de fichiers cachés pour actions rapides super admin */}
         {estSuperAdmin && (
           <>

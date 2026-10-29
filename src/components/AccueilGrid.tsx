@@ -3820,7 +3820,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // effet visible — tout l'ensemble suivait le vrai défilement de <main>
     // comme un seul bloc rigide. Retiré : le bandeau se fige maintenant
     // correctement par rapport à <main>, qui défile réellement.
-    <div className="min-h-full p-3 sm:p-5 flex flex-col gap-2 relative select-none">
+    <div className="min-h-full px-3 sm:px-5 pt-1 sm:pt-2 pb-4 flex flex-col gap-2 relative select-none">
       {/* Dynamic Background Glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-900/10 via-transparent to-transparent pointer-events-none" />
 

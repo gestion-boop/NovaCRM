@@ -2745,7 +2745,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
   const ActiveIcon = activeSection?.icon;
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-16 max-w-7xl mx-auto space-y-6 text-white min-h-full">
+    <div className="px-4 sm:px-6 lg:px-8 pt-1 sm:pt-2 pb-16 max-w-7xl mx-auto space-y-6 text-white min-h-full">
       {/* Signalé (30/08/2026) : "en haut il y a du texte transparent... la
           tuile ne prend pas de suite le plein écran" — cet en-tête générique
           (titre "Paramètres" + Déconnexion) posé à même la photo de fond

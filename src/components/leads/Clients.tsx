@@ -400,7 +400,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
   };
 
   return (
-    <div className="space-y-4 md:space-y-6 w-full p-2.5 sm:p-6">
+    <div className="space-y-4 md:space-y-6 w-full px-2.5 sm:px-6 pt-1 sm:pt-2 pb-6">
       {/* ── En-tête mobile compact ── */}
       <div className="md:hidden space-y-2.5">
         {/* Scopes tabs compacts */}

@@ -638,7 +638,7 @@ export const EquipeView: React.FC<EquipeViewProps> = ({ onNavigate, onComposeMai
           fixes, voir plus bas) s'étale sur toute la largeur réellement
           disponible, les cartes grandissent avec l'écran plutôt que de
           rester figées à une taille de conteneur arbitraire. */}
-      <div className="p-4 sm:p-6 space-y-4">
+      <div className="px-4 sm:px-6 pt-1 sm:pt-2 pb-6 space-y-4">
         {/* En-tête (30/08/2026, capture à l'appui) : "réorganise cela en
             haut... mets tout sur une ligne" — titre, onglets Membres/Clients
             invités et boutons Inviter tenaient chacun leur propre ligne
