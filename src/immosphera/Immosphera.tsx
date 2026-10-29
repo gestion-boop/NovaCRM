@@ -14,7 +14,6 @@ import {
   FileSignature,
   Map as MapIcon,
   X,
-  Image as ImageIcon,
   Search,
   ChevronDown,
 } from "lucide-react";
@@ -201,42 +200,29 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
             )}
           </div>
 
-          {/* Outils et actions de droite : Tiroir recherche, Photo 360 et retour CRM */}
-          <div className="flex items-center gap-2 ml-auto">
-            {isHome && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setSearchDrawerOpen((prev) => !prev)}
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    searchDrawerOpen
-                      ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/30 border-[#F7BC5F]"
-                      : "bg-white/10 hover:bg-white/15 text-white border-white/15 hover:border-[#F7BC5F]/50"
-                  }`}
-                  title={searchDrawerOpen ? "Fermer le tiroir de recherche" : "Ouvrir le panneau de recherche par-dessus la photo 360°"}
-                >
-                  <Search className="h-3.5 w-3.5" />
-                  <span>Recherche</span>
-                  <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-300 ${searchDrawerOpen ? "rotate-180" : ""}`} />
-                </button>
+          {/* Bouton Recherche au centre de la barre */}
+          {isHome && (
+            <div className="flex items-center justify-center my-0.5 mx-auto">
+              <button
+                type="button"
+                onClick={() => setSearchDrawerOpen((prev) => !prev)}
+                className={`px-4 py-1.5 rounded-xl border text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md ${
+                  searchDrawerOpen
+                    ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/30 border-[#F7BC5F]"
+                    : "bg-white/10 hover:bg-white/15 text-white border-white/15 hover:border-[#F7BC5F]/50"
+                }`}
+                title={searchDrawerOpen ? "Fermer le tiroir de recherche" : "Ouvrir le panneau de recherche par-dessus la photo 360°"}
+              >
+                <Search className="h-4 w-4" />
+                <span>Recherche</span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-300 ${searchDrawerOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
+          )}
 
-                <button
-                  type="button"
-                  onClick={() => setShowHero((prev) => !prev)}
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                    showHero
-                      ? "bg-[#F7BC5F]/20 border-[#F7BC5F]/40 text-[#FAD592]"
-                      : "border-white/10 hover:bg-white/5 text-slate-400 hover:text-white"
-                  }`}
-                  title={showHero ? "Masquer la bannière photo pour remonter la recherche" : "Afficher la photo d'accueil 360°"}
-                >
-                  <ImageIcon className="h-3.5 w-3.5 text-[#F7BC5F]" />
-                  <span className="hidden md:inline">{showHero ? "Masquer photo" : "Photo 360°"}</span>
-                </button>
-              </>
-            )}
-
-            {!isHome ? (
+          {/* Navigation interne : Si sous-page (ex: détail d'un bien), retour aux biens */}
+          {!isHome && (
+            <div className="flex items-center gap-2 ml-auto">
               <button
                 type="button"
                 onClick={() => navigate("/immosphera")}
@@ -246,20 +232,8 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
                 <ArrowLeft className="h-3.5 w-3.5 text-[#F7BC5F]" />
                 <span>Retour aux biens</span>
               </button>
-            ) : (
-              onExitToCrm && (
-                <button
-                  type="button"
-                  onClick={onExitToCrm}
-                  className="px-3 py-1.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                  title="Revenir à l'accueil du CRM"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Retour CRM</span>
-                </button>
-              )
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -210,8 +210,31 @@
   color: #0f172a !important;
 }
 
-.light-mode .immosphera-root .immosphera-topbar button:not([class*="bg-[#F7BC5F]"]):not([class*="bg-amber-400"]) {
+.light-mode .immosphera-root .immosphera-topbar [class*="bg-black/45"] {
+  background-color: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-mode .immosphera-root .immosphera-topbar button:not([class*="bg-[#F7BC5F]"]):not([class*="bg-amber-400"]):not([class*="bg-rose-500"]) {
   color: #1e293b !important;
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-mode .immosphera-root .immosphera-topbar button:not([class*="bg-[#F7BC5F]"]):not([class*="bg-amber-400"]):not([class*="bg-rose-500"]):hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+}
+
+.light-mode .immosphera-root .immosphera-topbar button[class*="bg-amber-400"] {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #f59e0b !important;
+}
+
+.light-mode .immosphera-root .immosphera-topbar span[class*="text-[#FAD592]"] {
+  color: #b45309 !important;
 }
 
 .light-mode .immosphera-root .immosphera-topbar span[class*="text-slate-300"],
