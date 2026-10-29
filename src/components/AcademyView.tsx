@@ -1259,10 +1259,10 @@ export default function AcademyView() {
       <div className="academy-dark-glow pointer-events-none absolute -top-40 left-1/4 w-[500px] h-[500px] bg-[#F7BC5F]/[0.035] rounded-full blur-3xl" />
       <div className="academy-dark-glow pointer-events-none absolute top-1/3 -right-20 w-[450px] h-[450px] bg-[#0ea5e9]/[0.025] rounded-full blur-3xl" />
 
-      {/* Bandeau d'image de l'agence avec dégradé cinématique vers le fond sombre */}
-      {fond && (
+      {/* Bandeau d'image de l'agence — masqué lors d'une recherche pour remonter directement les résultats */}
+      {fond && !enRecherche && (
         <div
-          className="relative w-full overflow-hidden"
+          className="relative w-full overflow-hidden transition-all duration-300"
           style={{ height: 'clamp(140px, 18vw, 320px)' }}
         >
           <img
@@ -1275,11 +1275,11 @@ export default function AcademyView() {
       )}
 
       <div
-        className="px-4 sm:px-6 lg:px-8 pb-16 relative z-10"
-        style={{ paddingTop: fond ? '1.5rem' : '2rem' }}
+        className="px-4 sm:px-6 lg:px-8 pb-16 relative z-10 transition-all duration-300"
+        style={{ paddingTop: enRecherche ? '0.75rem' : (fond ? '1.5rem' : '2rem') }}
       >
         <div className="max-w-6xl mx-auto">
-          {!fond && (
+          {!fond && !enRecherche && (
             <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#F7BC5F] to-[#C88C12] flex items-center justify-center text-slate-950 shadow-lg shadow-[#F7BC5F]/20 shrink-0">
@@ -1298,7 +1298,9 @@ export default function AcademyView() {
           )}
 
           {/* Barre unique sobre et design : navigation + recherche + actions */}
-          <div className="bg-[#0b1e22]/85 backdrop-blur-xl rounded-2xl p-2.5 sm:p-3 border border-white/12 shadow-[0_12px_36px_rgba(0,0,0,0.5)] flex flex-wrap items-center justify-between gap-2.5 mb-6">
+          <div className={`bg-[#0b1e22]/85 backdrop-blur-xl rounded-2xl p-2.5 sm:p-3 border border-white/12 shadow-[0_12px_36px_rgba(0,0,0,0.5)] flex flex-wrap items-center justify-between gap-2.5 transition-all ${
+            enRecherche ? 'mb-3' : 'mb-6'
+          }`}>
             {/* Gauche : Fil d'Ariane si on est dans un dossier, sinon Recherche */}
             {!auNiveauDossiers && !enRecherche ? (
               <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
@@ -1502,17 +1504,19 @@ export default function AcademyView() {
             </div>
           </div>
 
-          {/* En-tête de recherche si recherche active */}
+          {/* En-tête de recherche si recherche active — compact et remonté sous la barre */}
           {enRecherche && (
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-sm font-bold text-slate-700">
-                {visibles.length} résultat{visibles.length > 1 ? 's' : ''} pour « {recherche.trim()} »
+            <div className="mb-3 px-1 flex items-center justify-between text-xs sm:text-sm">
+              <p className="font-bold text-white">
+                <span className="text-[#F7BC5F] font-black">{visibles.length}</span> résultat{visibles.length > 1 ? 's' : ''} trouvé{visibles.length > 1 ? 's' : ''} pour « <span className="text-[#FAD592] font-semibold">{recherche.trim()}</span> »
                 {dossierActif ? ` dans ${dossierActif}` : ''}
               </p>
               <button
+                type="button"
                 onClick={() => setRecherche('')}
-                className="text-xs font-bold text-slate-600 hover:text-slate-900 underline cursor-pointer"
+                className="text-xs font-bold text-[#F7BC5F] hover:text-[#FAD592] hover:underline cursor-pointer flex items-center gap-1 transition-colors"
               >
+                <X className="w-3.5 h-3.5" />
                 Effacer la recherche
               </button>
             </div>

@@ -271,8 +271,8 @@ export default function Index({
     <div className="min-h-screen bg-background">
       {/* Hero photo 360° et Tiroir déroulant de recherche par-dessus */}
       <div className="relative w-full overflow-hidden">
-        {/* Photo 360° Hero — masqué si showHero est false ou en mode Carte */}
-        {!showMap && showHero && (
+        {/* Photo 360° Hero — masqué si showHero est false, en mode Carte, ou lors d'une recherche IA pour remonter les résultats */}
+        {!showMap && showHero && !aiDisplayItems && (
           <div
             className="relative h-[min(48vh,420px)] bg-cover bg-center grid place-items-center px-6 transition-all duration-300 animate-in fade-in"
             style={{
