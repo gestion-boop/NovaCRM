@@ -3,7 +3,7 @@ import {
   FileText, PlayCircle, Plus, Search, Trash2, X, Loader2, Upload, Link as LinkIcon, Pencil,
   CheckCircle2, Circle, Users, ImagePlus, GraduationCap, LayoutGrid, List as ListIcon,
   MoreVertical, ImageOff, Maximize2, Minimize2, Unlock, ArrowUp, ArrowDown, ArrowLeft,
-  Folder, ChevronRight, ExternalLink,
+  Folder, ChevronRight, ExternalLink, Trophy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -114,6 +114,8 @@ export default function AcademyView() {
   const [validees, setValidees] = useState<Set<string>>(new Set());
   const [validationsParRessource, setValidationsParRessource] = useState<Map<string, number>>(new Map());
   const [validationEnCours, setValidationEnCours] = useState<string | null>(null);
+  const [statutFiltre, setStatutFiltre] = useState<'toutes' | 'a_faire' | 'termine'>('toutes');
+  const [vueTop, setVueTop] = useState(false);
   // Demandé le 2 septembre : « voilà ce que je voudrais que tu mettes dans
   // ImmoSphera Académie en fond d'écran, et par-dessus on pourra mettre les
   // dossiers qui sont alignés ». L'image porte le logo et l'identité de la
@@ -526,36 +528,75 @@ export default function AcademyView() {
       .sort((a, b) => a.position - b.position || a.nom.localeCompare(b.nom, 'fr'));
   }, [ressources, dossiers, dossierActif]);
 
+  // Liste globale de tous les dossiers racines pour la barre latérale gauche (interface Campus)
+  const listeTousDossiers = useMemo(() => {
+    const nomsConnus = new Set(dossiers.map((d) => d.nom));
+    const positions = new Map<string, number>();
+    const racines = new Set<string>();
+    dossiers.filter((d) => d.parent_nom === null).forEach((d) => {
+      racines.add(d.nom);
+      positions.set(d.nom, d.position);
+    });
+    ressources.forEach((r) => {
+      if (!nomsConnus.has(r.rubrique)) racines.add(r.rubrique);
+    });
+    const estDescendantDe = (nomCandidat: string, nomAncetre: string): boolean => {
+      if (nomCandidat === nomAncetre) return true;
+      return dossiers
+        .filter((d) => d.parent_nom === nomAncetre)
+        .some((d) => estDescendantDe(nomCandidat, d.nom));
+    };
+    const compte = new Map<string, number>();
+    racines.forEach((nom) => compte.set(nom, 0));
+    ressources.forEach((r) => {
+      for (const nom of racines) {
+        if (estDescendantDe(r.rubrique, nom)) {
+          compte.set(nom, (compte.get(nom) || 0) + 1);
+        }
+      }
+    });
+    return Array.from(compte.entries())
+      .map(([nom, nombre]) => ({ nom, nombre, position: positions.get(nom) ?? 0 }))
+      .sort((a, b) => a.position - b.position || a.nom.localeCompare(b.nom, 'fr'));
+  }, [ressources, dossiers]);
+
   const visibles = useMemo(() => {
     const q = recherche.trim().toLowerCase();
-    return ressources
-      .filter((r) => {
-        if (dossierActif && r.rubrique !== dossierActif) return false;
-        if (!q) return true;
-        return (
-          r.titre.toLowerCase().includes(q) ||
-          (r.description || '').toLowerCase().includes(q) ||
-          (r.auteur || '').toLowerCase().includes(q) ||
-          r.rubrique.toLowerCase().includes(q)
-        );
-      })
-      // Tri explicite (1er octobre, glisser-déposer pour réordonner) :
-      // `ressources` n'est trié que lors du CHARGEMENT initial (même ordre à
-      // 3 clés que la requête `.order()` dans `charger` : rubrique, position,
-      // created_at) — après une mise à jour optimiste de position par
-      // renumeroterRessources, l'ORDRE du tableau ne change pas, seul le
-      // champ `position` de chaque élément change. Sans ce tri ici, la
-      // grille ne refléterait le nouvel ordre qu'après un rechargement
-      // complet. Rubrique conservée en première clé pour ne rien changer à
-      // l'affichage pendant une recherche (plusieurs rubriques mélangées) :
-      // sans objet ici (dossierActif filtre déjà à une seule rubrique) quand
-      // on réordonne réellement.
-      .sort((a, b) =>
-        a.rubrique.localeCompare(b.rubrique, 'fr') ||
-        a.position - b.position ||
-        a.created_at.localeCompare(b.created_at)
+    const liste = ressources.filter((r) => {
+      if (dossierActif) {
+        const estDescendantDe = (nomCandidat: string, nomAncetre: string): boolean => {
+          if (nomCandidat === nomAncetre) return true;
+          return dossiers
+            .filter((d) => d.parent_nom === nomAncetre)
+            .some((d) => estDescendantDe(nomCandidat, d.nom));
+        };
+        if (!estDescendantDe(r.rubrique, dossierActif)) return false;
+      }
+      if (statutFiltre === 'a_faire' && validees.has(r.id)) return false;
+      if (statutFiltre === 'termine' && !validees.has(r.id)) return false;
+      if (!q) return true;
+      return (
+        r.titre.toLowerCase().includes(q) ||
+        (r.description || '').toLowerCase().includes(q) ||
+        (r.auteur || '').toLowerCase().includes(q) ||
+        r.rubrique.toLowerCase().includes(q)
       );
-  }, [ressources, recherche, dossierActif]);
+    });
+
+    if (vueTop) {
+      return liste.sort((a, b) => {
+        const nbA = validationsParRessource.get(a.id) || 0;
+        const nbB = validationsParRessource.get(b.id) || 0;
+        return nbB - nbA;
+      });
+    }
+
+    return liste.sort((a, b) =>
+      a.rubrique.localeCompare(b.rubrique, 'fr') ||
+      a.position - b.position ||
+      a.created_at.localeCompare(b.created_at)
+    );
+  }, [ressources, dossiers, dossierActif, statutFiltre, recherche, vueTop, validees, validationsParRessource]);
 
   const reinitialiserFormulaire = () => {
     setEnModification(null);
@@ -1291,192 +1332,447 @@ export default function AcademyView() {
         </div>
       )}
 
-      <div className="px-4 sm:px-6 lg:px-8 pt-5 pb-16 relative z-10 transition-all duration-300">
-        <div className="max-w-6xl mx-auto">
-          {/* En-tête Académy — Toujours visible et élégant */}
-          {!enRecherche && (
-            <div className="mb-5 flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#F7BC5F] to-[#C88C12] flex items-center justify-center text-slate-950 shadow-lg shadow-[#F7BC5F]/20 shrink-0">
-                  <GraduationCap className="w-6 h-6 stroke-[2.2]" />
-                </div>
-                <div>
-                  <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2 flex-wrap">
-                    <span>Académy</span>
-                    {activeAgency?.name && (
-                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-[#F7BC5F]/15 text-[#FAD592] border border-[#F7BC5F]/30">
-                        {activeAgency.name}
-                      </span>
-                    )}
-                  </h1>
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    Toutes les procédures, formations et tutoriels de l'agence, rangés par dossier.
-                  </p>
-                </div>
+      <div className="px-3 sm:px-5 lg:px-6 py-5 relative z-10">
+        {/* Champs de fichiers cachés pour actions rapides super admin */}
+        {estSuperAdmin && (
+          <>
+            <input
+              ref={champCouvertureRapide}
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const image = e.target.files?.[0];
+                const cible = ressourcePourCouverture.current;
+                e.target.value = '';
+                ressourcePourCouverture.current = null;
+                if (image && cible) void changerCouvertureRapide(cible, image);
+              }}
+              className="hidden"
+            />
+            <input
+              ref={champVisuelDossier}
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const image = e.target.files?.[0];
+                const cible = dossierPourVisuel.current;
+                e.target.value = '';
+                dossierPourVisuel.current = null;
+                if (image && cible) void changerVisuelDossier(cible, image);
+              }}
+              className="hidden"
+            />
+            <input
+              ref={champFond}
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const image = e.target.files?.[0];
+                e.target.value = '';
+                if (image) void changerFond(image);
+              }}
+              className="hidden"
+            />
+          </>
+        )}
+
+        {/* ── DISPOSITION CAMPUS : DOSSIERS À GAUCHE & FORMATIONS EN FAÇADE ── */}
+        <div className="flex flex-col md:flex-row gap-5 items-start max-w-[1800px] mx-auto">
+          {/* ═══════════════ SIDEBAR GAUCHE (DOSSIERS) ═══════════════ */}
+          <aside className="academy-sidebar w-full md:w-72 lg:w-80 shrink-0 bg-[#071317]/85 backdrop-blur-xl rounded-2xl border border-white/10 p-4 shadow-xl flex flex-col gap-4 self-stretch md:sticky md:top-3">
+            {/* Logo / Titre Académy */}
+            <div className="flex items-center gap-3 pb-3 border-b border-white/10">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F7BC5F] to-[#C88C12] flex items-center justify-center text-slate-950 shadow-md shadow-[#F7BC5F]/20 shrink-0">
+                <GraduationCap className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-base font-black text-white tracking-tight flex items-center gap-1.5 truncate">
+                  <span>Académy</span>
+                </h1>
+                {activeAgency?.name && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD592] truncate block">
+                    {activeAgency.name}
+                  </span>
+                )}
               </div>
             </div>
-          )}
 
-          {/* Barre unique sobre et design : navigation + recherche + actions */}
-          <div className={`bg-[#0b1e22]/85 backdrop-blur-xl rounded-2xl p-2.5 sm:p-3 border border-white/12 shadow-[0_12px_36px_rgba(0,0,0,0.5)] flex flex-wrap items-center justify-between gap-2.5 transition-all ${
-            enRecherche ? 'mb-3' : 'mb-6'
-          }`}>
-            {/* Gauche : Fil d'Ariane si on est dans un dossier, sinon Recherche */}
-            {!auNiveauDossiers && !enRecherche ? (
-              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                <button
-                  onClick={() => {
-                    if (cheminDossiers.length > 1) {
-                      allerAuNiveau(cheminDossiers.length - 2);
-                    } else {
-                      setCheminDossiers([]);
-                    }
-                  }}
-                  className="h-9 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            {/* Navigation haute : Toutes les formations / Top formations */}
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setCheminDossiers([]);
+                  setVueTop(false);
+                  setStatutFiltre('toutes');
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  dossierActif === null && !vueTop && statutFiltre !== 'termine'
+                    ? 'bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/20 font-black'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <GraduationCap className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Toutes les formations</span>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                    dossierActif === null && !vueTop && statutFiltre !== 'termine'
+                      ? 'bg-slate-950/20 text-slate-950'
+                      : 'bg-white/10 text-slate-400'
+                  }`}
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Retour</span>
-                </button>
-                <button
-                  onClick={() => setCheminDossiers([])}
-                  className="hidden sm:inline-flex px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  Dossiers
-                </button>
-                {cheminDossiers.map((nom, index) => (
-                  <React.Fragment key={nom}>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-500 shrink-0 hidden sm:block" />
-                    <button
-                      onClick={() => allerAuNiveau(index)}
-                      disabled={index === cheminDossiers.length - 1}
-                      className={`px-2.5 py-1 rounded-lg text-xs sm:text-sm font-extrabold truncate max-w-[200px] sm:max-w-xs transition-colors ${
-                        index === cheminDossiers.length - 1
-                          ? 'text-[#FAD592]'
-                          : 'text-slate-400 hover:text-white hover:bg-white/10 cursor-pointer'
-                      }`}
-                    >
-                      {nom}
-                    </button>
-                  </React.Fragment>
-                ))}
-                <span className="px-2.5 py-1 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#FAD592] text-[11px] font-bold shrink-0">
-                  {visibles.length} procédure{visibles.length > 1 ? 's' : ''}
+                  {ressources.length}
                 </span>
-              </div>
-            ) : null}
+              </button>
 
-            {/* Champ de recherche */}
-            <div className={`relative flex-1 min-w-[180px] ${!auNiveauDossiers && !enRecherche ? 'sm:max-w-xs ml-auto' : 'max-w-md'}`}>
-              <Search className="w-4 h-4 text-[#F7BC5F] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                value={recherche}
-                onChange={(e) => setRecherche(e.target.value)}
-                placeholder={dossierActif ? `Rechercher dans ${dossierActif}…` : 'Rechercher une procédure…'}
-                className="w-full pl-9 pr-8 py-2 rounded-xl bg-[#051113]/90 text-white placeholder-slate-400 text-xs sm:text-sm border border-white/15 focus:outline-none focus:border-[#F7BC5F] focus:ring-1 focus:ring-[#F7BC5F] transition-all"
-              />
-              {recherche && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCheminDossiers([]);
+                  setVueTop(true);
+                  setStatutFiltre('toutes');
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  vueTop
+                    ? 'bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/20 font-black'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="truncate">Top formations</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Section Dossiers */}
+            <div className="flex-1 flex flex-col min-h-0 pt-2 border-t border-white/10">
+              <div className="flex items-center justify-between px-1 mb-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                  Dossiers
+                </span>
+                {estSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => void creerSousDossier(null)}
+                    title="Nouveau dossier racine"
+                    className="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                  </button>
+                )}
+              </div>
+
+              {/* Liste défilable des dossiers */}
+              <div className="flex-1 overflow-y-auto space-y-1 pr-1 max-h-[500px]">
+                {listeTousDossiers.map(({ nom, nombre }, index) => {
+                  const estActif = cheminDossiers[0] === nom && !vueTop;
+                  const visuel = visuelsDossiers.get(nom);
+                  return (
+                    <div
+                      key={nom}
+                      draggable={estSuperAdmin}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', `dossier:${nom}`);
+                        e.stopPropagation();
+                      }}
+                      onDragOver={(e) => {
+                        if (!estSuperAdmin) return;
+                        e.preventDefault();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const fraction = (e.clientY - rect.top) / rect.height;
+                        setDossierSurvoleParDossier(nom);
+                        setDossierSurvolIntention(fraction < 0.5 ? 'avant' : 'apres');
+                      }}
+                      onDragLeave={() => {
+                        setDossierSurvoleParDossier((v) => (v === nom ? null : v));
+                        setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDossierSurvoleParDossier(null);
+                        const intention = dossierSurvolIntention;
+                        setDossierSurvolIntention(null);
+                        setRessourceEnDrag(null);
+                        const donnee = e.dataTransfer.getData('text/plain');
+                        if (donnee.startsWith('dossier:')) {
+                          const nomSource = donnee.slice('dossier:'.length);
+                          if (intention === 'avant' || intention === 'apres') {
+                            void reordonnerDossier(nomSource, nom, intention);
+                          }
+                        }
+                      }}
+                      className={`group relative flex items-center justify-between rounded-xl px-2.5 py-2 text-xs font-semibold transition-all cursor-pointer ${
+                        estActif
+                          ? 'bg-[#F7BC5F]/20 text-[#FAD592] border border-[#F7BC5F]/40 shadow-sm font-bold'
+                          : 'text-slate-300 hover:text-white hover:bg-white/8 border border-transparent'
+                      }`}
+                      onClick={() => {
+                        setCheminDossiers([nom]);
+                        setVueTop(false);
+                      }}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-1">
+                        {visuel ? (
+                          <img src={visuel} alt="" className="w-5 h-5 rounded object-cover shrink-0" />
+                        ) : (
+                          <Folder className={`w-4 h-4 shrink-0 ${estActif ? 'text-[#F7BC5F]' : 'text-slate-400'}`} />
+                        )}
+                        <span className="truncate">{nom}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            estActif ? 'bg-[#F7BC5F]/30 text-[#FAD592]' : 'bg-white/10 text-slate-400'
+                          }`}
+                        >
+                          {nombre}
+                        </span>
+
+                        {estSuperAdmin && (
+                          <div className="relative">
+                            <button
+                              type="button"
+                              data-menu-dossier=""
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMenuDossier(menuDossier === nom ? null : nom);
+                              }}
+                              className="w-6 h-6 rounded-md hover:bg-white/15 text-slate-400 hover:text-white flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
+
+                            {menuDossier === nom && (
+                              <div
+                                data-menu-dossier=""
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute z-50 right-0 top-full mt-1 w-48 rounded-xl bg-[#091a1e] border border-white/15 shadow-2xl py-1 text-left text-slate-200"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuDossier(null);
+                                    void renommerDossier(nom);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10 cursor-pointer"
+                                >
+                                  <Pencil className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                                  Renommer
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuDossier(null);
+                                    dossierPourVisuel.current = nom;
+                                    champVisuelDossier.current?.click();
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10 cursor-pointer"
+                                >
+                                  <ImagePlus className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                                  {visuelsDossiers.get(nom) ? "Changer l'image" : 'Ajouter une image'}
+                                </button>
+                                {visuelsDossiers.get(nom) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setMenuDossier(null);
+                                      void retirerVisuelDossier(nom);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10 cursor-pointer"
+                                  >
+                                    <ImageOff className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                                    Retirer l'image
+                                  </button>
+                                )}
+                                <div className="my-1 border-t border-white/10" />
+                                <button
+                                  type="button"
+                                  disabled={index === 0}
+                                  onClick={() => {
+                                    if (index > 0) {
+                                      setMenuDossier(null);
+                                      void deplacerDossier(nom, 'monter');
+                                    }
+                                  }}
+                                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${
+                                    index === 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-200 hover:bg-white/10 cursor-pointer'
+                                  }`}
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5 text-slate-400" />
+                                  Déplacer avant
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={index === listeTousDossiers.length - 1}
+                                  onClick={() => {
+                                    if (index < listeTousDossiers.length - 1) {
+                                      setMenuDossier(null);
+                                      void deplacerDossier(nom, 'descendre');
+                                    }
+                                  }}
+                                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${
+                                    index === listeTousDossiers.length - 1 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-200 hover:bg-white/10 cursor-pointer'
+                                  }`}
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5 text-slate-400" />
+                                  Déplacer après
+                                </button>
+                                <div className="my-1 border-t border-white/10" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuDossier(null);
+                                    void supprimerDossier(nom, nombre);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/15 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Supprimer
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Bas de sidebar : Mes formations validées + progression */}
+            <div className="pt-3 border-t border-white/10 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCheminDossiers([]);
+                  setVueTop(false);
+                  setStatutFiltre('termine');
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  statutFiltre === 'termine' && dossierActif === null && !vueTop
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="truncate">Formations validées</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold">
+                  {validees.size}
+                </span>
+              </button>
+
+              {ressources.length > 0 && (
+                <div className="px-2 py-1 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Progression globale</span>
+                  <span className="font-bold text-slate-300">
+                    {Math.round((validees.size / ressources.length) * 100)}%
+                  </span>
+                </div>
+              )}
+            </div>
+          </aside>
+
+          {/* ═══════════════ FAÇADE PRINCIPALE (DROITE) ═══════════════ */}
+          <main className="academy-main-content flex-1 min-w-0 w-full flex flex-col gap-5">
+            {/* Barre supérieure : Recherche + Filtres Statut + Actions */}
+            <div className="academy-toolbar bg-[#0b1e22]/85 backdrop-blur-xl rounded-2xl p-3 border border-white/12 shadow-lg flex flex-wrap items-center justify-between gap-3">
+              {/* Champ de recherche */}
+              <div className="relative flex-1 min-w-[200px] sm:min-w-[260px] max-w-md">
+                <Search className="w-4 h-4 text-[#F7BC5F] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  value={recherche}
+                  onChange={(e) => setRecherche(e.target.value)}
+                  placeholder={dossierActif ? `Rechercher dans ${dossierActif}…` : 'Rechercher une formation ou procédure…'}
+                  className="w-full pl-9 pr-8 py-2 rounded-xl bg-[#051113]/90 text-white placeholder-slate-400 text-xs sm:text-sm border border-white/15 focus:outline-none focus:border-[#F7BC5F] transition-all"
+                />
+                {recherche && (
+                  <button
+                    type="button"
+                    onClick={() => setRecherche('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Onglets statut [ Toutes ] [ À faire ] [ Terminé ] */}
+              <div className="flex items-center rounded-xl bg-[#051113] p-1 border border-white/10 gap-1">
                 <button
                   type="button"
-                  onClick={() => setRecherche('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Droite : progression + vue + actions admin */}
-            <div className="flex items-center gap-2 flex-wrap ml-auto sm:ml-0">
-              {auNiveauDossiers && ressources.length > 0 && (
-                <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/6 border border-white/10 text-xs text-slate-300">
-                  <CheckCircle2
-                    className={`w-3.5 h-3.5 ${validees.size === ressources.length ? 'text-emerald-400' : 'text-[#F7BC5F]'}`}
-                  />
-                  <span className="font-semibold">{validees.size}/{ressources.length} lue{validees.size > 1 ? 's' : ''}</span>
-                </div>
-              )}
-
-              {/* Sélecteur Grille ou Liste */}
-              <div className="flex items-center rounded-xl bg-[#051113] p-0.5 border border-white/10">
-                <button
-                  onClick={() => choisirVue('grille')}
-                  title="Affichage en grille"
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                    vueDossiers === 'grille' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                  onClick={() => setStatutFiltre('toutes')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    statutFiltre === 'toutes'
+                      ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  <LayoutGrid className="w-3.5 h-3.5" />
+                  Toutes
                 </button>
                 <button
-                  onClick={() => choisirVue('liste')}
-                  title="Affichage en liste"
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                    vueDossiers === 'liste' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                  type="button"
+                  onClick={() => setStatutFiltre('a_faire')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    statutFiltre === 'a_faire'
+                      ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  <ListIcon className="w-3.5 h-3.5" />
+                  À faire
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatutFiltre('termine')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    statutFiltre === 'termine'
+                      ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Terminé
                 </button>
               </div>
 
-              {estSuperAdmin && (
-                <>
-                  <input
-                    ref={champCouvertureRapide}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const image = e.target.files?.[0];
-                      const cible = ressourcePourCouverture.current;
-                      e.target.value = '';
-                      ressourcePourCouverture.current = null;
-                      if (image && cible) void changerCouvertureRapide(cible, image);
-                    }}
-                    className="hidden"
-                  />
-                  <input
-                    ref={champVisuelDossier}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const image = e.target.files?.[0];
-                      const cible = dossierPourVisuel.current;
-                      e.target.value = '';
-                      dossierPourVisuel.current = null;
-                      if (image && cible) void changerVisuelDossier(cible, image);
-                    }}
-                    className="hidden"
-                  />
-                  <input
-                    ref={champFond}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const image = e.target.files?.[0];
-                      e.target.value = '';
-                      if (image) void changerFond(image);
-                    }}
-                    className="hidden"
-                  />
-
-                  {!enRecherche && (
-                    <button
-                      onClick={() => void creerSousDossier(dossierActif)}
-                      className="h-9 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/12 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                      <span>{dossierActif ? 'Sous-dossier' : 'Dossier'}</span>
-                    </button>
-                  )}
-
+              {/* Droite : Grille/Liste + Ajout Procédure + Options */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center rounded-xl bg-[#051113] p-0.5 border border-white/10">
                   <button
-                    onClick={ouvrirAjout}
-                    className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-[#F7BC5F]/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                    onClick={() => choisirVue('grille')}
+                    title="Affichage en grille"
+                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                      vueDossiers === 'grille' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                    }`}
                   >
-                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                    <span>Procédure</span>
+                    <LayoutGrid className="w-3.5 h-3.5" />
                   </button>
+                  <button
+                    onClick={() => choisirVue('liste')}
+                    title="Affichage en liste"
+                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                      vueDossiers === 'liste' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <ListIcon className="w-3.5 h-3.5" />
+                  </button>
+                </div>
 
-                  {auNiveauDossiers && (
+                {estSuperAdmin && (
+                  <>
+                    <button
+                      onClick={ouvrirAjout}
+                      className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-[#F7BC5F]/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Procédure</span>
+                    </button>
+
                     <div className="relative" ref={optionsAdminRef}>
                       <button
                         type="button"
@@ -1532,649 +1828,165 @@ export default function AcademyView() {
                         </div>
                       )}
                     </div>
-                  )}
-                </>
-              )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* En-tête de recherche si recherche active — compact et remonté sous la barre */}
-          {enRecherche && (
-            <div className="mb-3 px-1 flex items-center justify-between text-xs sm:text-sm">
-              <p className="font-bold text-white">
-                <span className="text-[#F7BC5F] font-black">{visibles.length}</span> résultat{visibles.length > 1 ? 's' : ''} trouvé{visibles.length > 1 ? 's' : ''} pour « <span className="text-[#FAD592] font-semibold">{recherche.trim()}</span> »
-                {dossierActif ? ` dans ${dossierActif}` : ''}
-              </p>
-              <button
-                type="button"
-                onClick={() => setRecherche('')}
-                className="text-xs font-bold text-[#F7BC5F] hover:text-[#FAD592] hover:underline cursor-pointer flex items-center gap-1 transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-                Effacer la recherche
-              </button>
-            </div>
-          )}
-
-          {/* ── LES DOSSIERS (racine ou sous-dossiers) ─────────────────────── */}
-          {(auNiveauDossiers || dansUnDossier) && !chargement && dossiersEnfants.length > 0 && (
-            <div className={dansUnDossier ? 'mb-6' : ''}>
-              {dansUnDossier && (
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[#F7BC5F] mb-2.5">
-                  Sous-dossiers
-                </p>
-              )}
-
-              {vueDossiers === 'grille' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
-                  {dossiersEnfants.map(({ nom, nombre }, index) => {
-                    const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
-                    return (
-                      <div
-                        key={nom}
-                        onClick={() => entrerDossier(nom)}
-                        draggable={estSuperAdmin}
-                        onDragStart={(e) => { e.dataTransfer.setData('text/plain', `dossier:${nom}`); e.stopPropagation(); }}
-                        onDragOver={(e) => {
-                          if (!estSuperAdmin) return;
-                          e.preventDefault();
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const fraction = (e.clientX - rect.left) / rect.width;
-                          setDossierSurvoleParDossier(nom);
-                          setDossierSurvolIntention(fraction < 0.25 ? 'avant' : fraction > 0.75 ? 'apres' : 'dans');
+            {/* En-tête de section : Titre / Fil d'Ariane + Compteur */}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {dossierActif ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCheminDossiers([]);
+                          setVueTop(false);
                         }}
-                        onDragLeave={() => {
-                          setDossierSurvoleParDossier((v) => (v === nom ? null : v));
-                          setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          setDossierSurvoleParDossier(null);
-                          const intention = dossierSurvolIntention;
-                          setDossierSurvolIntention(null);
-                          setRessourceEnDrag(null);
-                          const donnee = e.dataTransfer.getData('text/plain');
-                          if (donnee.startsWith('dossier:')) {
-                            const nomSource = donnee.slice('dossier:'.length);
-                            if (intention === 'avant' || intention === 'apres') {
-                              void reordonnerDossier(nomSource, nom, intention);
-                            } else {
-                              void deplacerDossierVersParent(nomSource, nom);
-                            }
-                          } else {
-                            const ressource = ressources.find((r) => r.id === donnee);
-                            if (ressource) void deplacerVers(ressource, nom);
-                          }
-                        }}
-                        className={`group relative bg-[#0b1e22]/75 hover:bg-[#0f282e]/95 backdrop-blur-md rounded-2xl p-4 border border-white/10 hover:border-[#F7BC5F]/50 shadow-lg hover:shadow-[0_12px_36px_rgba(0,0,0,0.5)] transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-3.5 cursor-pointer select-none ${
-                          dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans'
-                            ? 'ring-2 ring-[#F7BC5F] bg-[#102c32]'
-                            : ''
-                        }`}
+                        className="text-xs font-semibold text-slate-400 hover:text-white hover:underline cursor-pointer"
                       >
-                        {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'avant' && (
-                          <span className="absolute -left-1.5 top-2 bottom-2 w-1 rounded-full bg-[#F7BC5F]" />
-                        )}
-                        {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'apres' && (
-                          <span className="absolute -right-1.5 top-2 bottom-2 w-1 rounded-full bg-[#F7BC5F]" />
-                        )}
-
-                        {/* Icône dossier ambre/or épurée (ou miniature choisie) */}
-                        <div className="relative w-12 h-10 shrink-0">
-                          <div className="absolute inset-x-0 top-[14%] bottom-0 rounded-lg bg-gradient-to-b from-[#E8B33A] to-[#C88C12] shadow-xs" />
-                          <div className="absolute left-[6%] top-0 h-[20%] w-[44%] rounded-t-md bg-gradient-to-b from-[#F2C55C] to-[#E3AE33]" />
-                          <div className="absolute inset-x-0 top-[30%] bottom-0 rounded-lg bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/50 overflow-hidden flex items-center justify-center">
-                            {visuelsDossiers.get(nom) && (
-                              <img
-                                src={visuelsDossiers.get(nom)}
-                                alt=""
-                                className="w-full h-full object-cover"
-                              />
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Nom + compteur clair */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-white leading-snug line-clamp-2 group-hover:text-[#FAD592] transition-colors">
-                            {nom}
-                          </p>
-                          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
-                            <span>{nombre} procédure{nombre > 1 ? 's' : ''}</span>
-                            {vues > 0 && (
-                              <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-300 bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/25">
-                                <CheckCircle2 className="w-3 h-3" />
-                                {vues}/{nombre}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Menu admin ou chevron */}
-                        {estSuperAdmin ? (
+                        Toutes les formations
+                      </button>
+                      {cheminDossiers.map((nom, idx) => (
+                        <React.Fragment key={nom}>
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
                           <button
                             type="button"
-                            data-menu-dossier=""
-                            title="Gérer ce dossier"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMenuDossier(menuDossier === nom ? null : nom);
-                            }}
-                            className="w-8 h-8 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center shrink-0 transition-colors"
+                            onClick={() => allerAuNiveau(idx)}
+                            disabled={idx === cheminDossiers.length - 1}
+                            className={`text-xs font-extrabold ${
+                              idx === cheminDossiers.length - 1
+                                ? 'text-[#FAD592] text-sm sm:text-base'
+                                : 'text-slate-400 hover:text-white cursor-pointer'
+                            }`}
                           >
-                            {dossierEnDepot === nom ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-[#F7BC5F]" />
-                            ) : (
-                              <MoreVertical className="w-4 h-4" />
-                            )}
+                            {nom}
                           </button>
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-white shrink-0 transition-colors" />
-                        )}
-
-                        {estSuperAdmin && menuDossier === nom && (
-                          <div
-                            data-menu-dossier=""
-                            onClick={(e) => e.stopPropagation()}
-                            className="absolute z-30 right-2 top-full mt-1 w-48 rounded-xl bg-[#091a1e] border border-white/15 shadow-2xl py-1 text-left text-slate-200"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => { setMenuDossier(null); void renommerDossier(nom); }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10"
-                            >
-                              <Pencil className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                              Renommer
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMenuDossier(null);
-                                dossierPourVisuel.current = nom;
-                                champVisuelDossier.current?.click();
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10"
-                            >
-                              <ImagePlus className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                              {visuelsDossiers.get(nom) ? "Changer l'image" : 'Ajouter une image'}
-                            </button>
-                            {visuelsDossiers.get(nom) && (
-                              <button
-                                type="button"
-                                onClick={() => { setMenuDossier(null); void retirerVisuelDossier(nom); }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10"
-                              >
-                                <ImageOff className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                                Retirer l'image
-                              </button>
-                            )}
-                            <div className="my-1 border-t border-white/10" />
-                            <button
-                              type="button"
-                              disabled={index === 0}
-                              onClick={() => { if (index > 0) { setMenuDossier(null); void deplacerDossier(nom, 'monter'); } }}
-                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-200 hover:bg-white/10'}`}
-                            >
-                              <ArrowUp className="w-3.5 h-3.5 text-slate-400" />
-                              Déplacer avant
-                            </button>
-                            <button
-                              type="button"
-                              disabled={index === dossiersEnfants.length - 1}
-                              onClick={() => { if (index < dossiersEnfants.length - 1) { setMenuDossier(null); void deplacerDossier(nom, 'descendre'); } }}
-                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === dossiersEnfants.length - 1 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-200 hover:bg-white/10'}`}
-                            >
-                              <ArrowDown className="w-3.5 h-3.5 text-slate-400" />
-                              Déplacer après
-                            </button>
-                            <div className="my-1 border-t border-white/10" />
-                            <button
-                              type="button"
-                              onClick={() => { setMenuDossier(null); void supprimerDossier(nom, nombre); }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/15"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              Supprimer
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        </React.Fragment>
+                      ))}
+                    </>
+                  ) : vueTop ? (
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                      <Trophy className="w-5 h-5 text-amber-400" />
+                      <span>Top formations les plus consultées</span>
+                    </h2>
+                  ) : statutFiltre === 'termine' ? (
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                      <span>Mes formations validées</span>
+                    </h2>
+                  ) : (
+                    <h2 className="text-base sm:text-lg font-black text-white">
+                      Toutes les formations
+                    </h2>
+                  )}
                 </div>
-              ) : (
-                <div className="rounded-2xl bg-[#0b1e22]/75 backdrop-blur-md border border-white/10 shadow-lg divide-y divide-white/10 overflow-hidden">
-                  {dossiersEnfants.map(({ nom, nombre }, index) => {
-                    const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
-                    return (
-                      <div
-                        key={nom}
-                        onClick={() => entrerDossier(nom)}
-                        draggable={estSuperAdmin}
-                        onDragStart={(e) => { e.dataTransfer.setData('text/plain', `dossier:${nom}`); e.stopPropagation(); }}
-                        onDragOver={(e) => {
-                          if (!estSuperAdmin) return;
-                          e.preventDefault();
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const fraction = (e.clientY - rect.top) / rect.height;
-                          setDossierSurvoleParDossier(nom);
-                          setDossierSurvolIntention(fraction < 0.25 ? 'avant' : fraction > 0.75 ? 'apres' : 'dans');
-                        }}
-                        onDragLeave={() => {
-                          setDossierSurvoleParDossier((v) => (v === nom ? null : v));
-                          setDossierSurvolIntention((v) => (dossierSurvoleParDossier === nom ? null : v));
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          setDossierSurvoleParDossier(null);
-                          const intention = dossierSurvolIntention;
-                          setDossierSurvolIntention(null);
-                          setRessourceEnDrag(null);
-                          const donnee = e.dataTransfer.getData('text/plain');
-                          if (donnee.startsWith('dossier:')) {
-                            const nomSource = donnee.slice('dossier:'.length);
-                            if (intention === 'avant' || intention === 'apres') {
-                              void reordonnerDossier(nomSource, nom, intention);
-                            } else {
-                              void deplacerDossierVersParent(nomSource, nom);
-                            }
-                          } else {
-                            const ressource = ressources.find((r) => r.id === donnee);
-                            if (ressource) void deplacerVers(ressource, nom);
-                          }
-                        }}
-                        className={`relative w-full flex items-center gap-3.5 px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer ${
-                          dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans' ? 'bg-[#102c32]' : ''
-                        }`}
-                      >
-                        <div className="relative w-9 h-7 shrink-0">
-                          <span className="absolute inset-x-0 top-[14%] bottom-0 rounded bg-gradient-to-b from-[#E8B33A] to-[#C88C12]" />
-                          <span className="absolute left-[6%] top-0 h-[20%] w-[46%] rounded-t-sm bg-[#F2C55C]" />
-                          <span className="absolute inset-x-0 top-[32%] bottom-0 rounded bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40" />
-                        </div>
-                        <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">{nom}</span>
-                        {vues > 0 && (
-                          <span className="flex items-center gap-1 text-xs font-semibold text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/25">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            {vues}/{nombre}
-                          </span>
-                        )}
-                        <span className="text-xs text-slate-400 tabular-nums">
-                          {nombre} procédure{nombre > 1 ? 's' : ''}
-                        </span>
-                        {estSuperAdmin ? (
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              title="Renommer"
-                              onClick={() => void renommerDossier(nom)}
-                              className="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center"
-                            >
-                              <Pencil className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Supprimer"
-                              onClick={() => void supprimerDossier(nom, nombre)}
-                              className="w-7 h-7 rounded-lg text-rose-400 hover:bg-rose-500/20 flex items-center justify-center"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-slate-500" />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Zone de dépôt vers un autre dossier : s'affiche UNIQUEMENT quand on glisse une procédure */}
-          {ressourceEnDrag && estSuperAdmin && rubriques.length > 1 && (
-            <div className="mb-5 p-3 rounded-2xl bg-[#0b1e22]/90 border border-[#F7BC5F]/40 shadow-lg">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[#F7BC5F] mb-2">
-                Déposer dans un autre dossier :
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {rubriques
-                  .filter(([nom]) => nom !== dossierActif)
-                  .map(([nom, nombre]) => (
-                    <span
+                <span className="px-3 py-1 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#FAD592] text-xs font-bold">
+                  {visibles.length} formation{visibles.length > 1 ? 's' : ''}
+                </span>
+              </div>
+
+              {/* Si on est dans un dossier et qu'il y a des sous-dossiers, affichage en puces chips */}
+              {dossiersEnfants.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap pt-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sous-dossiers :</span>
+                  {dossiersEnfants.map(({ nom, nombre }) => (
+                    <button
                       key={nom}
-                      onDragOver={(e) => { e.preventDefault(); setDossierSurvole(nom); }}
-                      onDragLeave={() => setDossierSurvole((v) => (v === nom ? null : v))}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setDossierSurvole(null);
-                        setRessourceEnDrag(null);
-                        const id = e.dataTransfer.getData('text/plain');
-                        const ressource = ressources.find((r) => r.id === id);
-                        if (ressource) void deplacerVers(ressource, nom);
-                      }}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
-                        dossierSurvole === nom
-                          ? 'bg-[#F7BC5F] border-[#F7BC5F] text-slate-950 scale-105 shadow-md'
-                          : 'bg-[#051113] border-white/10 text-slate-200'
-                      }`}
+                      onClick={() => entrerDossier(nom)}
+                      className="px-3 py-1.5 rounded-xl bg-white/8 hover:bg-white/15 border border-white/12 text-slate-200 hover:text-white text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
                     >
                       <Folder className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                      <span className="truncate max-w-[180px]">{nom}</span>
-                      <span className="opacity-60 text-[10px]">({nombre})</span>
-                    </span>
+                      <span>{nom}</span>
+                      <span className="px-1.5 py-0.2 rounded bg-white/10 text-[10px] text-slate-300 font-extrabold">{nombre}</span>
+                    </button>
                   ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── LES PROCÉDURES (dans un dossier ou lors d'une recherche) ─── */}
-          {chargement ? (
-            <div className="flex items-center justify-center py-20 text-slate-400 gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-[#F7BC5F]" />
-              <span className="text-sm">Chargement de l'Académy…</span>
-            </div>
-          ) : ressources.length === 0 && dossiersEnfants.length === 0 ? (
-            <div className="p-12 text-center bg-[#0b1e22]/60 border border-dashed border-white/15 rounded-2xl shadow-xl">
-              <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 mx-auto mb-3.5 flex items-center justify-center text-[#F7BC5F]">
-                <GraduationCap className="w-6 h-6 stroke-[2]" />
-              </div>
-              <p className="text-sm font-bold text-white">L'Académy est vide pour le moment.</p>
-              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                {estSuperAdmin
-                  ? 'Créez un dossier ou ajoutez votre première procédure (PDF ou vidéo).'
-                  : "Les procédures de l'agence apparaîtront ici dès qu'elles seront publiées."}
-              </p>
-            </div>
-          ) : auNiveauDossiers ? null : visibles.length === 0 && dossiersEnfants.length === 0 ? (
-            <div className="p-10 text-center bg-[#0b1e22]/60 border border-white/10 rounded-2xl shadow-xl">
-              <p className="text-sm font-semibold text-slate-300">
-                {enRecherche
-                  ? `Aucune procédure ne correspond à « ${recherche} ».`
-                  : 'Ce dossier ne contient pas encore de procédure.'}
-              </p>
-              {estSuperAdmin && !enRecherche && (
-                <button
-                  onClick={ouvrirAjout}
-                  className="mt-3.5 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 text-xs font-bold shadow-md shadow-[#F7BC5F]/20 hover:brightness-110 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                  Ajouter une procédure ici
-                </button>
+                  {estSuperAdmin && (
+                    <button
+                      onClick={() => void creerSousDossier(dossierActif)}
+                      className="px-2.5 py-1.5 rounded-xl border border-dashed border-white/20 hover:border-[#F7BC5F] text-slate-400 hover:text-[#F7BC5F] text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Nouveau sous-dossier</span>
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          ) : visibles.length === 0 ? null : vueDossiers === 'liste' ? (
-            /* Affichage en LISTE des procédures : ultra lisible et moderne */
-            <div className="rounded-2xl bg-[#0b1e22]/75 backdrop-blur-md border border-white/10 shadow-lg divide-y divide-white/10 overflow-hidden">
-              {visibles.map((r) => {
-                const estVideo = r.type === 'video';
-                const estValidee = validees.has(r.id);
-                return (
-                  <div
-                    key={r.id}
-                    onClick={() => ouvrirRessource(r)}
-                    draggable={estSuperAdmin}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', r.id);
-                      setRessourceEnDrag(r.id);
-                    }}
-                    onDragEnd={() => setRessourceEnDrag(null)}
-                    className="group flex items-center gap-3.5 px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer"
+
+            {/* ═══════════════ GRILLE OU LISTE DES FORMATIONS EN FAÇADE ═══════════════ */}
+            {visibles.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-[#0b1e22]/40 backdrop-blur-md p-12 text-center flex flex-col items-center justify-center gap-3">
+                <GraduationCap className="w-10 h-10 text-slate-500" />
+                <p className="text-sm font-semibold text-slate-300">
+                  {recherche
+                    ? 'Aucune formation ne correspond à cette recherche.'
+                    : statutFiltre === 'termine'
+                    ? 'Vous n’avez pas encore de formations validées.'
+                    : statutFiltre === 'a_faire'
+                    ? 'Aucune formation en attente ! Toutes vos formations sont terminées.'
+                    : 'Aucune procédure dans ce dossier pour le moment.'}
+                </p>
+                {estSuperAdmin && (
+                  <button
+                    onClick={() => ouvrirFormulairePour(dossierActif)}
+                    className="mt-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-[#F7BC5F]/20 cursor-pointer"
                   >
-                    {/* Miniature ou icône */}
-                    {r.image_url ? (
-                      <img
-                        src={r.image_url}
-                        alt=""
-                        className="w-14 h-10 rounded-lg object-cover bg-[#051113] border border-white/10 shrink-0"
-                      />
-                    ) : (
-                      <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-                          estVideo
-                            ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
-                            : 'bg-[#F7BC5F]/15 border-[#F7BC5F]/30 text-[#FAD592]'
-                        }`}
-                      >
-                        {estVideo ? <PlayCircle className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-                      </div>
-                    )}
-
-                    {/* Titre & infos */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-white group-hover:text-[#FAD592] transition-colors truncate">
-                          {r.titre}
-                        </p>
-                        <span
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase shrink-0 border ${
-                            estVideo
-                              ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
-                              : 'bg-white/10 text-slate-300 border-white/15'
-                          }`}
-                        >
-                          {estVideo ? 'Vidéo' : 'PDF'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
-                        {enRecherche ? `${r.rubrique} · ` : ''}
-                        {r.description || (r.auteur ? `Par ${r.auteur}` : 'Cliquer pour ouvrir')}
-                        {r.duree ? ` · ${r.duree}` : ''}
-                      </p>
-                    </div>
-
-                    {/* Bouton Lu / Marquer lu */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void basculerValidation(r);
-                      }}
-                      disabled={validationEnCours === r.id}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer ${
-                        estValidee
-                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-xs'
-                          : 'bg-white/8 text-slate-300 hover:bg-white/15 border border-white/10'
-                      }`}
+                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>Créer une première procédure</span>
+                  </button>
+                )}
+              </div>
+            ) : vueDossiers === 'liste' ? (
+              /* Vue Liste */
+              <div className="rounded-2xl bg-[#0b1e22]/75 backdrop-blur-md border border-white/10 shadow-lg divide-y divide-white/10 overflow-hidden">
+                {visibles.map((r) => {
+                  const estVideo = r.type === 'video';
+                  const estValidee = validees.has(r.id);
+                  const nbValidations = validationsParRessource.get(r.id) || 0;
+                  return (
+                    <div
+                      key={r.id}
+                      className="p-3.5 flex items-center justify-between gap-3 hover:bg-white/5 transition-colors"
                     >
-                      {validationEnCours === r.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[#F7BC5F]" />
-                      ) : estValidee ? (
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      ) : (
-                        <Circle className="w-3.5 h-3.5" />
-                      )}
-                      <span className="hidden sm:inline">{estValidee ? 'Lu' : 'Marquer lu'}</span>
-                    </button>
-
-                    {estSuperAdmin && (
-                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <button
-                          type="button"
-                          onClick={() => ouvrirModification(r)}
-                          title="Modifier"
-                          className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
+                          onClick={() => ouvrirRessource(r)}
+                          className="w-12 h-12 rounded-xl bg-[#051113] overflow-hidden flex items-center justify-center shrink-0 border border-white/10 cursor-pointer"
                         >
-                          <Pencil className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void supprimer(r)}
-                          title="Supprimer"
-                          className="w-8 h-8 rounded-lg text-rose-400 hover:bg-rose-500/20 flex items-center justify-center transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            /* Affichage en GRILLE des procédures : cartes épurées, design et lisibles */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {visibles.map((r) => {
-                const estVideo = r.type === 'video';
-                const estValidee = validees.has(r.id);
-                const nbValidations = validationsParRessource.get(r.id) || 0;
-                return (
-                  <article
-                    key={r.id}
-                    draggable={estSuperAdmin}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', r.id);
-                      setRessourceEnDrag(r.id);
-                    }}
-                    onDragEnd={() => setRessourceEnDrag(null)}
-                    onDragOver={(e) => {
-                      if (!estSuperAdmin || !dansUnDossier) return;
-                      e.preventDefault();
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const fraction = (e.clientX - rect.left) / rect.width;
-                      setRessourceSurvolee(r.id);
-                      setRessourceSurvolIntention(fraction < 0.5 ? 'avant' : 'apres');
-                    }}
-                    onDragLeave={() => {
-                      setRessourceSurvolee((v) => (v === r.id ? null : v));
-                      setRessourceSurvolIntention((v) => (ressourceSurvolee === r.id ? null : v));
-                    }}
-                    onDrop={(e) => {
-                      if (!estSuperAdmin || !dansUnDossier) return;
-                      e.preventDefault();
-                      const intention = ressourceSurvolIntention;
-                      setRessourceSurvolee(null);
-                      setRessourceSurvolIntention(null);
-                      setRessourceEnDrag(null);
-                      const idSource = e.dataTransfer.getData('text/plain');
-                      if (idSource && intention) void reordonnerRessource(idSource, r.id, intention);
-                    }}
-                    className={`group relative bg-[#0b1e22]/75 hover:bg-[#0f282e]/95 backdrop-blur-md rounded-2xl border border-white/10 hover:border-[#F7BC5F]/50 overflow-hidden shadow-lg hover:shadow-[0_16px_40px_rgba(0,0,0,0.6)] flex flex-col transition-all duration-300 hover:-translate-y-1 ${
-                      deplacementEnCours === r.id ? 'opacity-50' : ''
-                    } ${
-                      ressourceSurvolee === r.id
-                        ? ressourceSurvolIntention === 'avant'
-                          ? 'border-l-4 border-l-[#F7BC5F]'
-                          : 'border-r-4 border-r-[#F7BC5F]'
-                        : ''
-                    }`}
-                  >
-                    {/* Aperçu visuel sobre */}
-                    <button
-                      onClick={() => ouvrirRessource(r)}
-                      className="relative block w-full aspect-[16/9] bg-[#051113] overflow-hidden border-b border-white/10 cursor-pointer"
-                    >
-                      {r.image_url ? (
-                        <img
-                          src={r.image_url}
-                          alt=""
-                          className="w-full h-full object-contain object-center transition-transform duration-300 group-hover:scale-[1.03]"
-                        />
-                      ) : (
-                        <div
-                          className={`w-full h-full flex flex-col items-center justify-center gap-1.5 ${
-                            estVideo ? 'bg-gradient-to-br from-[#0c2229] to-[#081518] text-blue-400' : 'bg-gradient-to-br from-[#122327] to-[#081417] text-[#F7BC5F]'
-                          }`}
-                        >
-                          {estVideo ? <PlayCircle className="w-10 h-10 stroke-[1.75]" /> : <FileText className="w-10 h-10 stroke-[1.75]" />}
-                          <span className="text-[11px] font-semibold text-slate-300">
-                            {estVideo ? 'Regarder la vidéo' : 'Ouvrir le document'}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Pastille PDF / Vidéo */}
-                      <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-lg bg-black/75 backdrop-blur-md text-white border border-white/15 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-md">
-                        {estVideo ? <PlayCircle className="w-3 h-3 text-blue-400" /> : <FileText className="w-3 h-3 text-[#F7BC5F]" />}
-                        {estVideo ? 'Vidéo' : 'PDF'}
-                        {r.duree && <span className="font-normal text-slate-300">· {r.duree}</span>}
-                      </span>
-                    </button>
-
-                    {/* Actions admin au survol */}
-                    {estSuperAdmin && (
-                      <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            ressourcePourCouverture.current = r;
-                            champCouvertureRapide.current?.click();
-                          }}
-                          title={r.image_url ? "Changer l'image" : 'Ajouter une image'}
-                          className="w-7 h-7 rounded-lg bg-black/80 backdrop-blur-md text-white hover:text-[#F7BC5F] border border-white/15 flex items-center justify-center shadow-md cursor-pointer transition-colors"
-                        >
-                          {couvertureEnCours === r.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#F7BC5F]" />
+                          {r.image_url ? (
+                            <img src={r.image_url} alt="" className="w-full h-full object-cover" />
+                          ) : estVideo ? (
+                            <PlayCircle className="w-6 h-6 text-blue-400" />
                           ) : (
-                            <ImagePlus className="w-3.5 h-3.5" />
+                            <FileText className="w-6 h-6 text-[#F7BC5F]" />
                           )}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => ouvrirModification(r)}
-                          title="Modifier"
-                          className="w-7 h-7 rounded-lg bg-black/80 backdrop-blur-md text-white hover:text-[#F7BC5F] border border-white/15 flex items-center justify-center shadow-md cursor-pointer transition-colors"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void supprimer(r)}
-                          title="Supprimer"
-                          className="w-7 h-7 rounded-lg bg-rose-600/90 text-white hover:bg-rose-600 border border-rose-400/40 flex items-center justify-center shadow-md cursor-pointer transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Corps de la carte */}
-                    <div className="flex-1 flex flex-col justify-between p-3.5 gap-3">
-                      <div>
-                        {enRecherche && (
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F] mb-1 truncate">
-                            {r.rubrique}
-                          </p>
-                        )}
-                        <button onClick={() => ouvrirRessource(r)} className="text-left w-full cursor-pointer">
-                          <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 group-hover:text-[#FAD592] transition-colors">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F] truncate">
+                              {r.rubrique}
+                            </span>
+                            {r.duree && <span className="text-[10px] text-slate-400">· {r.duree}</span>}
+                          </div>
+                          <button
+                            onClick={() => ouvrirRessource(r)}
+                            className="text-left font-bold text-sm text-white hover:text-[#FAD592] transition-colors truncate block w-full cursor-pointer"
+                          >
                             {r.titre}
-                          </h3>
-                        </button>
-                        {r.description && (
-                          <p className="mt-1 text-xs text-slate-400 leading-relaxed line-clamp-2">{r.description}</p>
-                        )}
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Pied de carte : auteur/lecteurs + bouton Lu */}
-                      <div className="pt-2.5 border-t border-white/10 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          {r.auteur_photo_url ? (
-                            <img
-                              src={r.auteur_photo_url}
-                              alt=""
-                              className="w-6 h-6 rounded-full object-cover ring-1 ring-white/20 shrink-0"
-                            />
-                          ) : r.auteur ? (
-                            <span className="w-6 h-6 rounded-full bg-white/10 text-[#FAD592] border border-white/15 text-[10px] font-bold flex items-center justify-center shrink-0">
-                              {initiales(r.auteur)}
-                            </span>
-                          ) : null}
-                          {r.auteur ? (
-                            <span className="text-xs text-slate-300 truncate">{r.auteur}</span>
-                          ) : estSuperAdmin && nbValidations > 0 ? (
-                            <span className="text-[11px] text-slate-400 flex items-center gap-1" title={`${nbValidations} validation(s)`}>
-                              <Users className="w-3 h-3 text-[#F7BC5F]" /> {nbValidations}
-                            </span>
-                          ) : <span />}
-                        </div>
-
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           type="button"
                           onClick={() => void basculerValidation(r)}
                           disabled={validationEnCours === r.id}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors shrink-0 cursor-pointer disabled:opacity-60 ${
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
                             estValidee
                               ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                               : 'bg-white/8 text-slate-300 hover:bg-white/15 border border-white/10'
@@ -2187,15 +1999,200 @@ export default function AcademyView() {
                           ) : (
                             <Circle className="w-3 h-3" />
                           )}
-                          <span>{estValidee ? 'Lu' : 'Marquer lu'}</span>
+                          <span>{estValidee ? 'Terminé' : 'À faire'}</span>
+                        </button>
+                        <button
+                          onClick={() => ouvrirRessource(r)}
+                          className="h-8 px-3 rounded-lg bg-[#F7BC5F] text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm hover:brightness-105"
+                        >
+                          {estVideo ? <PlayCircle className="w-3.5 h-3.5" /> : <ExternalLink className="w-3.5 h-3.5" />}
+                          <span>Ouvrir</span>
                         </button>
                       </div>
                     </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            ) : (
+              /* Vue Grille Campus (Cartes 16/9 épurées, design et lisibles) */
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+                {visibles.map((r) => {
+                  const estVideo = r.type === 'video';
+                  const estValidee = validees.has(r.id);
+                  const nbValidations = validationsParRessource.get(r.id) || 0;
+                  return (
+                    <article
+                      key={r.id}
+                      draggable={estSuperAdmin}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', r.id);
+                        setRessourceEnDrag(r.id);
+                      }}
+                      onDragEnd={() => setRessourceEnDrag(null)}
+                      onDragOver={(e) => {
+                        if (!estSuperAdmin || !dossierActif) return;
+                        e.preventDefault();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const fraction = (e.clientX - rect.left) / rect.width;
+                        setRessourceSurvolee(r.id);
+                        setRessourceSurvolIntention(fraction < 0.5 ? 'avant' : 'apres');
+                      }}
+                      onDragLeave={() => {
+                        setRessourceSurvolee((v) => (v === r.id ? null : v));
+                        setRessourceSurvolIntention((v) => (ressourceSurvolee === r.id ? null : v));
+                      }}
+                      onDrop={(e) => {
+                        if (!estSuperAdmin || !dossierActif) return;
+                        e.preventDefault();
+                        const intention = ressourceSurvolIntention;
+                        setRessourceSurvolee(null);
+                        setRessourceSurvolIntention(null);
+                        setRessourceEnDrag(null);
+                        const idSource = e.dataTransfer.getData('text/plain');
+                        if (idSource && intention) void reordonnerRessource(idSource, r.id, intention);
+                      }}
+                      className={`academy-card group relative bg-[#0b1e22]/75 hover:bg-[#0f282e]/95 backdrop-blur-md rounded-2xl border border-white/10 hover:border-[#F7BC5F]/50 overflow-hidden shadow-lg hover:shadow-[0_16px_40px_rgba(0,0,0,0.6)] flex flex-col transition-all duration-300 hover:-translate-y-1 ${
+                        deplacementEnCours === r.id ? 'opacity-50' : ''
+                      } ${
+                        ressourceSurvolee === r.id
+                          ? ressourceSurvolIntention === 'avant'
+                            ? 'border-l-4 border-l-[#F7BC5F]'
+                            : 'border-r-4 border-r-[#F7BC5F]'
+                          : ''
+                      }`}
+                    >
+                      {/* Vignette au ratio 16/9 */}
+                      <button
+                        onClick={() => ouvrirRessource(r)}
+                        className="relative block w-full aspect-[16/9] bg-[#051113] overflow-hidden border-b border-white/10 cursor-pointer"
+                      >
+                        {r.image_url ? (
+                          <img
+                            src={r.image_url}
+                            alt=""
+                            className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.03]"
+                          />
+                        ) : (
+                          <div
+                            className={`w-full h-full flex flex-col items-center justify-center gap-1.5 ${
+                              estVideo ? 'bg-gradient-to-br from-[#0c2229] to-[#081518] text-blue-400' : 'bg-gradient-to-br from-[#122327] to-[#081417] text-[#F7BC5F]'
+                            }`}
+                          >
+                            {estVideo ? <PlayCircle className="w-10 h-10 stroke-[1.75]" /> : <FileText className="w-10 h-10 stroke-[1.75]" />}
+                            <span className="text-[11px] font-semibold text-slate-300">
+                              {estVideo ? 'Regarder la vidéo' : 'Ouvrir le document'}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Pastille Type & Durée */}
+                        <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-lg bg-black/75 backdrop-blur-md text-white border border-white/15 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-md">
+                          {estVideo ? <PlayCircle className="w-3 h-3 text-blue-400" /> : <FileText className="w-3 h-3 text-[#F7BC5F]" />}
+                          {estVideo ? 'Vidéo' : 'PDF'}
+                          {r.duree && <span className="font-normal text-slate-300">· {r.duree}</span>}
+                        </span>
+
+                        {/* Badge de statut lu/terminé si validé */}
+                        {estValidee && (
+                          <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-lg bg-emerald-500/90 text-white text-[10px] font-black flex items-center gap-1 shadow-md">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Terminé</span>
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Actions admin au survol */}
+                      {estSuperAdmin && (
+                        <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              ressourcePourCouverture.current = r;
+                              champCouvertureRapide.current?.click();
+                            }}
+                            title={r.image_url ? "Changer l'image" : 'Ajouter une image'}
+                            className="w-7 h-7 rounded-lg bg-black/80 backdrop-blur-md text-white hover:text-[#F7BC5F] border border-white/15 flex items-center justify-center shadow-md cursor-pointer transition-colors"
+                          >
+                            {couvertureEnCours === r.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#F7BC5F]" />
+                            ) : (
+                              <ImagePlus className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => ouvrirModification(r)}
+                            title="Modifier"
+                            className="w-7 h-7 rounded-lg bg-black/80 backdrop-blur-md text-white hover:text-[#F7BC5F] border border-white/15 flex items-center justify-center shadow-md cursor-pointer transition-colors"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void supprimer(r)}
+                            title="Supprimer"
+                            className="w-7 h-7 rounded-lg bg-black/80 backdrop-blur-md text-rose-300 hover:text-rose-100 hover:bg-rose-500/40 border border-white/15 flex items-center justify-center shadow-md cursor-pointer transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Corps de la carte */}
+                      <div className="flex-1 flex flex-col justify-between p-3.5 gap-3">
+                        <div>
+                          {/* Dossier parent en badge sobre */}
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F] mb-1 truncate">
+                            {r.rubrique}
+                          </p>
+                          <button onClick={() => ouvrirRessource(r)} className="text-left w-full cursor-pointer">
+                            <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 group-hover:text-[#FAD592] transition-colors">
+                              {r.titre}
+                            </h3>
+                          </button>
+                          {r.description && (
+                            <p className="mt-1 text-xs text-slate-400 leading-relaxed line-clamp-2">{r.description}</p>
+                          )}
+                        </div>
+
+                        {/* Pied de carte : bouton Commencer + bouton validation */}
+                        <div className="pt-2.5 border-t border-white/10 flex items-center justify-between gap-2">
+                          <button
+                            onClick={() => ouvrirRessource(r)}
+                            className="h-8 px-3 rounded-lg bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-sm hover:brightness-105 active:scale-95 transition-all cursor-pointer"
+                          >
+                            {estVideo ? <PlayCircle className="w-3.5 h-3.5 stroke-[2.5]" /> : <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />}
+                            <span>{estValidee ? 'Revoir' : 'Commencer'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => void basculerValidation(r)}
+                            disabled={validationEnCours === r.id}
+                            title={estValidee ? 'Marquer comme non lu' : 'Valider cette formation'}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors shrink-0 cursor-pointer disabled:opacity-60 ${
+                              estValidee
+                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-white/8 text-slate-300 hover:bg-white/15 border border-white/10'
+                            }`}
+                          >
+                            {validationEnCours === r.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-[#F7BC5F]" />
+                            ) : estValidee ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Circle className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                            <span className="hidden sm:inline">{estValidee ? 'Validé' : 'Marquer fait'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </main>
         </div>
       </div>
 

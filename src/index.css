@@ -579,7 +579,7 @@ main[class*="bg-[#071015]/55" i] {
    dire s'il est périmé — à lancer après avoir ajouté un écran. */
 /* @generated:theme-surfaces:start — ne pas éditer à la main, voir scripts/theme-surfaces.mjs */
 /* ── Fonds sombres écrits en dur dans les composants → jeton de surface ──
-   77 teintes recensées automatiquement dans src/ (voir
+   76 teintes recensées automatiquement dans src/ (voir
    scripts/theme-surfaces.mjs). Le sélecteur ne cite PAS la valeur finale :
    il pose un jeton, redéfini une seule fois par thème plus haut dans ce
    fichier. Une même liste sert donc au mode nuit et au mode jour. */
@@ -643,7 +643,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0f212e" i],
 [class*="bg-[#0f2a2d" i],
 [class*="bg-[#0f3336" i],
-[class*="bg-[#102c32" i],
 [class*="bg-[#102f32" i],
 [class*="bg-[#142f32" i],
 [class*="bg-[#143c3f" i],
@@ -741,7 +740,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0f212e" i],
 [class*="bg-[#0f2a2d" i],
 [class*="bg-[#0f3336" i],
-[class*="bg-[#102c32" i],
 [class*="bg-[#102f32" i],
 [class*="bg-[#142f32" i],
 [class*="bg-[#143c3f" i],
@@ -821,7 +819,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#0f212e" i],
 [class*="bg-[#0f2a2d" i],
 [class*="bg-[#0f3336" i],
-[class*="bg-[#102c32" i],
 [class*="bg-[#102f32" i],
 [class*="bg-[#142f32" i],
 [class*="bg-[#143c3f" i],
@@ -2254,12 +2251,47 @@ html.agency-novavisio.light-mode .nv-activity-shell {
   color: #475569 !important;
 }
 
+.light-mode .academy-root .academy-sidebar {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04) !important;
+}
+
+.light-mode .academy-root .academy-toolbar {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04) !important;
+}
+
+.light-mode .academy-root .academy-card {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+
+.light-mode .academy-root .academy-card:hover {
+  border-color: #F7BC5F !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1) !important;
+}
+
 .light-mode .academy-root [class*="bg-[#0b1e22]"],
 .light-mode .academy-root [class*="bg-[#0b1e22]/"] {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05) !important;
   color: #0f172a !important;
+}
+
+.light-mode .academy-root [class*="bg-[#071317]"],
+.light-mode .academy-root [class*="bg-[#071317]/"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-mode .academy-root [class*="bg-[#051113]"],
+.light-mode .academy-root [class*="bg-[#051113]/"] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
 }
 
 .light-mode .academy-root input,
