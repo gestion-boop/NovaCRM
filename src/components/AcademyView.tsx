@@ -1332,7 +1332,7 @@ export default function AcademyView() {
         </div>
       )}
 
-      <div className="px-3 sm:px-5 lg:px-6 pt-1 sm:pt-2 pb-5 relative z-10">
+      <div className="px-3 sm:px-5 lg:px-6 pt-0 pb-5 relative z-10">
         {/* Champs de fichiers cachés pour actions rapides super admin */}
         {estSuperAdmin && (
           <>
@@ -2093,12 +2093,14 @@ export default function AcademyView() {
                           </div>
                         )}
 
-                        {/* Pastille Type & Durée */}
-                        <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-lg bg-black/75 backdrop-blur-md text-white border border-white/15 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-md">
-                          {estVideo ? <PlayCircle className="w-3 h-3 text-blue-400" /> : <FileText className="w-3 h-3 text-[#F7BC5F]" />}
-                          {estVideo ? 'Vidéo' : 'PDF'}
-                          {r.duree && <span className="font-normal text-slate-300">· {r.duree}</span>}
-                        </span>
+                        {/* Pastille Durée / Vidéo uniquement (ne pas marquer PDF sur les fichiers) */}
+                        {(estVideo || r.duree) && (
+                          <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-lg bg-black/75 backdrop-blur-md text-white border border-white/15 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-md">
+                            {estVideo && <PlayCircle className="w-3 h-3 text-blue-400" />}
+                            {estVideo ? 'Vidéo' : null}
+                            {r.duree && <span className="font-normal text-slate-300">{estVideo ? `· ${r.duree}` : r.duree}</span>}
+                          </span>
+                        )}
 
                         {/* Badge de statut lu/terminé si validé */}
                         {estValidee && (

@@ -305,7 +305,7 @@ export const Header: React.FC<
   return (
     // Barre du haut masquée en mobile : la navigation du bas (Accueil / Chat
     // / IA / Alertes / Menu) couvre déjà tous ces accès sur petit écran.
-    <header className="hidden md:flex bg-[#081318] border-b border-white/5 px-2.5 sm:px-6 items-center justify-between z-40 shrink-0 select-none pt-[env(safe-area-inset-top,0px)] min-h-[3.5rem] sm:min-h-[4rem] pb-1.5 sm:pb-0">
+    <header className="hidden md:flex bg-[#081318] border-b border-white/5 px-2.5 sm:px-6 items-center justify-between z-40 shrink-0 select-none pt-0 pt-[env(safe-area-inset-top,0px)] min-h-[3.25rem] sm:min-h-[3.5rem]">
       {/* ACCUEIL, MENU & SÉLECTEUR DE SOCIÉTÉ TOUT À GAUCHE */}
       <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
         {/* Icône "Accueil" (la maison) tout à gauche */}

@@ -995,25 +995,6 @@ function App() {
         onToggleNotifications={() => setNotificationsPanelOpen((open) => !open)}
         menuOpen={mobileMenuOpen}
       />
-      {/* Onglets internes (7 octobre) : s'affichent uniquement si plusieurs onglets sont ouverts,
-          pour ne pas repousser la barre Header vers le bas quand il n'y a qu'un seul onglet. */}
-      {canUseTabs && tabs.length > 1 && (
-        <TabBar
-          tabs={tabs.map((t) => ({
-            id: t.id,
-            // L'onglet ACTIF reflète l'écran/la fiche réels, pas son dernier
-            // instantané enregistré (qui ne se met à jour qu'au moment de
-            // changer d'onglet, voir switchToTab) — sinon son libellé
-            // resterait figé sur l'écran où il a été ouvert tant qu'on ne
-            // l'a pas quitté une fois.
-            label: t.id === activeTabId ? titreOnglet(currentNav, selectedClientProfileId) : t.title,
-          }))}
-          activeTabId={activeTabId}
-          onSwitch={switchToTab}
-          onClose={closeTab}
-          onNewTab={() => openInNewTab('accueil')}
-        />
-      )}
 
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Sidebar — masquée en mode plein écran Mail */}
