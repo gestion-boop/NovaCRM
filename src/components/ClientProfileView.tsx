@@ -1553,24 +1553,42 @@ export default function ClientProfileView({
     }
   };
 
-  const handleChatImageSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleChatImageSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
     e.target.value = '';
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target?.result as string;
-      if (!dataUrl) return;
-      try {
-        setUploadingChatMedia(true);
-        await insertChatMessage({ image_url: dataUrl });
-      } catch (err: any) {
-        toast.error(err?.message || "Impossible d'envoyer l'image");
-      } finally {
-        setUploadingChatMedia(false);
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    setUploadingChatMedia(true);
+    let toastId: string | number | undefined;
+    if (files.length > 1) {
+      toastId = toast.loading(`Envoi de ${files.length} images...`);
+    }
+    try {
+      let sentCount = 0;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (files.length > 1 && toastId) {
+          toast.loading(`Envoi de l'image ${i + 1}/${files.length}...`, { id: toastId });
+        }
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => resolve((ev.target?.result as string) || '');
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        if (dataUrl) {
+          await insertChatMessage({ image_url: dataUrl });
+          sentCount++;
+        }
       }
-    };
-    reader.readAsDataURL(file);
+      if (files.length > 1 && sentCount > 0) {
+        toast.success(`${sentCount} images envoyées`, { id: toastId });
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Impossible d'envoyer l'image", { id: toastId });
+    } finally {
+      setUploadingChatMedia(false);
+    }
   };
 
   const handleChatVideoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4586,7 +4604,7 @@ export default function ClientProfileView({
                   onSubmit={(e) => { e.preventDefault(); void handleSendChat(); }}
                   className="pt-3 border-t border-[#144447]/60 space-y-3"
                 >
-                  <input ref={chatImageInputRef} type="file" accept="image/*" hidden onChange={handleChatImageSelected} />
+                  <input ref={chatImageInputRef} type="file" accept="image/*" multiple hidden onChange={handleChatImageSelected} />
                   <input ref={chatVideoInputRef} type="file" accept="video/*" hidden onChange={handleChatVideoSelected} />
 
                   <input

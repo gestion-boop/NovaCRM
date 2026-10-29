@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown, ChevronRight,
+  Folder, FolderPlus, Hash, Plus, Send, Trash2, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, Download,
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Mic2, Square, Eye, ArrowLeft, Check, CheckCheck,
   Clock, Camera, Lock, Paperclip, FileText, Loader2, Video as VideoIcon,
@@ -744,6 +744,113 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     TEAM_MEMBERS.forEach((m) => { if (!map[m.id]) map[m.id] = { uid: m.id, displayName: m.name, email: m.email }; });
     return map;
   }, [allProfiles]);
+
+  // Carrousel de visualisation d'images dans les chats (demandé avec flèches gauche/droite, navigation clavier et tactile)
+  interface ChatCarouselItem {
+    url: string;
+    senderName?: string;
+    date?: string;
+    fileName?: string;
+  }
+  const [carouselState, setCarouselState] = useState<{
+    images: ChatCarouselItem[];
+    index: number;
+  } | null>(null);
+
+  const openChatCarousel = (targetUrl: string) => {
+    if (!targetUrl) return;
+    let images: ChatCarouselItem[] = [];
+    if (tab === 'conversations') {
+      images = convMessages
+        .filter((m) => {
+          const isImg = m.kind === 'image' || Boolean(m.attachment_url && (m.attachment_url.startsWith('data:image/') || m.attachment_url.startsWith('blob:') || /\.(png|jpe?g|webp|gif|svg)/i.test(m.attachment_url)));
+          return isImg && Boolean(m.attachment_url) && !isNovaReaction(m.attachment_url || '');
+        })
+        .map((m) => ({
+          url: m.attachment_url!,
+          senderName: profileByUid[m.user_id]?.displayName || 'Utilisateur',
+          date: m.created_at,
+          fileName: m.body || undefined,
+        }));
+    } else {
+      images = messages
+        .filter((m) => {
+          const url = (m.attachment_url || m.data?.attachmentUrl || m.data?.attachment_url || (m as any).attachment_url || m.data?.url || (typeof m.data?.body === 'string' && (m.data.body.startsWith('data:image/') || m.data.body.startsWith('blob:') || /^https?:\/\/.*\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(m.data.body)) ? m.data.body : null));
+          const isImg = m.data?.kind === 'image' || (m as any).kind === 'image' || Boolean(url && (!m.data?.kind || m.data?.kind === 'text'));
+          return isImg && Boolean(url) && !isNovaReaction(url || '');
+        })
+        .map((m) => {
+          const url = (m.attachment_url || m.data?.attachmentUrl || m.data?.attachment_url || (m as any).attachment_url || m.data?.url || (typeof m.data?.body === 'string' && (m.data.body.startsWith('data:image/') || m.data.body.startsWith('blob:') || /^https?:\/\/.*\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(m.data.body)) ? m.data.body : null))!;
+          const senderId = m.sender_id || m.data?.sender_id;
+          return {
+            url,
+            senderName: profileByUid[senderId]?.displayName || 'Utilisateur',
+            date: m.created_at,
+            fileName: m.data?.fileName || (m as any).fileName || undefined,
+          };
+        });
+    }
+
+    let foundIdx = images.findIndex((img) => img.url === targetUrl);
+    if (foundIdx === -1) {
+      images.push({ url: targetUrl });
+      foundIdx = images.length - 1;
+    }
+
+    setCarouselState({ images, index: foundIdx });
+    setConvLightboxUrl(targetUrl);
+  };
+
+  const handlePrevImage = () => {
+    setCarouselState((prev) => {
+      if (!prev || prev.images.length <= 1) return prev;
+      const nextIdx = (prev.index - 1 + prev.images.length) % prev.images.length;
+      setConvLightboxUrl(prev.images[nextIdx].url);
+      return { ...prev, index: nextIdx };
+    });
+  };
+
+  const handleNextImage = () => {
+    setCarouselState((prev) => {
+      if (!prev || prev.images.length <= 1) return prev;
+      const nextIdx = (prev.index + 1) % prev.images.length;
+      setConvLightboxUrl(prev.images[nextIdx].url);
+      return { ...prev, index: nextIdx };
+    });
+  };
+
+  useEffect(() => {
+    if (!carouselState) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setCarouselState(null);
+        setConvLightboxUrl(null);
+      } else if (e.key === 'ArrowLeft') {
+        handlePrevImage();
+      } else if (e.key === 'ArrowRight') {
+        handleNextImage();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [carouselState]);
+
+  const touchStartXRef = useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    touchStartXRef.current = null;
+    if (Math.abs(deltaX) > 40) {
+      if (deltaX > 0) {
+        handlePrevImage();
+      } else {
+        handleNextImage();
+      }
+    }
+  };
 
   // Bouton "Documents" (super admins) — demandé le 5 octobre : « avoir
   // accès à tous les documents qui ont été envoyés... rechercher beaucoup
@@ -3004,20 +3111,39 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   const handleConvImageSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const fileList = e.target.files;
     e.target.value = '';
-    if (!file) return;
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
     setUploadingConvMedia(true);
+    let toastId: string | number | undefined;
+    if (files.length > 1) {
+      toastId = toast.loading(`Envoi de ${files.length} images...`);
+    }
     try {
-      const dataUrl = await compresserImage(file);
-      if (!dataUrl) {
-        toast.error("Impossible de lire l'image sélectionnée.");
-        return;
+      let sentCount = 0;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (files.length > 1 && toastId) {
+          toast.loading(`Envoi de l'image ${i + 1}/${files.length}...`, { id: toastId });
+        }
+        const dataUrl = await compresserImage(file);
+        if (!dataUrl) {
+          toast.error(`Impossible de lire l'image "${file.name}".`);
+          continue;
+        }
+        const err = await insertConvMessage('image', dataUrl, undefined, file.type || 'image/jpeg', file.name);
+        if (err) {
+          toast.error(`Erreur d'envoi (${file.name}) : ${err}`);
+        } else {
+          sentCount++;
+        }
       }
-      const err = await insertConvMessage('image', dataUrl, undefined, file.type || 'image/jpeg', file.name);
-      if (err) toast.error(`Erreur d'envoi : ${err}`);
+      if (files.length > 1 && sentCount > 0) {
+        toast.success(`${sentCount} image${sentCount > 1 ? 's' : ''} envoyée${sentCount > 1 ? 's' : ''}`, { id: toastId });
+      }
     } catch (err: any) {
-      toast.error(err?.message || "Erreur d'envoi de l'image.");
+      toast.error(err?.message || "Erreur d'envoi des images.", { id: toastId });
     } finally {
       setUploadingConvMedia(false);
     }
@@ -3157,21 +3283,41 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     return null;
   };
 
-  const handleChannelImagePick = async (file: File | null) => {
-    if (!file) return;
+  const handleChannelImagePick = async (fileList: FileList | File[] | File | null) => {
+    if (!fileList) return;
+    const files = (fileList instanceof FileList || Array.isArray(fileList))
+      ? Array.from(fileList)
+      : [fileList];
+    if (files.length === 0) return;
     setUploadingChannelMedia(true);
+    let toastId: string | number | undefined;
+    if (files.length > 1) {
+      toastId = toast.loading(`Envoi de ${files.length} images...`);
+    }
     try {
-      const dataUrl = await compresserImage(file);
-      if (!dataUrl) {
-        toast.error("Impossible de lire l'image sélectionnée.");
-        return;
+      let sentCount = 0;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (files.length > 1 && toastId) {
+          toast.loading(`Envoi de l'image ${i + 1}/${files.length}...`, { id: toastId });
+        }
+        const dataUrl = await compresserImage(file);
+        if (!dataUrl) {
+          toast.error(`Impossible de lire l'image "${file.name}".`);
+          continue;
+        }
+        const err = await insertChannelMedia('image', dataUrl, undefined, file.type || 'image/jpeg', file.name);
+        if (err) {
+          toast.error(`Erreur d'envoi de l'image (${file.name}) : ${err}`);
+        } else {
+          sentCount++;
+        }
       }
-      const err = await insertChannelMedia('image', dataUrl, undefined, file.type || 'image/jpeg', file.name);
-      if (err) {
-        toast.error(`Erreur d'envoi de l'image : ${err}`);
+      if (files.length > 1 && sentCount > 0) {
+        toast.success(`${sentCount} image${sentCount > 1 ? 's' : ''} envoyée${sentCount > 1 ? 's' : ''}`, { id: toastId });
       }
     } catch (err: any) {
-      toast.error(err?.message || "Erreur lors de l'envoi de l'image.");
+      toast.error(err?.message || "Erreur lors de l'envoi de l'image.", { id: toastId });
     } finally {
       setUploadingChannelMedia(false);
       if (channelImageInputRef.current) channelImageInputRef.current.value = '';
@@ -5656,12 +5802,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                       "format cohérent" entre les deux surfaces de chat). Une vraie
                                       photo jointe par un utilisateur garde sa taille d'origine. */}
                                   {m.kind === 'image' && m.attachment_url && isNovaReaction(m.attachment_url) && (
-                                    <button type="button" onClick={() => setConvLightboxUrl(m.attachment_url)} className="block cursor-pointer">
+                                    <button type="button" onClick={() => openChatCarousel(m.attachment_url)} className="block cursor-pointer">
                                       <img src={m.attachment_url} alt="Nova" className="w-14 h-14 object-contain" />
                                     </button>
                                   )}
                                   {m.kind === 'image' && m.attachment_url && !isNovaReaction(m.attachment_url) && (
-                                    <button type="button" onClick={() => setConvLightboxUrl(m.attachment_url)} className="block cursor-pointer">
+                                    <button type="button" onClick={() => openChatCarousel(m.attachment_url)} className="block cursor-pointer">
                                       <img src={m.attachment_url} alt="Pièce jointe" className="max-w-[220px] rounded-xl" />
                                     </button>
                                   )}
@@ -5790,7 +5936,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                 {m.kind === 'image' && m.attachment_url && (
                                   <button
                                     type="button"
-                                    onClick={() => setConvLightboxUrl(m.attachment_url)}
+                                    onClick={() => openChatCarousel(m.attachment_url)}
                                     className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
                                     title="Aperçu"
                                   >
@@ -5912,7 +6058,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 {/* Même correctif que côté canaux (11 septembre) : espace
                     réduit au strict nécessaire sous la barre de saisie. */}
                 <div className="relative p-3.5 max-sm:px-2 max-sm:pb-[env(safe-area-inset-bottom,0px)] border-t border-teal-500/20 bg-[#07171a]/85 backdrop-blur-xl space-y-2.5 shadow-lg" style={rembourrageBarre}>
-                  <input ref={convImageInputRef} type="file" accept="image/*" hidden onChange={handleConvImageSelected} />
+                  <input ref={convImageInputRef} type="file" accept="image/*" multiple hidden onChange={handleConvImageSelected} />
                   <input ref={convCameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleConvImageSelected} />
                   <input ref={convFileInputRef} type="file" accept="application/pdf" hidden onChange={handleConvFileSelected} />
                   <input ref={convVideoInputRef} type="file" accept="video/*" hidden onChange={handleConvVideoSelected} />
@@ -6507,7 +6653,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               <div className="space-y-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => setConvLightboxUrl(imgUrl)}
+                                  onClick={() => openChatCarousel(imgUrl)}
                                   className="block cursor-pointer overflow-hidden rounded-xl border border-white/10 hover:opacity-95 transition-opacity"
                                 >
                                   <img
@@ -6931,8 +7077,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   ref={channelImageInputRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   className="hidden"
-                  onChange={(e) => void handleChannelImagePick(e.target.files?.[0] || null)}
+                  onChange={(e) => void handleChannelImagePick(e.target.files)}
                 />
                 <input
                   ref={channelCameraInputRef}
@@ -7937,29 +8084,151 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
           son vrai repère (la fenêtre), il se recentre alors sur cet ancêtre
           au lieu de l'écran, et la croix peut se retrouver hors du cadre
           visible. Un portail vers `document.body` élimine le problème. */}
-      {convLightboxUrl && createPortal(
+      {/* Carrousel de visualisation d'images dans les chats (demandé avec flèches gauche/droite, navigation clavier et tactile) */}
+      {(carouselState || convLightboxUrl) && createPortal(
         <div
-          className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-6"
-          onClick={() => setConvLightboxUrl(null)}
+          className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[99999] flex flex-col justify-between p-3 sm:p-6 select-none animate-in fade-in duration-200"
+          onClick={() => { setCarouselState(null); setConvLightboxUrl(null); }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
-          <button
-            onClick={() => setConvLightboxUrl(null)}
-            className="absolute right-6 text-white/70 hover:text-white p-2 rounded-lg hover:bg-white/10 z-10" style={{ top: 'calc(1.5rem + env(safe-area-inset-top, 0px))' }}
-          >
-            <X className="w-6 h-6" />
-          </button>
-          {/* Appui long sur la photo pour la fermer, en plus de la croix
-              (demande explicite) — un appui court reste sans effet pour ne
-              pas gêner un simple regard rapide. */}
-          <img
-            src={convLightboxUrl}
-            alt="Aperçu"
+          {/* Top Bar : Compteur, auteur, date, bouton Télécharger et Fermer */}
+          <div
+            className="flex items-center justify-between gap-3 text-white z-20 px-2 py-1 shrink-0"
+            style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
             onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => { lightboxPressTimer.current = window.setTimeout(() => setConvLightboxUrl(null), 500); }}
-            onPointerUp={() => { if (lightboxPressTimer.current) window.clearTimeout(lightboxPressTimer.current); }}
-            onPointerLeave={() => { if (lightboxPressTimer.current) window.clearTimeout(lightboxPressTimer.current); }}
-            className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl select-none"
-          />
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="px-3.5 py-1 rounded-full text-xs sm:text-sm font-extrabold bg-[#F7BC5F]/20 text-[#FAD592] border border-[#F7BC5F]/40 shadow-sm shrink-0">
+                {(carouselState?.index ?? 0) + 1} / {carouselState?.images.length || 1}
+              </span>
+              {carouselState?.images[carouselState.index]?.senderName && (
+                <div className="min-w-0 text-xs sm:text-sm text-slate-300 truncate">
+                  <span className="font-bold text-white">
+                    {carouselState.images[carouselState.index].senderName}
+                  </span>
+                  {carouselState.images[carouselState.index]?.date && (
+                    <span className="ml-2 text-xs text-slate-400 hidden sm:inline">
+                      {new Date(carouselState.images[carouselState.index].date!).toLocaleDateString('fr-FR', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <a
+                href={carouselState?.images[carouselState.index]?.url || convLightboxUrl || '#'}
+                download={carouselState?.images[carouselState.index]?.fileName || `image-${(carouselState?.index ?? 0) + 1}.jpg`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Télécharger l'image"
+              >
+                <Download className="w-4 h-4 text-[#F7BC5F]" />
+                <span className="hidden sm:inline">Télécharger</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => { setCarouselState(null); setConvLightboxUrl(null); }}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+                title="Fermer (Échap)"
+              >
+                <X className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+            </div>
+          </div>
+
+          {/* Zone centrale : Flèche Gauche + Image Centrale + Flèche Droite */}
+          <div className="relative flex-1 flex items-center justify-center w-full min-h-0 my-2">
+            {/* Flèche Gauche */}
+            {carouselState && carouselState.images.length > 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrevImage();
+                }}
+                className="absolute left-2 sm:left-6 z-30 w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-black/70 hover:bg-[#F7BC5F] hover:text-slate-950 text-white border-2 border-white/20 hover:border-[#F7BC5F] shadow-2xl flex items-center justify-center transition-all duration-200 cursor-pointer hover:scale-110 active:scale-95 group"
+                title="Image précédente (Flèche gauche ←)"
+                aria-label="Image précédente"
+              >
+                <ChevronLeft className="w-7 h-7 sm:w-10 sm:h-10 transition-transform group-hover:-translate-x-1" />
+              </button>
+            )}
+
+            {/* Image principale */}
+            <div
+              className="relative max-w-full max-h-full flex items-center justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                key={carouselState?.images[carouselState.index]?.url || convLightboxUrl || ''}
+                src={carouselState?.images[carouselState.index]?.url || convLightboxUrl || ''}
+                alt="Aperçu carrousel"
+                onPointerDown={() => {
+                  lightboxPressTimer.current = window.setTimeout(() => {
+                    setCarouselState(null);
+                    setConvLightboxUrl(null);
+                  }, 500);
+                }}
+                onPointerUp={() => { if (lightboxPressTimer.current) window.clearTimeout(lightboxPressTimer.current); }}
+                onPointerLeave={() => { if (lightboxPressTimer.current) window.clearTimeout(lightboxPressTimer.current); }}
+                className="max-w-[calc(100vw-3rem)] sm:max-w-[calc(100vw-12rem)] max-h-[70vh] sm:max-h-[76vh] rounded-2xl object-contain shadow-[0_25px_60px_rgba(0,0,0,0.9)] border border-white/15 animate-in zoom-in-95 duration-200 select-none"
+              />
+            </div>
+
+            {/* Flèche Droite */}
+            {carouselState && carouselState.images.length > 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNextImage();
+                }}
+                className="absolute right-2 sm:right-6 z-30 w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-black/70 hover:bg-[#F7BC5F] hover:text-slate-950 text-white border-2 border-white/20 hover:border-[#F7BC5F] shadow-2xl flex items-center justify-center transition-all duration-200 cursor-pointer hover:scale-110 active:scale-95 group"
+                title="Image suivante (Flèche droite →)"
+                aria-label="Image suivante"
+              >
+                <ChevronRight className="w-7 h-7 sm:w-10 sm:h-10 transition-transform group-hover:translate-x-1" />
+              </button>
+            )}
+          </div>
+
+          {/* Bande inférieure de vignettes si plusieurs images */}
+          {carouselState && carouselState.images.length > 1 && (
+            <div
+              className="z-20 flex items-center justify-center gap-2.5 overflow-x-auto py-2 px-4 max-w-full custom-scrollbar shrink-0"
+              onClick={(e) => e.stopPropagation()}
+              style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
+            >
+              {carouselState.images.map((img, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    setCarouselState((prev) => prev ? { ...prev, index: i } : null);
+                    setConvLightboxUrl(img.url);
+                  }}
+                  className={`w-12 h-12 sm:w-16 sm:h-16 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
+                    i === carouselState.index
+                      ? 'border-[#F7BC5F] scale-110 shadow-[0_0_16px_rgba(247,188,95,0.7)]'
+                      : 'border-white/20 opacity-50 hover:opacity-90 hover:border-white/50'
+                  }`}
+                  title={`Aller à l'image ${i + 1}`}
+                >
+                  <img src={img.url} alt="" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>,
         document.body
       )}
