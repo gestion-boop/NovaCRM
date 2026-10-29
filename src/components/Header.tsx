@@ -57,6 +57,7 @@ interface HeaderProps {
 
   selectedAgencyName: string;
   selectedAgencyId?: string;
+  onSelectAgency?: (agency: any) => void;
 
   onNavigate?: (
     nav: string
@@ -114,6 +115,7 @@ export const Header: React.FC<
 
   selectedAgencyName,
   selectedAgencyId,
+  onSelectAgency,
 
   onNavigate,
   onSelectContact,
@@ -335,7 +337,11 @@ export const Header: React.FC<
         <AgencyLogoSwitcher
           agencies={societesAccessibles}
           selectedId={selectedAgencyId || activeAgency.id}
-          onSelect={setActiveAgency}
+          onSelect={(agency) => {
+            setActiveAgency(agency);
+            onSelectAgency?.(agency);
+            onNavigate?.('accueil');
+          }}
           className="shrink-0"
         />
 

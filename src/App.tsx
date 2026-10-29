@@ -391,6 +391,24 @@ function App() {
     document.documentElement.classList.toggle('agency-novavisio', estAgenceNovavisio);
   }, [estAgenceNovavisio]);
 
+  // Sécurité cloisonnement agences : si l'agence active change et qu'on se trouve
+  // sur un écran exclusif à une autre agence (ex. Académy ou Immosphera 360 hors Immosphera,
+  // ou Carte Novavisio hors Novavisio), on ramène automatiquement sur l'accueil.
+  useEffect(() => {
+    if (currentNav === 'immosphera360' && !estAgenceImmosphera) {
+      setCurrentNav('accueil');
+      setSelectedClientProfileId(null);
+    }
+    if (currentNav === 'academy' && !estAgenceImmosphera) {
+      setCurrentNav('accueil');
+      setSelectedClientProfileId(null);
+    }
+    if (currentNav === 'carte-novavisio' && !estAgenceNovavisio) {
+      setCurrentNav('accueil');
+      setSelectedClientProfileId(null);
+    }
+  }, [activeAgency?.id, estAgenceImmosphera, estAgenceNovavisio, currentNav]);
+
   useEffect(() => {
     const isDefaultGold = accentColor === '#F7BC5F';
     const effectiveColor = isDefaultGold
@@ -976,6 +994,12 @@ function App() {
         onToggleTheme={handleToggleTheme}
         selectedAgencyName={activeAgency.name}
         selectedAgencyId={activeAgency.id}
+        onSelectAgency={(agency) => {
+          setActiveAgency(agency);
+          setNovaOpen(false);
+          setSelectedClientProfileId(null);
+          setCurrentNav('accueil');
+        }}
         onNavigate={(nav) => {
           setNovaOpen(false);
           setCurrentNav(nav);
@@ -1013,7 +1037,12 @@ function App() {
             }
           }}
           selectedAgency={activeAgency}
-          onSelectAgency={setActiveAgency}
+          onSelectAgency={(agency) => {
+            setActiveAgency(agency);
+            setNovaOpen(false);
+            setSelectedClientProfileId(null);
+            setCurrentNav('accueil');
+          }}
           onSignOut={handleSignOut}
           userEmail={currentUser?.email || 's.grazia@conseilfinances.fr'}
           collapsed={sidebarCollapsed}
