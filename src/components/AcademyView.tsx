@@ -1312,25 +1312,13 @@ export default function AcademyView() {
 
   return (
     <div
-      className="academy-root -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 min-h-[calc(100vh-4rem)] relative overflow-hidden"
+      className="academy-root -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 min-h-[calc(100vh-4rem)] relative overflow-hidden bg-[#071317]"
     >
-      {/* Fond sombre et halos réservés au mode nuit (neutralisés en mode jour) */}
+      {/* Fond sombre épuré et sobre sans superposition parasite d'images */}
       <div className="academy-dark-glow pointer-events-none absolute inset-0 bg-[#071317]" />
       <div className="academy-dark-glow pointer-events-none absolute inset-0 bg-gradient-to-b from-[#071317] via-[#091a20] to-[#050e11]" />
-      <div className="academy-dark-glow pointer-events-none absolute -top-40 left-1/4 w-[500px] h-[500px] bg-[#F7BC5F]/[0.035] rounded-full blur-3xl" />
-      <div className="academy-dark-glow pointer-events-none absolute top-1/3 -right-20 w-[450px] h-[450px] bg-[#0ea5e9]/[0.025] rounded-full blur-3xl" />
-
-      {/* Image de fond choisie par l'agence : intégrée en fond d'ambiance tamisé (sans bandeau coupant l'écran) */}
-      {fond && (
-        <div className="academy-wallpaper pointer-events-none absolute inset-0 overflow-hidden">
-          <img
-            src={fond}
-            alt=""
-            className="w-full h-full object-cover object-top opacity-15 filter contrast-110 brightness-90"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#071317]/80 via-[#071317]/90 to-[#071317]" />
-        </div>
-      )}
+      <div className="academy-dark-glow pointer-events-none absolute -top-40 left-1/4 w-[500px] h-[500px] bg-[#F7BC5F]/[0.025] rounded-full blur-3xl" />
+      <div className="academy-dark-glow pointer-events-none absolute top-1/3 -right-20 w-[450px] h-[450px] bg-[#0ea5e9]/[0.02] rounded-full blur-3xl" />
 
       <div className="px-3 sm:px-5 lg:px-6 pt-0 pb-5 relative z-10">
         {/* Champs de fichiers cachés pour actions rapides super admin */}
