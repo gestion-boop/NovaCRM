@@ -349,8 +349,8 @@ export default function Index({
               : "-translate-y-full opacity-0 pointer-events-none"
           }`}
         >
-          <div className="immosphera-drawer px-4 sm:px-8 py-5 bg-[#07171a]/95 backdrop-blur-2xl border-b border-[#F7BC5F]/35 shadow-[0_25px_60px_rgba(0,0,0,0.85)] max-h-[85vh] overflow-y-auto custom-scrollbar">
-            <div className="max-w-7xl mx-auto">
+          <div className="immosphera-drawer px-2 sm:px-6 pt-0 pb-5 bg-[#07171a]/98 backdrop-blur-2xl border-b border-[#F7BC5F]/35 shadow-[0_25px_60px_rgba(0,0,0,0.85)] max-h-[88vh] overflow-y-auto custom-scrollbar">
+            <div className="max-w-7xl mx-auto pt-0">
               <SearchPanel
                 filters={filters}
                 onChange={setFilters}

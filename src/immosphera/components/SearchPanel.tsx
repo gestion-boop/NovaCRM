@@ -221,11 +221,10 @@ export function SearchPanel({
 
   return (
     <div
-      className="bg-gradient-to-br from-card/98 via-card/95 to-secondary/90 border border-primary/25 rounded-[28px] p-6 shadow-[0_34px_70px_hsl(30_30%_8%/0.28)] relative"
-      style={{ animation: "panel-rise 0.5s ease both" }}
+      className="bg-gradient-to-br from-card/98 via-card/95 to-secondary/90 border border-primary/25 border-t-0 rounded-b-[24px] sm:rounded-b-[28px] rounded-t-none p-4 sm:p-6 shadow-[0_34px_70px_hsl(30_30%_8%/0.28)] relative mt-0"
     >
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 mb-5 sticky top-3 z-[2] bg-card/95 backdrop-blur-md p-3 rounded-[18px] border border-border/50 shadow-lg">
+      <div className="flex items-center justify-between gap-4 mb-5 sticky top-0 z-[2] bg-card/95 backdrop-blur-md p-2.5 sm:p-3 rounded-b-xl border border-border/50 shadow-md">
         <div className="flex items-center gap-2">
           <button className={`${PILL_BASE} ${PILL_IDLE}`} onClick={() => navigate("/accueil")}>
             <ArrowLeft className="h-3.5 w-3.5" />

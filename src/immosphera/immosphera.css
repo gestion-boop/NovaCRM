@@ -242,6 +242,11 @@
   color: #334155 !important;
 }
 
+.immosphera-drawer {
+  border-top: none !important;
+  margin-top: 0 !important;
+}
+
 .light-mode .immosphera-root .immosphera-drawer {
   background-color: rgba(255, 255, 255, 0.98) !important;
   border-bottom-color: rgba(0, 0, 0, 0.1) !important;
