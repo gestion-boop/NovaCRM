@@ -2235,6 +2235,15 @@ html.agency-novavisio.light-mode .nv-activity-shell {
   display: none !important;
 }
 
+.light-mode .academy-root .academy-wallpaper img {
+  opacity: 0.06 !important;
+  filter: grayscale(1) !important;
+}
+
+.light-mode .academy-root .academy-wallpaper div {
+  background: linear-gradient(to bottom, rgba(241, 245, 249, 0.9), rgba(241, 245, 249, 0.98)) !important;
+}
+
 .light-mode .academy-root h1,
 .light-mode .academy-root h2,
 .light-mode .academy-root h3 {

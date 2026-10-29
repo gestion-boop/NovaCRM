@@ -683,6 +683,26 @@ export default function AcademyView() {
     }
   };
 
+  const supprimerFond = async () => {
+    if (!activeAgency?.id || activeAgency.id === 'all') return;
+    setFondEnCours(true);
+    try {
+      const { error } = await supabase
+        .from('agency_ui_settings' as any)
+        .upsert({ agency_id: activeAgency.id, academy_background_url: null } as any, { onConflict: 'agency_id' });
+      if (error) {
+        toast.error(error.message);
+      } else {
+        setFond(null);
+        toast.success("Bannière retirée. L'Académy utilise désormais le fond sobre par défaut.");
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Impossible de retirer la bannière.");
+    } finally {
+      setFondEnCours(false);
+    }
+  };
+
   /** Pose ou remplace l'image de fond d'un dossier. */
   const changerVisuelDossier = async (nomDossier: string, image: File) => {
     if (!activeAgency?.id || activeAgency.id === 'all') return;
@@ -1259,37 +1279,37 @@ export default function AcademyView() {
       <div className="academy-dark-glow pointer-events-none absolute -top-40 left-1/4 w-[500px] h-[500px] bg-[#F7BC5F]/[0.035] rounded-full blur-3xl" />
       <div className="academy-dark-glow pointer-events-none absolute top-1/3 -right-20 w-[450px] h-[450px] bg-[#0ea5e9]/[0.025] rounded-full blur-3xl" />
 
-      {/* Bandeau d'image de l'agence — masqué lors d'une recherche pour remonter directement les résultats */}
-      {fond && !enRecherche && (
-        <div
-          className="relative w-full overflow-hidden transition-all duration-300"
-          style={{ height: 'clamp(140px, 18vw, 320px)' }}
-        >
+      {/* Image de fond choisie par l'agence : intégrée en fond d'ambiance tamisé (sans bandeau coupant l'écran) */}
+      {fond && (
+        <div className="academy-wallpaper pointer-events-none absolute inset-0 overflow-hidden">
           <img
             src={fond}
-            alt="Bannière Académy"
-            className="w-full h-full object-cover object-center brightness-[0.82] contrast-[1.08]"
+            alt=""
+            className="w-full h-full object-cover object-top opacity-15 filter contrast-110 brightness-90"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#071317] via-[#071317]/50 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#071317]/80 via-[#071317]/90 to-[#071317]" />
         </div>
       )}
 
-      <div
-        className="px-4 sm:px-6 lg:px-8 pb-16 relative z-10 transition-all duration-300"
-        style={{ paddingTop: enRecherche ? '0.75rem' : (fond ? '1.5rem' : '2rem') }}
-      >
+      <div className="px-4 sm:px-6 lg:px-8 pt-5 pb-16 relative z-10 transition-all duration-300">
         <div className="max-w-6xl mx-auto">
-          {!fond && !enRecherche && (
-            <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3">
+          {/* En-tête Académy — Toujours visible et élégant */}
+          {!enRecherche && (
+            <div className="mb-5 flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3.5">
                 <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#F7BC5F] to-[#C88C12] flex items-center justify-center text-slate-950 shadow-lg shadow-[#F7BC5F]/20 shrink-0">
                   <GraduationCap className="w-6 h-6 stroke-[2.2]" />
                 </div>
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                    Académy <span className="text-[#F7BC5F]">{activeAgency?.name || ''}</span>
+                  <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2 flex-wrap">
+                    <span>Académy</span>
+                    {activeAgency?.name && (
+                      <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-[#F7BC5F]/15 text-[#FAD592] border border-[#F7BC5F]/30">
+                        {activeAgency.name}
+                      </span>
+                    )}
                   </h1>
-                  <p className="mt-0.5 text-xs sm:text-sm text-slate-400">
+                  <p className="mt-0.5 text-xs text-slate-400">
                     Toutes les procédures, formations et tutoriels de l'agence, rangés par dossier.
                   </p>
                 </div>
@@ -1481,6 +1501,20 @@ export default function AcademyView() {
                             {fondEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5 text-[#F7BC5F]" />}
                             <span>Changer la bannière</span>
                           </button>
+                          {fond && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMenuOptionsAdmin(false);
+                                void supprimerFond();
+                              }}
+                              disabled={fondEnCours}
+                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-rose-300 hover:bg-white/10 font-medium text-left cursor-pointer border-t border-white/10"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                              <span>Retirer la bannière</span>
+                            </button>
+                          )}
                           {ressources.some((r) => r.drive_file_id) && (
                             <button
                               type="button"
