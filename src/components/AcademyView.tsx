@@ -1312,7 +1312,7 @@ export default function AcademyView() {
 
   return (
     <div
-      className="academy-root -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 min-h-[calc(100vh-4rem)] relative overflow-hidden bg-[#071317]"
+      className="academy-root -mx-4 sm:-mx-6 lg:-mx-8 min-h-[calc(100vh-4rem)] relative overflow-hidden bg-[#071317]"
     >
       {/* Fond sombre épuré et sobre sans superposition parasite d'images */}
       <div className="academy-dark-glow pointer-events-none absolute inset-0 bg-[#071317]" />
@@ -1320,7 +1320,7 @@ export default function AcademyView() {
       <div className="academy-dark-glow pointer-events-none absolute -top-40 left-1/4 w-[500px] h-[500px] bg-[#F7BC5F]/[0.025] rounded-full blur-3xl" />
       <div className="academy-dark-glow pointer-events-none absolute top-1/3 -right-20 w-[450px] h-[450px] bg-[#0ea5e9]/[0.02] rounded-full blur-3xl" />
 
-      <div className="px-3 sm:px-5 lg:px-6 pt-0 pb-5 relative z-10">
+      <div className="px-3 sm:px-5 lg:px-6 pt-3.5 sm:pt-4 pb-6 relative z-10">
         {/* Champs de fichiers cachés pour actions rapides super admin */}
         {estSuperAdmin && (
           <>
@@ -1668,9 +1668,163 @@ export default function AcademyView() {
           </aside>
 
           {/* ═══════════════ FAÇADE PRINCIPALE (DROITE) ═══════════════ */}
-          <main className="academy-main-content flex-1 min-w-0 w-full flex flex-col gap-3.5">
-            {/* Ligne 1 : En-tête de section (Titre / Fil d'Ariane + Compteur à gauche, Actions à droite) */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <main className="academy-main-content flex-1 min-w-0 w-full flex flex-col gap-4">
+            {/* Ligne 1 : Barre d'outils supérieure unifiée et alignée avec le haut de la sidebar */}
+            <div className="academy-toolbar bg-[#071317]/85 backdrop-blur-xl rounded-2xl p-2.5 sm:p-3 border border-white/10 shadow-xl flex flex-wrap items-center justify-between gap-3">
+              {/* Recherche */}
+              <div className="relative flex-1 min-w-[200px] sm:min-w-[260px] max-w-sm">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  value={recherche}
+                  onChange={(e) => setRecherche(e.target.value)}
+                  placeholder={dossierActif ? `Rechercher dans ${dossierActif}…` : 'Rechercher une formation ou procédure…'}
+                  className="w-full pl-9 pr-8 py-2 rounded-xl bg-[#051113]/90 text-white placeholder-slate-500 text-xs border border-white/12 focus:outline-none focus:border-[#F7BC5F] transition-all"
+                />
+                {recherche && (
+                  <button
+                    type="button"
+                    onClick={() => setRecherche('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filtres Statut, Mode d'affichage et Actions */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Onglets statut [ Toutes ] [ À faire ] [ Terminé ] */}
+                <div className="flex items-center rounded-xl bg-[#051113] p-1 border border-white/10 gap-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setStatutFiltre('toutes')}
+                    className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                      statutFiltre === 'toutes'
+                        ? 'bg-[#F7BC5F] text-slate-950 shadow-sm font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Toutes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatutFiltre('a_faire')}
+                    className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                      statutFiltre === 'a_faire'
+                        ? 'bg-[#F7BC5F] text-slate-950 shadow-sm font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    À faire
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatutFiltre('termine')}
+                    className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                      statutFiltre === 'termine'
+                        ? 'bg-[#F7BC5F] text-slate-950 shadow-sm font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Terminé
+                  </button>
+                </div>
+
+                {/* Bascule Grille / Liste */}
+                <div className="flex items-center rounded-xl bg-[#051113] p-0.5 border border-white/10">
+                  <button
+                    onClick={() => choisirVue('grille')}
+                    title="Affichage en grille"
+                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                      vueDossiers === 'grille' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => choisirVue('liste')}
+                    title="Affichage en liste"
+                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                      vueDossiers === 'liste' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <ListIcon className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Bouton d'action admin */}
+                {estSuperAdmin && (
+                  <>
+                    <button
+                      onClick={ouvrirAjout}
+                      className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-[#F7BC5F]/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Procédure</span>
+                    </button>
+
+                    <div className="relative" ref={optionsAdminRef}>
+                      <button
+                        type="button"
+                        onClick={() => setMenuOptionsAdmin((v) => !v)}
+                        title="Options d'administration"
+                        className="w-9 h-9 rounded-xl bg-white/8 hover:bg-white/15 text-slate-300 border border-white/10 flex items-center justify-center transition-all cursor-pointer"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+
+                      {menuOptionsAdmin && (
+                        <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-[#091a1e] border border-white/15 shadow-2xl py-1 z-30 text-xs text-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOptionsAdmin(false);
+                              champFond.current?.click();
+                            }}
+                            disabled={fondEnCours}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:bg-white/10 font-medium text-left cursor-pointer"
+                          >
+                            {fondEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5 text-[#F7BC5F]" />}
+                            <span>Changer la bannière</span>
+                          </button>
+                          {fond && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMenuOptionsAdmin(false);
+                                void supprimerFond();
+                              }}
+                              disabled={fondEnCours}
+                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-rose-300 hover:bg-white/10 font-medium text-left cursor-pointer border-t border-white/10"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                              <span>Retirer la bannière</span>
+                            </button>
+                          )}
+                          {ressources.some((r) => r.drive_file_id) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMenuOptionsAdmin(false);
+                                void rendrePublicsLesFichiersExistants();
+                              }}
+                              disabled={reparationEnCours}
+                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:bg-white/10 font-medium text-left border-t border-white/10 cursor-pointer"
+                            >
+                              {reparationEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5 text-[#F7BC5F]" />}
+                              <span>Rendre fichiers publics</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Ligne 2 : Titre de section / Fil d'Ariane + Compteur */}
+            <div className="flex items-center justify-between gap-3 px-1">
               <div className="flex items-center gap-2.5 flex-wrap">
                 {dossierActif ? (
                   <>
@@ -1719,165 +1873,11 @@ export default function AcademyView() {
                   {visibles.length} formation{visibles.length > 1 ? 's' : ''}
                 </span>
               </div>
-
-              {/* Actions d'administration */}
-              {estSuperAdmin && (
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={ouvrirAjout}
-                    className="h-8.5 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-[#F7BC5F]/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                    <span>Procédure</span>
-                  </button>
-
-                  <div className="relative" ref={optionsAdminRef}>
-                    <button
-                      type="button"
-                      onClick={() => setMenuOptionsAdmin((v) => !v)}
-                      title="Options d'administration"
-                      className="w-8.5 h-8.5 rounded-xl bg-white/8 hover:bg-white/15 text-slate-300 border border-white/10 flex items-center justify-center transition-all cursor-pointer"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-
-                    {menuOptionsAdmin && (
-                      <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-[#091a1e] border border-white/15 shadow-2xl py-1 z-30 text-xs text-slate-200">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMenuOptionsAdmin(false);
-                            champFond.current?.click();
-                          }}
-                          disabled={fondEnCours}
-                          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:bg-white/10 font-medium text-left cursor-pointer"
-                        >
-                          {fondEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5 text-[#F7BC5F]" />}
-                          <span>Changer la bannière</span>
-                        </button>
-                        {fond && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMenuOptionsAdmin(false);
-                              void supprimerFond();
-                            }}
-                            disabled={fondEnCours}
-                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-rose-300 hover:bg-white/10 font-medium text-left cursor-pointer border-t border-white/10"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                            <span>Retirer la bannière</span>
-                          </button>
-                        )}
-                        {ressources.some((r) => r.drive_file_id) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMenuOptionsAdmin(false);
-                              void rendrePublicsLesFichiersExistants();
-                            }}
-                            disabled={reparationEnCours}
-                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:bg-white/10 font-medium text-left border-t border-white/10 cursor-pointer"
-                          >
-                            {reparationEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5 text-[#F7BC5F]" />}
-                            <span>Rendre fichiers publics</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Ligne 2 : Barre d'outils unifiée (Recherche + Filtres Statut + Vue Grille/Liste) */}
-            <div className="academy-toolbar bg-[#0b1e22]/85 backdrop-blur-xl rounded-xl p-2.5 border border-white/10 shadow-md flex flex-wrap items-center justify-between gap-2.5">
-              {/* Champ de recherche */}
-              <div className="relative flex-1 min-w-[200px] sm:min-w-[260px] max-w-sm">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  value={recherche}
-                  onChange={(e) => setRecherche(e.target.value)}
-                  placeholder={dossierActif ? `Rechercher dans ${dossierActif}…` : 'Rechercher une formation ou procédure…'}
-                  className="w-full pl-8.5 pr-8 py-1.5 rounded-lg bg-[#051113]/90 text-white placeholder-slate-500 text-xs border border-white/12 focus:outline-none focus:border-[#F7BC5F] transition-all"
-                />
-                {recherche && (
-                  <button
-                    type="button"
-                    onClick={() => setRecherche('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-
-              {/* Filtres Statut et Mode d'affichage */}
-              <div className="flex items-center gap-2">
-                {/* Onglets statut [ Toutes ] [ À faire ] [ Terminé ] */}
-                <div className="flex items-center rounded-lg bg-[#051113] p-0.5 border border-white/10 gap-0.5 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setStatutFiltre('toutes')}
-                    className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                      statutFiltre === 'toutes'
-                        ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Toutes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStatutFiltre('a_faire')}
-                    className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                      statutFiltre === 'a_faire'
-                        ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    À faire
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStatutFiltre('termine')}
-                    className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                      statutFiltre === 'termine'
-                        ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Terminé
-                  </button>
-                </div>
-
-                {/* Bascule Grille / Liste */}
-                <div className="flex items-center rounded-lg bg-[#051113] p-0.5 border border-white/10">
-                  <button
-                    onClick={() => choisirVue('grille')}
-                    title="Affichage en grille"
-                    className={`p-1 rounded-md transition-colors cursor-pointer ${
-                      vueDossiers === 'grille' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => choisirVue('liste')}
-                    title="Affichage en liste"
-                    className={`p-1 rounded-md transition-colors cursor-pointer ${
-                      vueDossiers === 'liste' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <ListIcon className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
             </div>
 
             {/* Ligne 3 : Sous-dossiers — Affichés UNIQUEMENT lorsqu'on est à l'intérieur d'un dossier en comportant */}
             {dossierActif !== null && dossiersEnfants.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap pt-0.5">
+              <div className="flex items-center gap-2 flex-wrap pt-0.5 px-1">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sous-dossiers :</span>
                 {dossiersEnfants.map(({ nom, nombre }) => (
                   <button
