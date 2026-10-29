@@ -19,6 +19,7 @@ import Index from "@/immosphera/pages/Index";
 import PropertyDetail from "@/immosphera/pages/PropertyDetail";
 import Partners from "@/immosphera/pages/Partners";
 import Secteurs from "@/immosphera/pages/Secteurs";
+import NovaSearchBar from "@/immosphera/components/NovaSearchBar";
 
 interface ImmosphereProps {
   // Recherche immobilière lancée depuis Nova IA ailleurs dans le CRM
