@@ -65,6 +65,8 @@ export default function UpdateBanner({ currentNav, selectedClientProfileId }: Up
   useEffect(() => {
     const triggerSilentReload = () => {
       if (!updateDetectedRef.current) return;
+      // RÈGLE ABSOLUE : Aucune mise à jour automatique si l'utilisateur consulte ou travaille sur une fiche client
+      if (selectedClientIdRef.current) return;
       if (!isSafeToAutoReload()) return;
 
       // Sauvegarde de l'état de navigation courant

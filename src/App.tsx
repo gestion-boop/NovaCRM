@@ -734,13 +734,15 @@ function App() {
   );
   selectedClientIdRef.current = selectedClientProfileId;
 
-  const setSelectedClientProfileId = React.useCallback((valeur: React.SetStateAction<string | null>) => {
-    const nextId = typeof valeur === 'function' ? (valeur as any)(selectedClientIdRef.current) : valeur;
-    if (nextId !== selectedClientIdRef.current) {
-      if (applyUpdateOnNavigation({ nav: currentNavRef.current, clientId: nextId })) {
-        return;
-      }
+  // Signal global : aucune mise à jour automatique si l'utilisateur consulte ou travaille sur une fiche
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__NOVASPHERE_ACTIVE_FICHE__ = Boolean(selectedClientProfileId);
     }
+  }, [selectedClientProfileId]);
+
+  const setSelectedClientProfileId = React.useCallback((valeur: React.SetStateAction<string | null>) => {
+    // RÈGLE ABSOLUE : Jamais de rechargement/mise à jour automatique lors de l'accès à une fiche client
     React.startTransition(() => setSelectedClientProfileIdImmediat(valeur));
   }, []);
 
@@ -749,11 +751,7 @@ function App() {
   );
 
   const openClientProfile = (contactId: string | null, tab?: 'espace-client') => {
-    if (contactId !== selectedClientIdRef.current || tab !== selectedClientProfileTab) {
-      if (applyUpdateOnNavigation({ nav: currentNavRef.current, clientId: contactId, tab })) {
-        return;
-      }
-    }
+    // RÈGLE ABSOLUE : Jamais de rechargement/mise à jour automatique lors de l'accès à une fiche client
     setSelectedClientProfileId(contactId);
     setSelectedClientProfileTab(contactId ? tab : undefined);
   };

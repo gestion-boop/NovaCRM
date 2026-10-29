@@ -44,6 +44,18 @@ export function PartnerDetailPanel({ partner: p, onClose }: Props) {
   const documents: PartnerDoc[] = Array.isArray((p as any).documents) ? (p as any).documents : [];
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  // Signaler que l'utilisateur est sur une fiche active (bloque toute mise à jour intempestive)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as any).__NOVASPHERE_ACTIVE_FICHE__ = true;
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        (window as any).__NOVASPHERE_ACTIVE_FICHE__ = false;
+      }
+    };
+  }, []);
+
   // Fermeture par touche Échap
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -66,7 +78,10 @@ export function PartnerDetailPanel({ partner: p, onClose }: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      data-fiche-active="true"
+      className="partner-detail-panel fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div

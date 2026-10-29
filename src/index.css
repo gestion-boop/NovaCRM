@@ -579,7 +579,7 @@ main[class*="bg-[#071015]/55" i] {
    dire s'il est périmé — à lancer après avoir ajouté un écran. */
 /* @generated:theme-surfaces:start — ne pas éditer à la main, voir scripts/theme-surfaces.mjs */
 /* ── Fonds sombres écrits en dur dans les composants → jeton de surface ──
-   76 teintes recensées automatiquement dans src/ (voir
+   75 teintes recensées automatiquement dans src/ (voir
    scripts/theme-surfaces.mjs). Le sélecteur ne cite PAS la valeur finale :
    il pose un jeton, redéfini une seule fois par thème plus haut dans ce
    fichier. Une même liste sert donc au mode nuit et au mode jour. */
@@ -616,7 +616,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#081e22" i],
 [class*="bg-[#081f23" i],
 [class*="bg-[#09151c" i],
-[class*="bg-[#09171b" i],
 [class*="bg-[#091a1e" i],
 [class*="bg-[#092226" i],
 [class*="bg-[#0a1e10" i],
@@ -713,7 +712,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#081e22" i],
 [class*="bg-[#081f23" i],
 [class*="bg-[#09151c" i],
-[class*="bg-[#09171b" i],
 [class*="bg-[#091a1e" i],
 [class*="bg-[#092226" i],
 [class*="bg-[#0a1e10" i],
@@ -792,7 +790,6 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#081e22" i],
 [class*="bg-[#081f23" i],
 [class*="bg-[#09151c" i],
-[class*="bg-[#09171b" i],
 [class*="bg-[#091a1e" i],
 [class*="bg-[#092226" i],
 [class*="bg-[#0a1e10" i],
@@ -842,6 +839,7 @@ main[class*="bg-[#071015]/55" i] {
    distinguer la variante) : le survol se retrouvait peint de la même
    couleur que le repos, donc sans effet visible nulle part dans l'appli.
    Rétabli ici, dans les deux thèmes. */
+[class*="hover:bg-[#091f24" i]:hover,
 [class*="hover:bg-[#0b2429" i]:hover,
 [class*="hover:bg-[#0c2e32" i]:hover,
 [class*="hover:bg-[#0c2e33" i]:hover,

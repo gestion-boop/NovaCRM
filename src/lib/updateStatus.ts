@@ -178,23 +178,77 @@ export function useAppUpdateStatus() {
 }
 
 /**
- * Vérifie si un modal de saisie ouvert contient du texte tapé non sauvegardé.
+ * Vérifie si l'environnement actuel permet un rechargement / mise à jour automatique sans risque.
+ * RÈGLE ABSOLUE : AUCUNE mise à jour automatique si l'utilisateur travaille sur une fiche,
+ * consulte un profil, édite un formulaire, ou a un modal / tiroir ouvert.
  */
 export function isSafeToAutoReload(): boolean {
   try {
-    const openModals = document.querySelectorAll('[role="dialog"], .modal-active');
-    for (const modal of Array.from(openModals)) {
-      const inputs = modal.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
-        'input:not([type="hidden"]), textarea'
-      );
-      for (const input of Array.from(inputs)) {
-        if (input.value && input.value.trim().length > 0) {
-          return false;
-        }
+    if (typeof window === 'undefined') return true;
+
+    // 1. Indicateur global explicite d'activité sur fiche
+    if ((window as any).__NOVASPHERE_ACTIVE_FICHE__) {
+      return false;
+    }
+
+    // 2. Vérification de l'URL : page de détail / fiche active (bien, client, partenaire, etc.)
+    const path = (window.location.pathname || '').toLowerCase();
+    if (
+      path.includes('/bien/') ||
+      path.includes('/biens/') ||
+      path.includes('/client/') ||
+      path.includes('/clients/') ||
+      path.includes('/partenaire/') ||
+      path.includes('/partenaires/')
+    ) {
+      return false;
+    }
+
+    // 3. Détection dans le DOM d'une vue de fiche ou d'un profil ouvert
+    const ficheSelectors = [
+      '[data-client-profile]',
+      '[data-fiche-active="true"]',
+      '.client-profile-view',
+      '[data-testid="client-profile"]',
+      '.partner-detail-panel',
+      '.property-detail-panel',
+    ];
+    if (document.querySelector(ficheSelectors.join(', '))) {
+      return false;
+    }
+
+    // 4. Modals, Dialogs, Drawers, Sheets ou Popovers ouverts
+    const openModals = document.querySelectorAll(
+      '[role="dialog"], [aria-modal="true"], .modal-active, [data-state="open"]'
+    );
+    if (openModals.length > 0) {
+      return false;
+    }
+
+    // 5. Un champ de saisie a le focus actif
+    const activeEl = document.activeElement;
+    if (
+      activeEl &&
+      (activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        (activeEl as HTMLElement).isContentEditable)
+    ) {
+      return false;
+    }
+
+    // 6. N'importe quel champ de saisie dans la page contient du texte non vide (hors recherche)
+    const inputs = document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+      'input:not([type="hidden"]):not([type="search"]), textarea'
+    );
+    for (const input of Array.from(inputs)) {
+      if (input.value && input.value.trim().length > 0) {
+        return false;
       }
     }
   } catch {
-    /* fallback safe */
+    /* En cas d'erreur ou de doute, sécurité d'abord : ne pas recharger */
+    return false;
   }
   return true;
 }
@@ -204,6 +258,7 @@ export function isSafeToAutoReload(): boolean {
  * (ex: retour d'une fiche client, changement de dossier, changement d'onglet/section).
  * Si une mise à jour est en attente, enregistre la destination cible et recharge silencieusement la page.
  * Pour l'utilisateur, la transition sert d'intégration transparente de la mise à jour.
+ * RÈGLE ABSOLUE : Si l'utilisateur ouvre une fiche ou est sur une fiche, NE JAMAIS appliquer.
  * Renvoie true si un rechargement a été déclenché, false sinon.
  */
 export function applyUpdateOnNavigation(destination: {
@@ -212,6 +267,9 @@ export function applyUpdateOnNavigation(destination: {
   tab?: 'espace-client';
 }): boolean {
   if (!isUpdatePending) return false;
+  // Ne JAMAIS recharger si la destination est une fiche client
+  if (destination.clientId) return false;
+  // Ne JAMAIS recharger si une fiche est actuellement active ou si un travail est en cours
   if (!isSafeToAutoReload()) return false;
 
   try {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { geocodeCity } from "@/immosphera/lib/geo";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -77,6 +77,18 @@ export default function Partners() {
   const [sortBy, setSortBy] = useState<"category" | "name" | "company">("category");
   const [saving, setSaving] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
+
+  // Signaler globalement qu'une fiche / modal est active pour empêcher tout rechargement automatique
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as any).__NOVASPHERE_ACTIVE_FICHE__ = Boolean(formOpen || selectedPartner);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        (window as any).__NOVASPHERE_ACTIVE_FICHE__ = false;
+      }
+    };
+  }, [formOpen, selectedPartner]);
 
   const { data: partners = [], isLoading } = useQuery({
     queryKey: ["partners"],
@@ -255,17 +267,17 @@ export default function Partners() {
   const canEdit = (p: Partner) => isAdmin || p.created_by === user?.id;
 
   return (
-    <div className="w-full py-4 sm:py-6 px-4 sm:px-8 max-w-7xl mx-auto space-y-5">
-      {/* En-tête de la page Partenaires — Effet glace sombre (Glassmorphism) */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-[#07191b]/80 via-[#0c262a]/70 to-[#07191b]/80 backdrop-blur-2xl border border-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-[#F7BC5F]/20 border border-[#F7BC5F]/40 text-[#FAD592] flex items-center justify-center shadow-[0_0_20px_rgba(247,188,95,0.25)]">
-            <Users className="h-6 w-6 text-[#F7BC5F]" />
+    <div className="w-full py-3 sm:py-5 px-3 sm:px-6 max-w-7xl mx-auto space-y-4">
+      {/* En-tête de la page Partenaires — Épuré, compact et moderne */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#07191b]/90 via-[#0c262a]/80 to-[#07191b]/90 backdrop-blur-xl border border-white/10 shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#F7BC5F]/20 border border-[#F7BC5F]/35 text-[#FAD592] flex items-center justify-center shadow-[0_0_16px_rgba(247,188,95,0.2)] shrink-0">
+            <Users className="h-5 w-5 text-[#F7BC5F]" />
           </div>
           <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">Annuaire Partenaires</h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#F7BC5F]/20 text-[#F7BC5F] border border-[#F7BC5F]/35 shadow-sm">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">Annuaire Partenaires</h1>
+              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#F7BC5F]/15 text-[#F7BC5F] border border-[#F7BC5F]/30">
                 {sorted.length} contact{sorted.length > 1 ? "s" : ""}
               </span>
             </div>
@@ -277,34 +289,34 @@ export default function Partners() {
 
         <button
           onClick={openNew}
-          className="px-4 py-2.5 bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs sm:text-sm rounded-xl flex items-center gap-2 shadow-lg shadow-[#F7BC5F]/20 transition-all cursor-pointer shrink-0"
+          className="px-3.5 py-2 bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs sm:text-sm rounded-xl flex items-center gap-2 shadow-md shadow-[#F7BC5F]/20 transition-all cursor-pointer shrink-0"
         >
           <Plus className="h-4 w-4" />
           <span>Nouveau partenaire</span>
         </button>
       </div>
 
-      {/* Barre de filtres et recherche — Effet glace sombre avec tri alphabétique */}
-      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 p-3.5 rounded-2xl bg-[#07171b]/75 backdrop-blur-2xl border border-white/15 shadow-xl">
+      {/* Barre de filtres et recherche — Plus fine et sobre */}
+      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 p-3 rounded-xl bg-[#07171b]/80 backdrop-blur-xl border border-white/10 shadow-md">
         {/* Recherche par nom / entreprise */}
         <div className="sm:col-span-4 relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
           <input
             placeholder="Rechercher par nom, entreprise..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#051114]/80 backdrop-blur-md border border-white/15 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+            className="w-full bg-[#051114]/90 border border-white/10 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
           />
         </div>
 
         {/* Filtrer par ville ou secteur */}
         <div className="sm:col-span-3 relative">
-          <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
           <input
             placeholder="Filtrer par ville..."
             value={searchCity}
             onChange={(e) => setSearchCity(e.target.value)}
-            className="w-full bg-[#051114]/80 backdrop-blur-md border border-white/15 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
+            className="w-full bg-[#051114]/90 border border-white/10 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
           />
         </div>
 
@@ -314,8 +326,8 @@ export default function Partners() {
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
             style={{ colorScheme: "dark" }}
-            className={`w-full bg-[#051114]/80 backdrop-blur-md border border-white/15 rounded-xl px-3.5 py-2 pr-9 text-xs sm:text-sm focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none ${
-              filterCategory === "all" ? "text-slate-500" : "text-white font-medium"
+            className={`w-full bg-[#051114]/90 border border-white/10 rounded-lg px-3 py-1.5 pr-8 text-xs focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none ${
+              filterCategory === "all" ? "text-slate-400" : "text-white font-medium"
             }`}
           >
             <option value="all" className="bg-[#0B151A] text-slate-400">Toutes catégories</option>
@@ -325,7 +337,7 @@ export default function Partners() {
               </option>
             ))}
           </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
         </div>
 
         {/* Classer par ordre alphabétique des métiers */}
@@ -334,30 +346,30 @@ export default function Partners() {
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
             style={{ colorScheme: "dark" }}
-            className="w-full bg-[#051114]/80 backdrop-blur-md border border-[#F7BC5F]/35 rounded-xl px-3 py-2 pr-8 text-xs sm:text-xs font-bold text-[#FAD592] focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none shadow-sm"
+            className="w-full bg-[#051114]/90 border border-[#F7BC5F]/35 rounded-lg px-2.5 py-1.5 pr-7 text-xs font-semibold text-[#FAD592] focus:outline-none focus:border-[#F7BC5F] transition-colors cursor-pointer appearance-none shadow-sm"
             title="Classer les partenaires"
           >
             <option value="category" className="bg-[#0B151A] text-white">Métiers (A → Z)</option>
             <option value="name" className="bg-[#0B151A] text-white">Noms (A → Z)</option>
             <option value="company" className="bg-[#0B151A] text-white">Entreprises (A → Z)</option>
           </select>
-          <ArrowUpDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#F7BC5F] pointer-events-none" />
+          <ArrowUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-[#F7BC5F] pointer-events-none" />
         </div>
       </div>
 
-      {/* Grille des partenaires moderne — Cartes spacieuses effet glace sombre */}
+      {/* Grille des partenaires moderne — Cartes équilibrées et lisibles */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-7">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-64 rounded-3xl bg-white/5 animate-pulse border border-white/10" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-60 rounded-2xl bg-white/5 animate-pulse border border-white/10" />
           ))}
         </div>
       ) : sorted.length === 0 ? (
-        <div className="rounded-3xl p-12 text-center border border-white/10 bg-[#07191b]/50 backdrop-blur-xl flex flex-col items-center justify-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-500">
-            <Users className="h-7 w-7" />
+        <div className="rounded-2xl p-10 text-center border border-white/10 bg-[#07191b]/50 backdrop-blur-xl flex flex-col items-center justify-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-slate-500">
+            <Users className="h-6 w-6" />
           </div>
-          <h3 className="font-bold text-white text-base">Aucun partenaire trouvé</h3>
+          <h3 className="font-bold text-white text-sm sm:text-base">Aucun partenaire trouvé</h3>
           <p className="text-xs text-slate-400 max-w-sm">
             {search || searchCity || filterCategory !== "all"
               ? "Aucun professionnel ne correspond à vos filtres actuels. Essayez de réinitialiser votre recherche."
@@ -370,138 +382,143 @@ export default function Partners() {
                 setSearchCity("");
                 setFilterCategory("all");
               }}
-              className="mt-2 text-xs text-[#F7BC5F] hover:underline cursor-pointer"
+              className="mt-1 text-xs text-[#F7BC5F] hover:underline cursor-pointer"
             >
               Réinitialiser les filtres
             </button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-7">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {sorted.map((p) => {
-            const initials = `${p.first_name?.charAt(0) || ""}${p.last_name?.charAt(0) || ""}`.toUpperCase() || "P";
+            const firstName = (p.first_name || "").trim();
+            const lastName = (p.last_name || "").trim();
+            const formattedName = [
+              firstName ? firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase() : "",
+              lastName ? lastName.toUpperCase() : "",
+            ].filter(Boolean).join(" ");
+            const displayName = formattedName || p.company || CATEGORY_MAP[p.category] || "Partenaire";
+            const initials = `${firstName.charAt(0) || ""}${lastName.charAt(0) || ""}`.toUpperCase() || (p.company ? p.company.charAt(0).toUpperCase() : "P");
             const docCount = Array.isArray((p as any).documents) ? (p as any).documents.length : 0;
             return (
               <div
                 key={p.id}
-                className="group relative bg-[#09171b]/75 backdrop-blur-2xl border border-white/15 hover:border-[#F7BC5F] rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all duration-300 hover:shadow-[0_16px_40px_rgba(0,0,0,0.5),0_0_24px_rgba(247,188,95,0.18)] hover:-translate-y-1.5 cursor-pointer min-h-[300px]"
+                className="group relative bg-[#07171a]/85 hover:bg-[#091f24] backdrop-blur-xl border border-white/10 hover:border-[#F7BC5F]/45 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-[0_12px_28px_rgba(0,0,0,0.45),0_0_20px_rgba(247,188,95,0.12)] hover:-translate-y-0.5 cursor-pointer min-h-[250px]"
                 onClick={() => setSelectedPartner(p)}
               >
                 <div>
-                  {/* Top card : avatar large + nom + entreprise */}
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-[#F7BC5F]/25 via-amber-600/30 to-amber-700/40 border-2 border-[#F7BC5F]/45 text-[#FAD592] font-black text-xl sm:text-2xl flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(247,188,95,0.25)] group-hover:scale-105 transition-transform">
-                        {initials}
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="font-extrabold text-base sm:text-lg text-white truncate group-hover:text-[#F7BC5F] transition-colors leading-snug">
-                          {[(p.first_name || "").charAt(0).toUpperCase() + (p.first_name || "").slice(1).toLowerCase(), (p.last_name || "").toUpperCase()].filter(Boolean).join(" ") || "Partenaire"}
-                        </h4>
-                        {p.company ? (
-                          <p className="text-xs sm:text-sm text-slate-300 truncate flex items-center gap-1.5 mt-1 font-semibold">
-                            <Building2 className="h-4 w-4 shrink-0 text-[#F7BC5F]" />
-                            <span>{p.company}</span>
-                          </p>
-                        ) : (
-                          <p className="text-xs text-slate-400 italic mt-0.5">Indépendant</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Badge Catégorie / Métier */}
-                    <span className="shrink-0 inline-flex items-center px-3.5 py-1.5 rounded-xl text-xs font-black bg-[#F7BC5F]/15 text-[#FAD592] border border-[#F7BC5F]/35 shadow-sm uppercase tracking-wider">
+                  {/* Ligne 1 : Catégorie & Badge doc */}
+                  <div className="flex items-center justify-between gap-2 mb-2.5">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#F7BC5F]/15 text-[#FAD592] border border-[#F7BC5F]/25 truncate max-w-[200px] tracking-tight">
                       {CATEGORY_MAP[p.category] || p.category}
                     </span>
+                    {docCount > 0 && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                        <FileText className="h-3 w-3" />
+                        <span>{docCount}</span>
+                      </span>
+                    )}
                   </div>
 
-                  {/* Coordonnées rapides bien aérées et lisibles */}
-                  <div className="space-y-2.5 my-4">
+                  {/* Ligne 2 : Avatar + Nom + Entreprise */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F7BC5F]/20 via-amber-600/30 to-amber-700/35 border border-[#F7BC5F]/40 text-[#FAD592] font-black text-sm flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                      {initials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-bold text-sm text-white truncate group-hover:text-[#F7BC5F] transition-colors leading-tight">
+                        {displayName}
+                      </h4>
+                      <p className="text-xs text-slate-400 truncate flex items-center gap-1 mt-0.5">
+                        {p.company ? (
+                          <>
+                            <Building2 className="h-3 w-3 shrink-0 text-[#F7BC5F]/80" />
+                            <span className="font-medium text-slate-300">{p.company}</span>
+                          </>
+                        ) : (
+                          <span className="italic">Indépendant</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Coordonnées : lignes fines, lisibles et aérées */}
+                  <div className="space-y-1.5 my-2.5 text-xs">
                     {p.phone && (
                       <a
                         href={`tel:${p.phone}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-emerald-500/15 border border-white/5 hover:border-emerald-500/35 text-slate-200 hover:text-emerald-300 transition-all truncate group/tel"
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.03] hover:bg-emerald-500/10 border border-white/5 hover:border-emerald-500/25 text-slate-200 hover:text-emerald-300 transition-all truncate group/tel"
                         title="Appeler ce partenaire"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
-                          <Phone className="h-4 w-4" />
+                        <div className="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                          <Phone className="h-3 w-3" />
                         </div>
-                        <span className="font-mono text-sm sm:text-base font-bold tracking-wide truncate group-hover/tel:underline">{p.phone}</span>
+                        <span className="font-medium tracking-normal truncate group-hover/tel:underline">{p.phone}</span>
                       </a>
                     )}
                     {p.email && (
                       <a
                         href={`mailto:${p.email}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-sky-500/15 border border-white/5 hover:border-sky-500/35 text-slate-200 hover:text-sky-300 transition-all truncate group/mail"
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.03] hover:bg-sky-500/10 border border-white/5 hover:border-sky-500/25 text-slate-300 hover:text-sky-300 transition-all truncate group/mail"
                         title="Envoyer un e-mail"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 shrink-0">
-                          <Mail className="h-4 w-4" />
+                        <div className="w-5 h-5 rounded-md bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+                          <Mail className="h-3 w-3" />
                         </div>
-                        <span className="text-xs sm:text-sm font-medium truncate group-hover/mail:underline">{p.email}</span>
+                        <span className="truncate group-hover/mail:underline">{p.email}</span>
                       </a>
                     )}
                     {p.intervention_area && (
-                      <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/5 text-slate-300 truncate">
-                        <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-                          <MapPin className="h-4 w-4" />
+                      <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/5 text-slate-300 truncate">
+                        <div className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                          <MapPin className="h-3 w-3" />
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider leading-none">Zone / Secteur</p>
-                          <p className="text-xs sm:text-sm font-semibold truncate mt-0.5">{p.intervention_area}</p>
-                        </div>
+                        <span className="truncate">{p.intervention_area}</span>
                       </div>
                     )}
                   </div>
 
                   {p.notes && (
-                    <div className="mt-3 p-3 rounded-xl bg-white/[0.03] border border-white/10 text-xs sm:text-sm text-slate-300 italic line-clamp-2 leading-relaxed">
+                    <div className="mt-2 p-2 rounded-lg bg-white/[0.02] border border-white/5 text-[11px] text-slate-400 italic line-clamp-2 leading-relaxed">
                       « {p.notes} »
                     </div>
                   )}
                 </div>
 
                 {/* Footer card : indicateur doc & actions */}
-                <div className="pt-4 mt-4 border-t border-white/10 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    {docCount > 0 ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                        <FileText className="h-3.5 w-3.5" />
-                        <span>{docCount} doc{docCount > 1 ? "s" : ""}</span>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-500">Aucun document joint</span>
-                    )}
-                  </div>
+                <div className="pt-2.5 mt-2.5 border-t border-white/10 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-500">
+                    {docCount > 0 ? `${docCount} doc${docCount > 1 ? "s" : ""}` : "Aucun document"}
+                  </span>
 
-                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => setSelectedPartner(p)}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-[#F7BC5F] hover:text-slate-950 text-white transition-all cursor-pointer flex items-center gap-1"
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/10 hover:bg-[#F7BC5F] hover:text-slate-950 text-white transition-all cursor-pointer flex items-center gap-1"
                     >
                       <span>Fiche</span>
-                      <ChevronRight className="h-3.5 w-3.5" />
+                      <ChevronRight className="h-3 w-3" />
                     </button>
                     {canEdit(p) && (
                       <>
                         <button
                           type="button"
                           onClick={() => openEdit(p)}
-                          className="w-8 h-8 rounded-xl text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center transition-colors cursor-pointer"
+                          className="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
                           title="Modifier le partenaire"
                         >
-                          <Edit className="h-4 w-4" />
+                          <Edit className="h-3.5 w-3.5" />
                         </button>
                         <button
                           type="button"
                           onClick={() => deleteMutation.mutate(p.id)}
-                          className="w-8 h-8 rounded-xl text-slate-300 hover:text-rose-400 hover:bg-rose-500/15 flex items-center justify-center transition-colors cursor-pointer"
+                          className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition-colors cursor-pointer"
                           title="Supprimer le partenaire"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </>
                     )}
@@ -516,6 +533,9 @@ export default function Partners() {
       {/* Modal Ajouter / Modifier Partenaire — TÉLÉPORTÉE SUR document.body AVEC z-[99999] */}
       {formOpen && typeof document !== "undefined" && createPortal(
         <div
+          role="dialog"
+          aria-modal="true"
+          data-fiche-active="true"
           className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150"
           onClick={() => !saving && setFormOpen(false)}
         >
