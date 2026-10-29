@@ -221,7 +221,7 @@ export function SearchPanel({
 
   return (
     <div
-      className="bg-gradient-to-br from-card/98 via-card/95 to-secondary/90 border border-primary/25 border-t-0 rounded-b-[24px] sm:rounded-b-[28px] rounded-t-none p-4 sm:p-6 shadow-[0_34px_70px_hsl(30_30%_8%/0.28)] relative mt-0"
+      className="bg-gradient-to-br from-card/98 via-card/95 to-secondary/90 border border-primary/25 border-t-0 rounded-b-[24px] sm:rounded-b-[28px] rounded-t-none p-4 sm:p-6 shadow-[0_34px_70px_hsl(30_30%_8%/0.28)] relative mt-0 min-h-full flex flex-col justify-between"
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-4 mb-5 sticky top-0 z-[2] bg-card/95 backdrop-blur-md p-2.5 sm:p-3 rounded-b-xl border border-border/50 shadow-md">

@@ -320,21 +320,6 @@ export default function Index({
               <p className="text-white/70 text-sm max-w-md mx-auto">
                 Explorez notre sélection de biens immobiliers avec visites virtuelles 360°
               </p>
-
-              {/* Bouton d'ouverture rapide sur la photo si le tiroir est fermé */}
-              {!isSearchDrawerOpen && (
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={handleToggleSearch}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/65 hover:bg-black/85 text-[#F7BC5F] border border-[#F7BC5F]/40 hover:border-[#F7BC5F] backdrop-blur-md text-xs font-bold shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                  >
-                    <Search className="h-4 w-4" />
-                    <span>Ouvrir la recherche & filtres</span>
-                    <ChevronDown className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -342,15 +327,15 @@ export default function Index({
         {/* Tiroir de recherche : descend par-dessus l'image de fond et remonte quand on le ferme */}
         <div
           className={`w-full z-30 transition-all duration-500 ease-in-out ${
-            showHero && !showMap ? "absolute top-0 inset-x-0" : "relative"
+            showHero && !showMap ? "absolute top-0 inset-x-0 min-h-full" : "relative"
           } ${
             isSearchDrawerOpen
               ? "translate-y-0 opacity-100 pointer-events-auto"
               : "-translate-y-full opacity-0 pointer-events-none"
           }`}
         >
-          <div className="immosphera-drawer px-2 sm:px-6 pt-0 pb-5 bg-[#07171a]/98 backdrop-blur-2xl border-b border-[#F7BC5F]/35 shadow-[0_25px_60px_rgba(0,0,0,0.85)] max-h-[88vh] overflow-y-auto custom-scrollbar">
-            <div className="max-w-7xl mx-auto pt-0">
+          <div className="immosphera-drawer px-2 sm:px-6 pt-0 pb-6 bg-[#07171a]/98 backdrop-blur-2xl border-b border-[#F7BC5F]/35 shadow-[0_25px_60px_rgba(0,0,0,0.85)] min-h-[min(48vh,420px)] sm:min-h-[420px] flex flex-col justify-between max-h-[88vh] overflow-y-auto custom-scrollbar">
+            <div className="max-w-7xl mx-auto pt-0 w-full flex-1 flex flex-col justify-between">
               <SearchPanel
                 filters={filters}
                 onChange={setFilters}
