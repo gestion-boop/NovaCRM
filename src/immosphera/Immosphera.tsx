@@ -15,6 +15,8 @@ import {
   Map as MapIcon,
   X,
   Image as ImageIcon,
+  Search,
+  ChevronDown,
 } from "lucide-react";
 import "@/immosphera/immosphera.css";
 import { useImmoAuth } from "@/immosphera/lib/access";
@@ -66,6 +68,7 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
   const location = useLocation();
   const [activeChip, setActiveChip] = useState("");
   const [showHero, setShowHero] = useState(true);
+  const [searchDrawerOpen, setSearchDrawerOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [aiResultIds, setAiResultIds] = useState<string[] | null>(initialAiResultIds);
   const [aiQueryText, setAiQueryText] = useState(initialAiQueryText);
@@ -198,22 +201,39 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
             )}
           </div>
 
-          {/* Outils et actions de droite : Photo 360 et retour CRM */}
+          {/* Outils et actions de droite : Tiroir recherche, Photo 360 et retour CRM */}
           <div className="flex items-center gap-2 ml-auto">
             {isHome && (
-              <button
-                type="button"
-                onClick={() => setShowHero((prev) => !prev)}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                  showHero
-                    ? "bg-[#F7BC5F]/20 border-[#F7BC5F]/40 text-[#FAD592]"
-                    : "border-white/10 hover:bg-white/5 text-slate-400 hover:text-white"
-                }`}
-                title={showHero ? "Masquer la bannière photo pour remonter la recherche" : "Afficher la photo d'accueil 360°"}
-              >
-                <ImageIcon className="h-3.5 w-3.5 text-[#F7BC5F]" />
-                <span className="hidden md:inline">{showHero ? "Masquer photo" : "Photo 360°"}</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSearchDrawerOpen((prev) => !prev)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    searchDrawerOpen
+                      ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/30 border-[#F7BC5F]"
+                      : "bg-white/10 hover:bg-white/15 text-white border-white/15 hover:border-[#F7BC5F]/50"
+                  }`}
+                  title={searchDrawerOpen ? "Fermer le tiroir de recherche" : "Ouvrir le panneau de recherche par-dessus la photo 360°"}
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  <span>Recherche</span>
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-300 ${searchDrawerOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowHero((prev) => !prev)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    showHero
+                      ? "bg-[#F7BC5F]/20 border-[#F7BC5F]/40 text-[#FAD592]"
+                      : "border-white/10 hover:bg-white/5 text-slate-400 hover:text-white"
+                  }`}
+                  title={showHero ? "Masquer la bannière photo pour remonter la recherche" : "Afficher la photo d'accueil 360°"}
+                >
+                  <ImageIcon className="h-3.5 w-3.5 text-[#F7BC5F]" />
+                  <span className="hidden md:inline">{showHero ? "Masquer photo" : "Photo 360°"}</span>
+                </button>
+              </>
             )}
 
             {!isHome ? (
@@ -252,6 +272,9 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
                 activeChip={activeChip}
                 onChipClick={handleChipClick}
                 showHero={showHero}
+                searchOpen={searchDrawerOpen}
+                onToggleSearch={() => setSearchDrawerOpen((v) => !v)}
+                onCloseSearch={() => setSearchDrawerOpen(false)}
                 externalFormOpen={formOpen}
                 onCloseExternalForm={() => setFormOpen(false)}
                 aiResultIds={aiResultIds}

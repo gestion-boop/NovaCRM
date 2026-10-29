@@ -15,6 +15,7 @@ import {
   MapPinned,
   FileText,
   FileSignature,
+  ChevronUp,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -242,8 +243,14 @@ export function SearchPanel({
               Réinitialiser
             </button>
           )}
-          <button className="ghost-btn text-xs" onClick={onToggleCollapse}>
-            Réduire
+          <button
+            type="button"
+            className="ghost-btn text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 cursor-pointer font-bold transition-colors"
+            onClick={onToggleCollapse}
+            title="Fermer et remonter le tiroir de recherche"
+          >
+            <ChevronUp className="h-3.5 w-3.5 text-[#F7BC5F]" />
+            <span>Fermer le tiroir</span>
           </button>
         </div>
       </div>

@@ -11,7 +11,7 @@ import { PropalBar } from "@/immosphera/components/PropalBar";
 import { CompareModal } from "@/immosphera/components/CompareModal";
 import { usePropertyFilters } from "@/immosphera/hooks/usePropertyFilters";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Map, LayoutGrid, List, ArrowUpDown, Maximize2, Minimize2, Sparkles, X } from "lucide-react";
+import { Map, LayoutGrid, List, ArrowUpDown, Maximize2, Minimize2, Sparkles, X, Search, ChevronDown, ChevronUp } from "lucide-react";
 import { computeMatchScore } from "@/immosphera/lib/matchScore";
 import { matchesPropertyType } from "@/immosphera/lib/propertyTypes";
 import { detectOpportunity, trackProperty } from "@/immosphera/lib/opportunities";
@@ -36,6 +36,9 @@ interface IndexProps {
   showHero?: boolean;
   externalFormOpen?: boolean;
   onCloseExternalForm?: () => void;
+  searchOpen?: boolean;
+  onToggleSearch?: () => void;
+  onCloseSearch?: () => void;
 }
 
 export default function Index({
@@ -49,14 +52,23 @@ export default function Index({
   showHero = true,
   externalFormOpen,
   onCloseExternalForm,
+  searchOpen,
+  onToggleSearch,
+  onCloseSearch,
 }: IndexProps) {
   const isMobile = useIsMobile();
   const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
-  // Replié par défaut : le panneau de recherche déployé prenait trop de
-  // place à l'écran — demande explicite de le garder replié en permanence
-  // (l'utilisateur le déploie lui-même au besoin via le bouton existant).
-  const [searchCollapsed, setSearchCollapsed] = useState(true);
+  const [localSearchOpen, setLocalSearchOpen] = useState(false);
+  const isSearchDrawerOpen = searchOpen !== undefined ? searchOpen : localSearchOpen;
+  const handleToggleSearch = () => {
+    if (onToggleSearch) onToggleSearch();
+    else setLocalSearchOpen((v) => !v);
+  };
+  const handleCloseSearch = () => {
+    if (onCloseSearch) onCloseSearch();
+    else setLocalSearchOpen(false);
+  };
   const [listView, setListView] = useState<ViewMode>("grid");
   const [hoveredPropertyId, setHoveredPropertyId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(24);
@@ -257,66 +269,75 @@ export default function Index({
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero — masqué si showHero est false ou en mode Carte pour laisser toute la place aux filtres + grille */}
-      {!showMap && showHero && (
-        <div
-          className="relative h-[min(48vh,420px)] bg-cover bg-center grid place-items-center px-6 transition-all duration-300 animate-in fade-in"
-          style={{
-            backgroundImage: `linear-gradient(120deg, hsl(30 30% 8% / 0.72), hsl(30 30% 8% / 0.12)), url('${heroVilla.url}')`,
-          }}
-        >
-          <div className="text-center z-[1] w-full max-w-[1100px] space-y-5">
-            <h1
-              className="text-[clamp(28px,4.5vw,56px)] font-extrabold text-primary tracking-tight"
-              style={{
-                textShadow:
-                  "2px 2px 0 hsl(0 0% 12%), 3px 3px 0 hsl(0 0% 18%), 4px 4px 0 hsl(0 0% 24%), 5px 5px 12px hsl(0 0% 0% / 0.5)",
-              }}
-            >
-              ImmoSphera<span>360°</span>
-            </h1>
-            <p className="text-white/70 text-sm max-w-md mx-auto">
-              Explorez notre sélection de biens immobiliers avec visites virtuelles 360°
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Search panel */}
-      <div
-        className="w-full px-5 mt-4 relative z-[8] mb-6"
-        style={{
-          display: "grid",
-          gridTemplateRows: showSearch ? "1fr" : "0fr",
-          opacity: showSearch ? 1 : 0,
-          transition:
-            "grid-template-rows 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
-          marginBottom: showSearch ? undefined : "0px",
-          marginTop: showSearch ? undefined : "0px",
-        }}
-      >
-        <div style={{ overflow: "hidden" }}>
+      {/* Hero photo 360° et Tiroir déroulant de recherche par-dessus */}
+      <div className="relative w-full overflow-hidden">
+        {/* Photo 360° Hero — masqué si showHero est false ou en mode Carte */}
+        {!showMap && showHero && (
           <div
+            className="relative h-[min(48vh,420px)] bg-cover bg-center grid place-items-center px-6 transition-all duration-300 animate-in fade-in"
             style={{
-              transform: showSearch ? "translateY(0) scale(1)" : "translateY(-30px) scale(0.97)",
-              filter: showSearch ? "blur(0px)" : "blur(6px)",
-              transition: "transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), filter 0.5s ease",
+              backgroundImage: `linear-gradient(120deg, hsl(30 30% 8% / 0.72), hsl(30 30% 8% / 0.12)), url('${heroVilla.url}')`,
             }}
           >
-            <SearchPanel
-              filters={filters}
-              onChange={setFilters}
-              onReset={resetFilters}
-              properties={properties}
-              resultCount={displayItems.length}
-              isCollapsed={searchCollapsed}
-              onToggleCollapse={() => setSearchCollapsed((p) => !p)}
-              activeChip={activeChip}
-              onChipClick={onChipClick}
-              mapAvailable={true}
-              canAdd={isAdmin}
-              onAddProperty={() => setFormOpen(true)}
-            />
+            <div className="text-center z-[1] w-full max-w-[1100px] space-y-4">
+              <h1
+                className="text-[clamp(28px,4.5vw,56px)] font-extrabold text-primary tracking-tight"
+                style={{
+                  textShadow:
+                    "2px 2px 0 hsl(0 0% 12%), 3px 3px 0 hsl(0 0% 18%), 4px 4px 0 hsl(0 0% 24%), 5px 5px 12px hsl(0 0% 0% / 0.5)",
+                }}
+              >
+                ImmoSphera<span>360°</span>
+              </h1>
+              <p className="text-white/70 text-sm max-w-md mx-auto">
+                Explorez notre sélection de biens immobiliers avec visites virtuelles 360°
+              </p>
+
+              {/* Bouton d'ouverture rapide sur la photo si le tiroir est fermé */}
+              {!isSearchDrawerOpen && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleToggleSearch}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/65 hover:bg-black/85 text-[#F7BC5F] border border-[#F7BC5F]/40 hover:border-[#F7BC5F] backdrop-blur-md text-xs font-bold shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <Search className="h-4 w-4" />
+                    <span>Ouvrir la recherche & filtres</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tiroir de recherche : descend par-dessus l'image de fond et remonte quand on le ferme */}
+        <div
+          className={`w-full z-30 transition-all duration-500 ease-in-out ${
+            showHero && !showMap ? "absolute top-0 inset-x-0" : "relative"
+          } ${
+            isSearchDrawerOpen
+              ? "translate-y-0 opacity-100 pointer-events-auto"
+              : "-translate-y-full opacity-0 pointer-events-none"
+          }`}
+        >
+          <div className="px-4 sm:px-8 py-5 bg-[#07171a]/95 backdrop-blur-2xl border-b border-[#F7BC5F]/35 shadow-[0_25px_60px_rgba(0,0,0,0.85)] max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="max-w-7xl mx-auto">
+              <SearchPanel
+                filters={filters}
+                onChange={setFilters}
+                onReset={resetFilters}
+                properties={properties}
+                resultCount={displayItems.length}
+                isCollapsed={false}
+                onToggleCollapse={handleCloseSearch}
+                activeChip={activeChip}
+                onChipClick={onChipClick}
+                mapAvailable={true}
+                canAdd={isAdmin}
+                onAddProperty={() => setFormOpen(true)}
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -1251,41 +1251,52 @@ export default function AcademyView() {
 
   return (
     <div
-      className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 min-h-[calc(100vh-4rem)]"
-      style={{ backgroundColor: '#F7F1E5' }}
+      className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 min-h-[calc(100vh-4rem)] relative overflow-hidden bg-gradient-to-b from-[#071317] via-[#091a20] to-[#050e11] text-white"
     >
-      {/* Bandeau d'image de l'agence */}
+      {/* Halos d'ambiance sobres et élégants en arrière-plan */}
+      <div className="pointer-events-none absolute -top-40 left-1/4 w-[500px] h-[500px] bg-[#F7BC5F]/[0.035] rounded-full blur-3xl" />
+      <div className="pointer-events-none absolute top-1/3 -right-20 w-[450px] h-[450px] bg-[#0ea5e9]/[0.025] rounded-full blur-3xl" />
+
+      {/* Bandeau d'image de l'agence avec dégradé cinématique vers le fond sombre */}
       {fond && (
         <div
-          className="w-full"
-          style={{
-            height: 'clamp(120px, 15vw, 320px)',
-            backgroundImage: `url(${fond})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-          }}
-        />
+          className="relative w-full overflow-hidden"
+          style={{ height: 'clamp(140px, 18vw, 320px)' }}
+        >
+          <img
+            src={fond}
+            alt="Bannière Académy"
+            className="w-full h-full object-cover object-center brightness-[0.82] contrast-[1.08]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#071317] via-[#071317]/50 to-transparent" />
+        </div>
       )}
 
       <div
-        className="px-4 sm:px-6 lg:px-8 pb-16"
-        style={{ paddingTop: fond ? '1.25rem' : '2rem' }}
+        className="px-4 sm:px-6 lg:px-8 pb-16 relative z-10"
+        style={{ paddingTop: fond ? '1.5rem' : '2rem' }}
       >
         <div className="max-w-6xl mx-auto">
           {!fond && (
-            <div className="mb-6">
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                Académy {activeAgency?.name}
-              </h1>
-              <p className="mt-1 text-xs sm:text-sm text-slate-600">
-                Toutes les procédures et formations de l'agence, rangées par dossier.
-              </p>
+            <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#F7BC5F] to-[#C88C12] flex items-center justify-center text-slate-950 shadow-lg shadow-[#F7BC5F]/20 shrink-0">
+                  <GraduationCap className="w-6 h-6 stroke-[2.2]" />
+                </div>
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                    Académy <span className="text-[#F7BC5F]">{activeAgency?.name || ''}</span>
+                  </h1>
+                  <p className="mt-0.5 text-xs sm:text-sm text-slate-400">
+                    Toutes les procédures, formations et tutoriels de l'agence, rangés par dossier.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Barre unique : navigation + recherche + actions */}
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 border border-black/8 shadow-xs flex flex-wrap items-center justify-between gap-2.5 mb-6">
+          {/* Barre unique sobre et design : navigation + recherche + actions */}
+          <div className="bg-[#0b1e22]/85 backdrop-blur-xl rounded-2xl p-2.5 sm:p-3 border border-white/12 shadow-[0_12px_36px_rgba(0,0,0,0.5)] flex flex-wrap items-center justify-between gap-2.5 mb-6">
             {/* Gauche : Fil d'Ariane si on est dans un dossier, sinon Recherche */}
             {!auNiveauDossiers && !enRecherche ? (
               <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
@@ -1297,34 +1308,34 @@ export default function AcademyView() {
                       setCheminDossiers([]);
                     }
                   }}
-                  className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                  className="h-9 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Retour</span>
                 </button>
                 <button
                   onClick={() => setCheminDossiers([])}
-                  className="hidden sm:inline-flex px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                  className="hidden sm:inline-flex px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 >
                   Dossiers
                 </button>
                 {cheminDossiers.map((nom, index) => (
                   <React.Fragment key={nom}>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0 hidden sm:block" />
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-500 shrink-0 hidden sm:block" />
                     <button
                       onClick={() => allerAuNiveau(index)}
                       disabled={index === cheminDossiers.length - 1}
-                      className={`px-2.5 py-1 rounded-lg text-xs sm:text-sm font-extrabold truncate max-w-[200px] sm:max-w-xs ${
+                      className={`px-2.5 py-1 rounded-lg text-xs sm:text-sm font-extrabold truncate max-w-[200px] sm:max-w-xs transition-colors ${
                         index === cheminDossiers.length - 1
-                          ? 'text-slate-900'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer'
+                          ? 'text-[#FAD592]'
+                          : 'text-slate-400 hover:text-white hover:bg-white/10 cursor-pointer'
                       }`}
                     >
                       {nom}
                     </button>
                   </React.Fragment>
                 ))}
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-900 text-[11px] font-bold shrink-0">
+                <span className="px-2.5 py-1 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#FAD592] text-[11px] font-bold shrink-0">
                   {visibles.length} procédure{visibles.length > 1 ? 's' : ''}
                 </span>
               </div>
@@ -1332,19 +1343,18 @@ export default function AcademyView() {
 
             {/* Champ de recherche */}
             <div className={`relative flex-1 min-w-[180px] ${!auNiveauDossiers && !enRecherche ? 'sm:max-w-xs ml-auto' : 'max-w-md'}`}>
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#F7BC5F] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 value={recherche}
                 onChange={(e) => setRecherche(e.target.value)}
                 placeholder={dossierActif ? `Rechercher dans ${dossierActif}…` : 'Rechercher une procédure…'}
-                style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
-                className="w-full pl-9 pr-8 py-2 rounded-xl placeholder-slate-400 text-xs sm:text-sm border border-black/10 focus:outline-none focus:border-[#E0A21A] focus:ring-1 focus:ring-[#E0A21A]"
+                className="w-full pl-9 pr-8 py-2 rounded-xl bg-[#051113]/90 text-white placeholder-slate-400 text-xs sm:text-sm border border-white/15 focus:outline-none focus:border-[#F7BC5F] focus:ring-1 focus:ring-[#F7BC5F] transition-all"
               />
               {recherche && (
                 <button
                   type="button"
                   onClick={() => setRecherche('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -1354,21 +1364,21 @@ export default function AcademyView() {
             {/* Droite : progression + vue + actions admin */}
             <div className="flex items-center gap-2 flex-wrap ml-auto sm:ml-0">
               {auNiveauDossiers && ressources.length > 0 && (
-                <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-black/5 text-xs text-slate-700">
+                <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/6 border border-white/10 text-xs text-slate-300">
                   <CheckCircle2
-                    className={`w-3.5 h-3.5 ${validees.size === ressources.length ? 'text-emerald-600' : 'text-[#E0A21A]'}`}
+                    className={`w-3.5 h-3.5 ${validees.size === ressources.length ? 'text-emerald-400' : 'text-[#F7BC5F]'}`}
                   />
                   <span className="font-semibold">{validees.size}/{ressources.length} lue{validees.size > 1 ? 's' : ''}</span>
                 </div>
               )}
 
               {/* Sélecteur Grille ou Liste */}
-              <div className="flex items-center rounded-xl bg-slate-100 p-0.5 border border-black/5">
+              <div className="flex items-center rounded-xl bg-[#051113] p-0.5 border border-white/10">
                 <button
                   onClick={() => choisirVue('grille')}
                   title="Affichage en grille"
                   className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                    vueDossiers === 'grille' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400 hover:text-slate-700'
+                    vueDossiers === 'grille' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
                   }`}
                 >
                   <LayoutGrid className="w-3.5 h-3.5" />
@@ -1377,7 +1387,7 @@ export default function AcademyView() {
                   onClick={() => choisirVue('liste')}
                   title="Affichage en liste"
                   className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                    vueDossiers === 'liste' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400 hover:text-slate-700'
+                    vueDossiers === 'liste' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
                   }`}
                 >
                   <ListIcon className="w-3.5 h-3.5" />
@@ -1427,16 +1437,16 @@ export default function AcademyView() {
                   {!enRecherche && (
                     <button
                       onClick={() => void creerSousDossier(dossierActif)}
-                      className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                      className="h-9 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/12 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5 text-slate-600" />
+                      <Plus className="w-3.5 h-3.5 text-[#F7BC5F]" />
                       <span>{dossierActif ? 'Sous-dossier' : 'Dossier'}</span>
                     </button>
                   )}
 
                   <button
                     onClick={ouvrirAjout}
-                    className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer"
+                    className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-[#F7BC5F]/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Procédure</span>
@@ -1448,13 +1458,13 @@ export default function AcademyView() {
                         type="button"
                         onClick={() => setMenuOptionsAdmin((v) => !v)}
                         title="Options d'administration"
-                        className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-600 flex items-center justify-center transition-all cursor-pointer"
+                        className="w-9 h-9 rounded-xl bg-white/8 hover:bg-white/15 text-slate-300 border border-white/10 flex items-center justify-center transition-all cursor-pointer"
                       >
                         <MoreVertical className="w-4 h-4" />
                       </button>
 
                       {menuOptionsAdmin && (
-                        <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-white border border-black/10 shadow-xl py-1 z-30 text-xs">
+                        <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-[#091a1e] border border-white/15 shadow-2xl py-1 z-30 text-xs text-slate-200">
                           <button
                             type="button"
                             onClick={() => {
@@ -1462,9 +1472,9 @@ export default function AcademyView() {
                               champFond.current?.click();
                             }}
                             disabled={fondEnCours}
-                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-700 hover:bg-slate-50 font-medium text-left cursor-pointer"
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:bg-white/10 font-medium text-left cursor-pointer"
                           >
-                            {fondEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5 text-slate-500" />}
+                            {fondEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5 text-[#F7BC5F]" />}
                             <span>Changer la bannière</span>
                           </button>
                           {ressources.some((r) => r.drive_file_id) && (
@@ -1475,9 +1485,9 @@ export default function AcademyView() {
                                 void rendrePublicsLesFichiersExistants();
                               }}
                               disabled={reparationEnCours}
-                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-700 hover:bg-slate-50 font-medium text-left border-t border-slate-100 cursor-pointer"
+                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:bg-white/10 font-medium text-left border-t border-white/10 cursor-pointer"
                             >
-                              {reparationEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5 text-slate-500" />}
+                              {reparationEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5 text-[#F7BC5F]" />}
                               <span>Rendre fichiers publics</span>
                             </button>
                           )}
@@ -1510,7 +1520,7 @@ export default function AcademyView() {
           {(auNiveauDossiers || dansUnDossier) && !chargement && dossiersEnfants.length > 0 && (
             <div className={dansUnDossier ? 'mb-6' : ''}>
               {dansUnDossier && (
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[#F7BC5F] mb-2.5">
                   Sous-dossiers
                 </p>
               )}
@@ -1556,20 +1566,20 @@ export default function AcademyView() {
                             if (ressource) void deplacerVers(ressource, nom);
                           }
                         }}
-                        className={`group relative bg-white hover:bg-amber-50/40 rounded-2xl p-3.5 border border-black/8 shadow-xs hover:shadow-md transition-all flex items-center gap-3.5 cursor-pointer select-none ${
+                        className={`group relative bg-[#0b1e22]/75 hover:bg-[#0f282e]/95 backdrop-blur-md rounded-2xl p-4 border border-white/10 hover:border-[#F7BC5F]/50 shadow-lg hover:shadow-[0_12px_36px_rgba(0,0,0,0.5)] transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-3.5 cursor-pointer select-none ${
                           dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans'
-                            ? 'ring-2 ring-[#E0A21A] bg-amber-50'
+                            ? 'ring-2 ring-[#F7BC5F] bg-[#102c32]'
                             : ''
                         }`}
                       >
                         {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'avant' && (
-                          <span className="absolute -left-1.5 top-2 bottom-2 w-1 rounded-full bg-[#E0A21A]" />
+                          <span className="absolute -left-1.5 top-2 bottom-2 w-1 rounded-full bg-[#F7BC5F]" />
                         )}
                         {dossierSurvoleParDossier === nom && dossierSurvolIntention === 'apres' && (
-                          <span className="absolute -right-1.5 top-2 bottom-2 w-1 rounded-full bg-[#E0A21A]" />
+                          <span className="absolute -right-1.5 top-2 bottom-2 w-1 rounded-full bg-[#F7BC5F]" />
                         )}
 
-                        {/* Icône dossier jaune épurée (ou miniature choisie) */}
+                        {/* Icône dossier ambre/or épurée (ou miniature choisie) */}
                         <div className="relative w-12 h-10 shrink-0">
                           <div className="absolute inset-x-0 top-[14%] bottom-0 rounded-lg bg-gradient-to-b from-[#E8B33A] to-[#C88C12] shadow-xs" />
                           <div className="absolute left-[6%] top-0 h-[20%] w-[44%] rounded-t-md bg-gradient-to-b from-[#F2C55C] to-[#E3AE33]" />
@@ -1586,13 +1596,13 @@ export default function AcademyView() {
 
                         {/* Nom + compteur clair */}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-black">
+                          <p className="text-sm font-bold text-white leading-snug line-clamp-2 group-hover:text-[#FAD592] transition-colors">
                             {nom}
                           </p>
-                          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
                             <span>{nombre} procédure{nombre > 1 ? 's' : ''}</span>
                             {vues > 0 && (
-                              <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-700">
+                              <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-300 bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/25">
                                 <CheckCircle2 className="w-3 h-3" />
                                 {vues}/{nombre}
                               </span>
@@ -1610,30 +1620,30 @@ export default function AcademyView() {
                               e.stopPropagation();
                               setMenuDossier(menuDossier === nom ? null : nom);
                             }}
-                            className="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-black/5 flex items-center justify-center shrink-0 transition-colors"
+                            className="w-8 h-8 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center shrink-0 transition-colors"
                           >
                             {dossierEnDepot === nom ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <Loader2 className="w-4 h-4 animate-spin text-[#F7BC5F]" />
                             ) : (
                               <MoreVertical className="w-4 h-4" />
                             )}
                           </button>
                         ) : (
-                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600 shrink-0 transition-colors" />
+                          <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-white shrink-0 transition-colors" />
                         )}
 
                         {estSuperAdmin && menuDossier === nom && (
                           <div
                             data-menu-dossier=""
                             onClick={(e) => e.stopPropagation()}
-                            className="absolute z-30 right-2 top-full mt-1 w-48 rounded-xl bg-white border border-black/10 shadow-xl py-1 text-left"
+                            className="absolute z-30 right-2 top-full mt-1 w-48 rounded-xl bg-[#091a1e] border border-white/15 shadow-2xl py-1 text-left text-slate-200"
                           >
                             <button
                               type="button"
                               onClick={() => { setMenuDossier(null); void renommerDossier(nom); }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10"
                             >
-                              <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                              <Pencil className="w-3.5 h-3.5 text-[#F7BC5F]" />
                               Renommer
                             </button>
                             <button
@@ -1643,45 +1653,45 @@ export default function AcademyView() {
                                 dossierPourVisuel.current = nom;
                                 champVisuelDossier.current?.click();
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10"
                             >
-                              <ImagePlus className="w-3.5 h-3.5 text-slate-500" />
+                              <ImagePlus className="w-3.5 h-3.5 text-[#F7BC5F]" />
                               {visuelsDossiers.get(nom) ? "Changer l'image" : 'Ajouter une image'}
                             </button>
                             {visuelsDossiers.get(nom) && (
                               <button
                                 type="button"
                                 onClick={() => { setMenuDossier(null); void retirerVisuelDossier(nom); }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10"
                               >
-                                <ImageOff className="w-3.5 h-3.5 text-slate-500" />
+                                <ImageOff className="w-3.5 h-3.5 text-[#F7BC5F]" />
                                 Retirer l'image
                               </button>
                             )}
-                            <div className="my-1 border-t border-slate-100" />
+                            <div className="my-1 border-t border-white/10" />
                             <button
                               type="button"
                               disabled={index === 0}
                               onClick={() => { if (index > 0) { setMenuDossier(null); void deplacerDossier(nom, 'monter'); } }}
-                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === 0 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-50'}`}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-200 hover:bg-white/10'}`}
                             >
-                              <ArrowUp className="w-3.5 h-3.5 text-slate-500" />
+                              <ArrowUp className="w-3.5 h-3.5 text-slate-400" />
                               Déplacer avant
                             </button>
                             <button
                               type="button"
                               disabled={index === dossiersEnfants.length - 1}
                               onClick={() => { if (index < dossiersEnfants.length - 1) { setMenuDossier(null); void deplacerDossier(nom, 'descendre'); } }}
-                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === dossiersEnfants.length - 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-50'}`}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${index === dossiersEnfants.length - 1 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-200 hover:bg-white/10'}`}
                             >
-                              <ArrowDown className="w-3.5 h-3.5 text-slate-500" />
+                              <ArrowDown className="w-3.5 h-3.5 text-slate-400" />
                               Déplacer après
                             </button>
-                            <div className="my-1 border-t border-slate-100" />
+                            <div className="my-1 border-t border-white/10" />
                             <button
                               type="button"
                               onClick={() => { setMenuDossier(null); void supprimerDossier(nom, nombre); }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/15"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               Supprimer
@@ -1693,7 +1703,7 @@ export default function AcademyView() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-2xl bg-white border border-black/8 shadow-xs divide-y divide-black/5 overflow-hidden">
+                <div className="rounded-2xl bg-[#0b1e22]/75 backdrop-blur-md border border-white/10 shadow-lg divide-y divide-white/10 overflow-hidden">
                   {dossiersEnfants.map(({ nom, nombre }, index) => {
                     const vues = ressources.filter((r) => r.rubrique === nom && validees.has(r.id)).length;
                     return (
@@ -1733,8 +1743,8 @@ export default function AcademyView() {
                             if (ressource) void deplacerVers(ressource, nom);
                           }
                         }}
-                        className={`relative w-full flex items-center gap-3.5 px-4 py-3 hover:bg-amber-50/40 transition-colors cursor-pointer ${
-                          dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans' ? 'bg-amber-50' : ''
+                        className={`relative w-full flex items-center gap-3.5 px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer ${
+                          dossierSurvoleParDossier === nom && dossierSurvolIntention === 'dans' ? 'bg-[#102c32]' : ''
                         }`}
                       >
                         <div className="relative w-9 h-7 shrink-0">
@@ -1742,14 +1752,14 @@ export default function AcademyView() {
                           <span className="absolute left-[6%] top-0 h-[20%] w-[46%] rounded-t-sm bg-[#F2C55C]" />
                           <span className="absolute inset-x-0 top-[32%] bottom-0 rounded bg-gradient-to-b from-[#FFD976] to-[#EFB52C] border-t border-white/40" />
                         </div>
-                        <span className="flex-1 min-w-0 text-sm font-bold text-slate-900 truncate">{nom}</span>
+                        <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">{nom}</span>
                         {vues > 0 && (
-                          <span className="flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                          <span className="flex items-center gap-1 text-xs font-semibold text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/25">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             {vues}/{nombre}
                           </span>
                         )}
-                        <span className="text-xs text-slate-500 tabular-nums">
+                        <span className="text-xs text-slate-400 tabular-nums">
                           {nombre} procédure{nombre > 1 ? 's' : ''}
                         </span>
                         {estSuperAdmin ? (
@@ -1758,21 +1768,21 @@ export default function AcademyView() {
                               type="button"
                               title="Renommer"
                               onClick={() => void renommerDossier(nom)}
-                              className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-black/5 flex items-center justify-center"
+                              className="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center"
                             >
-                              <Pencil className="w-3.5 h-3.5" />
+                              <Pencil className="w-3.5 h-3.5 text-[#F7BC5F]" />
                             </button>
                             <button
                               type="button"
                               title="Supprimer"
                               onClick={() => void supprimerDossier(nom, nombre)}
-                              className="w-7 h-7 rounded-lg text-rose-500 hover:bg-rose-50 flex items-center justify-center"
+                              className="w-7 h-7 rounded-lg text-rose-400 hover:bg-rose-500/20 flex items-center justify-center"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         ) : (
-                          <ChevronRight className="w-4 h-4 text-slate-300" />
+                          <ChevronRight className="w-4 h-4 text-slate-500" />
                         )}
                       </div>
                     );
@@ -1784,8 +1794,8 @@ export default function AcademyView() {
 
           {/* Zone de dépôt vers un autre dossier : s'affiche UNIQUEMENT quand on glisse une procédure */}
           {ressourceEnDrag && estSuperAdmin && rubriques.length > 1 && (
-            <div className="mb-5 p-3 rounded-2xl bg-amber-50/90 border border-amber-300/80 shadow-xs">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-900 mb-2">
+            <div className="mb-5 p-3 rounded-2xl bg-[#0b1e22]/90 border border-[#F7BC5F]/40 shadow-lg">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#F7BC5F] mb-2">
                 Déposer dans un autre dossier :
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -1806,11 +1816,11 @@ export default function AcademyView() {
                       }}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
                         dossierSurvole === nom
-                          ? 'bg-[#E0A21A] border-[#E0A21A] text-white scale-105 shadow'
-                          : 'bg-white border-black/10 text-slate-700'
+                          ? 'bg-[#F7BC5F] border-[#F7BC5F] text-slate-950 scale-105 shadow-md'
+                          : 'bg-[#051113] border-white/10 text-slate-200'
                       }`}
                     >
-                      <Folder className="w-3.5 h-3.5 text-[#E0A21A]" />
+                      <Folder className="w-3.5 h-3.5 text-[#F7BC5F]" />
                       <span className="truncate max-w-[180px]">{nom}</span>
                       <span className="opacity-60 text-[10px]">({nombre})</span>
                     </span>
@@ -1821,22 +1831,25 @@ export default function AcademyView() {
 
           {/* ── LES PROCÉDURES (dans un dossier ou lors d'une recherche) ─── */}
           {chargement ? (
-            <div className="flex items-center justify-center py-20 text-slate-600 gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" /> Chargement de l'Académy…
+            <div className="flex items-center justify-center py-20 text-slate-400 gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-[#F7BC5F]" />
+              <span className="text-sm">Chargement de l'Académy…</span>
             </div>
           ) : ressources.length === 0 && dossiersEnfants.length === 0 ? (
-            <div className="p-12 text-center bg-white/80 border border-dashed border-black/10 rounded-2xl">
-              <GraduationCap className="w-9 h-9 mx-auto mb-3 text-slate-400" />
-              <p className="text-sm font-bold text-slate-800">L'Académy est vide pour le moment.</p>
-              <p className="text-xs text-slate-500 mt-1">
+            <div className="p-12 text-center bg-[#0b1e22]/60 border border-dashed border-white/15 rounded-2xl shadow-xl">
+              <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 mx-auto mb-3.5 flex items-center justify-center text-[#F7BC5F]">
+                <GraduationCap className="w-6 h-6 stroke-[2]" />
+              </div>
+              <p className="text-sm font-bold text-white">L'Académy est vide pour le moment.</p>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
                 {estSuperAdmin
                   ? 'Créez un dossier ou ajoutez votre première procédure (PDF ou vidéo).'
                   : "Les procédures de l'agence apparaîtront ici dès qu'elles seront publiées."}
               </p>
             </div>
           ) : auNiveauDossiers ? null : visibles.length === 0 && dossiersEnfants.length === 0 ? (
-            <div className="p-10 text-center bg-white/80 border border-black/8 rounded-2xl">
-              <p className="text-sm font-semibold text-slate-700">
+            <div className="p-10 text-center bg-[#0b1e22]/60 border border-white/10 rounded-2xl shadow-xl">
+              <p className="text-sm font-semibold text-slate-300">
                 {enRecherche
                   ? `Aucune procédure ne correspond à « ${recherche} ».`
                   : 'Ce dossier ne contient pas encore de procédure.'}
@@ -1844,16 +1857,16 @@ export default function AcademyView() {
               {estSuperAdmin && !enRecherche && (
                 <button
                   onClick={ouvrirAjout}
-                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F7BC5F] text-slate-950 text-xs font-bold shadow-xs hover:brightness-105 cursor-pointer"
+                  className="mt-3.5 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 text-xs font-bold shadow-md shadow-[#F7BC5F]/20 hover:brightness-110 cursor-pointer"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                   Ajouter une procédure ici
                 </button>
               )}
             </div>
           ) : visibles.length === 0 ? null : vueDossiers === 'liste' ? (
-            /* Affichage en LISTE des procédures : ultra lisible et direct */
-            <div className="rounded-2xl bg-white border border-black/8 shadow-xs divide-y divide-black/5 overflow-hidden">
+            /* Affichage en LISTE des procédures : ultra lisible et moderne */
+            <div className="rounded-2xl bg-[#0b1e22]/75 backdrop-blur-md border border-white/10 shadow-lg divide-y divide-white/10 overflow-hidden">
               {visibles.map((r) => {
                 const estVideo = r.type === 'video';
                 const estValidee = validees.has(r.id);
@@ -1867,19 +1880,21 @@ export default function AcademyView() {
                       setRessourceEnDrag(r.id);
                     }}
                     onDragEnd={() => setRessourceEnDrag(null)}
-                    className="group flex items-center gap-3.5 px-4 py-3 hover:bg-amber-50/40 transition-colors cursor-pointer"
+                    className="group flex items-center gap-3.5 px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer"
                   >
                     {/* Miniature ou icône */}
                     {r.image_url ? (
                       <img
                         src={r.image_url}
                         alt=""
-                        className="w-14 h-10 rounded-lg object-cover bg-slate-100 border border-black/5 shrink-0"
+                        className="w-14 h-10 rounded-lg object-cover bg-[#051113] border border-white/10 shrink-0"
                       />
                     ) : (
                       <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                          estVideo ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-700'
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                          estVideo
+                            ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                            : 'bg-[#F7BC5F]/15 border-[#F7BC5F]/30 text-[#FAD592]'
                         }`}
                       >
                         {estVideo ? <PlayCircle className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
@@ -1889,16 +1904,20 @@ export default function AcademyView() {
                     {/* Titre & infos */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-slate-900 truncate">{r.titre}</p>
+                        <p className="text-sm font-bold text-white group-hover:text-[#FAD592] transition-colors truncate">
+                          {r.titre}
+                        </p>
                         <span
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase shrink-0 ${
-                            estVideo ? 'bg-blue-100/80 text-blue-800' : 'bg-slate-100 text-slate-700'
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase shrink-0 border ${
+                            estVideo
+                              ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                              : 'bg-white/10 text-slate-300 border-white/15'
                           }`}
                         >
                           {estVideo ? 'Vidéo' : 'PDF'}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 truncate mt-0.5">
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
                         {enRecherche ? `${r.rubrique} · ` : ''}
                         {r.description || (r.auteur ? `Par ${r.auteur}` : 'Cliquer pour ouvrir')}
                         {r.duree ? ` · ${r.duree}` : ''}
@@ -1915,12 +1934,12 @@ export default function AcademyView() {
                       disabled={validationEnCours === r.id}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer ${
                         estValidee
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-xs'
+                          : 'bg-white/8 text-slate-300 hover:bg-white/15 border border-white/10'
                       }`}
                     >
                       {validationEnCours === r.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[#F7BC5F]" />
                       ) : estValidee ? (
                         <CheckCircle2 className="w-3.5 h-3.5" />
                       ) : (
@@ -1935,15 +1954,15 @@ export default function AcademyView() {
                           type="button"
                           onClick={() => ouvrirModification(r)}
                           title="Modifier"
-                          className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-black/5 flex items-center justify-center"
+                          className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
                         >
-                          <Pencil className="w-3.5 h-3.5" />
+                          <Pencil className="w-3.5 h-3.5 text-[#F7BC5F]" />
                         </button>
                         <button
                           type="button"
                           onClick={() => void supprimer(r)}
                           title="Supprimer"
-                          className="w-8 h-8 rounded-lg text-rose-500 hover:bg-rose-50 flex items-center justify-center"
+                          className="w-8 h-8 rounded-lg text-rose-400 hover:bg-rose-500/20 flex items-center justify-center transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1954,7 +1973,7 @@ export default function AcademyView() {
               })}
             </div>
           ) : (
-            /* Affichage en GRILLE des procédures : cartes épurées et lisibles */
+            /* Affichage en GRILLE des procédures : cartes épurées, design et lisibles */
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {visibles.map((r) => {
                 const estVideo = r.type === 'video';
@@ -1991,51 +2010,51 @@ export default function AcademyView() {
                       const idSource = e.dataTransfer.getData('text/plain');
                       if (idSource && intention) void reordonnerRessource(idSource, r.id, intention);
                     }}
-                    className={`group relative bg-white rounded-2xl border border-black/8 overflow-hidden shadow-xs hover:shadow-md flex flex-col transition-all duration-200 hover:-translate-y-0.5 ${
+                    className={`group relative bg-[#0b1e22]/75 hover:bg-[#0f282e]/95 backdrop-blur-md rounded-2xl border border-white/10 hover:border-[#F7BC5F]/50 overflow-hidden shadow-lg hover:shadow-[0_16px_40px_rgba(0,0,0,0.6)] flex flex-col transition-all duration-300 hover:-translate-y-1 ${
                       deplacementEnCours === r.id ? 'opacity-50' : ''
                     } ${
                       ressourceSurvolee === r.id
                         ? ressourceSurvolIntention === 'avant'
-                          ? 'border-l-4 border-l-[#E0A21A]'
-                          : 'border-r-4 border-r-[#E0A21A]'
+                          ? 'border-l-4 border-l-[#F7BC5F]'
+                          : 'border-r-4 border-r-[#F7BC5F]'
                         : ''
                     }`}
                   >
                     {/* Aperçu visuel sobre */}
                     <button
                       onClick={() => ouvrirRessource(r)}
-                      className="relative block w-full aspect-[16/9] bg-slate-50 overflow-hidden border-b border-black/5 cursor-pointer"
+                      className="relative block w-full aspect-[16/9] bg-[#051113] overflow-hidden border-b border-white/10 cursor-pointer"
                     >
                       {r.image_url ? (
                         <img
                           src={r.image_url}
                           alt=""
-                          className="w-full h-full object-contain object-center transition-transform duration-300 group-hover:scale-[1.02]"
+                          className="w-full h-full object-contain object-center transition-transform duration-300 group-hover:scale-[1.03]"
                         />
                       ) : (
                         <div
                           className={`w-full h-full flex flex-col items-center justify-center gap-1.5 ${
-                            estVideo ? 'bg-gradient-to-br from-blue-50 to-indigo-50/70 text-blue-600' : 'bg-gradient-to-br from-amber-50/80 to-orange-50/50 text-amber-700'
+                            estVideo ? 'bg-gradient-to-br from-[#0c2229] to-[#081518] text-blue-400' : 'bg-gradient-to-br from-[#122327] to-[#081417] text-[#F7BC5F]'
                           }`}
                         >
-                          {estVideo ? <PlayCircle className="w-9 h-9 stroke-[1.75]" /> : <FileText className="w-9 h-9 stroke-[1.75]" />}
-                          <span className="text-[11px] font-semibold opacity-75">
+                          {estVideo ? <PlayCircle className="w-10 h-10 stroke-[1.75]" /> : <FileText className="w-10 h-10 stroke-[1.75]" />}
+                          <span className="text-[11px] font-semibold text-slate-300">
                             {estVideo ? 'Regarder la vidéo' : 'Ouvrir le document'}
                           </span>
                         </div>
                       )}
 
                       {/* Pastille PDF / Vidéo */}
-                      <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-lg bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                        {estVideo ? <PlayCircle className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
+                      <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-lg bg-black/75 backdrop-blur-md text-white border border-white/15 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-md">
+                        {estVideo ? <PlayCircle className="w-3 h-3 text-blue-400" /> : <FileText className="w-3 h-3 text-[#F7BC5F]" />}
                         {estVideo ? 'Vidéo' : 'PDF'}
-                        {r.duree && <span className="font-normal opacity-85">· {r.duree}</span>}
+                        {r.duree && <span className="font-normal text-slate-300">· {r.duree}</span>}
                       </span>
                     </button>
 
                     {/* Actions admin au survol */}
                     {estSuperAdmin && (
-                      <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                         <button
                           type="button"
                           onClick={() => {
@@ -2043,10 +2062,10 @@ export default function AcademyView() {
                             champCouvertureRapide.current?.click();
                           }}
                           title={r.image_url ? "Changer l'image" : 'Ajouter une image'}
-                          className="w-7 h-7 rounded-lg bg-slate-900/80 text-white hover:text-[#F7BC5F] flex items-center justify-center shadow-xs cursor-pointer"
+                          className="w-7 h-7 rounded-lg bg-black/80 backdrop-blur-md text-white hover:text-[#F7BC5F] border border-white/15 flex items-center justify-center shadow-md cursor-pointer transition-colors"
                         >
                           {couvertureEnCours === r.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#F7BC5F]" />
                           ) : (
                             <ImagePlus className="w-3.5 h-3.5" />
                           )}
@@ -2055,7 +2074,7 @@ export default function AcademyView() {
                           type="button"
                           onClick={() => ouvrirModification(r)}
                           title="Modifier"
-                          className="w-7 h-7 rounded-lg bg-slate-900/80 text-white hover:text-[#F7BC5F] flex items-center justify-center shadow-xs cursor-pointer"
+                          className="w-7 h-7 rounded-lg bg-black/80 backdrop-blur-md text-white hover:text-[#F7BC5F] border border-white/15 flex items-center justify-center shadow-md cursor-pointer transition-colors"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
@@ -2063,7 +2082,7 @@ export default function AcademyView() {
                           type="button"
                           onClick={() => void supprimer(r)}
                           title="Supprimer"
-                          className="w-7 h-7 rounded-lg bg-rose-600/90 text-white hover:bg-rose-600 flex items-center justify-center shadow-xs cursor-pointer"
+                          className="w-7 h-7 rounded-lg bg-rose-600/90 text-white hover:bg-rose-600 border border-rose-400/40 flex items-center justify-center shadow-md cursor-pointer transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -2074,39 +2093,39 @@ export default function AcademyView() {
                     <div className="flex-1 flex flex-col justify-between p-3.5 gap-3">
                       <div>
                         {enRecherche && (
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700 mb-1 truncate">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F] mb-1 truncate">
                             {r.rubrique}
                           </p>
                         )}
                         <button onClick={() => ouvrirRessource(r)} className="text-left w-full cursor-pointer">
-                          <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-amber-900 transition-colors">
+                          <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 group-hover:text-[#FAD592] transition-colors">
                             {r.titre}
                           </h3>
                         </button>
                         {r.description && (
-                          <p className="mt-1 text-xs text-slate-500 leading-relaxed line-clamp-2">{r.description}</p>
+                          <p className="mt-1 text-xs text-slate-400 leading-relaxed line-clamp-2">{r.description}</p>
                         )}
                       </div>
 
                       {/* Pied de carte : auteur/lecteurs + bouton Lu */}
-                      <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <div className="pt-2.5 border-t border-white/10 flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 min-w-0">
                           {r.auteur_photo_url ? (
                             <img
                               src={r.auteur_photo_url}
                               alt=""
-                              className="w-6 h-6 rounded-full object-cover ring-1 ring-slate-200 shrink-0"
+                              className="w-6 h-6 rounded-full object-cover ring-1 ring-white/20 shrink-0"
                             />
                           ) : r.auteur ? (
-                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold flex items-center justify-center shrink-0">
+                            <span className="w-6 h-6 rounded-full bg-white/10 text-[#FAD592] border border-white/15 text-[10px] font-bold flex items-center justify-center shrink-0">
                               {initiales(r.auteur)}
                             </span>
                           ) : null}
                           {r.auteur ? (
-                            <span className="text-xs text-slate-600 truncate">{r.auteur}</span>
+                            <span className="text-xs text-slate-300 truncate">{r.auteur}</span>
                           ) : estSuperAdmin && nbValidations > 0 ? (
                             <span className="text-[11px] text-slate-400 flex items-center gap-1" title={`${nbValidations} validation(s)`}>
-                              <Users className="w-3 h-3" /> {nbValidations}
+                              <Users className="w-3 h-3 text-[#F7BC5F]" /> {nbValidations}
                             </span>
                           ) : <span />}
                         </div>
@@ -2117,12 +2136,12 @@ export default function AcademyView() {
                           disabled={validationEnCours === r.id}
                           className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors shrink-0 cursor-pointer disabled:opacity-60 ${
                             estValidee
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-white/8 text-slate-300 hover:bg-white/15 border border-white/10'
                           }`}
                         >
                           {validationEnCours === r.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <Loader2 className="w-3 h-3 animate-spin text-[#F7BC5F]" />
                           ) : estValidee ? (
                             <CheckCircle2 className="w-3 h-3" />
                           ) : (
@@ -2218,28 +2237,28 @@ export default function AcademyView() {
       {/* ── MODALE D'AJOUT / MODIFICATION SIMPLIFIÉE ──────────────────────── */}
       {formOuvert && estSuperAdmin && (
         <div
-          className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => !enregistrement && setFormOuvert(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar rounded-2xl bg-white border border-black/10 p-5 sm:p-6 space-y-4 shadow-2xl text-slate-900"
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar rounded-2xl bg-[#091a1e] border border-white/15 p-5 sm:p-6 space-y-4 shadow-2xl text-white"
           >
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="text-base font-extrabold text-slate-900">
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <h3 className="text-base font-extrabold text-white">
                 {enModification ? 'Modifier la procédure' : 'Nouvelle procédure'}
               </h3>
               <button
                 onClick={() => setFormOuvert(false)}
-                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center"
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* 1. Le fichier ou le lien (en premier : pré-remplit le titre et le type automatiquement) */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-2.5">
-              <label className="block text-xs font-bold text-slate-700">1. Document PDF ou vidéo</label>
+            <div className="rounded-xl border border-white/10 bg-[#051113] p-3.5 space-y-2.5">
+              <label className="block text-xs font-bold text-slate-300">1. Document PDF ou vidéo</label>
               <input
                 ref={champFichier}
                 type="file"
@@ -2260,10 +2279,9 @@ export default function AcademyView() {
               <button
                 type="button"
                 onClick={() => champFichier.current?.click()}
-                style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 hover:border-[#E0A21A] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-2xs cursor-pointer transition-colors"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 hover:border-[#F7BC5F]/60 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 text-white cursor-pointer transition-colors"
               >
-                <Upload className="w-4 h-4 text-[#E0A21A] shrink-0" />
+                <Upload className="w-4 h-4 text-[#F7BC5F] shrink-0" />
                 <span className="truncate">
                   {fichier ? fichier.name : 'Choisir un fichier PDF ou une vidéo sur votre appareil'}
                 </span>
@@ -2279,8 +2297,7 @@ export default function AcademyView() {
                     if (/youtube\.com|youtu\.be|vimeo\.com/i.test(val)) setType('video');
                   }}
                   placeholder="Ou coller un lien YouTube, Vimeo ou Google Drive…"
-                  style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
-                  className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs placeholder-slate-400 focus:outline-none focus:border-[#E0A21A]"
+                  className="w-full pl-8 pr-3 py-2 rounded-xl border border-white/15 bg-[#030c0e] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
                 />
               </div>
             </div>
@@ -2288,19 +2305,18 @@ export default function AcademyView() {
             {/* 2. Titre & Dossier */}
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">2. Titre de la procédure</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">2. Titre de la procédure</label>
                 <input
                   value={titre}
                   onChange={(e) => setTitre(e.target.value)}
                   placeholder="Ex : Rédiger un mandat exclusif"
-                  style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm placeholder-slate-400 focus:outline-none focus:border-[#E0A21A]"
+                  className="w-full px-3 py-2.5 rounded-xl border border-white/15 bg-[#051113] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Dossier</label>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Dossier</label>
                   {nouvelleRubrique ? (
                     <div className="flex items-center gap-1.5">
                       <input
@@ -2308,8 +2324,7 @@ export default function AcademyView() {
                         value={rubrique}
                         onChange={(e) => setRubrique(e.target.value)}
                         placeholder="Nom du nouveau dossier"
-                        style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
-                        className="w-full min-w-0 px-3 py-2 rounded-xl border border-slate-200 text-sm placeholder-slate-400 focus:outline-none focus:border-[#E0A21A]"
+                        className="w-full min-w-0 px-3 py-2 rounded-xl border border-white/15 bg-[#051113] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F]"
                       />
                       <button
                         type="button"
@@ -2317,7 +2332,7 @@ export default function AcademyView() {
                           setNouvelleRubrique(false);
                           setRubrique(dossierActif || rubriques[0]?.[0] || RUBRIQUES_SUGGEREES[0]);
                         }}
-                        className="shrink-0 text-xs font-bold text-slate-500 hover:text-slate-900 underline"
+                        className="shrink-0 text-xs font-bold text-[#F7BC5F] hover:text-[#ffcd78] underline cursor-pointer"
                       >
                         Liste
                       </button>
@@ -2333,30 +2348,28 @@ export default function AcademyView() {
                           setRubrique(e.target.value);
                         }
                       }}
-                      style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#E0A21A]"
+                      className="w-full px-3 py-2 rounded-xl border border-white/15 bg-[#051113] text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
                     >
                       {[...new Set([...rubriques.map(([n]) => n), ...RUBRIQUES_SUGGEREES, rubrique])]
                         .filter(Boolean)
                         .sort((a, b) => a.localeCompare(b, 'fr'))
                         .map((n) => (
-                          <option key={n} value={n}>{n}</option>
+                          <option key={n} value={n} className="bg-[#091a1e] text-white">{n}</option>
                         ))}
-                      <option value="__nouvelle__">+ Nouveau dossier…</option>
+                      <option value="__nouvelle__" className="bg-[#091a1e] text-[#F7BC5F]">+ Nouveau dossier…</option>
                     </select>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Format</label>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Format</label>
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value as 'pdf' | 'video')}
-                    style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#E0A21A]"
+                    className="w-full px-3 py-2 rounded-xl border border-white/15 bg-[#051113] text-sm text-white focus:outline-none focus:border-[#F7BC5F]"
                   >
-                    <option value="pdf">Document PDF</option>
-                    <option value="video">Vidéo</option>
+                    <option value="pdf" className="bg-[#091a1e] text-white">Document PDF</option>
+                    <option value="video" className="bg-[#091a1e] text-white">Vidéo</option>
                   </select>
                 </div>
               </div>
@@ -2365,16 +2378,15 @@ export default function AcademyView() {
             {/* 3. Courte description & image de couverture (optionnels) */}
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Description courte <span className="font-normal text-slate-400">(optionnel)</span>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Description courte <span className="font-normal text-slate-500">(optionnel)</span>
                 </label>
                 <textarea
                   rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="En une phrase : ce qu'on retrouve dans cette procédure…"
-                  style={{ backgroundColor: '#f8fafc', color: '#0f172a' }}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm placeholder-slate-400 focus:outline-none focus:border-[#E0A21A] resize-y"
+                  className="w-full px-3 py-2 rounded-xl border border-white/15 bg-[#051113] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] resize-y"
                 />
               </div>
 
@@ -2389,9 +2401,9 @@ export default function AcademyView() {
                 <button
                   type="button"
                   onClick={() => champCouverture.current?.click()}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-xs font-semibold text-slate-300 hover:text-white flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
-                  <ImagePlus className="w-4 h-4 text-[#E0A21A] shrink-0" />
+                  <ImagePlus className="w-4 h-4 text-[#F7BC5F] shrink-0" />
                   <span className="truncate">
                     {couverture ? couverture.name : couvertureActuelle ? "Changer l'image de couverture" : 'Ajouter une image de couverture (optionnel)'}
                   </span>
@@ -2400,29 +2412,27 @@ export default function AcademyView() {
             </div>
 
             {/* Options supplémentaires repliées par défaut */}
-            <details className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-xs">
-              <summary className="font-bold text-slate-600 cursor-pointer select-none">
+            <details className="rounded-xl border border-white/10 bg-[#051113]/70 px-3.5 py-2.5 text-xs">
+              <summary className="font-bold text-[#F7BC5F] cursor-pointer select-none">
                 Plus d'options (auteur, durée…)
               </summary>
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Auteur</label>
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1">Auteur</label>
                   <input
                     value={auteur}
                     onChange={(e) => setAuteur(e.target.value)}
                     placeholder="Prénom Nom"
-                    style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs"
+                    className="w-full px-3 py-2 rounded-lg border border-white/15 bg-[#030c0e] text-xs text-white placeholder-slate-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Durée ou nb de pages</label>
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1">Durée ou nb de pages</label>
                   <input
                     value={duree}
                     onChange={(e) => setDuree(e.target.value)}
                     placeholder="Ex : 5 min ou 3 pages"
-                    style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs"
+                    className="w-full px-3 py-2 rounded-lg border border-white/15 bg-[#030c0e] text-xs text-white placeholder-slate-500"
                   />
                 </div>
                 <div className="sm:col-span-2">
@@ -2436,9 +2446,9 @@ export default function AcademyView() {
                   <button
                     type="button"
                     onClick={() => champPortrait.current?.click()}
-                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-xs text-slate-700 flex items-center justify-center gap-2"
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/15 hover:bg-white/10 text-xs text-slate-300 flex items-center justify-center gap-2 cursor-pointer transition-colors"
                   >
-                    <ImagePlus className="w-3.5 h-3.5 text-[#E0A21A]" />
+                    <ImagePlus className="w-3.5 h-3.5 text-[#F7BC5F]" />
                     <span className="truncate">
                       {portrait ? portrait.name : portraitActuel ? "Changer la photo de l'auteur" : "Photo de l'auteur (optionnel)"}
                     </span>
@@ -2447,18 +2457,18 @@ export default function AcademyView() {
               </div>
             </details>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
               <button
                 onClick={() => setFormOuvert(false)}
                 disabled={enregistrement}
-                className="px-4 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-bold cursor-pointer"
+                className="px-4 py-2.5 rounded-xl text-slate-300 hover:bg-white/10 text-xs font-bold cursor-pointer transition-colors"
               >
                 Annuler
               </button>
               <button
                 onClick={() => void enregistrer()}
                 disabled={enregistrement}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] hover:brightness-105 disabled:opacity-50 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] hover:brightness-110 disabled:opacity-50 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-md shadow-[#F7BC5F]/20 cursor-pointer transition-all"
               >
                 {enregistrement && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 {enModification ? 'Enregistrer' : 'Ajouter la procédure'}
