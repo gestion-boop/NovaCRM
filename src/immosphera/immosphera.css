@@ -210,7 +210,7 @@
   color: #0f172a !important;
 }
 
-.light-mode .immosphera-root .immosphera-topbar [class*="bg-black/45"] {
+.light-mode .immosphera-root .immosphera-topbar [class*="bg-black/"] {
   background-color: #e2e8f0 !important;
   border-color: #cbd5e1 !important;
 }

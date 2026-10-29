@@ -8,12 +8,6 @@ import {
   Building2,
   ArrowLeft,
   MapPinned,
-  Tag,
-  Key,
-  Sparkles,
-  FileSignature,
-  Map as MapIcon,
-  X,
   Search,
   ChevronDown,
 } from "lucide-react";
@@ -25,20 +19,6 @@ import Index from "@/immosphera/pages/Index";
 import PropertyDetail from "@/immosphera/pages/PropertyDetail";
 import Partners from "@/immosphera/pages/Partners";
 import Secteurs from "@/immosphera/pages/Secteurs";
-import NovaSearchBar from "@/immosphera/components/NovaSearchBar";
-
-const PROPERTY_QUICK_FILTERS = [
-  { chip: "Ventes", label: "Ventes", icon: Tag },
-  { chip: "Locations", label: "Locations", icon: Key },
-  { chip: "Nouveautés 15J", label: "Nouveautés", icon: Sparkles },
-  { chip: "Sous offre", label: "Sous offre", icon: FileText },
-  { chip: "Sous compromis", label: "Sous compromis", icon: FileSignature },
-  { chip: "Carte", label: "Carte", icon: MapIcon },
-];
-const PILL_BASE =
-  "inline-flex items-center gap-2 px-4 h-10 rounded-full text-sm font-semibold transition-all border backdrop-blur-md";
-const PILL_IDLE = "bg-foreground/10 border-border/60 text-foreground/80 hover:text-foreground hover:border-primary/50";
-const PILL_ACTIVE = "bg-card border-primary text-foreground shadow-lg";
 
 interface ImmosphereProps {
   // Recherche immobilière lancée depuis Nova IA ailleurs dans le CRM
@@ -119,96 +99,40 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
 
   return (
     <div className="immosphera-root min-h-screen">
-      {/* Barre de navigation et filtres de façade Immosphera 360 — Effet glace dépoli tout en haut */}
-      <div className="immosphera-topbar sticky top-0 z-40 bg-[#071317]/80 backdrop-blur-2xl border-b border-white/15 px-3 sm:px-6 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
-        <div className="flex items-center justify-between gap-2.5 flex-wrap">
-          {/* Piliers du module + Séparation marquée + Filtres Catégories */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-            {/* 3 grands piliers */}
-            <div className="flex items-center gap-1 bg-black/45 p-1 rounded-2xl border border-white/15 shadow-inner">
-              {navItems.map(({ label, icon: Icon, path }) => {
-                const active = path === "/immosphera" ? isHome : location.pathname.startsWith(path);
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => navigate(path)}
-                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                      active
-                        ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/25 font-extrabold"
-                        : "text-slate-300 hover:text-white hover:bg-white/10"
-                    }`}
-                  >
-                    <Icon className={`h-4 w-4 ${active ? "text-slate-950" : "text-[#F7BC5F]"}`} />
-                    <span>{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* SÉPARATION NETTE AVEC LES CATÉGORIES */}
-            {isHome && (
-              <div className="flex items-center gap-1.5 flex-wrap pl-3 border-l-2 border-[#F7BC5F]/40 ml-1.5">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#FAD592]/80 select-none hidden lg:inline-flex items-center gap-1">
-                  <Tag className="w-3 h-3 text-[#F7BC5F]" /> Catégories :
-                </span>
-
-                {PROPERTY_QUICK_FILTERS.map(({ chip, label, icon: Icon }) => {
-                  const active = activeChip === chip;
-                  return (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => handleChipClick(chip)}
-                      className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                        active
-                          ? "bg-amber-400/25 text-amber-300 border border-amber-400/50 shadow-sm font-bold"
-                          : "bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5"
-                      }`}
-                    >
-                      <Icon className={`h-3.5 w-3.5 ${active ? "text-amber-300" : "text-[#F7BC5F]"}`} />
-                      <span>{label}</span>
-                    </button>
-                  );
-                })}
-
-                {activeChip && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveChip("")}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition-colors cursor-pointer"
-                    title="Effacer le filtre actif"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Tous</span>
-                  </button>
-                )}
-
-                {/* Bouton "+ Ajouter un bien" tout au bout des catégories */}
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setFormOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs shadow-md shadow-[#F7BC5F]/20 transition-all cursor-pointer shrink-0 ml-1"
-                    title="Ajouter un nouveau bien immobilier"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Ajouter un bien</span>
-                  </button>
-                )}
-              </div>
-            )}
+      {/* Barre de navigation d'en-tête Immosphera 360 — Épurée et uniforme avec NovaSphere */}
+      <div className="immosphera-topbar sticky top-0 z-40 bg-[#071317]/85 backdrop-blur-2xl border-b border-white/10 px-4 sm:px-6 py-2 shadow-md">
+        <div className="flex items-center justify-between gap-4 w-full">
+          {/* Gauche : Piliers du module Immosphera */}
+          <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 shadow-inner shrink-0">
+            {navItems.map(({ label, icon: Icon, path }) => {
+              const active = path === "/immosphera" ? isHome : location.pathname.startsWith(path);
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => navigate(path)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                    active
+                      ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/20 font-extrabold"
+                      : "text-slate-300 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 ${active ? "text-slate-950" : "text-[#F7BC5F]"}`} />
+                  <span>{label}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Bouton Recherche au centre de la barre */}
+          {/* Centre : Bouton Recherche (au centre absolu de la barre) */}
           {isHome && (
-            <div className="flex items-center justify-center my-0.5 mx-auto">
+            <div className="flex items-center justify-center">
               <button
                 type="button"
                 onClick={() => setSearchDrawerOpen((prev) => !prev)}
-                className={`px-4 py-1.5 rounded-xl border text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md ${
+                className={`h-9 px-4 rounded-xl border text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
                   searchDrawerOpen
-                    ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/30 border-[#F7BC5F]"
+                    ? "bg-[#F7BC5F] text-slate-950 shadow-md shadow-[#F7BC5F]/25 border-[#F7BC5F]"
                     : "bg-white/10 hover:bg-white/15 text-white border-white/15 hover:border-[#F7BC5F]/50"
                 }`}
                 title={searchDrawerOpen ? "Fermer le tiroir de recherche" : "Ouvrir le panneau de recherche par-dessus la photo 360°"}
@@ -220,20 +144,32 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
             </div>
           )}
 
-          {/* Navigation interne : Si sous-page (ex: détail d'un bien), retour aux biens */}
-          {!isHome && (
-            <div className="flex items-center gap-2 ml-auto">
+          {/* Droite : Action principale Ajouter un bien (si admin) ou Retour aux biens */}
+          <div className="flex items-center gap-2 shrink-0">
+            {isHome && isAdmin && (
+              <button
+                type="button"
+                onClick={() => setFormOpen(true)}
+                className="h-9 px-3.5 rounded-xl bg-[#F7BC5F] hover:bg-[#d9ab38] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-[#F7BC5F]/20 transition-all cursor-pointer"
+                title="Ajouter un nouveau bien immobilier"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Ajouter un bien</span>
+              </button>
+            )}
+
+            {!isHome && (
               <button
                 type="button"
                 onClick={() => navigate("/immosphera")}
-                className="px-3 py-1.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                className="h-9 px-3.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                 title="Retourner à la liste des biens"
               >
                 <ArrowLeft className="h-3.5 w-3.5 text-[#F7BC5F]" />
                 <span>Retour aux biens</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
