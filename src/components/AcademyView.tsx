@@ -1967,17 +1967,25 @@ export default function AcademyView() {
                         </button>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F] truncate">
-                              {r.rubrique}
-                            </span>
+                            {(!dossierActif || r.rubrique !== dossierActif) && (
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F] truncate">
+                                {r.rubrique}
+                              </span>
+                            )}
                             {r.duree && <span className="text-[10px] text-slate-400">· {r.duree}</span>}
                           </div>
                           <button
                             onClick={() => ouvrirRessource(r)}
-                            className="text-left font-bold text-sm text-white hover:text-[#FAD592] transition-colors truncate block w-full cursor-pointer"
+                            className="text-left font-bold text-sm text-white hover:text-[#FAD592] transition-colors truncate block w-full cursor-pointer mt-0.5"
                           >
-                            {r.titre}
+                            {dossierActif ? (r.description || r.titre) : r.titre}
                           </button>
+                          {!dossierActif && r.description && (
+                            <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{r.description}</p>
+                          )}
+                          {dossierActif && r.description && r.titre !== r.description && (
+                            <p className="text-[11px] text-slate-400/80 line-clamp-1 mt-0.5 truncate">{r.titre}</p>
+                          )}
                         </div>
                       </div>
 
@@ -2014,8 +2022,8 @@ export default function AcademyView() {
                 })}
               </div>
             ) : (
-              /* Vue Grille Campus (Cartes 16/9 épurées, design et lisibles) */
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+              /* Vue Grille Campus (Cartes 16/9 épurées, design et lisibles — 4 cartes par ligne sur desktop) */
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-4">
                 {visibles.map((r) => {
                   const estVideo = r.type === 'video';
                   const estValidee = validees.has(r.id);
@@ -2138,20 +2146,26 @@ export default function AcademyView() {
                         </div>
                       )}
 
-                      {/* Corps de la carte */}
-                      <div className="flex-1 flex flex-col justify-between p-3.5 gap-3">
+                      {/* Corps de la carte : sous-titre affiché en priorité quand on est dans un dossier */}
+                      <div className="flex-1 flex flex-col justify-between p-3 gap-2.5">
                         <div>
-                          {/* Dossier parent en badge sobre */}
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F] mb-1 truncate">
-                            {r.rubrique}
-                          </p>
+                          {/* Dossier parent en badge sobre (seulement si hors de ce dossier) */}
+                          {(!dossierActif || r.rubrique !== dossierActif) && (
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F] mb-1 truncate">
+                              {r.rubrique}
+                            </p>
+                          )}
                           <button onClick={() => ouvrirRessource(r)} className="text-left w-full cursor-pointer">
                             <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 group-hover:text-[#FAD592] transition-colors">
-                              {r.titre}
+                              {dossierActif ? (r.description || r.titre) : r.titre}
                             </h3>
                           </button>
-                          {r.description && (
+                          {/* Sous-titre à la racine, ou titre initial discret dans le dossier */}
+                          {!dossierActif && r.description && (
                             <p className="mt-1 text-xs text-slate-400 leading-relaxed line-clamp-2">{r.description}</p>
+                          )}
+                          {dossierActif && r.description && r.titre !== r.description && (
+                            <p className="mt-1 text-[11px] text-slate-400/80 leading-relaxed line-clamp-1 truncate">{r.titre}</p>
                           )}
                         </div>
 
@@ -2210,9 +2224,12 @@ export default function AcademyView() {
                 <span className="hidden sm:inline">Retour</span>
               </button>
               <div className="min-w-0">
-                <p className="text-sm font-bold text-white truncate">{ouverte.titre}</p>
+                <p className="text-sm font-bold text-white truncate">
+                  {dossierActif && ouverte.description ? ouverte.description : ouverte.titre}
+                </p>
                 <p className="text-[11px] text-slate-400 truncate">
                   {ouverte.rubrique}
+                  {dossierActif && ouverte.description && ouverte.titre !== ouverte.description ? ` · ${ouverte.titre}` : ''}
                   {ouverte.auteur ? ` · ${ouverte.auteur}` : ''}
                   {ouverte.duree ? ` · ${ouverte.duree}` : ''}
                 </p>
@@ -2412,17 +2429,17 @@ export default function AcademyView() {
               </div>
             </div>
 
-            {/* 3. Courte description & image de couverture (optionnels) */}
+            {/* 3. Courte description / sous-titre & image de couverture (optionnels) */}
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Description courte <span className="font-normal text-slate-500">(optionnel)</span>
+                  Sous-titre / Description <span className="font-normal text-slate-500">(optionnel — affiché en titre des cartes dans le dossier)</span>
                 </label>
                 <textarea
                   rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="En une phrase : ce qu'on retrouve dans cette procédure…"
+                  placeholder="Sous-titre de la procédure ou court résumé affiché dans le dossier…"
                   className="w-full px-3 py-2 rounded-xl border border-white/15 bg-[#051113] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] resize-y"
                 />
               </div>
