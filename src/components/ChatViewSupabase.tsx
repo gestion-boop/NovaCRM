@@ -288,6 +288,129 @@ async function compresserImage(file: File, maxDimension = 1600, quality = 0.82):
   });
 }
 
+/**
+ * Décode une ou plusieurs images associées à un message.
+ * Si le message contient plusieurs photos (ex: 2 photos postées ensemble),
+ * attachment_url contient un JSON array `["url1", "url2"]`.
+ */
+function extraireImagesMessage(attachmentUrl: string | null | undefined): string[] {
+  if (!attachmentUrl) return [];
+  const trimmed = attachmentUrl.trim();
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((u): u is string => typeof u === 'string' && Boolean(u));
+      }
+    } catch {
+      // not JSON
+    }
+  }
+  return [attachmentUrl];
+}
+
+/**
+ * Composant de carrousel compact dans la bulle du message chat.
+ * Si une seule photo : affichage classique propre.
+ * Si 2 photos ou plus : carrousel intégré avec flèches gauche/droite et compteur (ex: 1/2).
+ */
+function ChatImageCarousel({
+  images,
+  alt,
+  onOpenFullscreen,
+}: {
+  images: string[];
+  alt?: string;
+  onOpenFullscreen: (index: number) => void;
+}) {
+  const [index, setIndex] = useState(0);
+
+  if (!images || images.length === 0) return null;
+
+  if (images.length === 1) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenFullscreen(0)}
+        className="block cursor-pointer overflow-hidden rounded-2xl border border-white/10 hover:opacity-95 transition-all shadow-md group text-left"
+        title="Agrandir l'image"
+      >
+        <img
+          src={images[0]}
+          alt={alt || "Photo jointe"}
+          className="max-w-[240px] max-h-[260px] sm:max-w-[320px] sm:max-h-[320px] rounded-2xl object-cover group-hover:scale-[1.02] transition-transform duration-200"
+          loading="lazy"
+        />
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className="relative group/carousel max-w-[260px] sm:max-w-[320px] rounded-2xl overflow-hidden border border-white/20 bg-black/40 shadow-xl select-none"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Photo affichée */}
+      <div
+        className="cursor-pointer overflow-hidden aspect-[4/3] flex items-center justify-center bg-black/60 relative"
+        onClick={() => onOpenFullscreen(index)}
+        title="Cliquer pour agrandir le carrousel de ce post"
+      >
+        <img
+          key={images[index]}
+          src={images[index]}
+          alt={`${alt || "Photo"} ${index + 1}`}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover/carousel:scale-105"
+          loading="lazy"
+        />
+
+        {/* Badge compteur discret en haut à droite */}
+        <div className="absolute top-2 right-2 px-2.5 py-0.5 rounded-full bg-black/75 backdrop-blur-md text-[11px] font-black text-[#FAD592] border border-[#F7BC5F]/35 shadow-md">
+          {index + 1} / {images.length}
+        </div>
+      </div>
+
+      {/* Flèche Gauche (vers photo précédente de CE post) */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIndex((prev) => (prev - 1 + images.length) % images.length);
+        }}
+        className="absolute left-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/70 hover:bg-[#F7BC5F] hover:text-slate-950 text-white border border-white/25 flex items-center justify-center transition-all opacity-85 hover:opacity-100 shadow-lg cursor-pointer hover:scale-110 active:scale-95"
+        title="Photo précédente de ce post"
+      >
+        <ChevronLeft className="w-5 h-5" />
+      </button>
+
+      {/* Flèche Droite (vers photo suivante de CE post) */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIndex((prev) => (prev + 1) % images.length);
+        }}
+        className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/70 hover:bg-[#F7BC5F] hover:text-slate-950 text-white border border-white/25 flex items-center justify-center transition-all opacity-85 hover:opacity-100 shadow-lg cursor-pointer hover:scale-110 active:scale-95"
+        title="Photo suivante de ce post"
+      >
+        <ChevronRight className="w-5 h-5" />
+      </button>
+
+      {/* Barre inférieure avec points de pagination */}
+      <div className="absolute bottom-2 inset-x-0 flex items-center justify-center gap-1.5 pointer-events-none">
+        {images.map((_, i) => (
+          <span
+            key={i}
+            className={`h-1.5 rounded-full transition-all duration-200 ${
+              i === index ? "w-4 bg-[#F7BC5F] shadow-sm" : "w-1.5 bg-white/50"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface ScheduledMediaPayload {
   __media__: true;
   kind: 'image' | 'video';
@@ -757,48 +880,28 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     index: number;
   } | null>(null);
 
+  /**
+   * Ouvre la visionneuse carrousel strictement isolée aux photos de CE post envoyé.
+   * L'utilisateur a explicitement demandé d'isoler chaque post, pour ne pas mélanger
+   * les photos d'un envoi avec le reste de l'historique du fil.
+   */
+  const openPostCarousel = (images: string[], initialIndex: number, senderName?: string, date?: string) => {
+    if (!images || images.length === 0) return;
+    const items: ChatCarouselItem[] = images.map((url, i) => ({
+      url,
+      senderName,
+      date,
+      fileName: `Photo ${i + 1}`,
+    }));
+    const validIdx = Math.max(0, Math.min(initialIndex, items.length - 1));
+    setCarouselState({ images: items, index: validIdx });
+    setConvLightboxUrl(items[validIdx].url);
+  };
+
   const openChatCarousel = (targetUrl: string) => {
     if (!targetUrl) return;
-    let images: ChatCarouselItem[] = [];
-    if (tab === 'conversations') {
-      images = convMessages
-        .filter((m) => {
-          const isImg = m.kind === 'image' || Boolean(m.attachment_url && (m.attachment_url.startsWith('data:image/') || m.attachment_url.startsWith('blob:') || /\.(png|jpe?g|webp|gif|svg)/i.test(m.attachment_url)));
-          return isImg && Boolean(m.attachment_url) && !isNovaReaction(m.attachment_url || '');
-        })
-        .map((m) => ({
-          url: m.attachment_url!,
-          senderName: profileByUid[m.user_id]?.displayName || 'Utilisateur',
-          date: m.created_at,
-          fileName: m.body || undefined,
-        }));
-    } else {
-      images = messages
-        .filter((m) => {
-          const url = (m.attachment_url || m.data?.attachmentUrl || m.data?.attachment_url || (m as any).attachment_url || m.data?.url || (typeof m.data?.body === 'string' && (m.data.body.startsWith('data:image/') || m.data.body.startsWith('blob:') || /^https?:\/\/.*\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(m.data.body)) ? m.data.body : null));
-          const isImg = m.data?.kind === 'image' || (m as any).kind === 'image' || Boolean(url && (!m.data?.kind || m.data?.kind === 'text'));
-          return isImg && Boolean(url) && !isNovaReaction(url || '');
-        })
-        .map((m) => {
-          const url = (m.attachment_url || m.data?.attachmentUrl || m.data?.attachment_url || (m as any).attachment_url || m.data?.url || (typeof m.data?.body === 'string' && (m.data.body.startsWith('data:image/') || m.data.body.startsWith('blob:') || /^https?:\/\/.*\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(m.data.body)) ? m.data.body : null))!;
-          const senderId = m.sender_id || m.data?.sender_id;
-          return {
-            url,
-            senderName: profileByUid[senderId]?.displayName || 'Utilisateur',
-            date: m.created_at,
-            fileName: m.data?.fileName || (m as any).fileName || undefined,
-          };
-        });
-    }
-
-    let foundIdx = images.findIndex((img) => img.url === targetUrl);
-    if (foundIdx === -1) {
-      images.push({ url: targetUrl });
-      foundIdx = images.length - 1;
-    }
-
-    setCarouselState({ images, index: foundIdx });
-    setConvLightboxUrl(targetUrl);
+    const images = extraireImagesMessage(targetUrl);
+    openPostCarousel(images, 0);
   };
 
   const handlePrevImage = () => {
@@ -3118,32 +3221,38 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setUploadingConvMedia(true);
     let toastId: string | number | undefined;
     if (files.length > 1) {
-      toastId = toast.loading(`Envoi de ${files.length} images...`);
+      toastId = toast.loading(`Préparation de ${files.length} photos pour le carrousel...`);
     }
     try {
-      let sentCount = 0;
+      const dataUrls: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (files.length > 1 && toastId) {
-          toast.loading(`Envoi de l'image ${i + 1}/${files.length}...`, { id: toastId });
+          toast.loading(`Compression de la photo ${i + 1}/${files.length}...`, { id: toastId });
         }
         const dataUrl = await compresserImage(file);
-        if (!dataUrl) {
-          toast.error(`Impossible de lire l'image "${file.name}".`);
-          continue;
-        }
-        const err = await insertConvMessage('image', dataUrl, undefined, file.type || 'image/jpeg', file.name);
-        if (err) {
-          toast.error(`Erreur d'envoi (${file.name}) : ${err}`);
+        if (dataUrl) {
+          dataUrls.push(dataUrl);
         } else {
-          sentCount++;
+          toast.error(`Impossible de lire la photo "${file.name}".`);
         }
       }
-      if (files.length > 1 && sentCount > 0) {
-        toast.success(`${sentCount} image${sentCount > 1 ? 's' : ''} envoyée${sentCount > 1 ? 's' : ''}`, { id: toastId });
+
+      if (dataUrls.length === 0) return;
+
+      // Un SEUL message regroupant les photos sélectionnées en carrousel
+      const payloadUrl = dataUrls.length === 1 ? dataUrls[0] : JSON.stringify(dataUrls);
+      const mime = files[0]?.type || 'image/jpeg';
+      const label = dataUrls.length === 1 ? (files[0]?.name || 'Photo') : `${dataUrls.length} photos`;
+
+      const err = await insertConvMessage('image', payloadUrl, undefined, mime, label);
+      if (err) {
+        toast.error(`Erreur d'envoi : ${err}`, { id: toastId });
+      } else if (files.length > 1 && toastId) {
+        toast.success(`Carrousel de ${files.length} photos envoyé !`, { id: toastId });
       }
     } catch (err: any) {
-      toast.error(err?.message || "Erreur d'envoi des images.", { id: toastId });
+      toast.error(err?.message || "Erreur d'envoi des photos.", { id: toastId });
     } finally {
       setUploadingConvMedia(false);
     }
@@ -3292,32 +3401,37 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setUploadingChannelMedia(true);
     let toastId: string | number | undefined;
     if (files.length > 1) {
-      toastId = toast.loading(`Envoi de ${files.length} images...`);
+      toastId = toast.loading(`Préparation de ${files.length} photos pour le carrousel...`);
     }
     try {
-      let sentCount = 0;
+      const dataUrls: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (files.length > 1 && toastId) {
-          toast.loading(`Envoi de l'image ${i + 1}/${files.length}...`, { id: toastId });
+          toast.loading(`Compression de la photo ${i + 1}/${files.length}...`, { id: toastId });
         }
         const dataUrl = await compresserImage(file);
-        if (!dataUrl) {
-          toast.error(`Impossible de lire l'image "${file.name}".`);
-          continue;
-        }
-        const err = await insertChannelMedia('image', dataUrl, undefined, file.type || 'image/jpeg', file.name);
-        if (err) {
-          toast.error(`Erreur d'envoi de l'image (${file.name}) : ${err}`);
+        if (dataUrl) {
+          dataUrls.push(dataUrl);
         } else {
-          sentCount++;
+          toast.error(`Impossible de lire la photo "${file.name}".`);
         }
       }
-      if (files.length > 1 && sentCount > 0) {
-        toast.success(`${sentCount} image${sentCount > 1 ? 's' : ''} envoyée${sentCount > 1 ? 's' : ''}`, { id: toastId });
+
+      if (dataUrls.length === 0) return;
+
+      const payloadUrl = dataUrls.length === 1 ? dataUrls[0] : JSON.stringify(dataUrls);
+      const mime = files[0]?.type || 'image/jpeg';
+      const label = dataUrls.length === 1 ? (files[0]?.name || 'Photo') : `${dataUrls.length} photos`;
+
+      const err = await insertChannelMedia('image', payloadUrl, undefined, mime, label);
+      if (err) {
+        toast.error(`Erreur d'envoi : ${err}`, { id: toastId });
+      } else if (files.length > 1 && toastId) {
+        toast.success(`Carrousel de ${files.length} photos envoyé !`, { id: toastId });
       }
     } catch (err: any) {
-      toast.error(err?.message || "Erreur lors de l'envoi de l'image.", { id: toastId });
+      toast.error(err?.message || "Erreur lors de l'envoi des photos.", { id: toastId });
     } finally {
       setUploadingChannelMedia(false);
       if (channelImageInputRef.current) channelImageInputRef.current.value = '';
@@ -5802,15 +5916,25 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                       "format cohérent" entre les deux surfaces de chat). Une vraie
                                       photo jointe par un utilisateur garde sa taille d'origine. */}
                                   {m.kind === 'image' && m.attachment_url && isNovaReaction(m.attachment_url) && (
-                                    <button type="button" onClick={() => openChatCarousel(m.attachment_url)} className="block cursor-pointer">
+                                    <button type="button" onClick={() => openPostCarousel([m.attachment_url!], 0)} className="block cursor-pointer">
                                       <img src={m.attachment_url} alt="Nova" className="w-14 h-14 object-contain" />
                                     </button>
                                   )}
-                                  {m.kind === 'image' && m.attachment_url && !isNovaReaction(m.attachment_url) && (
-                                    <button type="button" onClick={() => openChatCarousel(m.attachment_url)} className="block cursor-pointer">
-                                      <img src={m.attachment_url} alt="Pièce jointe" className="max-w-[220px] rounded-xl" />
-                                    </button>
-                                  )}
+                                  {m.kind === 'image' && m.attachment_url && !isNovaReaction(m.attachment_url) && (() => {
+                                    const postImages = extraireImagesMessage(m.attachment_url);
+                                    return (
+                                      <div className="space-y-1.5">
+                                        <ChatImageCarousel
+                                          images={postImages}
+                                          alt="Photo jointe"
+                                          onOpenFullscreen={(idx) => openPostCarousel(postImages, idx, author?.displayName || 'Utilisateur', m.created_at)}
+                                        />
+                                        {m.body && !m.body.endsWith('photos') && m.body !== 'image' && (
+                                          <p className="whitespace-pre-line select-text leading-relaxed mt-1">{linkifyText(m.body)}</p>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                   {/* controlsList="nofullscreen" : voir ClientProfileView.tsx — le
                                       plein écran natif fait perdre notre croix de fermeture. */}
                                   {/* Signalé (23 octobre) : « la vidéo ne peut pas se lire... Natacha
@@ -6649,21 +6773,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             (m as any).kind === 'image' ||
                             Boolean(imgUrl && (!m.data?.kind || m.data?.kind === 'text'));
                           if (isImg && imgUrl) {
+                            const postImages = extraireImagesMessage(imgUrl);
+                            const senderName = m.data?.sender_name || profileByUid[m.sender_id || m.data?.sender_id]?.displayName || 'Utilisateur';
                             return (
                               <div className="space-y-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => openChatCarousel(imgUrl)}
-                                  className="block cursor-pointer overflow-hidden rounded-xl border border-white/10 hover:opacity-95 transition-opacity"
-                                >
-                                  <img
-                                    src={imgUrl}
-                                    alt="Pièce jointe"
-                                    className="max-w-[240px] max-h-[240px] sm:max-w-[320px] sm:max-h-[320px] rounded-xl object-contain bg-black/30"
-                                    loading="lazy"
-                                  />
-                                </button>
-                                {m.data?.body && m.data.body !== imgUrl && (
+                                <ChatImageCarousel
+                                  images={postImages}
+                                  alt="Pièce jointe"
+                                  onOpenFullscreen={(idx) => openPostCarousel(postImages, idx, senderName, m.created_at)}
+                                />
+                                {m.data?.body && m.data.body !== imgUrl && !m.data.body.endsWith('photos') && (
                                   <p className="whitespace-pre-line select-text leading-relaxed">{linkifyText(m.data.body)}</p>
                                 )}
                               </div>

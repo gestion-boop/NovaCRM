@@ -1561,14 +1561,14 @@ export default function ClientProfileView({
     setUploadingChatMedia(true);
     let toastId: string | number | undefined;
     if (files.length > 1) {
-      toastId = toast.loading(`Envoi de ${files.length} images...`);
+      toastId = toast.loading(`Préparation de ${files.length} photos pour le carrousel...`);
     }
     try {
-      let sentCount = 0;
+      const dataUrls: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (files.length > 1 && toastId) {
-          toast.loading(`Envoi de l'image ${i + 1}/${files.length}...`, { id: toastId });
+          toast.loading(`Compression de la photo ${i + 1}/${files.length}...`, { id: toastId });
         }
         const dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -1577,15 +1577,18 @@ export default function ClientProfileView({
           reader.readAsDataURL(file);
         });
         if (dataUrl) {
-          await insertChatMessage({ image_url: dataUrl });
-          sentCount++;
+          dataUrls.push(dataUrl);
         }
       }
-      if (files.length > 1 && sentCount > 0) {
-        toast.success(`${sentCount} images envoyées`, { id: toastId });
+      if (dataUrls.length > 0) {
+        const payload = dataUrls.length === 1 ? dataUrls[0] : JSON.stringify(dataUrls);
+        await insertChatMessage({ image_url: payload });
+        if (files.length > 1 && toastId) {
+          toast.success(`Carrousel de ${files.length} photos envoyé !`, { id: toastId });
+        }
       }
     } catch (err: any) {
-      toast.error(err?.message || "Impossible d'envoyer l'image", { id: toastId });
+      toast.error(err?.message || "Impossible d'envoyer les photos", { id: toastId });
     } finally {
       setUploadingChatMedia(false);
     }
