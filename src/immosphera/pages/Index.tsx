@@ -29,7 +29,7 @@ import {
   FileSignature,
 } from "lucide-react";
 import { computeMatchScore } from "@/immosphera/lib/matchScore";
-import { matchesPropertyType } from "@/immosphera/lib/propertyTypes";
+import { matchesPropertyType, VISIBLE_PROPERTY_TYPES } from "@/immosphera/lib/propertyTypes";
 import { detectOpportunity, trackProperty } from "@/immosphera/lib/opportunities";
 import type { Tables } from "@/integrations/supabase/types";
 const heroVilla = {
@@ -108,6 +108,7 @@ export default function Index({
   };
   const [compareOpen, setCompareOpen] = useState(false);
   const [sortByMatch, setSortByMatch] = useState(false);
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("");
   const [propalIds, setPropalIds] = useState<Set<string>>(new Set());
   const [currentPropalId, setCurrentPropalId] = useState<string | null>(null);
   const [showMapOnce, setShowMapOnce] = useState(false);
@@ -239,8 +240,9 @@ export default function Index({
                 ? filteredProperties.filter((p) => (p as any).status === "under_compromise")
                 : filteredProperties;
 
-  const baseProperties = typeFilter
-    ? chipProperties.filter((p) => matchesPropertyType(p.property_type, typeFilter))
+  const effectiveTypeFilter = selectedTypeFilter || typeFilter;
+  const baseProperties = effectiveTypeFilter
+    ? chipProperties.filter((p) => matchesPropertyType(p.property_type, effectiveTypeFilter))
     : chipProperties;
 
   // Match scores
@@ -370,83 +372,128 @@ export default function Index({
 
       {/* Ruban unifié de filtres rapides & affichage — Standard plateforme NovaSphere */}
       <div className="w-full px-4 sm:px-11 pt-5 pb-1">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-border/50">
-          {/* Filtres rapides : Tous, Ventes, Locations, Nouveautés, Sous offre, Sous compromis, Carte */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {QUICK_FILTERS.map(({ chip, label, icon: Icon }) => {
-              const active = activeChip === chip || (chip === "" && !activeChip);
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => onChipClick(chip)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                    active
-                      ? "bg-[#F7BC5F] text-slate-950 font-bold shadow-md shadow-[#F7BC5F]/20"
-                      : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground border border-border"
-                  }`}
-                >
-                  <Icon className={`h-3.5 w-3.5 ${active ? "text-slate-950" : "text-[#F7BC5F]"}`} />
-                  <span>{label}</span>
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex flex-col gap-3 pb-3 border-b border-border/50">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            {/* Filtres rapides : Tous, Ventes, Locations, Nouveautés, Sous offre, Sous compromis, Carte */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {QUICK_FILTERS.map(({ chip, label, icon: Icon }) => {
+                const active = activeChip === chip || (chip === "" && !activeChip);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      onChipClick(chip);
+                      if (chip !== "Ventes" && chip !== "Locations") {
+                        setSelectedTypeFilter("");
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      active
+                        ? "bg-[#F7BC5F] text-slate-950 font-bold shadow-md shadow-[#F7BC5F]/20"
+                        : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground border border-border"
+                    }`}
+                  >
+                    <Icon className={`h-3.5 w-3.5 ${active ? "text-slate-950" : "text-[#F7BC5F]"}`} />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* Compteur et contrôles d'affichage (Grille, Liste, Tri) */}
-          <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-            <span className="text-xs text-muted-foreground font-medium">
-              <strong className="text-foreground font-bold">{finalDisplayItems.length}</strong> bien{finalDisplayItems.length !== 1 ? "s" : ""}{" "}
-              {aiDisplayItems
-                ? "(IA)"
-                : activeChip === "Nouveautés 15J"
-                  ? "récents"
-                  : activeChip === "Sous offre"
-                    ? "sous offre"
-                    : activeChip === "Sous compromis"
-                      ? "sous compromis"
-                      : "trouvés"}
-            </span>
-            <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border">
-              <button
-                type="button"
-                onClick={() => setSortByMatch((p) => !p)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
-                  sortByMatch
-                    ? "bg-[#F7BC5F] text-slate-950 font-bold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                title="Trier par pertinence IA"
-              >
-                <ArrowUpDown className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Match</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setListView("grid")}
-                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                  listView === "grid"
-                    ? "bg-[#F7BC5F] text-slate-950"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                title="Affichage en grille"
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setListView("compact")}
-                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                  listView === "compact"
-                    ? "bg-[#F7BC5F] text-slate-950"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                title="Affichage compact"
-              >
-                <List className="h-4 w-4" />
-              </button>
+            {/* Compteur et contrôles d'affichage (Grille, Liste, Tri) */}
+            <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+              <span className="text-xs text-muted-foreground font-medium">
+                <strong className="text-foreground font-bold">{finalDisplayItems.length}</strong> bien{finalDisplayItems.length !== 1 ? "s" : ""}{" "}
+                {aiDisplayItems
+                  ? "(IA)"
+                  : activeChip === "Nouveautés 15J"
+                    ? "récents"
+                    : activeChip === "Sous offre"
+                      ? "sous offre"
+                      : activeChip === "Sous compromis"
+                        ? "sous compromis"
+                        : "trouvés"}
+              </span>
+              <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border">
+                <button
+                  type="button"
+                  onClick={() => setSortByMatch((p) => !p)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                    sortByMatch
+                      ? "bg-[#F7BC5F] text-slate-950 font-bold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Trier par pertinence IA"
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Match</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setListView("grid")}
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                    listView === "grid"
+                      ? "bg-[#F7BC5F] text-slate-950"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Affichage en grille"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setListView("compact")}
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                    listView === "compact"
+                      ? "bg-[#F7BC5F] text-slate-950"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Affichage compact"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Sous-rangée d'onglets catégories de biens (Maison, Appartement, Professionnel, Terrain, Autre)
+              qui apparaît dès qu'on clique sur Ventes ou Locations — demande explicite utilisateur */}
+          {(activeChip === "Ventes" || activeChip === "Locations") && (
+            <div className="flex items-center gap-2 pt-1 flex-wrap animate-in fade-in slide-in-from-top-1 duration-200">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mr-1">
+                Catégories :
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedTypeFilter("")}
+                className={`px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer border ${
+                  !selectedTypeFilter
+                    ? "bg-[#F7BC5F] text-slate-950 font-bold border-[#F7BC5F] shadow-sm"
+                    : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground border-border"
+                }`}
+              >
+                Tous
+              </button>
+              {VISIBLE_PROPERTY_TYPES.map(({ value, label }) => {
+                const isSelected = selectedTypeFilter === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSelectedTypeFilter((prev) => (prev === value ? "" : value))}
+                    className={`px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer border ${
+                      isSelected
+                        ? "bg-[#F7BC5F] text-slate-950 font-bold border-[#F7BC5F] shadow-sm"
+                        : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground border-border"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
