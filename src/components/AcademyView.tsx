@@ -1251,11 +1251,13 @@ export default function AcademyView() {
 
   return (
     <div
-      className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 min-h-[calc(100vh-4rem)] relative overflow-hidden bg-gradient-to-b from-[#071317] via-[#091a20] to-[#050e11] text-white"
+      className="academy-root -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 min-h-[calc(100vh-4rem)] relative overflow-hidden"
     >
-      {/* Halos d'ambiance sobres et élégants en arrière-plan */}
-      <div className="pointer-events-none absolute -top-40 left-1/4 w-[500px] h-[500px] bg-[#F7BC5F]/[0.035] rounded-full blur-3xl" />
-      <div className="pointer-events-none absolute top-1/3 -right-20 w-[450px] h-[450px] bg-[#0ea5e9]/[0.025] rounded-full blur-3xl" />
+      {/* Fond sombre et halos réservés au mode nuit (neutralisés en mode jour) */}
+      <div className="academy-dark-glow pointer-events-none absolute inset-0 bg-[#071317]" />
+      <div className="academy-dark-glow pointer-events-none absolute inset-0 bg-gradient-to-b from-[#071317] via-[#091a20] to-[#050e11]" />
+      <div className="academy-dark-glow pointer-events-none absolute -top-40 left-1/4 w-[500px] h-[500px] bg-[#F7BC5F]/[0.035] rounded-full blur-3xl" />
+      <div className="academy-dark-glow pointer-events-none absolute top-1/3 -right-20 w-[450px] h-[450px] bg-[#0ea5e9]/[0.025] rounded-full blur-3xl" />
 
       {/* Bandeau d'image de l'agence avec dégradé cinématique vers le fond sombre */}
       {fond && (

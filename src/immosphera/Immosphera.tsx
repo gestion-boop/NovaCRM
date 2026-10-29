@@ -119,9 +119,9 @@ export default function Immosphera({ initialAiResultIds = null, initialAiQueryTe
   }
 
   return (
-    <div className="immosphera-root min-h-screen bg-gradient-to-b from-[#071317] via-[#091a20] to-[#050e11] text-white">
+    <div className="immosphera-root min-h-screen">
       {/* Barre de navigation et filtres de façade Immosphera 360 — Effet glace dépoli tout en haut */}
-      <div className="sticky top-0 z-40 bg-[#071317]/80 backdrop-blur-2xl border-b border-white/15 px-3 sm:px-6 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
+      <div className="immosphera-topbar sticky top-0 z-40 bg-[#071317]/80 backdrop-blur-2xl border-b border-white/15 px-3 sm:px-6 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
         <div className="flex items-center justify-between gap-2.5 flex-wrap">
           {/* Piliers du module + Séparation marquée + Filtres Catégories */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">

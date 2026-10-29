@@ -2225,6 +2225,57 @@ html.agency-novavisio.light-mode .nv-activity-shell {
   color: #64748b !important;
 }
 
+/* ── Immosphera Academy : Adaptation Mode Jour ── */
+.light-mode .academy-root {
+  background-color: var(--nv-surface-app, #eceff3) !important;
+  color: #0f172a !important;
+}
+
+.light-mode .academy-root .academy-dark-glow {
+  display: none !important;
+}
+
+.light-mode .academy-root h1,
+.light-mode .academy-root h2,
+.light-mode .academy-root h3 {
+  color: #0f172a !important;
+}
+
+.light-mode .academy-root p {
+  color: #475569 !important;
+}
+
+.light-mode .academy-root [class*="bg-[#0b1e22]"],
+.light-mode .academy-root [class*="bg-[#0b1e22]/"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+  color: #0f172a !important;
+}
+
+.light-mode .academy-root input,
+.light-mode .academy-root select,
+.light-mode .academy-root textarea {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light-mode .academy-root input::placeholder,
+.light-mode .academy-root textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+.light-mode .academy-root button:not([class*="bg-gradient-to-r"]):not([class*="bg-[#F7BC5F]"]):not([class*="bg-rose"]) {
+  color: #1e293b !important;
+}
+
+.light-mode .academy-root span[class*="text-slate-400"],
+.light-mode .academy-root span[class*="text-slate-300"] {
+  color: #64748b !important;
+}
+
+
 
 
 

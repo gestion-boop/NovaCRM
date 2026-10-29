@@ -184,3 +184,93 @@
   background: none !important;
   border: none !important;
 }
+
+/* ── Adaptation au Mode Jour (light-mode) ── */
+.light-mode .immosphera-root {
+  --background: 210 20% 96%;
+  --foreground: 210 16% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 16% 13%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 210 16% 13%;
+  --secondary: 210 20% 94%;
+  --secondary-foreground: 210 16% 13%;
+  --muted: 210 20% 94%;
+  --muted-foreground: 212 11% 39%;
+  --border: 213 18% 86%;
+  --input: 213 18% 86%;
+  background: #f1f4f8 !important;
+  color: #0f172a !important;
+}
+
+.light-mode .immosphera-root .immosphera-topbar {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
+  color: #0f172a !important;
+}
+
+.light-mode .immosphera-root .immosphera-topbar button:not([class*="bg-[#F7BC5F]"]):not([class*="bg-amber-400"]) {
+  color: #1e293b !important;
+}
+
+.light-mode .immosphera-root .immosphera-topbar span[class*="text-slate-300"],
+.light-mode .immosphera-root .immosphera-topbar span[class*="text-slate-400"] {
+  color: #334155 !important;
+}
+
+.light-mode .immosphera-root .immosphera-drawer {
+  background-color: rgba(255, 255, 255, 0.98) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.1) !important;
+  color: #0f172a !important;
+}
+
+.light-mode .immosphera-root .immosphera-drawer p,
+.light-mode .immosphera-root .immosphera-drawer span,
+.light-mode .immosphera-root .immosphera-drawer h1,
+.light-mode .immosphera-root .immosphera-drawer h2,
+.light-mode .immosphera-root .immosphera-drawer h3 {
+  color: #0f172a;
+}
+
+.light-mode .immosphera-root .immosphera-drawer .text-muted-foreground {
+  color: #475569 !important;
+}
+
+.light-mode .immosphera-root .field-card {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04) !important;
+  color: #0f172a !important;
+}
+
+.light-mode .immosphera-root .field-card input,
+.light-mode .immosphera-root .field-card select {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light-mode .immosphera-root .field-card input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.light-mode .immosphera-root .type-pill {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+.light-mode .immosphera-root .type-pill:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.light-mode .immosphera-root .type-pill--active {
+  background: linear-gradient(120deg, #F7BC5F, #E5A642) !important;
+  color: #0f172a !important;
+  border-color: #D4932B !important;
+  box-shadow: 0 4px 12px rgba(247, 188, 95, 0.3) !important;
+}
+
