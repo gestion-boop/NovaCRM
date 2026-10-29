@@ -1668,17 +1668,138 @@ export default function AcademyView() {
           </aside>
 
           {/* ═══════════════ FAÇADE PRINCIPALE (DROITE) ═══════════════ */}
-          <main className="academy-main-content flex-1 min-w-0 w-full flex flex-col gap-5">
-            {/* Barre supérieure : Recherche + Filtres Statut + Actions */}
-            <div className="academy-toolbar bg-[#0b1e22]/85 backdrop-blur-xl rounded-2xl p-3 border border-white/12 shadow-lg flex flex-wrap items-center justify-between gap-3">
+          <main className="academy-main-content flex-1 min-w-0 w-full flex flex-col gap-3.5">
+            {/* Ligne 1 : En-tête de section (Titre / Fil d'Ariane + Compteur à gauche, Actions à droite) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                {dossierActif ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCheminDossiers([]);
+                        setVueTop(false);
+                      }}
+                      className="text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      Toutes les formations
+                    </button>
+                    {cheminDossiers.map((nom, idx) => (
+                      <React.Fragment key={nom}>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span
+                          className={`text-xs font-bold ${
+                            idx === cheminDossiers.length - 1
+                              ? 'text-[#FAD592] text-sm sm:text-base font-extrabold'
+                              : 'text-slate-400'
+                          }`}
+                        >
+                          {nom}
+                        </span>
+                      </React.Fragment>
+                    ))}
+                  </>
+                ) : vueTop ? (
+                  <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-amber-400" />
+                    <span>Top formations les plus consultées</span>
+                  </h2>
+                ) : statutFiltre === 'termine' ? (
+                  <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    <span>Mes formations validées</span>
+                  </h2>
+                ) : (
+                  <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                    Toutes les formations
+                  </h2>
+                )}
+
+                <span className="px-2.5 py-0.5 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#FAD592] text-xs font-semibold">
+                  {visibles.length} formation{visibles.length > 1 ? 's' : ''}
+                </span>
+              </div>
+
+              {/* Actions d'administration */}
+              {estSuperAdmin && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={ouvrirAjout}
+                    className="h-8.5 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-[#F7BC5F]/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>Procédure</span>
+                  </button>
+
+                  <div className="relative" ref={optionsAdminRef}>
+                    <button
+                      type="button"
+                      onClick={() => setMenuOptionsAdmin((v) => !v)}
+                      title="Options d'administration"
+                      className="w-8.5 h-8.5 rounded-xl bg-white/8 hover:bg-white/15 text-slate-300 border border-white/10 flex items-center justify-center transition-all cursor-pointer"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+
+                    {menuOptionsAdmin && (
+                      <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-[#091a1e] border border-white/15 shadow-2xl py-1 z-30 text-xs text-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOptionsAdmin(false);
+                            champFond.current?.click();
+                          }}
+                          disabled={fondEnCours}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:bg-white/10 font-medium text-left cursor-pointer"
+                        >
+                          {fondEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5 text-[#F7BC5F]" />}
+                          <span>Changer la bannière</span>
+                        </button>
+                        {fond && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOptionsAdmin(false);
+                              void supprimerFond();
+                            }}
+                            disabled={fondEnCours}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-rose-300 hover:bg-white/10 font-medium text-left cursor-pointer border-t border-white/10"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                            <span>Retirer la bannière</span>
+                          </button>
+                        )}
+                        {ressources.some((r) => r.drive_file_id) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOptionsAdmin(false);
+                              void rendrePublicsLesFichiersExistants();
+                            }}
+                            disabled={reparationEnCours}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:bg-white/10 font-medium text-left border-t border-white/10 cursor-pointer"
+                          >
+                            {reparationEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5 text-[#F7BC5F]" />}
+                            <span>Rendre fichiers publics</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Ligne 2 : Barre d'outils unifiée (Recherche + Filtres Statut + Vue Grille/Liste) */}
+            <div className="academy-toolbar bg-[#0b1e22]/85 backdrop-blur-xl rounded-xl p-2.5 border border-white/10 shadow-md flex flex-wrap items-center justify-between gap-2.5">
               {/* Champ de recherche */}
-              <div className="relative flex-1 min-w-[200px] sm:min-w-[260px] max-w-md">
-                <Search className="w-4 h-4 text-[#F7BC5F] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <div className="relative flex-1 min-w-[200px] sm:min-w-[260px] max-w-sm">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   value={recherche}
                   onChange={(e) => setRecherche(e.target.value)}
                   placeholder={dossierActif ? `Rechercher dans ${dossierActif}…` : 'Rechercher une formation ou procédure…'}
-                  className="w-full pl-9 pr-8 py-2 rounded-xl bg-[#051113]/90 text-white placeholder-slate-400 text-xs sm:text-sm border border-white/15 focus:outline-none focus:border-[#F7BC5F] transition-all"
+                  className="w-full pl-8.5 pr-8 py-1.5 rounded-lg bg-[#051113]/90 text-white placeholder-slate-500 text-xs border border-white/12 focus:outline-none focus:border-[#F7BC5F] transition-all"
                 />
                 {recherche && (
                   <button
@@ -1686,55 +1807,56 @@ export default function AcademyView() {
                     onClick={() => setRecherche('')}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-3 h-3" />
                   </button>
                 )}
               </div>
 
-              {/* Onglets statut [ Toutes ] [ À faire ] [ Terminé ] */}
-              <div className="flex items-center rounded-xl bg-[#051113] p-1 border border-white/10 gap-1">
-                <button
-                  type="button"
-                  onClick={() => setStatutFiltre('toutes')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    statutFiltre === 'toutes'
-                      ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Toutes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatutFiltre('a_faire')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    statutFiltre === 'a_faire'
-                      ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  À faire
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatutFiltre('termine')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    statutFiltre === 'termine'
-                      ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Terminé
-                </button>
-              </div>
+              {/* Filtres Statut et Mode d'affichage */}
+              <div className="flex items-center gap-2">
+                {/* Onglets statut [ Toutes ] [ À faire ] [ Terminé ] */}
+                <div className="flex items-center rounded-lg bg-[#051113] p-0.5 border border-white/10 gap-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setStatutFiltre('toutes')}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                      statutFiltre === 'toutes'
+                        ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Toutes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatutFiltre('a_faire')}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                      statutFiltre === 'a_faire'
+                        ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    À faire
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatutFiltre('termine')}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                      statutFiltre === 'termine'
+                        ? 'bg-[#F7BC5F] text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Terminé
+                  </button>
+                </div>
 
-              {/* Droite : Grille/Liste + Ajout Procédure + Options */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center rounded-xl bg-[#051113] p-0.5 border border-white/10">
+                {/* Bascule Grille / Liste */}
+                <div className="flex items-center rounded-lg bg-[#051113] p-0.5 border border-white/10">
                   <button
                     onClick={() => choisirVue('grille')}
                     title="Affichage en grille"
-                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    className={`p-1 rounded-md transition-colors cursor-pointer ${
                       vueDossiers === 'grille' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -1743,167 +1865,42 @@ export default function AcademyView() {
                   <button
                     onClick={() => choisirVue('liste')}
                     title="Affichage en liste"
-                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    className={`p-1 rounded-md transition-colors cursor-pointer ${
                       vueDossiers === 'liste' ? 'bg-[#F7BC5F] text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
                     }`}
                   >
                     <ListIcon className="w-3.5 h-3.5" />
                   </button>
                 </div>
+              </div>
+            </div>
 
+            {/* Ligne 3 : Sous-dossiers — Affichés UNIQUEMENT lorsqu'on est à l'intérieur d'un dossier en comportant */}
+            {dossierActif !== null && dossiersEnfants.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sous-dossiers :</span>
+                {dossiersEnfants.map(({ nom, nombre }) => (
+                  <button
+                    key={nom}
+                    onClick={() => entrerDossier(nom)}
+                    className="px-2.5 py-1 rounded-lg bg-white/8 hover:bg-white/15 border border-white/10 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Folder className="w-3 h-3 text-[#F7BC5F]" />
+                    <span>{nom}</span>
+                    <span className="px-1.5 py-0.2 rounded bg-white/10 text-[10px] text-slate-300 font-bold">{nombre}</span>
+                  </button>
+                ))}
                 {estSuperAdmin && (
-                  <>
-                    <button
-                      onClick={ouvrirAjout}
-                      className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-[#F7BC5F] to-[#E5A642] text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-[#F7BC5F]/20 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>Procédure</span>
-                    </button>
-
-                    <div className="relative" ref={optionsAdminRef}>
-                      <button
-                        type="button"
-                        onClick={() => setMenuOptionsAdmin((v) => !v)}
-                        title="Options d'administration"
-                        className="w-9 h-9 rounded-xl bg-white/8 hover:bg-white/15 text-slate-300 border border-white/10 flex items-center justify-center transition-all cursor-pointer"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-
-                      {menuOptionsAdmin && (
-                        <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-[#091a1e] border border-white/15 shadow-2xl py-1 z-30 text-xs text-slate-200">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMenuOptionsAdmin(false);
-                              champFond.current?.click();
-                            }}
-                            disabled={fondEnCours}
-                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:bg-white/10 font-medium text-left cursor-pointer"
-                          >
-                            {fondEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5 text-[#F7BC5F]" />}
-                            <span>Changer la bannière</span>
-                          </button>
-                          {fond && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMenuOptionsAdmin(false);
-                                void supprimerFond();
-                              }}
-                              disabled={fondEnCours}
-                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-rose-300 hover:bg-white/10 font-medium text-left cursor-pointer border-t border-white/10"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                              <span>Retirer la bannière</span>
-                            </button>
-                          )}
-                          {ressources.some((r) => r.drive_file_id) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMenuOptionsAdmin(false);
-                                void rendrePublicsLesFichiersExistants();
-                              }}
-                              disabled={reparationEnCours}
-                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-slate-200 hover:bg-white/10 font-medium text-left border-t border-white/10 cursor-pointer"
-                            >
-                              {reparationEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5 text-[#F7BC5F]" />}
-                              <span>Rendre fichiers publics</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </>
+                  <button
+                    onClick={() => void creerSousDossier(dossierActif)}
+                    className="px-2 py-1 rounded-lg border border-dashed border-white/20 hover:border-[#F7BC5F] text-slate-400 hover:text-[#F7BC5F] text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Nouveau sous-dossier</span>
+                  </button>
                 )}
               </div>
-            </div>
-
-            {/* En-tête de section : Titre / Fil d'Ariane + Compteur */}
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {dossierActif ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCheminDossiers([]);
-                          setVueTop(false);
-                        }}
-                        className="text-xs font-semibold text-slate-400 hover:text-white hover:underline cursor-pointer"
-                      >
-                        Toutes les formations
-                      </button>
-                      {cheminDossiers.map((nom, idx) => (
-                        <React.Fragment key={nom}>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
-                          <button
-                            type="button"
-                            onClick={() => allerAuNiveau(idx)}
-                            disabled={idx === cheminDossiers.length - 1}
-                            className={`text-xs font-extrabold ${
-                              idx === cheminDossiers.length - 1
-                                ? 'text-[#FAD592] text-sm sm:text-base'
-                                : 'text-slate-400 hover:text-white cursor-pointer'
-                            }`}
-                          >
-                            {nom}
-                          </button>
-                        </React.Fragment>
-                      ))}
-                    </>
-                  ) : vueTop ? (
-                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                      <Trophy className="w-5 h-5 text-amber-400" />
-                      <span>Top formations les plus consultées</span>
-                    </h2>
-                  ) : statutFiltre === 'termine' ? (
-                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                      <span>Mes formations validées</span>
-                    </h2>
-                  ) : (
-                    <h2 className="text-base sm:text-lg font-black text-white">
-                      Toutes les formations
-                    </h2>
-                  )}
-                </div>
-
-                <span className="px-3 py-1 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#FAD592] text-xs font-bold">
-                  {visibles.length} formation{visibles.length > 1 ? 's' : ''}
-                </span>
-              </div>
-
-              {/* Si on est dans un dossier et qu'il y a des sous-dossiers, affichage en puces chips */}
-              {dossiersEnfants.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap pt-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sous-dossiers :</span>
-                  {dossiersEnfants.map(({ nom, nombre }) => (
-                    <button
-                      key={nom}
-                      onClick={() => entrerDossier(nom)}
-                      className="px-3 py-1.5 rounded-xl bg-white/8 hover:bg-white/15 border border-white/12 text-slate-200 hover:text-white text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
-                    >
-                      <Folder className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                      <span>{nom}</span>
-                      <span className="px-1.5 py-0.2 rounded bg-white/10 text-[10px] text-slate-300 font-extrabold">{nombre}</span>
-                    </button>
-                  ))}
-                  {estSuperAdmin && (
-                    <button
-                      onClick={() => void creerSousDossier(dossierActif)}
-                      className="px-2.5 py-1.5 rounded-xl border border-dashed border-white/20 hover:border-[#F7BC5F] text-slate-400 hover:text-[#F7BC5F] text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Nouveau sous-dossier</span>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
 
             {/* ═══════════════ GRILLE OU LISTE DES FORMATIONS EN FAÇADE ═══════════════ */}
             {visibles.length === 0 ? (
@@ -1963,9 +1960,11 @@ export default function AcademyView() {
                             onClick={() => ouvrirRessource(r)}
                             className="text-left font-bold text-sm text-white hover:text-[#FAD592] transition-colors truncate block w-full cursor-pointer mt-0.5"
                           >
-                            {dossierActif ? (r.description || r.titre) : r.titre}
+                            {dossierActif
+                              ? (r.description || r.titre)
+                              : (r.titre?.trim().toLowerCase() === 'formation' && r.description ? r.description : r.titre)}
                           </button>
-                          {!dossierActif && r.description && (
+                          {!dossierActif && r.description && r.titre?.trim().toLowerCase() !== 'formation' && r.description !== r.titre && (
                             <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{r.description}</p>
                           )}
                         </div>
@@ -2135,10 +2134,12 @@ export default function AcademyView() {
                         <div>
                           <button onClick={() => ouvrirRessource(r)} className="text-left w-full cursor-pointer">
                             <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 group-hover:text-[#FAD592] transition-colors">
-                              {dossierActif ? (r.description || r.titre) : r.titre}
+                              {dossierActif
+                                ? (r.description || r.titre)
+                                : (r.titre?.trim().toLowerCase() === 'formation' && r.description ? r.description : r.titre)}
                             </h3>
                           </button>
-                          {!dossierActif && r.description && (
+                          {!dossierActif && r.description && r.titre?.trim().toLowerCase() !== 'formation' && r.description !== r.titre && (
                             <p className="mt-1 text-xs text-slate-400 leading-relaxed line-clamp-2">{r.description}</p>
                           )}
                         </div>
