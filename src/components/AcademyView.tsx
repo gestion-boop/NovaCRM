@@ -1954,14 +1954,11 @@ export default function AcademyView() {
                           )}
                         </button>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            {(!dossierActif || r.rubrique !== dossierActif) && (
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F] truncate">
-                                {r.rubrique}
-                              </span>
-                            )}
-                            {r.duree && <span className="text-[10px] text-slate-400">· {r.duree}</span>}
-                          </div>
+                          {r.duree && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-slate-400">{r.duree}</span>
+                            </div>
+                          )}
                           <button
                             onClick={() => ouvrirRessource(r)}
                             className="text-left font-bold text-sm text-white hover:text-[#FAD592] transition-colors truncate block w-full cursor-pointer mt-0.5"
@@ -1970,9 +1967,6 @@ export default function AcademyView() {
                           </button>
                           {!dossierActif && r.description && (
                             <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{r.description}</p>
-                          )}
-                          {dossierActif && r.description && r.titre !== r.description && (
-                            <p className="text-[11px] text-slate-400/80 line-clamp-1 mt-0.5 truncate">{r.titre}</p>
                           )}
                         </div>
                       </div>
@@ -2136,26 +2130,16 @@ export default function AcademyView() {
                         </div>
                       )}
 
-                      {/* Corps de la carte : sous-titre affiché en priorité quand on est dans un dossier */}
+                      {/* Corps de la carte : sous-titre affiché dans le dossier, pas de nom de dossier redondant */}
                       <div className="flex-1 flex flex-col justify-between p-3 gap-2.5">
                         <div>
-                          {/* Dossier parent en badge sobre (seulement si hors de ce dossier) */}
-                          {(!dossierActif || r.rubrique !== dossierActif) && (
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-[#F7BC5F] mb-1 truncate">
-                              {r.rubrique}
-                            </p>
-                          )}
                           <button onClick={() => ouvrirRessource(r)} className="text-left w-full cursor-pointer">
                             <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 group-hover:text-[#FAD592] transition-colors">
                               {dossierActif ? (r.description || r.titre) : r.titre}
                             </h3>
                           </button>
-                          {/* Sous-titre à la racine, ou titre initial discret dans le dossier */}
                           {!dossierActif && r.description && (
                             <p className="mt-1 text-xs text-slate-400 leading-relaxed line-clamp-2">{r.description}</p>
-                          )}
-                          {dossierActif && r.description && r.titre !== r.description && (
-                            <p className="mt-1 text-[11px] text-slate-400/80 leading-relaxed line-clamp-1 truncate">{r.titre}</p>
                           )}
                         </div>
 
