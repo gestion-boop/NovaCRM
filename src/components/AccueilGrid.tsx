@@ -443,26 +443,6 @@ const INITIAL_TILES: TileItemNode[] = [
         gradient: 'from-[#0D9488] via-[#0F766E] to-[#042F2E]',
         badgeCount: 0,
         navTarget: 'tableau-de-bord',
-      },
-      // Demande explicite (30/08/2026) : "supprime la tuile assistant nova
-      // qui ne servira jamais" — tuile retirée d'ici (elle vivait dans ce
-      // dossier "Stratégie & Ventes"). Nova reste accessible normalement via
-      // le menu latéral (Sidebar.tsx, NAV_ITEMS 'assistant-ia' inchangé) —
-      // seul le raccourci depuis l'accueil disparaît. Retrait forcé aussi
-      // pour les grilles déjà personnalisées/enregistrées un peu plus bas
-      // (voir removeSpacer/removeAssistantIaTile dans loadTilesForKey), même
-      // principe que pour "nova-lock-spacer".
-      // Demande explicite (28/08/2026) : tuile "tableau à l'ancienne" en
-      // étiquettes laiton, données réelles du pipeline Transactions V2 par
-      // agent (Compromis / Signature / Total) — voir
-      // StatistiquesEtiquettesView.tsx.
-      {
-        id: 'statistiques-etiquettes',
-        title: 'Statistiques',
-        iconName: 'BarChart2',
-        gradient: 'from-[#B8923F] via-[#78350F] to-[#2A2211]',
-        badgeCount: 0,
-        navTarget: 'statistiques-etiquettes',
       }
     ]
   },
@@ -624,6 +604,17 @@ const INITIAL_TILES: TileItemNode[] = [
     gradient: 'from-[#00B4DB] via-[#0083B0] to-[#005C8A]',
     badgeCount: 0,
     navTarget: 'academy',
+  },
+  // Demande explicite (28/08/2026, consolidé 30/10/2026) : tuile "Statistiques" façon
+  // "tableau à l'ancienne" en étiquettes laiton, données réelles du pipeline Transactions V2
+  // par agent (Locations, Offres, Compromis, Acte authentique, Conciergerie) — réservée à Immosphera.
+  {
+    id: 'statistiques-etiquettes',
+    title: 'Statistiques',
+    iconName: 'BarChart2',
+    gradient: 'from-[#B8923F] via-[#78350F] to-[#2A2211]',
+    badgeCount: 0,
+    navTarget: 'statistiques-etiquettes',
   },
   {
     id: 'immosphera-amanda',
@@ -1494,7 +1485,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   };
   const retirerTuilesMasqueesRecursif = (items: TileItemNode[], hiddenIds: Set<string>): TileItemNode[] =>
     items
-      .filter((t) => !hiddenIds.has(t.id) || (t.id === 'reserver-camera' && !estAgenceConseilsFinances(activeAgency)))
+      .filter((t) => !hiddenIds.has(t.id) || (t.id === 'reserver-camera' && !estAgenceConseilsFinances(activeAgency)) || (t.id === 'statistiques-etiquettes' && estImmospheraAgency(activeAgency)))
       .map((t) => (t.children ? { ...t, children: retirerTuilesMasqueesRecursif(t.children, hiddenIds) } : t));
 
   // Signalé (23 septembre) : « Lucie et peut-être les autres courtiers n'ont
@@ -1542,6 +1533,60 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     }
     const cameraTile = findInitialTile('reserver-camera');
     return cameraTile ? [...items, cameraTile] : items;
+  };
+
+  // Signalé (30 octobre) : « je n'ai plus la tuile statistique dans immosphera »
+  // La tuile Statistiques (tableau d'étiquettes laiton du pipeline Transactions V2)
+  // est réservée exclusivement à Immosphera.
+  // Si le dossier "Immosphera" existe sur la grille, la tuile doit se trouver
+  // à l'intérieur de ce dossier. Si le dossier n'existe pas, elle doit être présente
+  // à la racine de la grille Immosphera.
+  const reinjecterStatistiques = (items: TileItemNode[]): TileItemNode[] => {
+    if (!estImmospheraAgency(activeAgency)) return items;
+
+    const statsTile: TileItemNode = findInitialTile('statistiques-etiquettes') || {
+      id: 'statistiques-etiquettes',
+      title: 'Statistiques',
+      iconName: 'BarChart2',
+      gradient: 'from-[#B8923F] via-[#78350F] to-[#2A2211]',
+      badgeCount: 0,
+      navTarget: 'statistiques-etiquettes',
+    };
+
+    const dossierImmoIndex = items.findIndex((t) => t.isFolder && estDossierImmosphera(t.title));
+
+    if (dossierImmoIndex !== -1) {
+      const dossierImmo = items[dossierImmoIndex];
+      const enfants = dossierImmo.children || [];
+      const dejaDansDossier = enfants.some((c) => c.id === 'statistiques-etiquettes');
+      if (dejaDansDossier) {
+        // Déjà présent dans le dossier Immosphera : s'assurer qu'il n'y a pas de doublon orphelin ailleurs
+        return items.map((t, idx) => {
+          if (idx === dossierImmoIndex) return t;
+          if (t.id === 'statistiques-etiquettes') return null as any;
+          if (t.children) return { ...t, children: t.children.filter((c) => c.id !== 'statistiques-etiquettes') };
+          return t;
+        }).filter(Boolean);
+      }
+
+      // Absent du dossier Immosphera : retirer les éventuelles occurrences ailleurs (ex: racine ou ancien dossier)
+      // et l'ajouter proprement dans les enfants du dossier Immosphera
+      const sansAncien = items
+        .filter((t) => t.id !== 'statistiques-etiquettes')
+        .map((t) => (t.children ? { ...t, children: t.children.filter((c) => c.id !== 'statistiques-etiquettes') } : t));
+
+      return sansAncien.map((t) =>
+        t.isFolder && estDossierImmosphera(t.title)
+          ? { ...t, children: [...(t.children || []), statsTile] }
+          : t
+      );
+    }
+
+    // Aucun dossier Immosphera : s'assurer que la tuile est présente
+    if (existsRecursive(items, 'statistiques-etiquettes')) {
+      return items;
+    }
+    return [...items, statsTile];
   };
 
   // Demande explicite (23 septembre) : « le dossier Communication ne sert
@@ -1593,7 +1638,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // sans jamais passer par ici — voir idsCouvertsParVerrou plus haut) ET
     // pas emporté par un dossier que l'utilisateur a lui-même masqué.
     const estAbsent = (id: string) =>
-      !existsRecursive(base, id) && !idsCouvertsParVerrou(id) && (!hiddenIds.has(id) || (id === 'reserver-camera' && !estAgenceConseilsFinances(activeAgency)));
+      !existsRecursive(base, id) && !idsCouvertsParVerrou(id) && (!hiddenIds.has(id) || (id === 'reserver-camera' && !estAgenceConseilsFinances(activeAgency)) || (id === 'statistiques-etiquettes' && estImmospheraAgency(activeAgency)));
     // Cloisonnement strict par agence : aucune tuile réservée à une agence
     // ne doit être injectée dans la grille d'une autre agence (évite les cases fantômes
     // invisibles qui repoussent les autres tuiles vers le bas).
@@ -1728,7 +1773,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       if (hiddenIds.size > 0) {
         const stripHidden = (items: TileItemNode[]): TileItemNode[] =>
           items
-            .filter((t) => !hiddenIds.has(t.id) || findInitialTile(t.id)?.locked === true || (t.id === 'reserver-camera' && !estAgenceConseilsFinances(activeAgency)))
+            .filter((t) => !hiddenIds.has(t.id) || findInitialTile(t.id)?.locked === true || (t.id === 'reserver-camera' && !estAgenceConseilsFinances(activeAgency)) || (t.id === 'statistiques-etiquettes' && estImmospheraAgency(activeAgency)))
             .map((t) => (t.children ? { ...t, children: stripHidden(t.children) } : t));
         base = stripHidden(base);
       }
@@ -1755,6 +1800,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         return item.children ? { ...item, children: resyncLockedFolders(item.children) } : item;
       });
     base = resyncLockedFolders(base);
+    base = reinjecterStatistiques(base);
     return dedupeRecursive(base);
   };
 
@@ -1798,6 +1844,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         console.error('Failed to parse saved tiles:', e);
       }
     }
+    base = reinjecterStatistiques(base);
     return reconcilierGrille(
       base,
       // Pas d'injection tant que la liste des tuiles masquées du compte
@@ -2044,22 +2091,33 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
 
         if (aDesTuilesLocales) {
           homeSyncReadyAgencies.add(clefSync);
-          const locales = toujoursActive() ? tilesRef.current : tuilesLocales;
+          const baseLocales = toujoursActive() ? tilesRef.current : tuilesLocales;
+          const locales = reinjecterStatistiques(baseLocales);
+          if (JSON.stringify(locales) !== JSON.stringify(baseLocales)) {
+            try { localStorage.setItem(cleTuiles, JSON.stringify(locales)); } catch { /* ignore */ }
+            if (toujoursActive()) {
+              skipNextTilesSaveRef.current = true;
+              derniersTilesRef.current = JSON.stringify(locales);
+              setTiles(locales);
+            }
+          }
           const maj = Date.now();
           ecrireHorodatageLocal(cleTuiles, maj);
           void ecrireDispositionAgence('home_tiles', currentUser.uid, agencyId, locales, maj);
         } else if (tuilesServeur && tuilesServeur.length > 0) {
           // Premier chargement sur un appareil vierge uniquement
           const normalisees = reinjecterReserverCamera(
-            retirerTuilesMasqueesRecursif(
-              retirerDossierCommunication(
-                reinjecterPipelineDansSonDossier(
-                  removeQuickBarDuplicates(
-                    (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+            reinjecterStatistiques(
+              retirerTuilesMasqueesRecursif(
+                retirerDossierCommunication(
+                  reinjecterPipelineDansSonDossier(
+                    removeQuickBarDuplicates(
+                      (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+                    )
                   )
-                )
-              ),
-              listerIdsMasquesAplatis()
+                ),
+                listerIdsMasquesAplatis()
+              )
             )
           );
           try { localStorage.setItem(cleTuiles, JSON.stringify(normalisees)); } catch { /* ignore */ }
@@ -2209,6 +2267,19 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     }
   }, [canSeeConseilsFinances, currentUser?.uid]);
 
+  // Démasquage automatique de Statistiques sur Immosphera si elle
+  // a été marquée masquée globalement (ex: masquée depuis Conseils Finances ou Novavisio).
+  useEffect(() => {
+    if (canSeeImmospheraExtras) {
+      const masques = lireMasquees();
+      if (masques.some((t) => t.id === 'statistiques-etiquettes')) {
+        void reafficherTuile(currentUser?.uid, 'statistiques-etiquettes').then(() => {
+          setVersionMasquees((v) => v + 1);
+        });
+      }
+    }
+  }, [canSeeImmospheraExtras, currentUser?.uid]);
+
   // Tuile "Annonce" (30/08/2026) : "que pour les super admin... Philippe,
   // Mélanie et Sylvain qui resteront toujours super admin" — déjà couvert
   // par isSuperAdmin ci-dessous. Laetitia Pioche : "on va la rajouter en
@@ -2336,7 +2407,21 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         // dossier restait chez ceux qui l'avaient déjà, prise pour un ajout
         // personnel. Le verrou retient maintenant ces retraits.
         const ajoutsPersonnels = enfantsUtilisateur.filter((c) => !idsImposes.has(c.id) && !idsRetires.has(c.id));
+        if (estDossierImmosphera(withChildren.title) && estImmospheraAgency(activeAgency)) {
+          const aDejaStats = imposes.some((c) => c.id === 'statistiques-etiquettes') || ajoutsPersonnels.some((c) => c.id === 'statistiques-etiquettes');
+          if (!aDejaStats) {
+            const statsTile = findInitialTile('statistiques-etiquettes');
+            if (statsTile) ajoutsPersonnels.push(statsTile);
+          }
+        }
         return { ...withChildren, ...apparence, ...couleur(withChildren, withChildren.gradient), children: [...imposes, ...ajoutsPersonnels], locked: true };
+      }
+      if (estDossierImmosphera(withChildren.title) && estImmospheraAgency(activeAgency)) {
+        const enfants = withChildren.children || [];
+        if (!enfants.some((c) => c.id === 'statistiques-etiquettes')) {
+          const statsTile = findInitialTile('statistiques-etiquettes');
+          if (statsTile) return { ...withChildren, ...apparence, ...couleur(withChildren, withChildren.gradient), children: [...enfants, statsTile], locked: true };
+        }
       }
       return { ...withChildren, ...apparence, ...couleur(withChildren, withChildren.gradient), locked: true };
     });
@@ -3421,7 +3506,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     && (!NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
     && (!CONSEILS_EXTRA_TILE_IDS.includes(t.id) || canSeeConseilsFinances)
     && ((t.id !== 'annonce' && t.id !== 'nova-lock-spacer') || canSeeAnnonceTile)
-    && (!idsMasques.has(t.id) || findInitialTile(t.id)?.locked === true || (t.id === 'reserver-camera' && !canSeeConseilsFinances));
+    && (!idsMasques.has(t.id) || findInitialTile(t.id)?.locked === true || (t.id === 'reserver-camera' && !canSeeConseilsFinances) || (t.id === 'statistiques-etiquettes' && canSeeImmospheraExtras));
 
   const filtrerEnProfondeur = (items: TileItemNode[]): TileItemNode[] =>
     items
