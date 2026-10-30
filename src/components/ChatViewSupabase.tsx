@@ -2516,6 +2516,26 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const convSchedulePhotoInputRef = useRef<HTMLInputElement>(null);
   const convScheduleVideoInputRef = useRef<HTMLInputElement>(null);
 
+  // État d'édition d'un message programmé existant (canal ou conversation directe)
+  const [editingScheduled, setEditingScheduled] = useState<{
+    id: string;
+    contexte: 'channel' | 'conversation';
+    targetTitle: string;
+    text: string;
+    date: string;
+    time: string;
+    media: {
+      kind: 'image' | 'video';
+      url: string;
+      fileName?: string;
+      mime?: string;
+    } | null;
+    loadingMedia?: boolean;
+    isSaving?: boolean;
+  } | null>(null);
+  const editSchedulePhotoInputRef = useRef<HTMLInputElement>(null);
+  const editScheduleVideoInputRef = useRef<HTMLInputElement>(null);
+
   const handleChannelSchedulePhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -3065,6 +3085,170 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setConvScheduled(await chargerMessagesProgrammes('conversation_id', activeConversationId));
     toast.success(`Message programmé pour le ${formaterEcheance(scheduledAt)}.`);
   };
+
+  // ── Modification d'un message programmé (Canal ou Conversation) ──
+  const ouvrirEditionMessageProgramme = (m: MessageProgramme, contexte: 'channel' | 'conversation') => {
+    const decoded = decoderMessageProgramme(m);
+    const d = new Date(m.scheduled_at);
+    const annee = d.getFullYear();
+    const mois = String(d.getMonth() + 1).padStart(2, '0');
+    const jour = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${annee}-${mois}-${jour}`;
+
+    const heures = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const heureStr = `${heures}:${minutes}`;
+
+    let targetTitle = 'le chat';
+    if (contexte === 'channel') {
+      targetTitle = activeChannel ? `# ${activeChannel.name}` : 'le canal';
+    } else {
+      const conv = conversations.find((c) => c.id === activeConversationId);
+      targetTitle = conv ? conversationLabel(conv) : 'la discussion';
+    }
+
+    setEditingScheduled({
+      id: m.id,
+      contexte,
+      targetTitle,
+      text: decoded.text,
+      date: dateStr,
+      time: heureStr,
+      media: decoded.attachmentUrl
+        ? {
+            kind: decoded.kind as 'image' | 'video',
+            url: decoded.attachmentUrl,
+            fileName: decoded.fileName,
+            mime: decoded.attachmentMime,
+          }
+        : null,
+      loadingMedia: false,
+      isSaving: false,
+    });
+    // Fermer les popovers pour que l'arrière-plan soit dégagé
+    setShowChannelSchedule(false);
+    setShowConvSchedule(false);
+  };
+
+  const handleEditSchedulePhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !editingScheduled) return;
+    setEditingScheduled((prev) => prev ? { ...prev, loadingMedia: true } : null);
+    try {
+      const url = await compresserImage(file);
+      if (!url) {
+        toast.error("Impossible de charger la photo sélectionnée.");
+        return;
+      }
+      setEditingScheduled((prev) => prev ? {
+        ...prev,
+        media: {
+          kind: 'image',
+          url,
+          fileName: file.name,
+          mime: file.type || 'image/jpeg',
+        },
+      } : null);
+      toast.success('Photo attachée.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erreur lors du traitement de la photo.');
+    } finally {
+      setEditingScheduled((prev) => prev ? { ...prev, loadingMedia: false } : null);
+    }
+  };
+
+  const handleEditScheduleVideoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !editingScheduled) return;
+    setEditingScheduled((prev) => prev ? { ...prev, loadingMedia: true } : null);
+    try {
+      const url = await preparerFichierVideo(file, `Programmé - ${editingScheduled.targetTitle}`);
+      setEditingScheduled((prev) => prev ? {
+        ...prev,
+        media: {
+          kind: 'video',
+          url,
+          fileName: file.name,
+          mime: file.type || 'video/mp4',
+        },
+      } : null);
+      toast.success('Vidéo attachée.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erreur lors du traitement de la vidéo.');
+    } finally {
+      setEditingScheduled((prev) => prev ? { ...prev, loadingMedia: false } : null);
+    }
+  };
+
+  const sauvegarderMessageProgramme = async () => {
+    if (!editingScheduled || !currentUser) return;
+    const textTrim = editingScheduled.text.trim();
+    if (!textTrim && !editingScheduled.media) {
+      toast.error('Le message doit contenir du texte ou une pièce jointe.');
+      return;
+    }
+    const scheduledAt = combinerDateHeure(editingScheduled.date, editingScheduled.time);
+    if (!scheduledAt) {
+      toast.error('Choisissez une date et une heure dans le futur.');
+      return;
+    }
+
+    setEditingScheduled((prev) => prev ? { ...prev, isSaving: true } : null);
+    try {
+      const kind = editingScheduled.media?.kind || 'text';
+      const body = editingScheduled.media
+        ? JSON.stringify({
+            __media__: true,
+            kind: editingScheduled.media.kind,
+            attachmentUrl: editingScheduled.media.url,
+            attachmentMime: editingScheduled.media.mime,
+            fileName: editingScheduled.media.fileName,
+            text: textTrim,
+          })
+        : textTrim;
+
+      const { error } = await supabase
+        .from('scheduled_messages' as any)
+        .update({
+          body,
+          kind,
+          scheduled_at: scheduledAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', editingScheduled.id)
+        .eq('status', 'pending');
+
+      if (error) {
+        toast.error(`Impossible de modifier le message : ${error.message}`);
+        setEditingScheduled((prev) => prev ? { ...prev, isSaving: false } : null);
+        return;
+      }
+
+      toast.success(`Message programmé mis à jour pour le ${formaterEcheance(scheduledAt)}.`);
+      const ctx = editingScheduled.contexte;
+      setEditingScheduled(null);
+
+      if (ctx === 'channel' && activeChannel?.id) {
+        setChannelScheduled(await chargerMessagesProgrammes('channel_id', activeChannel.id));
+      } else if (ctx === 'conversation' && activeConversationId) {
+        setConvScheduled(await chargerMessagesProgrammes('conversation_id', activeConversationId));
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Erreur lors de la mise à jour.');
+      setEditingScheduled((prev) => prev ? { ...prev, isSaving: false } : null);
+    }
+  };
+
+  useEffect(() => {
+    if (!editingScheduled) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEditingScheduled(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editingScheduled]);
   // Demande explicite (11 septembre) : « dans le [menu] plus, rajoute la
   // dictée vocale » — DIFFÉRENT du message vocal (bouton micro rouge
   // ci-dessous, qui ENREGISTRE et ENVOIE un fichier audio) : ici la voix est
@@ -6482,8 +6666,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               {convScheduled.map((m) => {
                                 const decoded = decoderMessageProgramme(m);
                                 return (
-                                  <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg p-2 border border-white/5">
-                                    <div className="min-w-0 flex-1">
+                                  <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 hover:bg-white/[0.08] rounded-lg p-2 border border-white/5 hover:border-[#F7BC5F]/30 transition-all">
+                                    <div
+                                      className="min-w-0 flex-1 cursor-pointer group/item"
+                                      onClick={() => ouvrirEditionMessageProgramme(m, 'conversation')}
+                                      title="Cliquer pour modifier ce message programmé"
+                                    >
                                       <div className="flex items-center gap-1.5 text-[10px] text-[#F7BC5F] font-medium">
                                         <Clock className="w-3 h-3 shrink-0" />
                                         <span>{formaterEcheance(m.scheduled_at)}</span>
@@ -6498,18 +6686,28 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                           </span>
                                         )}
                                       </div>
-                                      <p className="truncate text-slate-300 mt-0.5" title={decoded.text || decoded.fileName || ''}>
+                                      <p className="truncate text-slate-300 group-hover/item:text-white mt-0.5" title={decoded.text || decoded.fileName || ''}>
                                         {decoded.text || (decoded.kind === 'image' ? 'Photo jointe' : decoded.kind === 'video' ? 'Vidéo jointe' : 'Message')}
                                       </p>
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => void annulerMessageProgramme(m.id, 'conversation')}
-                                      className="text-slate-400 hover:text-white shrink-0 p-1 hover:bg-white/10 rounded"
-                                      title="Annuler"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
+                                    <div className="flex items-center gap-0.5 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => ouvrirEditionMessageProgramme(m, 'conversation')}
+                                        className="text-slate-400 hover:text-[#F7BC5F] shrink-0 p-1 hover:bg-white/10 rounded transition-colors"
+                                        title="Modifier ce message programmé"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => void annulerMessageProgramme(m.id, 'conversation')}
+                                        className="text-slate-400 hover:text-red-400 shrink-0 p-1 hover:bg-white/10 rounded transition-colors"
+                                        title="Annuler ce message programmé"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -7273,8 +7471,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           {channelScheduled.map((m) => {
                             const decoded = decoderMessageProgramme(m);
                             return (
-                              <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 rounded-lg p-2 border border-white/5">
-                                <div className="min-w-0 flex-1">
+                              <div key={m.id} className="flex items-center justify-between gap-2 text-xs text-slate-200 bg-white/5 hover:bg-white/[0.08] rounded-lg p-2 border border-white/5 hover:border-[#F7BC5F]/30 transition-all">
+                                <div
+                                  className="min-w-0 flex-1 cursor-pointer group/item"
+                                  onClick={() => ouvrirEditionMessageProgramme(m, 'channel')}
+                                  title="Cliquer pour modifier ce message programmé"
+                                >
                                   <div className="flex items-center gap-1.5 text-[10px] text-[#F7BC5F] font-medium">
                                     <Clock className="w-3 h-3 shrink-0" />
                                     <span>{formaterEcheance(m.scheduled_at)}</span>
@@ -7289,18 +7491,28 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                       </span>
                                     )}
                                   </div>
-                                  <p className="truncate text-slate-300 mt-0.5" title={decoded.text || decoded.fileName || ''}>
+                                  <p className="truncate text-slate-300 group-hover/item:text-white mt-0.5" title={decoded.text || decoded.fileName || ''}>
                                     {decoded.text || (decoded.kind === 'image' ? 'Photo jointe' : decoded.kind === 'video' ? 'Vidéo jointe' : 'Message')}
                                   </p>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => void annulerMessageProgramme(m.id, 'channel')}
-                                  className="text-slate-400 hover:text-white shrink-0 p-1 hover:bg-white/10 rounded"
-                                  title="Annuler"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => ouvrirEditionMessageProgramme(m, 'channel')}
+                                    className="text-slate-400 hover:text-[#F7BC5F] shrink-0 p-1 hover:bg-white/10 rounded transition-colors"
+                                    title="Modifier ce message programmé"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void annulerMessageProgramme(m.id, 'channel')}
+                                    className="text-slate-400 hover:text-red-400 shrink-0 p-1 hover:bg-white/10 rounded transition-colors"
+                                    title="Annuler ce message programmé"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
                             );
                           })}
@@ -8403,6 +8615,198 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modale d'édition d'un message programmé (Canal ou Conversation directe) */}
+      {editingScheduled && createPortal(
+        <div
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => !editingScheduled.isSaving && setEditingScheduled(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#0b1c1e] border border-[#F7BC5F]/35 rounded-2xl w-full max-w-lg shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden text-slate-100"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10 bg-white/[0.02]">
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+                  <span>Modifier le message programmé</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5 truncate">
+                  Destinataire : <span className="text-[#F7BC5F] font-semibold">{editingScheduled.targetTitle}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !editingScheduled.isSaving && setEditingScheduled(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 shrink-0 transition-colors"
+                title="Fermer sans enregistrer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Corps du formulaire */}
+            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              {/* Date & Heure */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                  <span>Date et heure d'envoi</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <input
+                    type="date"
+                    value={editingScheduled.date}
+                    onChange={(e) => setEditingScheduled((prev) => prev ? { ...prev, date: e.target.value } : null)}
+                    min={new Date().toISOString().slice(0, 10)}
+                    className="w-full bg-[#081318] border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F7BC5F] transition-colors"
+                  />
+                  <input
+                    type="time"
+                    value={editingScheduled.time}
+                    onChange={(e) => setEditingScheduled((prev) => prev ? { ...prev, time: e.target.value } : null)}
+                    className="w-full bg-[#081318] border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F7BC5F] transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Texte du message */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wide">
+                  Contenu du message
+                </label>
+                <textarea
+                  value={editingScheduled.text}
+                  onChange={(e) => setEditingScheduled((prev) => prev ? { ...prev, text: e.target.value } : null)}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                      e.preventDefault();
+                      void sauvegarderMessageProgramme();
+                    }
+                  }}
+                  placeholder="Rédigez ou modifiez le texte du message..."
+                  rows={4}
+                  className="w-full bg-[#081318] border border-white/20 rounded-xl p-3 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors resize-none custom-scrollbar"
+                />
+                <p className="text-[10px] text-slate-500 text-right">
+                  Astuce : Ctrl+Entrée pour enregistrer
+                </p>
+              </div>
+
+              {/* Média actuel si présent */}
+              {editingScheduled.media && (
+                <div className="relative p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+                  {editingScheduled.media.kind === 'image' ? (
+                    <img
+                      src={editingScheduled.media.url}
+                      alt="Aperçu photo"
+                      className="w-14 h-14 rounded-lg object-cover border border-white/10 bg-black/40 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-lg bg-black/50 border border-white/10 flex items-center justify-center shrink-0">
+                      <VideoIcon className="w-6 h-6 text-sky-400" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="text-xs text-white font-medium truncate flex items-center gap-1.5">
+                      {editingScheduled.media.kind === 'image' ? '📷 Photo attachée' : '🎥 Vidéo attachée'}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">{editingScheduled.media.fileName || 'Fichier joint'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingScheduled((prev) => prev ? { ...prev, media: null } : null)}
+                    className="w-8 h-8 rounded-lg hover:bg-red-500/10 hover:border-red-500/30 border border-transparent flex items-center justify-center text-slate-400 hover:text-red-400 shrink-0 transition-all"
+                    title="Supprimer la pièce jointe"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Boutons pour joindre ou remplacer photo/vidéo */}
+              <div className="space-y-1.5">
+                <input
+                  ref={editSchedulePhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={handleEditSchedulePhotoPick}
+                />
+                <input
+                  ref={editScheduleVideoInputRef}
+                  type="file"
+                  accept="video/*"
+                  hidden
+                  onChange={handleEditScheduleVideoPick}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => editSchedulePhotoInputRef.current?.click()}
+                    disabled={editingScheduled.loadingMedia || editingScheduled.isSaving}
+                    className="flex-1 py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-slate-200 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40 cursor-pointer"
+                    title={editingScheduled.media ? "Remplacer par une photo" : "Joindre une photo"}
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 text-[#F7BC5F]" />
+                    <span>{editingScheduled.media?.kind === 'image' ? 'Changer la photo' : 'Joindre une photo'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => editScheduleVideoInputRef.current?.click()}
+                    disabled={editingScheduled.loadingMedia || editingScheduled.isSaving}
+                    className="flex-1 py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-slate-200 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40 cursor-pointer"
+                    title={editingScheduled.media ? "Remplacer par une vidéo" : "Joindre une vidéo"}
+                  >
+                    <VideoIcon className="w-3.5 h-3.5 text-sky-400" />
+                    <span>{editingScheduled.media?.kind === 'video' ? 'Changer la vidéo' : 'Joindre une vidéo'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {editingScheduled.loadingMedia && (
+                <p className="text-xs text-[#F7BC5F] animate-pulse text-center flex items-center justify-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Traitement du média en cours...</span>
+                </p>
+              )}
+            </div>
+
+            {/* Footer / Actions */}
+            <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-white/10 bg-white/[0.02]">
+              <button
+                type="button"
+                onClick={() => setEditingScheduled(null)}
+                disabled={editingScheduled.isSaving}
+                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold transition-colors disabled:opacity-40"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => void sauvegarderMessageProgramme()}
+                disabled={(!editingScheduled.text.trim() && !editingScheduled.media) || editingScheduled.loadingMedia || editingScheduled.isSaving}
+                className="px-5 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#d4a83b] disabled:opacity-40 text-slate-950 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-98 cursor-pointer"
+              >
+                {editingScheduled.isSaving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Enregistrement…</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Enregistrer les modifications</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>,
