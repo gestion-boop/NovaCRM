@@ -743,7 +743,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
               className={cn(
                 // Ticket #4 (nouvelle base) : fond de carte plus marqué, moins
                 // transparent (bg-card/96 laissait trop transparaître le fond).
-                "group relative flex h-full min-h-[286px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card cursor-pointer [content-visibility:auto] [contain-intrinsic-size:0_286px]",
+                "group relative flex h-full min-h-[220px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card cursor-pointer [content-visibility:auto] [contain-intrinsic-size:0_220px]",
                 "hover:border-[hsl(43_55%_40%/0.42)] hover:shadow-[0_16px_40px_hsl(43_70%_28%/0.13)] hover:-translate-y-0.5 transition-all duration-200",
                 l.archived_at && "opacity-35 grayscale border-dashed",
               )}
@@ -916,25 +916,15 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                   )}
                 </div>
 
-                {/* ── Pipeline + Commentaires ── */}
-                <div className="border-t border-border/60 pt-3 grid grid-cols-1 gap-2.5 text-[13px]">
-                  {l.pipeline_stages?.name && (
-                    <div>
-                      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">
-                        Pipeline
-                      </p>
-                      <p className="font-semibold text-foreground">{l.pipeline_stages.name}</p>
-                    </div>
-                  )}
-                  {l.comments && (
-                    <div className={cn(l.pipeline_stages?.name ? "" : "col-span-2")}>
-                      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">
-                        Commentaires
-                      </p>
-                      <p className="text-muted-foreground line-clamp-2">{l.comments}</p>
-                    </div>
-                  )}
-                </div>
+                {/* ── Pipeline ── */}
+                {l.pipeline_stages?.name && (
+                  <div className="border-t border-border/60 pt-2.5 text-[13px]">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">
+                      Pipeline
+                    </p>
+                    <p className="font-semibold text-foreground">{l.pipeline_stages.name}</p>
+                  </div>
+                )}
               </div>
 
               {/* ── Footer : créateur + flèche ── */}
