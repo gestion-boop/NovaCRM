@@ -43,6 +43,7 @@ import { useTasks } from '@/hooks/useTasks';
 import { useLeadChat } from '@/hooks/useLeadChat';
 import { useDocumentRequests, DOC_REQUEST_STATUS_LABELS, DOC_CATEGORIES } from '@/hooks/useDocumentRequests';
 import { useAuth } from '@/context/AuthContext';
+import { LiveVoiceWaveform } from '@/components/LiveVoiceWaveform';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1428,6 +1429,7 @@ export default function ClientProfileView({
   const [showReadByFor, setShowReadByFor] = useState<string | null>(null);
   const [isRecordingChat, setIsRecordingChat] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [chatAudioStream, setChatAudioStream] = useState<MediaStream | null>(null);
   const [uploadingChatMedia, setUploadingChatMedia] = useState(false);
   const chatMediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const chatAudioChunksRef = React.useRef<Blob[]>([]);
@@ -1628,6 +1630,7 @@ export default function ClientProfileView({
       chatAudioChunksRef.current = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chatAudioChunksRef.current.push(e.data); };
       recorder.start(100);
+      setChatAudioStream(stream);
       setIsRecordingChat(true);
       setRecordingSeconds(0);
       chatRecordingTimerRef.current = setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
@@ -1637,6 +1640,7 @@ export default function ClientProfileView({
   };
 
   const handleStopRecordingChat = async (cancel = false) => {
+    setChatAudioStream(null);
     const recorder = chatMediaRecorderRef.current;
     if (chatRecordingTimerRef.current) { clearInterval(chatRecordingTimerRef.current); chatRecordingTimerRef.current = null; }
     const duration = recordingSeconds;
@@ -1691,6 +1695,7 @@ export default function ClientProfileView({
         recorder.stream.getTracks().forEach((t) => t.stop());
         setIsRecordingChat(false);
         setRecordingSeconds(0);
+        setChatAudioStream(null);
       }
       chatAudioChunksRef.current = [];
     };
@@ -4586,20 +4591,23 @@ export default function ClientProfileView({
                 </div>
 
                 {isRecordingChat && (
-                  <div className="flex items-center gap-3 px-3 py-2 mb-2 rounded-xl bg-rose-500/10 border border-rose-500/30">
-                    <span className="relative flex h-2.5 w-2.5">
+                  <div className="flex items-center gap-2.5 px-3 py-2 mb-2 rounded-xl bg-rose-500/10 border border-rose-500/30 backdrop-blur-md animate-in fade-in slide-in-from-bottom-1 duration-150">
+                    <span className="relative flex h-2.5 w-2.5 shrink-0">
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-500" />
                     </span>
-                    <span className="text-xs font-mono text-rose-300 flex-1">
-                      {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')} — Enregistrement...
+                    <span className="text-xs font-mono font-bold text-rose-300 shrink-0">
+                      {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}
                     </span>
-                    <button type="button" onClick={() => void handleStopRecordingChat(true)} className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300" title="Annuler">
-                      <X className="w-4 h-4" />
-                    </button>
-                    <button type="button" onClick={() => void handleStopRecordingChat(false)} className="p-1.5 rounded-lg bg-rose-500 text-white" title="Envoyer">
-                      <Square className="w-4 h-4" />
-                    </button>
+                    <LiveVoiceWaveform stream={chatAudioStream} className="h-6 flex-1 min-w-[70px] max-w-[260px]" />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button type="button" onClick={() => void handleStopRecordingChat(true)} className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 transition-colors" title="Annuler">
+                        <X className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => void handleStopRecordingChat(false)} className="p-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-950/40 transition-all active:scale-95 flex items-center justify-center" title="Envoyer">
+                        <Square className="w-4 h-4 fill-current" />
+                      </button>
+                    </div>
                   </div>
                 )}
 

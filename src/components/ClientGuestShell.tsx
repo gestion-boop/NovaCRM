@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useLeadChat, LeadMessage } from '@/hooks/useLeadChat';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
+import { LiveVoiceWaveform } from '@/components/LiveVoiceWaveform';
 
 // Ticket "Espace Client" (refonte) : demande explicite — un espace
 // "classique" façon Messenger, on atterrit DIRECTEMENT dans le chat (plus
@@ -148,6 +149,7 @@ const ClientGuestShell: React.FC = () => {
   // la dictée ci-dessus, qui convertit la voix en texte).
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -161,6 +163,7 @@ const ClientGuestShell: React.FC = () => {
       audioChunksRef.current = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       recorder.start(100);
+      setAudioStream(stream);
       setIsRecording(true);
       setRecordingSeconds(0);
       recordingTimerRef.current = setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
@@ -170,6 +173,7 @@ const ClientGuestShell: React.FC = () => {
   };
 
   const stopRecording = async (cancel = false) => {
+    setAudioStream(null);
     const recorder = mediaRecorderRef.current;
     if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null; }
     const duration = recordingSeconds;
@@ -578,14 +582,15 @@ const ClientGuestShell: React.FC = () => {
         )}
 
         {isRecording ? (
-          <div className="flex items-center gap-3 bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-2.5">
+          <div className="flex items-center gap-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl px-3 py-2 animate-in fade-in slide-in-from-bottom-1 duration-150">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
-            <span className="flex-1 text-sm text-rose-200 font-semibold">Enregistrement... {recordingSeconds}s</span>
-            <button onClick={() => void stopRecording(true)} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10" title="Annuler">
+            <span className="text-xs font-mono font-bold text-rose-300 shrink-0">{recordingSeconds}s</span>
+            <LiveVoiceWaveform stream={audioStream} className="h-6 flex-1 min-w-[70px] max-w-[260px]" />
+            <button onClick={() => void stopRecording(true)} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors" title="Annuler">
               <Trash2 className="w-4 h-4" />
             </button>
-            <button onClick={() => void stopRecording(false)} className="p-2 rounded-lg bg-[#F7BC5F] text-slate-950" title="Envoyer">
-              <Square className="w-4 h-4" />
+            <button onClick={() => void stopRecording(false)} className="p-1.5 rounded-lg bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950 font-bold transition-all active:scale-95 flex items-center justify-center" title="Envoyer">
+              <Square className="w-4 h-4 fill-current" />
             </button>
           </div>
         ) : (

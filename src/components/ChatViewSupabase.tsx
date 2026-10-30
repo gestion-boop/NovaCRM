@@ -35,6 +35,7 @@ import {
   ligneDirecteDepuisTempsReel,
 } from '@/lib/affichageFil';
 import { fermerNotificationsSysteme } from '@/lib/notificationsLues';
+import { LiveVoiceWaveform } from '@/components/LiveVoiceWaveform';
 
 const MAX_VIDEO_SIZE = 150 * 1024 * 1024; // 150 Mo — même plafond que ClientProfileView.tsx
 
@@ -555,6 +556,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   const channelRecordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isRecordingChannel, setIsRecordingChannel] = useState(false);
   const [recordingChannelSeconds, setRecordingChannelSeconds] = useState(0);
+  const [channelAudioStream, setChannelAudioStream] = useState<MediaStream | null>(null);
   // Demandé (4 septembre) : « pour les envois vocaux, je voudrais avoir un
   // bouton d'envoi et de réécoute avant envoi ». Jusqu'ici, arrêter
   // l'enregistrement l'envoyait aussitôt : aucun moyen de se réécouter, ni de
@@ -3361,6 +3363,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const [isRecordingConv, setIsRecordingConv] = useState(false);
   const [recordingConvSeconds, setRecordingConvSeconds] = useState(0);
+  const [convAudioStream, setConvAudioStream] = useState<MediaStream | null>(null);
   // Même attente avant envoi que côté canal — voir le commentaire sur
   // `channelVocalPret` plus haut.
   const [convVocalPret, setConvVocalPret] = useState<{ dataUrl: string; duree: number } | null>(null);
@@ -3776,6 +3779,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       channelAudioChunksRef.current = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) channelAudioChunksRef.current.push(e.data); };
       recorder.start(100);
+      setChannelAudioStream(stream);
       setIsRecordingChannel(true);
       setRecordingChannelSeconds(0);
       channelRecordingTimerRef.current = setInterval(() => setRecordingChannelSeconds((x) => x + 1), 1000);
@@ -3785,6 +3789,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   const handleStopRecordingChannel = async (cancel = false) => {
+    setChannelAudioStream(null);
     const recorder = channelMediaRecorderRef.current;
     if (channelRecordingTimerRef.current) { clearInterval(channelRecordingTimerRef.current); channelRecordingTimerRef.current = null; }
     const duration = recordingChannelSeconds;
@@ -3842,6 +3847,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       convAudioChunksRef.current = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) convAudioChunksRef.current.push(e.data); };
       recorder.start(100);
+      setConvAudioStream(stream);
       setIsRecordingConv(true);
       setRecordingConvSeconds(0);
       convRecordingTimerRef.current = setInterval(() => setRecordingConvSeconds((s) => s + 1), 1000);
@@ -3851,6 +3857,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   const handleStopRecordingConv = async (cancel = false) => {
+    setConvAudioStream(null);
     const recorder = convMediaRecorderRef.current;
     if (convRecordingTimerRef.current) { clearInterval(convRecordingTimerRef.current); convRecordingTimerRef.current = null; }
     const duration = recordingConvSeconds;
@@ -3893,6 +3900,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       if (channelMediaRecorderRef.current && channelMediaRecorderRef.current.state !== 'inactive') {
         void handleStopRecordingChannel(true);
       }
+      setConvAudioStream(null);
+      setChannelAudioStream(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId, activeChannel?.id, isActive]);
@@ -6502,20 +6511,36 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   <input ref={convVideoInputRef} type="file" accept="video/*" hidden onChange={handleConvVideoSelected} />
 
                   {isRecordingConv && (
-                    <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30">
-                      <span className="relative flex h-2.5 w-2.5">
+                    <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 backdrop-blur-md animate-in fade-in slide-in-from-bottom-1 duration-150">
+                      <span className="relative flex h-2.5 w-2.5 shrink-0">
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
                         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-500" />
                       </span>
-                      <span className="text-xs font-mono text-rose-300 flex-1">
-                        {Math.floor(recordingConvSeconds / 60)}:{String(recordingConvSeconds % 60).padStart(2, '0')} — Enregistrement...
+                      <span className="text-xs font-mono font-bold text-rose-300 shrink-0">
+                        {Math.floor(recordingConvSeconds / 60)}:{String(recordingConvSeconds % 60).padStart(2, '0')}
                       </span>
-                      <button type="button" onClick={() => void handleStopRecordingConv(true)} className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300" title="Annuler">
-                        <X className="w-4 h-4" />
-                      </button>
-                      <button type="button" onClick={() => void handleStopRecordingConv(false)} className="p-1.5 rounded-lg bg-rose-500 text-white" title="Arrêter et réécouter">
-                        <Square className="w-4 h-4" />
-                      </button>
+
+                      {/* Variations des ondes vocales en temps réel */}
+                      <LiveVoiceWaveform stream={convAudioStream} className="h-6 flex-1 min-w-[70px] max-w-[260px]" />
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => void handleStopRecordingConv(true)}
+                          className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 transition-colors"
+                          title="Annuler l'enregistrement"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleStopRecordingConv(false)}
+                          className="p-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-950/40 transition-all active:scale-95 flex items-center justify-center"
+                          title="Arrêter et réécouter"
+                        >
+                          <Square className="w-4 h-4 fill-current" />
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -7394,6 +7419,40 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   réduit au strict nécessaire (juste la zone sûre du bas,
                   sans marge ajoutée) plutôt que 1.5rem + zone sûre. */}
               <div className="relative p-3.5 max-sm:px-2 max-sm:pb-[env(safe-area-inset-bottom,0px)] border-t border-teal-500/20 bg-[#07171a]/85 backdrop-blur-xl space-y-2.5 shadow-lg" style={rembourrageBarre}>
+                {isRecordingChannel && (
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 backdrop-blur-md animate-in fade-in slide-in-from-bottom-1 duration-150">
+                    <span className="relative flex h-2.5 w-2.5 shrink-0">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-500" />
+                    </span>
+                    <span className="text-xs font-mono font-bold text-rose-300 shrink-0">
+                      {Math.floor(recordingChannelSeconds / 60)}:{String(recordingChannelSeconds % 60).padStart(2, '0')}
+                    </span>
+
+                    {/* Variations des ondes vocales en temps réel */}
+                    <LiveVoiceWaveform stream={channelAudioStream} className="h-6 flex-1 min-w-[70px] max-w-[260px]" />
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => void handleStopRecordingChannel(true)}
+                        className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 transition-colors"
+                        title="Annuler l'enregistrement"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleStopRecordingChannel(false)}
+                        className="p-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-950/40 transition-all active:scale-95 flex items-center justify-center"
+                        title="Arrêter et réécouter"
+                      >
+                        <Square className="w-4 h-4 fill-current" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {channelVocalPret && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/20">
                     <audio

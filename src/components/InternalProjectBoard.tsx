@@ -27,6 +27,7 @@ import { useInternalProjectTasks, InternalTasksScope } from '@/hooks/useInternal
 import { useTaskChecklist, useChecklistCounts } from '@/hooks/useTaskChecklist';
 import { useTaskActivity } from '@/hooks/useTaskActivity';
 import { useTaskMessages, useTaskMessageCounts, TaskMessage } from '@/hooks/useTaskMessages';
+import { LiveVoiceWaveform } from '@/components/LiveVoiceWaveform';
 
 // Ticket "Projets internes" (phase 1) : tableau kanban des tâches d'un
 // projet — même mécanisme de glisser-déposer que le Pipeline CRM (@dnd-kit,
@@ -952,6 +953,7 @@ const TaskDetailModal: React.FC<{
   const [sendingChat, setSendingChat] = useState(false);
   const [uploadingChatMedia, setUploadingChatMedia] = useState(false);
   const [isRecordingChat, setIsRecordingChat] = useState(false);
+  const [chatAudioStream, setChatAudioStream] = useState<MediaStream | null>(null);
   // Ticket "Refonte fiche tâche" (suivi) : aperçu œil en plein cadre pour les
   // photos du chat, même comportement que la prévisualisation Documents.
   const [chatLightboxUrl, setChatLightboxUrl] = useState<string | null>(null);
@@ -1064,6 +1066,7 @@ const TaskDetailModal: React.FC<{
       chatAudioChunksRef.current = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chatAudioChunksRef.current.push(e.data); };
       recorder.start(100);
+      setChatAudioStream(stream);
       setIsRecordingChat(true);
       setRecordingChatSeconds(0);
       chatRecordingTimerRef.current = setInterval(() => setRecordingChatSeconds((s) => s + 1), 1000);
@@ -1073,6 +1076,7 @@ const TaskDetailModal: React.FC<{
   };
 
   const stopRecordingChat = async (cancel = false) => {
+    setChatAudioStream(null);
     const recorder = chatMediaRecorderRef.current;
     if (chatRecordingTimerRef.current) { clearInterval(chatRecordingTimerRef.current); chatRecordingTimerRef.current = null; }
     const duration = recordingChatSeconds;
@@ -1377,42 +1381,52 @@ const TaskDetailModal: React.FC<{
                 <div className="flex items-center gap-1.5 pt-3 mt-1 border-t border-white/10">
                   <input ref={chatImageInputRef} type="file" accept="image/*" hidden onChange={handleChatImageSelected} />
                   <input ref={chatFileInputRef} type="file" hidden onChange={handleChatFileSelected} />
-                  <button type="button" onClick={() => chatImageInputRef.current?.click()} disabled={uploadingChatMedia} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0" title="Envoyer une image">
-                    <ImageIcon className="w-4 h-4" />
-                  </button>
-                  <button type="button" onClick={() => chatFileInputRef.current?.click()} disabled={uploadingChatMedia} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0" title="Joindre un document">
-                    <Paperclip className="w-4 h-4" />
-                  </button>
                   {isRecordingChat ? (
-                    <button type="button" onClick={() => void stopRecordingChat(false)} className="p-2 rounded-lg bg-rose-500/20 text-rose-300 shrink-0 flex items-center gap-1" title="Arrêter et envoyer">
-                      <Square className="w-4 h-4" /> <span className="text-[10px] font-bold">{recordingChatSeconds}s</span>
-                    </button>
+                    <div className="flex-1 flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 rounded-xl px-3 py-1.5 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
+                      <span className="text-xs font-mono font-bold text-rose-300 shrink-0">{recordingChatSeconds}s</span>
+                      <LiveVoiceWaveform stream={chatAudioStream} className="h-6 flex-1 min-w-[70px]" />
+                      <button type="button" onClick={() => void stopRecordingChat(true)} className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors" title="Annuler">
+                        <X className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => void stopRecordingChat(false)} className="p-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-950/40 transition-all active:scale-95 flex items-center justify-center" title="Arrêter et envoyer">
+                        <Square className="w-4 h-4 fill-current" />
+                      </button>
+                    </div>
                   ) : (
-                    <button type="button" onClick={() => void startRecordingChat()} disabled={uploadingChatMedia} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0" title="Note vocale">
-                      <Mic className="w-4 h-4" />
-                    </button>
+                    <>
+                      <button type="button" onClick={() => chatImageInputRef.current?.click()} disabled={uploadingChatMedia} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0" title="Envoyer une image">
+                        <ImageIcon className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => chatFileInputRef.current?.click()} disabled={uploadingChatMedia} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0" title="Joindre un document">
+                        <Paperclip className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => void startRecordingChat()} disabled={uploadingChatMedia} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0" title="Note vocale">
+                        <Mic className="w-4 h-4" />
+                      </button>
+                      {/* Même méthodologie que les autres chats du CRM (23
+                          septembre) : Entrée ne fait que revenir à la ligne,
+                          seul le bouton d'envoi envoie — <textarea> au lieu
+                          d'un <input>, qui ne pouvait pas contenir de retour à
+                          la ligne. */}
+                      <textarea
+                        ref={chatTextareaRef}
+                        rows={1}
+                        value={chatDraft}
+                        onChange={(e) => setChatDraft(e.target.value)}
+                        placeholder="Écrire un message..."
+                        className="flex-1 min-w-0 resize-none bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void sendChatText()}
+                        disabled={!chatDraft.trim() || sendingChat}
+                        className="w-8 h-8 shrink-0 rounded-lg bg-[#F7BC5F] hover:bg-[#d9ab38] text-black flex items-center justify-center disabled:opacity-50"
+                      >
+                        {sendingChat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      </button>
+                    </>
                   )}
-                  {/* Même méthodologie que les autres chats du CRM (23
-                      septembre) : Entrée ne fait que revenir à la ligne,
-                      seul le bouton d'envoi envoie — <textarea> au lieu
-                      d'un <input>, qui ne pouvait pas contenir de retour à
-                      la ligne. */}
-                  <textarea
-                    ref={chatTextareaRef}
-                    rows={1}
-                    value={chatDraft}
-                    onChange={(e) => setChatDraft(e.target.value)}
-                    placeholder="Écrire un message..."
-                    className="flex-1 min-w-0 resize-none bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white leading-relaxed focus:outline-none focus:border-[#F7BC5F]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void sendChatText()}
-                    disabled={!chatDraft.trim() || sendingChat}
-                    className="w-8 h-8 shrink-0 rounded-lg bg-[#F7BC5F] hover:bg-[#d9ab38] text-black flex items-center justify-center disabled:opacity-50"
-                  >
-                    {sendingChat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  </button>
                 </div>
               </div>
             )}
