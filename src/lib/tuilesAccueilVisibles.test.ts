@@ -3,6 +3,7 @@ import {
   estAgenceImmosphera,
   estBlocNotes,
   estDossierImmosphera,
+  estDossierPasserelle,
   retirerDoublonsNotes,
 } from './tuilesAccueilVisibles';
 
@@ -12,6 +13,9 @@ describe('tuiles d’accueil selon l’agence', () => {
     expect(estDossierImmosphera('ImmoSphera')).toBe(true);
     expect(estDossierImmosphera('Immosphera 360')).toBe(false);
     expect(estDossierImmosphera('Banques')).toBe(false);
+    expect(estDossierPasserelle({ id: 'folder-passerelle', title: 'Passerelle' })).toBe(true);
+    expect(estDossierPasserelle({ id: 'custom-123', title: 'Passerelles' })).toBe(true);
+    expect(estDossierPasserelle({ id: 'autre', title: 'Immosphera' })).toBe(false);
     expect(estAgenceImmosphera({ name: 'Novavisio' })).toBe(false);
     expect(estAgenceImmosphera({ name: 'Conseils Finances' })).toBe(false);
     expect(estAgenceImmosphera({ name: 'Immosphera' })).toBe(true);

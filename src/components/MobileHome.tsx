@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
-import { estAgenceImmosphera, estBlocNotes, estDossierImmosphera } from '@/lib/tuilesAccueilVisibles';
+import { estAgenceImmosphera, estBlocNotes, estDossierImmosphera, estDossierPasserelle } from '@/lib/tuilesAccueilVisibles';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
 import { prochainRendezVous, texteProchainGeste, type RendezVousProchain } from '@/lib/prochainGeste';
@@ -423,6 +423,8 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
       if (estDossierReserveConseilsFinances(lock.title) && !estAgenceConseilsFinances(activeAgency)) return;
       // Dossier « Immosphera » recopié dans les autres sociétés.
       if (estDossierImmosphera(lock.title) && !estAgenceImmosphera(activeAgency)) return;
+      // Dossier « Passerelle » : Immosphera uniquement.
+      if (estDossierPasserelle(lock) && !estAgenceImmosphera(activeAgency)) return;
       // `isFolder` n'est en pratique jamais renseigné par AccueilGrid sur un
       // verrou (vérifié en base) : on détecte un dossier verrouillé à la
       // seule présence de `children`, pas à ce champ.

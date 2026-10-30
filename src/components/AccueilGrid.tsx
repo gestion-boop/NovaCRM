@@ -34,7 +34,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAuth as useAgenceReelle } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
-import { estAgenceImmosphera, estDossierImmosphera, retirerDoublonsNotes } from '@/lib/tuilesAccueilVisibles';
+import { estAgenceImmosphera, estDossierImmosphera, estDossierPasserelle, retirerDoublonsNotes } from '@/lib/tuilesAccueilVisibles';
 import { assemblerDictee } from '@/lib/dictee';
 import {
   lireDispositionAgence, ecrireDispositionAgence, lireHorodatageLocal, ecrireHorodatageLocal,
@@ -591,6 +591,15 @@ const INITIAL_TILES: TileItemNode[] = [
         navTarget: '',
         externalUrl: 'https://immobilier.lefigaro.fr',
       },
+      {
+        id: 'immosphera-amanda',
+        title: 'Amanda',
+        iconName: 'Shield',
+        gradient: 'from-[#6B21A8] via-[#3B0764] to-[#1E1B4B]',
+        badgeCount: 0,
+        navTarget: '',
+        externalUrl: 'https://narbonne-et-environs.amepi.fr/Account/Login?ReturnUrl=%2F',
+      },
     ],
   },
   // Demandé le 2 septembre : « je voudrais une tuile Académy ImmoSphera, on
@@ -615,15 +624,6 @@ const INITIAL_TILES: TileItemNode[] = [
     gradient: 'from-[#B8923F] via-[#78350F] to-[#2A2211]',
     badgeCount: 0,
     navTarget: 'statistiques-etiquettes',
-  },
-  {
-    id: 'immosphera-amanda',
-    title: 'Amanda',
-    iconName: 'Shield',
-    gradient: 'from-[#6B21A8] via-[#3B0764] to-[#1E1B4B]',
-    badgeCount: 0,
-    navTarget: '',
-    externalUrl: 'https://narbonne-et-environs.amepi.fr/Account/Login?ReturnUrl=%2F',
   },
   // Ticket #221 : partage des biens entre agents Immosphera, hébergé sur
   // Google Sheets (aucun droit supplémentaire créé côté CRM — respecte les
@@ -1323,7 +1323,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Remonté plus haut (était après [tiles, setTiles]) : nécessaire dès
   // l'initialisation de `tiles` pour cloisonner le stockage par agence
   // (voir HOME_TILES_KEY juste en dessous).
-  const { agencies, activeAgency, isSuperAdmin, currentUser } = useAuth() as any;
+  const { agencies, activeAgency, isSuperAdmin, currentUser, userProfile } = useAuth() as any;
+  const isAdmin = Boolean(isSuperAdmin || userProfile?.role === 'super_admin' || userProfile?.role === 'admin');
   // Vraie sélection globale, jamais substituée — voir le commentaire sur
   // l'import plus haut. Ne sert qu'au garde-fou dans enregistrerVerrous.
   const { activeAgency: agenceActiveReelle } = useAgenceReelle();
@@ -1589,6 +1590,53 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     return [...items, statsTile];
   };
 
+  // Signalé (30 octobre) : Sylvain admin a mis Amanda dans le dossier Passerelle.
+  // Amanda doit être dans le dossier Passerelle pour tous les utilisateurs Immosphera,
+  // sans doublon orphelin à la racine.
+  const reinjecterAmandaDansPasserelle = (items: TileItemNode[]): TileItemNode[] => {
+    if (!estImmospheraAgency(activeAgency)) return items;
+
+    const amandaTile: TileItemNode = findInitialTile('immosphera-amanda') || {
+      id: 'immosphera-amanda',
+      title: 'Amanda',
+      iconName: 'Shield',
+      gradient: 'from-[#6B21A8] via-[#3B0764] to-[#1E1B4B]',
+      badgeCount: 0,
+      navTarget: '',
+      externalUrl: 'https://narbonne-et-environs.amepi.fr/Account/Login?ReturnUrl=%2F',
+    };
+
+    const dossierPasserelleIndex = items.findIndex((t) => t.isFolder && (t.id === 'folder-passerelle' || estDossierPasserelle(t)));
+
+    if (dossierPasserelleIndex !== -1) {
+      const dossierPasserelle = items[dossierPasserelleIndex];
+      const enfants = dossierPasserelle.children || [];
+      const dejaDansDossier = enfants.some((c) => c.id === 'immosphera-amanda');
+      if (dejaDansDossier) {
+        // Déjà présent dans Passerelle : supprimer tout doublon orphelin ailleurs (ex: à la racine)
+        return items.map((t, idx) => {
+          if (idx === dossierPasserelleIndex) return t;
+          if (t.id === 'immosphera-amanda') return null as any;
+          if (t.children) return { ...t, children: t.children.filter((c) => c.id !== 'immosphera-amanda') };
+          return t;
+        }).filter(Boolean);
+      }
+
+      // Absent du dossier Passerelle : retirer Amanda de la racine/ailleurs et l'ajouter dans Passerelle
+      const sansAncien = items
+        .filter((t) => t.id !== 'immosphera-amanda')
+        .map((t) => (t.children ? { ...t, children: t.children.filter((c) => c.id !== 'immosphera-amanda') } : t));
+
+      return sansAncien.map((t) =>
+        t.isFolder && (t.id === 'folder-passerelle' || estDossierPasserelle(t))
+          ? { ...t, children: [...(t.children || []), amandaTile] }
+          : t
+      );
+    }
+
+    return items;
+  };
+
   // Demande explicite (23 septembre) : « le dossier Communication ne sert
   // à rien, supprime-le sur tous les profils, mets la tuile [Support] à
   // l'extérieur, ça ne doit plus jamais revenir » — déjà signalé comme bug
@@ -1800,7 +1848,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         return item.children ? { ...item, children: resyncLockedFolders(item.children) } : item;
       });
     base = resyncLockedFolders(base);
-    base = reinjecterStatistiques(base);
+    base = reinjecterAmandaDansPasserelle(reinjecterStatistiques(base));
     return dedupeRecursive(base);
   };
 
@@ -1996,7 +2044,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // compte, donc même risque d'écrasement inter-agences sans `agencyId`.
     // Super admin : la case d'un dossier verrouillé suit ses déplacements
     // (voir Verrou.slot) — sans réécrire les verrous quand rien n'a bougé.
-    if (change && isSuperAdmin && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) {
+    if (change && isAdmin && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) {
       const suivants: Record<string, Verrou> = { ...lockedTiles };
       let bouge = false;
       Object.entries(lockedTiles).forEach(([id, v]) => {
@@ -2092,7 +2140,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         if (aDesTuilesLocales) {
           homeSyncReadyAgencies.add(clefSync);
           const baseLocales = toujoursActive() ? tilesRef.current : tuilesLocales;
-          const locales = reinjecterStatistiques(baseLocales);
+          const locales = reinjecterAmandaDansPasserelle(reinjecterStatistiques(baseLocales));
           if (JSON.stringify(locales) !== JSON.stringify(baseLocales)) {
             try { localStorage.setItem(cleTuiles, JSON.stringify(locales)); } catch { /* ignore */ }
             if (toujoursActive()) {
@@ -2107,16 +2155,18 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         } else if (tuilesServeur && tuilesServeur.length > 0) {
           // Premier chargement sur un appareil vierge uniquement
           const normalisees = reinjecterReserverCamera(
-            reinjecterStatistiques(
-              retirerTuilesMasqueesRecursif(
-                retirerDossierCommunication(
-                  reinjecterPipelineDansSonDossier(
-                    removeQuickBarDuplicates(
-                      (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+            reinjecterAmandaDansPasserelle(
+              reinjecterStatistiques(
+                retirerTuilesMasqueesRecursif(
+                  retirerDossierCommunication(
+                    reinjecterPipelineDansSonDossier(
+                      removeQuickBarDuplicates(
+                        (tuilesServeur as TileItemNode[]).map((t) => normalizeTile(t))
+                      )
                     )
-                  )
-                ),
-                listerIdsMasquesAplatis()
+                  ),
+                  listerIdsMasquesAplatis()
+                )
               )
             )
           );
@@ -2363,17 +2413,20 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     return () => { active = false; void supabase.removeChannel(channel); };
   }, [activeAgency?.id]);
 
-  // Applique les verrouillages du super admin par-dessus la personnalisation
+  // Applique les verrouillages du super admin / admin par-dessus la personnalisation
   // locale — un utilisateur qui a déplacé/recoloré une tuile verrouillée
   // avant qu'elle ne le devienne verra quand même la version imposée.
   const applyLocks = (items: TileItemNode[]): TileItemNode[] =>
     items.map((item) => {
-      const lock = lockedTiles[item.id];
+      const lock =
+        lockedTiles[item.id] ||
+        (estDossierPasserelle(item) ? Object.values(lockedTiles).find((v) => estDossierPasserelle(v as any)) : undefined) ||
+        (estDossierImmosphera(item.title) ? Object.values(lockedTiles).find((v) => estDossierImmosphera(v.title)) : undefined);
       const withChildren = item.children ? { ...item, children: applyLocks(item.children) } : item;
       if (!lock) return { ...withChildren, locked: false };
 
       // Le contenu d'un dossier verrouillé est imposé lui aussi : les cartes
-      // posées par le super admin reviennent chez tout le monde, même chez
+      // posées par l'admin reviennent chez tout le monde, même chez
       // quelqu'un qui les avait sorties. Chacun garde en revanche SON ordre
       // (demande explicite : « ils pourront changer l'ordre des dossiers à
       // l'intérieur »), et les cartes qu'il a ajoutées à côté sont laissées
@@ -2414,6 +2467,13 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
             if (statsTile) ajoutsPersonnels.push(statsTile);
           }
         }
+        if (estDossierPasserelle(withChildren) && estImmospheraAgency(activeAgency)) {
+          const aDejaAmanda = imposes.some((c) => c.id === 'immosphera-amanda') || ajoutsPersonnels.some((c) => c.id === 'immosphera-amanda');
+          if (!aDejaAmanda && !idsRetires.has('immosphera-amanda')) {
+            const amandaTile = findInitialTile('immosphera-amanda');
+            if (amandaTile) ajoutsPersonnels.push(amandaTile);
+          }
+        }
         return { ...withChildren, ...apparence, ...couleur(withChildren, withChildren.gradient), children: [...imposes, ...ajoutsPersonnels], locked: true };
       }
       if (estDossierImmosphera(withChildren.title) && estImmospheraAgency(activeAgency)) {
@@ -2421,6 +2481,13 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         if (!enfants.some((c) => c.id === 'statistiques-etiquettes')) {
           const statsTile = findInitialTile('statistiques-etiquettes');
           if (statsTile) return { ...withChildren, ...apparence, ...couleur(withChildren, withChildren.gradient), children: [...enfants, statsTile], locked: true };
+        }
+      }
+      if (estDossierPasserelle(withChildren) && estImmospheraAgency(activeAgency)) {
+        const enfants = withChildren.children || [];
+        if (!enfants.some((c) => c.id === 'immosphera-amanda')) {
+          const amandaTile = findInitialTile('immosphera-amanda');
+          if (amandaTile) return { ...withChildren, ...apparence, ...couleur(withChildren, withChildren.gradient), children: [...enfants, amandaTile], locked: true };
         }
       }
       return { ...withChildren, ...apparence, ...couleur(withChildren, withChildren.gradient), locked: true };
@@ -2548,49 +2615,66 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // chargement), pour qu'un appareil resté sur une vieille grille ne
   // réécrive pas un verrou plus récent.
   const synchroniserVerrous = (grille: TileItemNode[], base: Record<string, Verrou> = lockedTiles) => {
-    if (!isSuperAdmin || !activeAgency?.id || !currentUser?.uid) return;
+    if (!isAdmin || !activeAgency?.id || !currentUser?.uid) return;
     const next: Record<string, Verrou> = { ...base };
     let change = false;
-    // La grille du super admin fait foi, mais seulement une fois sa version
+    // La grille de l'admin fait foi, mais seulement une fois sa version
     // serveur chargée : un appareil resté sur une vieille grille ne doit pas
     // effacer un verrou posé ailleurs.
     const grilleFiable = homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id));
-    Object.entries(base).forEach(([id, verrou]) => {
+
+    // Rassemble tous les dossiers verrouillés ou d'agence partagés (Passerelle, Immosphera)
+    // ainsi que les verrous préexistants dans base.
+    const idsDossiers = new Set<string>(Object.keys(base));
+    const collecterDossiers = (nodes: TileItemNode[]) => {
+      nodes.forEach((n) => {
+        if (n.isFolder) {
+          if (n.locked || estDossierPasserelle(n) || estDossierImmosphera(n.title) || !!base[n.id]) {
+            idsDossiers.add(n.id);
+          }
+          if (n.children) collecterDossiers(n.children);
+        }
+      });
+    };
+    collecterDossiers(grille);
+
+    idsDossiers.forEach((id) => {
       const tuile = findTileRecursive(grille, id);
+      const verrou = base[id];
       if (!tuile) {
         // 3 septembre : un verrou dont le dossier n'existe plus chez le super
         // admin (ni dans les tuiles fournies) est un fantôme — c'est lui qui
         // faisait réapparaître d'anciens dossiers chez les membres. On le
         // retire dès que le super admin touche à sa grille.
-        if (grilleFiable && !findInitialTile(id)) { delete next[id]; change = true; }
+        if (verrou && grilleFiable && !findInitialTile(id)) { delete next[id]; change = true; }
         return;
       }
       const nouveau = instantaneVerrou(tuile);
-      const ancien = instantaneVerrou(verrou);
+      const ancien = verrou ? instantaneVerrou(verrou) : undefined;
       const slot = rootSlotsRef.current.indexOf(id);
-      const slotChange = slot >= 0 && verrou.slot !== slot;
+      const slotChange = slot >= 0 && verrou?.slot !== slot;
+
+      if (!verrou || !ancien) {
+        // Nouveau dossier verrouillé ou dossier d'agence (Passerelle, Immosphera)
+        next[id] = {
+          ...nouveau,
+          ...(slot >= 0 ? { slot } : {}),
+          maj: Date.now(),
+        };
+        change = true;
+        return;
+      }
 
       // Audit stabilité (20 octobre, récidive du dossier Immosphera) :
       // `ancien` (issu de `base`, par défaut `lockedTiles`) est déjà tenu à
       // jour par le temps réel — l'ajout d'un raccourci par un AUTRE super
-      // admin s'y reflète donc déjà correctement. Le vrai danger : `grille`
-      // (l'arbre de CET appareil) peut contenir une copie figée, posée une
-      // fois pour toutes (voir la repose automatique plus bas), d'un
-      // dossier verrouillé que CET appareil ne maintient pas activement —
-      // rien ne la rafraîchit jamais toute seule. Comparée à `ancien`, elle
-      // semblait alors "différente", et N'IMPORTE QUELLE action SANS AUCUN
-      // RAPPORT avec ce dossier (renommer un autre raccourci, changer une
-      // couleur ailleurs...) réécrivait le verrou avec cette copie figée et
-      // périmée, effaçant ce que l'autre super admin venait d'y ajouter.
-      // On ne fait confiance à `nouveau` pour le CONTENU que si la copie de
-      // CET appareil a elle-même changé entre l'arbre d'avant cette action
-      // (tilesRef.current, pas encore mis à jour à cet instant précis de
-      // l'événement) et celui d'après (grille) — seule preuve que c'est
-      // bien CETTE action, sur CET appareil, qui a touché ce dossier.
-      // Sinon, seule une éventuelle position différente sur la grille
-      // racine est reprise ; le contenu enregistré, lui, ne bouge pas.
+      // admin s'y reflète donc déjà correctement.
       const tuileAvant = findTileRecursive(tilesRef.current, id);
-      const contenuToucheIci = !tuileAvant || JSON.stringify(instantaneVerrou(tuileAvant)) !== JSON.stringify(nouveau);
+      const idsAncien = new Set((ancien.children || []).map((c) => c.id));
+      const aNouveauxEnfantsAgence =
+        (estDossierPasserelle(tuile) || estDossierImmosphera(tuile.title)) &&
+        (nouveau.children || []).some((c) => !idsAncien.has(c.id));
+      const contenuToucheIci = !tuileAvant || aNouveauxEnfantsAgence || JSON.stringify(instantaneVerrou(tuileAvant)) !== JSON.stringify(nouveau);
       const contenuAEcrire = contenuToucheIci ? nouveau : ancien;
 
       if (JSON.stringify(contenuAEcrire) === JSON.stringify(ancien) && !slotChange) return;
@@ -2615,7 +2699,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Renvoie la nouvelle carte des verrous, pour enchaîner sans repartir de
   // l'ancienne.
   const retirerVerrous = (ids: string[]): Record<string, Verrou> => {
-    if (!isSuperAdmin || !activeAgency?.id) return lockedTiles;
+    if (!isAdmin || !activeAgency?.id) return lockedTiles;
     const next: Record<string, Verrou> = { ...lockedTiles };
     let change = false;
     ids.forEach((id) => { if (next[id]) { delete next[id]; change = true; } });
@@ -2632,7 +2716,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Pose/retire un verrou — écrit directement dans agency_ui_settings pour
   // que ça s'applique à toute l'agence, pas seulement à ce navigateur.
   const toggleTileLock = async (tile: TileItemNode) => {
-    if (!activeAgency?.id || !isSuperAdmin) return;
+    if (!activeAgency?.id || !isAdmin) return;
     const next = { ...lockedTiles };
     if (next[tile.id]) {
       delete next[tile.id];
@@ -2647,51 +2731,52 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     await enregistrerVerrous(next, lockedTiles);
   };
 
-  // 3 septembre (« le dossier Communication : les tuiles dedans s'enlèvent,
-  // et quand on le dissout il revient au rafraîchissement ») : des verrous
-  // FANTÔMES — anciens dossiers du même nom, supprimés avant que le verrou ne
-  // parte avec — reposaient un dossier que le super admin venait de
-  // dissoudre, et en retiraient les cartes de la racine. Un verrou dont le
-  // dossier n'existe ni dans la grille de CE super admin ni parmi les
-  // tuiles fournies est filtré de l'affichage local (verrousEffectifs).
-  //
-  // Signalé (14 octobre, voir la note sur `currentUser` en haut du fichier) :
-  // l'écriture automatique qui effaçait aussi ce fantôme CÔTÉ SERVEUR, pour
-  // toute l'agence, n'a jamais pu s'exécuter tant que `currentUser` valait
-  // `undefined` (elle dépendait de `homeSyncReadyAgencies`, alimentée
-  // uniquement par la synchronisation serveur, bloquée par le même bug).
-  // Retirée plutôt que réactivée telle quelle : elle ne compare un verrou
-  // qu'à la grille du SEUL super admin connecté à cet instant — un dossier
-  // verrouillé par un AUTRE super admin (Mélanie), absent de la grille de
-  // celui-ci, serait pris pour un fantôme et effacé pour toute l'agence.
-  // Le filtrage d'affichage ci-dessous reste sans danger (local, jamais
-  // écrit nulle part) ; une vraie purge partagée demande un garde-fou entre
-  // super admins qui n'existe pas encore.
-  //
-  // 15 octobre (« les tuiles d'Immosphera sont sorties du dossier ») : ce
-  // filtre local, lui aussi inactif jusqu'au 14 (même bug `currentUser`),
-  // s'est mis à tourner — et il écartait le dossier verrouillé
-  // « Immosphera » chez tout super admin dont la grille ne le contenait pas
-  // (Mélanie). Le verrou écarté, ses cartes (Site internet, Partenaires,
-  // Netty, Pool…) n'étaient plus « imposées par un dossier » et
-  // réapparaissaient à la racine. Même raison que pour la purge serveur : on
-  // ne peut pas juger un verrou d'après la grille d'UN super admin. Un
-  // verrou qui décrit un vrai dossier (avec `children`) n'est donc plus
-  // jamais traité comme fantôme ; seuls les anciens verrous sans contenu le
-  // restent (ils ne reposent rien de toute façon).
   const fantomesVerrous = useMemo<string[]>(() => {
-    if (!isSuperAdmin || !activeAgency?.id || !currentUser?.uid || !homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) return [];
+    if (!isAdmin || !activeAgency?.id || !currentUser?.uid || !homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) return [];
     return Object.keys(lockedTiles).filter(
       (id) => !Array.isArray(lockedTiles[id]?.children) && !existsRecursive(tiles, id) && !findInitialTile(id)
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lockedTiles, tiles, isSuperAdmin, activeAgency?.id, currentUser?.uid, syncPrete]);
+  }, [lockedTiles, tiles, isAdmin, activeAgency?.id, currentUser?.uid, syncPrete]);
   const verrousEffectifs = useMemo<Record<string, Verrou>>(() => {
     if (fantomesVerrous.length === 0) return lockedTiles;
     const propres = { ...lockedTiles };
     fantomesVerrous.forEach((id) => { delete propres[id]; });
     return propres;
   }, [lockedTiles, fantomesVerrous]);
+
+  // Synchronisation automatique au chargement pour les administrateurs :
+  // Si un admin (ex: Sylvain) a des raccourcis dans le dossier Passerelle ou Immosphera
+  // qui ne sont pas encore reflétés dans les verrous d'agence (lockedTiles),
+  // on pousse automatiquement la synchronisation vers agency_ui_settings.
+  useEffect(() => {
+    if (!isAdmin || !activeAgency?.id || !currentUser?.uid) return;
+    if (!homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) return;
+
+    let besoinSync = false;
+    const dossiersAgence = tiles.filter((t) => t.isFolder && (estDossierPasserelle(t) || estDossierImmosphera(t.title)));
+    for (const dossier of dossiersAgence) {
+      const lock = lockedTiles[dossier.id] || (estDossierPasserelle(dossier) ? Object.values(lockedTiles).find((v) => estDossierPasserelle(v as any)) : undefined);
+      if (!lock) {
+        if ((dossier.children || []).length > 0) {
+          besoinSync = true;
+          break;
+        }
+      } else {
+        const enfantsLock = new Set((lock.children || []).map((c) => c.id));
+        const enfantsTuile = (dossier.children || []).map((c) => c.id);
+        if (enfantsTuile.some((id) => !enfantsLock.has(id))) {
+          besoinSync = true;
+          break;
+        }
+      }
+    }
+
+    if (besoinSync) {
+      synchroniserVerrous(tiles, lockedTiles);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, activeAgency?.id, currentUser?.uid, syncPrete, lockedTiles, tiles]);
 
   // Folder Stack state for navigation inside open folders/nested folders
   const [openFolderStack, setOpenFolderStack] = useState<TileItemNode[]>([]);
@@ -3198,7 +3283,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // lui, change la couleur du verrou pour tout le monde (synchroniserVerrous).
     const dansDossierVerrouille =
       !!activeFolder && ((lockedTiles[activeFolder.id]?.children || []) as TileItemNode[]).some((c) => c.id === tileId);
-    const couleurPerso = !isSuperAdmin && (!!lockedTiles[tileId] || dansDossierVerrouille);
+    const couleurPerso = !isAdmin && (!!lockedTiles[tileId] || dansDossierVerrouille);
     const updateGradientRecursive = (items: TileItemNode[]): TileItemNode[] => {
       return items.map(item => {
         if (item.id === tileId) {
@@ -4100,11 +4185,11 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                 // dossiers et les tuiles "d'origine"), pas seulement ses
                 // propres raccourcis créés à la main (id "custom-...").
                 onEdit={
-                  tile.id.startsWith('custom-') || (isSuperAdmin && tile.id !== '__voir-plus__')
+                  tile.id.startsWith('custom-') || (isAdmin && tile.id !== '__voir-plus__')
                     ? () => openEditShortcut(tile)
                     : undefined
                 }
-                isSuperAdmin={!!isSuperAdmin}
+                isSuperAdmin={!!isAdmin}
                 onToggleLock={() => void toggleTileLock(tile)}
                 onQuickAdd={
                   tile.isFolder
@@ -4279,11 +4364,11 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                     }}
                     onOpenPalette={() => setPaletteTileId(subItem.id)}
                     onEdit={
-                      subItem.id.startsWith('custom-') || (isSuperAdmin && !subItem.isFolder)
+                      subItem.id.startsWith('custom-') || (isAdmin && !subItem.isFolder)
                         ? () => openEditShortcut(subItem)
                         : undefined
                     }
-                    isSuperAdmin={!!isSuperAdmin}
+                    isSuperAdmin={!!isAdmin}
                     onToggleLock={() => void toggleTileLock(subItem)}
                     onOpenActionsMenu={() => setActionsMenuTileId(subItem.id)}
                   />
@@ -4813,9 +4898,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         // les sous-dossiers. On s'arrête juste à ces éléments-là quand il y a
         // le cadenas. » Sur une tuile verrouillée, un membre n'a donc que
         // « Changer la couleur » ; le déplacement se fait en glissant.
-        const peutModifier = !menuTile.locked || !!isSuperAdmin;
+        const peutModifier = !menuTile.locked || !!isAdmin;
         const carteImposee =
-          !isSuperAdmin
+          !isAdmin
           && !!activeFolder
           && ((lockedTiles[activeFolder.id]?.children || []) as TileItemNode[]).some((c) => c.id === menuTile.id);
         return (
@@ -4904,7 +4989,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
                       {menuTile.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                     </button>
                   )}
-                  {isSuperAdmin && (
+                  {isAdmin && (
                     <button
                       onClick={() => { void toggleTileLock(menuTile); setActionsMenuTileId(null); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition-colors text-sm text-white"

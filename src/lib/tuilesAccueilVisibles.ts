@@ -9,6 +9,10 @@ export const estAgenceImmosphera = (
 export const estDossierImmosphera = (titre: string | null | undefined) =>
   /^immosphera$/.test(sansCasse(titre ?? ''));
 
+/** Dossier Passerelle d'Immosphera regroupant les portails immobiliers (Leboncoin, Bien Ici, Le Figaro, Amanda...). */
+export const estDossierPasserelle = (tuile: { id?: string | null; title?: string | null } | null | undefined) =>
+  tuile?.id === 'folder-passerelle' || /^passerelles?$/i.test(sansCasse(tuile?.title ?? ''));
+
 export interface TuileNotes {
   id: string;
   title?: string | null;
