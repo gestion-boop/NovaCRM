@@ -37,6 +37,7 @@ export function useAuth() {
     // ici aussi, en plus de `user`, pour que ce bug de fond ne se reproduise
     // pas ailleurs à chaque nouveau composant qui consomme ce shim.
     currentUser,
+    userProfile,
     agencies: undefined,
     activeAgency: resolvedAgency,
     isSuperAdmin,

@@ -264,65 +264,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Une personne à une seule société n'a pas de rangée (rien à
                 choisir) : elle garde la ligne qui nomme sa société, comme
                 avant. */}
-            <AgencyLogoSwitcher
-              agencies={availableAgencies}
-              selectedId={selectedAgency.id}
-              size="lg"
-              className="justify-center"
-              onSelect={(agency) => {
-                onSelectAgency(agency);
-                setShowAgencyMenu(false);
-              }}
-            />
-            {availableAgencies.length < 2 && (
-            <div className="relative">
-            <button
-              onClick={() => setShowAgencyMenu(!showAgencyMenu)}
-              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-left cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5 overflow-hidden w-full">
-                {/* Ticket #228 : logo de la société active (logos déjà
-                    présents dans le projet, jamais de nouveaux logos). */}
-                <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0 overflow-hidden p-1">
-                  <img src={getAgencyLogo(selectedAgency.name)} alt="" className="w-full h-full object-contain" />
-                </div>
-                <div className="truncate flex-1">
-                  <p className="text-xs font-semibold text-white truncate">{selectedAgency.name}</p>
-                  <p className="text-[10px] text-[#F9C977] font-medium">Agence active</p>
+            {availableAgencies.length >= 2 ? (
+              <AgencyLogoSwitcher
+                agencies={availableAgencies}
+                selectedId={selectedAgency.id}
+                size="lg"
+                className="justify-center"
+                onSelect={(agency) => {
+                  onSelectAgency(agency);
+                  setShowAgencyMenu(false);
+                }}
+              />
+            ) : (
+              <div className="w-full flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/10 select-none">
+                <div className="flex items-center gap-2.5 overflow-hidden w-full">
+                  <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0 overflow-hidden p-1">
+                    <img src={getAgencyLogo(selectedAgency.name)} alt="" className="w-full h-full object-contain" />
+                  </div>
+                  <div className="truncate flex-1">
+                    <p className="text-xs font-semibold text-white truncate">{selectedAgency.name}</p>
+                    <p className="text-[10px] text-[#F9C977] font-medium">Société affectée</p>
+                  </div>
                 </div>
               </div>
-              <ChevronDown className="w-4 h-4 text-gray-400 shrink-0 ml-1" />
-            </button>
-
-            {/* Dropdown Menu for Agencies */}
-            {showAgencyMenu && (
-              <div className="absolute left-0 right-0 top-full mt-1 bg-[#0E1A20] border border-white/10 rounded-xl shadow-2xl z-50 p-1 space-y-1 max-h-52 overflow-y-auto custom-scrollbar">
-                {availableAgencies.map((agency) => (
-                  <button
-                    key={agency.id}
-                    onClick={() => {
-                      onSelectAgency(agency);
-                      setShowAgencyMenu(false);
-                      if (isMobile && onCloseMobile) onCloseMobile();
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors ${
-                      selectedAgency.id === agency.id
-                        ? 'bg-[#F7BC5F]/20 text-[#F7BC5F] font-semibold'
-                        : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 h-5 rounded bg-white/10 flex items-center justify-center shrink-0 overflow-hidden p-0.5">
-                        <img src={getAgencyLogo(agency.name)} alt="" className="w-full h-full object-contain" />
-                      </span>
-                      <span className="truncate">{agency.name}</span>
-                    </span>
-                    <span className="text-[10px] text-gray-400 shrink-0 ml-1">{agency.city}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            </div>
             )}
           </div>
         )}

@@ -8,6 +8,8 @@ import React, {
 import { Agency, AGENCIES } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { adopterJetonDeSession, connectGoogleWorkspaceTokens } from '@/lib/workspace';
+import { TEAM_MEMBERS } from '@/data/teamMembers';
+import { agencesDisponibles } from '@/lib/agency-logos';
 
 const SUPER_ADMIN_EMAIL = 's.grazia@conseilfinances.fr';
 const REAL_AGENCY_IDS = AGENCIES.filter((agency) => agency.id !== 'all').map((agency) => agency.id);
@@ -97,7 +99,7 @@ function agencyIdMatchingEmailDomain(email: string | null | undefined, candidate
   if (!domain) return undefined;
   const nameMatch = (name: string) => domain === name || domain.endsWith(`.${name}`);
   const matched = AGENCIES.find((a) => {
-    if (!candidateIds.includes(a.id)) return false;
+    if (candidateIds && candidateIds.length > 0 && !candidateIds.includes(a.id)) return false;
     const n = a.name.toLowerCase().replace(/\s+/g, '');
     if (n.includes('immosphera') && (nameMatch('immosphera.fr') || domain.includes('immosphera'))) return true;
     if (n.includes('novavisio') && (nameMatch('novavisio.fr') || domain.includes('novavisio'))) return true;
@@ -105,6 +107,27 @@ function agencyIdMatchingEmailDomain(email: string | null | undefined, candidate
     return false;
   });
   return matched?.id;
+}
+
+// Déduit l'agence d'un utilisateur par son email (annuaire d'équipe ou domaine)
+function deduceAgencyForUser(email: string | null | undefined, candidateIds: string[]): string | undefined {
+  const emailNorm = String(email ?? '').trim().toLowerCase();
+
+  // 1. Si candidateIds contient des agences, tenter d'abord d'y trouver celle qui correspond à l'email
+  if (candidateIds && candidateIds.length > 0) {
+    const matched = agencyIdMatchingEmailDomain(email, candidateIds);
+    if (matched) return matched;
+    return candidateIds[0];
+  }
+
+  // 2. Vérifier dans TEAM_MEMBERS
+  const member = TEAM_MEMBERS.find((m) => m.email?.trim().toLowerCase() === emailNorm);
+  if (member?.agencyId && member.agencyId !== 'all') {
+    return member.agencyId;
+  }
+
+  // 3. Déduire par le domaine email parmi toutes les agences réelles
+  return agencyIdMatchingEmailDomain(email, REAL_AGENCY_IDS);
 }
 
 function getAgencyById(agencyId: string | undefined): Agency | undefined {
@@ -138,16 +161,25 @@ function storeActiveAgencyId(agencyId: string) {
 }
 
 // Résout l'agence à utiliser à la (re)connexion : le choix manuel
-// mémorisé s'il est toujours valide pour ce compte (accessible ou super
-// admin), sinon l'agence préférée du profil.
-function resolveActiveAgency(preferredAgencyId: string | undefined, accessibleAgencyIds: string[] | 'all'): Agency | undefined {
-  const storedId = getStoredActiveAgencyId();
-  if (storedId) {
-    const storedAgency = getAgencyById(storedId);
-    const isAccessible = accessibleAgencyIds === 'all' || accessibleAgencyIds.includes(storedId);
-    if (storedAgency && isAccessible) return storedAgency;
+// mémorisé s'il est toujours valide pour ce compte (super admin uniquement),
+// sinon l'agence assignée du profil pour garantir le cloisonnement strict.
+function resolveActiveAgency(
+  preferredAgencyId: string | undefined,
+  accessibleAgencyIds: string[] | 'all',
+  isSuperAdmin = false
+): Agency | undefined {
+  if (isSuperAdmin) {
+    const storedId = getStoredActiveAgencyId();
+    if (storedId) {
+      const storedAgency = getAgencyById(storedId);
+      const isAccessible = accessibleAgencyIds === 'all' || accessibleAgencyIds.includes(storedId);
+      if (storedAgency && isAccessible) return storedAgency;
+    }
   }
-  return getAgencyById(preferredAgencyId);
+  return (
+    getAgencyById(preferredAgencyId) ||
+    (Array.isArray(accessibleAgencyIds) && accessibleAgencyIds[0] ? getAgencyById(accessibleAgencyIds[0]) : undefined)
+  );
 }
 
 function saveProfileToLocalCache(profile: NovaSphereUserProfile) {
@@ -387,7 +419,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (cachedLocal && cachedLocal.active) {
         setCurrentUser(appUser);
         setUserProfile(cachedLocal);
-        const resolvedAgency = resolveActiveAgency(cachedLocal.primaryAgencyId, cachedLocal.agencyIds ?? []);
+        const isSuper = cachedLocal.role === 'super_admin' || email === SUPER_ADMIN_EMAIL;
+        const resolvedAgency = resolveActiveAgency(cachedLocal.primaryAgencyId, cachedLocal.agencyIds ?? [], isSuper);
         if (resolvedAgency) setActiveAgency(resolvedAgency);
         setAuthLoading(false);
       }
@@ -399,7 +432,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUserProfile(profile);
           // Super admin : accès à toutes les agences, donc son dernier
           // choix manuel (sélecteur) reste toujours valide.
-          const resolvedAgency = resolveActiveAgency(profile.primaryAgencyId, 'all');
+          const resolvedAgency = resolveActiveAgency(profile.primaryAgencyId, 'all', true);
           if (resolvedAgency) setActiveAgency(resolvedAgency);
           setAuthLoading(false);
           return;
@@ -430,14 +463,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         const profileRow = bootstrapBody.profile;
+        const rawAgencyIds = Array.isArray(bootstrapBody.agency_ids) ? bootstrapBody.agency_ids : [];
+        const deducedPrimaryId = deduceAgencyForUser(email, rawAgencyIds);
+        const finalAgencyIds = rawAgencyIds.length > 0 ? rawAgencyIds : (deducedPrimaryId ? [deducedPrimaryId] : []);
         const profile = buildProfileFromSupabaseUser(appUser, {
           ...profileRow,
-          agencyIds: bootstrapBody.agency_ids ?? [],
+          agencyIds: finalAgencyIds,
           displayName: profileRow?.full_name ?? appUser.displayName ?? email,
           photoURL: profileRow?.avatar_url ?? appUser.photoURL ?? null,
           role: bootstrapBody.role ?? 'user',
-          primaryAgencyId:
-            agencyIdMatchingEmailDomain(email, bootstrapBody.agency_ids ?? []) || bootstrapBody.agency_ids?.[0],
+          primaryAgencyId: deducedPrimaryId || finalAgencyIds[0],
           active: profileRow?.is_active !== false,
           createdAt: profileRow?.created_at ?? new Date().toISOString(),
           updatedAt: profileRow?.updated_at ?? new Date().toISOString(),
@@ -486,7 +521,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         saveProfileToLocalCache(profile);
         setCurrentUser(appUser);
         setUserProfile(profile);
-        const resolvedAgency = resolveActiveAgency(profile.primaryAgencyId, profile.agencyIds ?? []);
+        const isSuper = profile.role === 'super_admin';
+        const resolvedAgency = resolveActiveAgency(profile.primaryAgencyId, profile.agencyIds ?? [], isSuper);
         if (resolvedAgency) setActiveAgency(resolvedAgency);
         setAuthLoading(false);
       } catch (error: unknown) {
@@ -513,7 +549,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (cachedLocal && cachedLocal.active) {
           setCurrentUser(appUser);
           setUserProfile(cachedLocal);
-          const resolvedAgency = resolveActiveAgency(cachedLocal.primaryAgencyId, cachedLocal.agencyIds ?? []);
+          const isSuper = cachedLocal.role === 'super_admin' || email === SUPER_ADMIN_EMAIL;
+          const resolvedAgency = resolveActiveAgency(cachedLocal.primaryAgencyId, cachedLocal.agencyIds ?? [], isSuper);
           if (resolvedAgency) setActiveAgency(resolvedAgency);
           setAuthLoading(false);
           return;
@@ -591,10 +628,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
 
-  // Choix manuel via le sélecteur d'agence (Sidebar) : mémorisé pour rester
-  // prioritaire sur l'agence "préférée" du profil lors des prochaines
-  // resynchronisations en arrière-plan (voir resolveActiveAgency plus haut).
+  // Choix manuel via le sélecteur d'agence (Sidebar / Header) : mémorisé pour rester
+  // prioritaire sur l'agence "préférée" du profil pour le super admin (voir resolveActiveAgency).
+  // Pour un utilisateur normal, cloisonnement strict : interdiction de basculer sur une autre agence.
   const handleSetActiveAgency = (agency: Agency) => {
+    const isSuperAdmin = userProfile?.role === 'super_admin';
+    if (!isSuperAdmin) {
+      const autorisees = agencesDisponibles(AGENCIES, userProfile);
+      if (!autorisees.some((a) => a.id === agency.id)) {
+        console.warn('[AuthContext] Cloisonnement strict : refus de basculer vers une agence non autorisée :', agency.name);
+        return;
+      }
+    }
     setActiveAgency(agency);
     if (agency.id !== 'all') storeActiveAgencyId(agency.id);
   };
