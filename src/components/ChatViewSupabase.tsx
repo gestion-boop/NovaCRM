@@ -2220,55 +2220,62 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     convDoitRecadrerBasRef.current = true;
     if (convScrollRef.current) forcerDefilementBas(convScrollRef.current, 'smooth');
 
-    let inserted: { id?: string } | null = null;
-    let error: unknown = null;
     try {
-      const res = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: convId,
-          user_id: currentUser.uid,
-          kind: 'text',
-          body,
-        } as any)
-        .select('id')
-        .single();
-      inserted = res.data as { id?: string } | null;
-      error = res.error;
-    } catch (e) {
-      // Réseau coupé en plein envoi : sans ce filet, le verrou resterait
-      // fermé et plus AUCUN message ne pourrait partir jusqu'au rechargement
-      // de la page.
-      error = e;
-    }
+      let inserted: { id?: string } | null = null;
+      let error: any = null;
+      try {
+        const res = await supabase
+          .from('messages')
+          .insert({
+            conversation_id: convId,
+            user_id: currentUser.uid,
+            kind: 'text',
+            body,
+          } as any)
+          .select('id')
+          .single();
+        inserted = res.data as { id?: string } | null;
+        error = res.error;
+      } catch (e) {
+        // Réseau coupé en plein envoi : sans ce filet, le verrou resterait
+        // fermé et plus AUCUN message ne pourrait partir jusqu'au rechargement
+        // de la page.
+        error = e;
+      }
 
-    if (error) {
-      // L'envoi a échoué : on retire l'écho optimiste et on restaure le
-      // brouillon pour ne pas faire croire que le message est parti.
+      if (error) {
+        // L'envoi a échoué : on retire l'écho optimiste et on restaure le
+        // brouillon pour ne pas faire croire que le message est parti.
+        retirerMessageDirect(convId, optimisticId);
+        setConvDraft(body);
+        toast.error(`Message non envoyé : ${error?.message || 'Erreur inconnue'}`);
+        return;
+      }
+
+      // L'écho provisoire prend immédiatement l'identifiant réel renvoyé par
+      // la base. La fusion de `loadConvMessages` le reconnaît alors et le
+      // remplace au lieu d'ajouter une seconde copie à côté — c'est ce qui
+      // faisait apparaître chaque message en double.
+      const realId = inserted?.id;
+      if (realId) {
+        const remplacer = (m: DirectMessageRow) => (m.id === optimisticId ? { ...m, id: realId } : m);
+        const maj = (convMessagesCacheRef.current[convId] || []).map(remplacer);
+        convMessagesCacheRef.current[convId] = maj;
+        signatureConvRef.current[convId] = signatureMessages(maj);
+        if (activeConversationIdRef.current === convId) setConvMessages((prev) => prev.map(remplacer));
+      } else {
+        retirerMessageDirect(convId, optimisticId);
+      }
+
+      await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId);
+      loadConversations(true);
+    } catch (e: any) {
       retirerMessageDirect(convId, optimisticId);
       setConvDraft(body);
+      toast.error(`Message non envoyé : ${e?.message || 'Erreur inattendue'}`);
+    } finally {
       sendingConvRef.current = false;
-      return;
     }
-
-    // L'écho provisoire prend immédiatement l'identifiant réel renvoyé par
-    // la base. La fusion de `loadConvMessages` le reconnaît alors et le
-    // remplace au lieu d'ajouter une seconde copie à côté — c'est ce qui
-    // faisait apparaître chaque message en double.
-    const realId = inserted?.id;
-    if (realId) {
-      const remplacer = (m: DirectMessageRow) => (m.id === optimisticId ? { ...m, id: realId } : m);
-      const maj = (convMessagesCacheRef.current[convId] || []).map(remplacer);
-      convMessagesCacheRef.current[convId] = maj;
-      signatureConvRef.current[convId] = signatureMessages(maj);
-      if (activeConversationIdRef.current === convId) setConvMessages((prev) => prev.map(remplacer));
-    } else {
-      retirerMessageDirect(convId, optimisticId);
-    }
-    sendingConvRef.current = false;
-
-    await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId);
-    loadConversations(true);
     // le push est géré côté base (voir note ci-dessous)
 
     // Ticket #12 (nouvelle base, correctif) : un déclencheur existe déjà
@@ -4645,53 +4652,57 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       return;
     }
     try {
-    const messageId = crypto.randomUUID();
-    // Même id que l'insert : le retour temps réel fusionne cette bulle au
-    // lieu d'en ajouter une seconde. On la montre avant l'aller-retour.
-    integrerMessageCanal(canalId, {
-      id: messageId,
-      channel: canalId,
-      created_at: creeLe,
-      sender_id: currentUser.uid,
-      is_deleted: false,
-      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
-      data: { body, sender_id: currentUser.uid, sender_name: displayName, created_at: creeLe },
-    });
-    canalDoitRecadrerBasRef.current = true;
-    if (scrollRef.current) forcerDefilementBas(scrollRef.current, 'smooth');
-    const { error } = await supabase.from('chat_messages').insert({
-      // Signalé : "les Novadji dans les messages ne se mettent pas" — en
-      // creusant, la colonne `id` de `chat_messages` n'a pas de valeur par
-      // défaut côté base (corrigé séparément par une migration SQL), donc
-      // AUCUN message de canal ne s'enregistrait jamais, silencieusement
-      // (violait la contrainte NOT NULL). Fourni explicitement ici aussi,
-      // en plus du correctif base, pour ne plus jamais dépendre d'un défaut
-      // serveur pour cette colonne.
-      id: messageId,
-      channel: canalId,
-      data: { body, sender_id: currentUser.uid, sender_name: displayName, created_at: creeLe },
-      // Bug remonté : sans ces colonnes réelles (avant, seulement dans le
-      // JSONB `data`), le badge "Chat" ne pouvait jamais reconnaître ni ses
-      // propres messages ni un message lu — il grossissait indéfiniment.
-      sender_id: currentUser.uid,
-      is_deleted: false,
-      read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
-    } as any);
-    // Signalé (19/09/2026, Laetitia Pioche/Réseaux sociaux) : "elle reçoit
-    // bien le message mais ne peut pas répondre" — l'erreur de cet insert
-    // n'était jamais lue : que la ligne parte réellement en base ou qu'elle
-    // soit refusée (RLS, contrainte...), le champ se vidait quand même
-    // (`setDraft('')` ci-dessus, avant même l'appel réseau) et rien
-    // n'indiquait un échec — un blocage strictement invisible. Le texte
-    // tapé est maintenant restauré et l'erreur réelle affichée.
-    if (error) {
-      retirerMessageCanal(canalId, messageId);
+      const messageId = crypto.randomUUID();
+      const creeLe = new Date().toISOString();
+      // Même id que l'insert : le retour temps réel fusionne cette bulle au
+      // lieu d'en ajouter une seconde. On la montre avant l'aller-retour.
+      integrerMessageCanal(canalId, {
+        id: messageId,
+        channel: canalId,
+        created_at: creeLe,
+        sender_id: currentUser.uid,
+        is_deleted: false,
+        read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
+        data: { body, sender_id: currentUser.uid, sender_name: displayName, created_at: creeLe },
+      });
+      canalDoitRecadrerBasRef.current = true;
+      if (scrollRef.current) forcerDefilementBas(scrollRef.current, 'smooth');
+      const { error } = await supabase.from('chat_messages').insert({
+        // Signalé : "les Novadji dans les messages ne se mettent pas" — en
+        // creusant, la colonne `id` de `chat_messages` n'a pas de valeur par
+        // défaut côté base (corrigé séparément par une migration SQL), donc
+        // AUCUN message de canal ne s'enregistrait jamais, silencieusement
+        // (violait la contrainte NOT NULL). Fourni explicitement ici aussi,
+        // en plus du correctif base, pour ne plus jamais dépendre d'un défaut
+        // serveur pour cette colonne.
+        id: messageId,
+        channel: canalId,
+        data: { body, sender_id: currentUser.uid, sender_name: displayName, created_at: creeLe },
+        // Bug remonté : sans ces colonnes réelles (avant, seulement dans le
+        // JSONB `data`), le badge "Chat" ne pouvait jamais reconnaître ni ses
+        // propres messages ni un message lu — il grossissait indéfiniment.
+        sender_id: currentUser.uid,
+        is_deleted: false,
+        read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
+      } as any);
+      // Signalé (19/09/2026, Laetitia Pioche/Réseaux sociaux) : "elle reçoit
+      // bien le message mais ne peut pas répondre" — l'erreur de cet insert
+      // n'était jamais lue : que la ligne parte réellement en base ou qu'elle
+      // soit refusée (RLS, contrainte...), le champ se vidait quand même
+      // (`setDraft('')` ci-dessus, avant même l'appel réseau) et rien
+      // n'indiquait un échec — un blocage strictement invisible. Le texte
+      // tapé est maintenant restauré et l'erreur réelle affichée.
+      if (error) {
+        retirerMessageCanal(canalId, messageId);
+        setDraft(body);
+        toast.error(`Message non envoyé : ${error.message}`);
+        return;
+      }
+      await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', canalId);
+      await notifierMembresDuDossier(canal, body, messageId);
+    } catch (e: any) {
       setDraft(body);
-      toast.error(`Message non envoyé : ${error.message}`);
-      return;
-    }
-    await supabase.from('chat_channels').update({ last_message_at: new Date().toISOString() }).eq('id', canalId);
-    await notifierMembresDuDossier(canal, body, messageId);
+      toast.error(`Message non envoyé : ${e?.message || 'Erreur inattendue'}`);
     } finally {
       sendingChannelRef.current = false;
     }
