@@ -551,13 +551,15 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
                     }
                     setDetailReservation(res);
                   }}
-                  className="w-full flex items-center justify-between gap-3 bg-[var(--nv-field)] border border-[var(--nv-border-1)] rounded-xl px-3 py-2 text-left"
+                  className="w-full flex items-center justify-between gap-3 bg-[var(--nv-field)] border border-[var(--nv-border-1)] hover:border-violet-400 rounded-xl px-3 py-2.5 text-left active:scale-[0.99] transition-all"
                 >
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold text-[var(--ink-1)] truncate">{res.equipmentName}</span>
                     <span className="block text-[11px] text-[var(--ink-2)] truncate">{res.agentName} · {formatReservationDateFr(res)}</span>
                   </span>
-                  <span className="text-xs font-semibold text-[var(--ink-violet)] shrink-0">Contrôler</span>
+                  <span className="h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold shrink-0 flex items-center gap-1 shadow-sm">
+                    Examiner
+                  </span>
                 </button>
               ))}
             </div>
@@ -678,212 +680,214 @@ export const CameraReservationModal: React.FC<CameraReservationModalProps> = ({
       {/* Fenêtre de contrôle détaillée d'une réservation (ticket #19) */}
       {detailReservation && (
         <div
-          className="fixed inset-0 bg-black/85 backdrop-blur-md z-[70] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
           onClick={() => setDetailReservation(null)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-[#09151c] border border-[#182e38] rounded-3xl w-full max-w-lg p-6 sm:p-8 text-white shadow-2xl space-y-5"
+            className="bg-[var(--nv-surface-1)] border border-[var(--nv-border-1)] rounded-t-3xl sm:rounded-3xl w-full max-w-lg text-[var(--ink-1)] shadow-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-bold text-purple-300 uppercase tracking-wider mb-1">Demande en attente</p>
-                <h3 className="text-lg font-bold text-white">{detailReservation.equipmentName}</h3>
+            {/* Header fixe */}
+            <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-3 border-b border-[var(--nv-border-1)] flex items-start justify-between gap-3 bg-[var(--nv-surface-1)]">
+              <div className="min-w-0">
+                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-[#F7BC5F]/15 text-[#F9C977] border border-[#F7BC5F]/30 uppercase tracking-wider mb-1">
+                  Demande en attente de validation
+                </span>
+                <h3 className="text-base sm:text-lg font-bold text-[var(--ink-1)] truncate">{detailReservation.equipmentName}</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setDetailReservation(null)}
-                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white shrink-0"
+                aria-label="Fermer"
+                className="p-2 rounded-xl bg-[var(--nv-wash)] hover:bg-[var(--nv-field)] text-[var(--ink-2)] hover:text-[var(--ink-1)] shrink-0 transition-colors"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center gap-2.5">
-                <Briefcase className="w-4 h-4 text-slate-500 shrink-0" />
-                <span>{detailReservation.agentName}</span>
+            {/* Corps scrollable */}
+            <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 py-4 space-y-4 text-sm">
+              <div className="space-y-2.5 bg-[var(--nv-field)] p-3.5 rounded-2xl border border-[var(--nv-border-1)]">
+                <div className="flex items-center gap-2.5">
+                  <Briefcase className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span className="font-semibold text-[var(--ink-1)]">{detailReservation.agentName}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Calendar className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span className="font-semibold text-[var(--ink-1)]">{formatReservationDateFr(detailReservation)}</span>
+                </div>
+                {detailReservation.propertyAddress && (
+                  <div className="flex items-center gap-2.5">
+                    <Hash className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span className="text-[var(--ink-2)]">{detailReservation.propertyAddress}</span>
+                  </div>
+                )}
+                {detailReservation.projectName && (
+                  <div className="flex items-center gap-2.5">
+                    <Film className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span className="text-[var(--ink-2)]">{detailReservation.projectName}</span>
+                  </div>
+                )}
+                {detailReservation.mandateNumber && (
+                  <div className="flex items-center gap-2.5">
+                    <Package className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span className="text-[var(--ink-2)]">Mandat n° {detailReservation.mandateNumber}</span>
+                  </div>
+                )}
+                {detailReservation.note && (
+                  <div className="p-2.5 rounded-xl bg-[var(--nv-surface-1)] border border-[var(--nv-border-1)] text-xs text-[var(--ink-2)] whitespace-pre-wrap">
+                    {detailReservation.note}
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-2.5">
-                <Calendar className="w-4 h-4 text-slate-500 shrink-0" />
-                {/* Demande explicite (7 septembre) : « on ne voit pas trop
-                    bien la date qui est demandée » — date en toutes lettres
-                    au lieu du format brut AAAA-MM-JJ. */}
-                <span className="font-semibold text-white">{formatReservationDateFr(detailReservation)}</span>
-              </div>
-              {detailReservation.propertyAddress && (
-                <div className="flex items-center gap-2.5">
-                  <Hash className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span>{detailReservation.propertyAddress}</span>
-                </div>
-              )}
-              {detailReservation.projectName && (
-                <div className="flex items-center gap-2.5">
-                  <Film className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span>{detailReservation.projectName}</span>
-                </div>
-              )}
-              {detailReservation.mandateNumber && (
-                <div className="flex items-center gap-2.5">
-                  <Package className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span>Mandat n° {detailReservation.mandateNumber}</span>
-                </div>
-              )}
-              {detailReservation.note && (
-                <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-300 whitespace-pre-wrap">
-                  {detailReservation.note}
-                </div>
-              )}
-            </div>
 
-            {/* Disponibilité du matériel demandé pour ce créneau, comparée aux
-                autres réservations (confirmées ou en attente) sur la même
-                journée — pour que l'admin sache tout de suite si le
-                matériel est libre avant de valider ou refuser. */}
-            {(() => {
-              const conflicts = getConflictingReservations(detailReservation);
-              return conflicts.length === 0 ? (
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <p className="text-xs font-semibold text-emerald-300">
-                    Disponible — aucune autre réservation sur ce créneau pour {detailReservation.equipmentName}.
-                  </p>
-                </div>
-              ) : (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 space-y-2">
-                  <p className="text-xs font-semibold text-rose-300 flex items-center gap-2">
-                    <XCircle className="w-4 h-4 shrink-0" />
-                    Conflit avec {conflicts.length > 1 ? `${conflicts.length} autres réservations` : 'une autre réservation'}
-                  </p>
-                  <ul className="space-y-1.5">
-                    {conflicts.map((conflict) => (
-                      <li key={conflict.id} className="text-[11px] text-rose-200/90 pl-6">
-                        <span className="font-semibold">{conflict.agentName}</span>
-                        {' · '}
-                        {conflict.startTime || conflict.startDate.slice(-5)}–{conflict.endTime || conflict.endDate.slice(-5)}
-                        {' · '}
-                        {conflict.equipmentName}
-                        {' · '}
-                        <span className={conflict.status === 'Confirmée' ? 'text-rose-300' : 'text-amber-300'}>
-                          {conflict.status === 'Confirmée' ? 'validée' : 'en attente'}
-                        </span>
+              {/* Disponibilité du matériel demandé pour ce créneau */}
+              {(() => {
+                const conflicts = getConflictingReservations(detailReservation);
+                return conflicts.length === 0 ? (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <p className="text-xs font-semibold text-emerald-300">
+                      Disponible — aucune autre réservation sur ce créneau pour {detailReservation.equipmentName}.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 space-y-2">
+                    <p className="text-xs font-semibold text-rose-300 flex items-center gap-2">
+                      <XCircle className="w-4 h-4 shrink-0" />
+                      Conflit avec {conflicts.length > 1 ? `${conflicts.length} autres réservations` : 'une autre réservation'}
+                    </p>
+                    <ul className="space-y-1.5">
+                      {conflicts.map((conflict) => (
+                        <li key={conflict.id} className="text-[11px] text-rose-200/90 pl-6">
+                          <span className="font-semibold">{conflict.agentName}</span>
+                          {' · '}
+                          {conflict.startTime || conflict.startDate.slice(-5)}–{conflict.endTime || conflict.endDate.slice(-5)}
+                          {' · '}
+                          {conflict.equipmentName}
+                          {' · '}
+                          <span className={conflict.status === 'Confirmée' ? 'text-rose-300' : 'text-amber-300'}>
+                            {conflict.status === 'Confirmée' ? 'validée' : 'en attente'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
+
+              {/* Ticket #41 : compatibilité avec l'agenda avant de valider */}
+              <div className="p-3 rounded-xl bg-[var(--nv-field)] border border-[var(--nv-border-1)] space-y-2">
+                <p className="text-[11px] font-bold text-[var(--ink-2)] uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-purple-400" /> Votre agenda ce jour-là
+                </p>
+                {loadingDayEvents ? (
+                  <p className="text-xs text-[var(--ink-3)]">Vérification...</p>
+                ) : calendarNeedsAuth ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const token = await requestWorkspaceAccessToken();
+                        await loadDayEvents(detailReservation.startDate, token);
+                      } catch {
+                        /* l'utilisateur a annulé la connexion */
+                      }
+                    }}
+                    className="text-xs text-[#F9C977] hover:underline"
+                  >
+                    Connecter mon agenda Google pour vérifier les conflits
+                  </button>
+                ) : dayEvents === null ? (
+                  <p className="text-xs text-[var(--ink-3)]">Agenda indisponible pour le moment.</p>
+                ) : dayEvents.length === 0 ? (
+                  <p className="text-xs text-emerald-400">Rien d'autre à cette date — libre.</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {dayEvents.map((ev, i) => (
+                      <li key={i} className="text-xs text-[var(--ink-2)] flex items-center gap-2">
+                        <span className="text-[var(--ink-3)] font-mono shrink-0">{ev.time}</span>
+                        <span className="truncate">{ev.title}</span>
                       </li>
                     ))}
                   </ul>
-                </div>
-              );
-            })()}
+                )}
+              </div>
 
-            {/* Ticket #41 : compatibilité avec l'agenda avant de valider */}
-            <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5" /> Votre agenda ce jour-là
-              </p>
-              {loadingDayEvents ? (
-                <p className="text-xs text-slate-500">Vérification...</p>
-              ) : calendarNeedsAuth ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      const token = await requestWorkspaceAccessToken();
-                      await loadDayEvents(detailReservation.startDate, token);
-                    } catch {
-                      /* l'utilisateur a annulé la connexion */
-                    }
-                  }}
-                  className="text-xs text-[#F9C977] hover:underline"
-                >
-                  Connecter mon agenda Google pour vérifier les conflits
-                </button>
-              ) : dayEvents === null ? (
-                <p className="text-xs text-slate-500">Agenda indisponible pour le moment.</p>
-              ) : dayEvents.length === 0 ? (
-                <p className="text-xs text-emerald-400">Rien d'autre à cette date — libre.</p>
-              ) : (
-                <ul className="space-y-1">
-                  {dayEvents.map((ev, i) => (
-                    <li key={i} className="text-xs text-slate-300 flex items-center gap-2">
-                      <span className="text-slate-500 font-mono shrink-0">{ev.time}</span>
-                      <span className="truncate">{ev.title}</span>
-                    </li>
+              {/* Demande explicite : panneau de refus */}
+              {showRefusePanel && (
+                <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 space-y-2.5">
+                  <p className="text-[11px] font-bold text-rose-300 uppercase tracking-wider">Refuser cette demande</p>
+                  <textarea
+                    rows={2}
+                    placeholder="Motif du refus (optionnel)..."
+                    value={refuseReason}
+                    onChange={(e) => setRefuseReason(e.target.value)}
+                    className="w-full bg-[var(--nv-field)] border border-[var(--nv-field-border)] rounded-lg p-2.5 text-xs text-[var(--ink-1)] placeholder:text-[var(--ink-3)] focus:outline-none focus:border-rose-500/40 resize-none"
+                  />
+                  <p className="text-[10px] text-[var(--ink-3)]">Proposer d'autres créneaux (facultatif) :</p>
+                  {altSlots.map((slot, i) => (
+                    <input
+                      key={i}
+                      type="text"
+                      placeholder={`Proposition ${i + 1} (ex. mar. 14h-15h)`}
+                      value={slot}
+                      onChange={(e) => setAltSlots((prev) => prev.map((s, j) => (j === i ? e.target.value : s)))}
+                      className="w-full bg-[var(--nv-field)] border border-[var(--nv-field-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--ink-1)] placeholder:text-[var(--ink-3)] focus:outline-none focus:border-rose-500/40"
+                    />
                   ))}
-                </ul>
+                </div>
               )}
             </div>
 
-            {/* Demande explicite (7 septembre) : « qu'on ait trois
-                propositions au cas où, pour pallier aux besoins » — en
-                refusant, proposer jusqu'à 3 créneaux de remplacement,
-                repris dans la notification envoyée au demandeur. */}
-            {showRefusePanel && (
-              <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 space-y-2.5">
-                <p className="text-[11px] font-bold text-rose-300 uppercase tracking-wider">Refuser cette demande</p>
-                <textarea
-                  rows={2}
-                  placeholder="Motif du refus (optionnel)..."
-                  value={refuseReason}
-                  onChange={(e) => setRefuseReason(e.target.value)}
-                  className="w-full bg-[#050f14] border border-[#182e38] rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500/40 resize-none"
-                />
-                <p className="text-[10px] text-slate-400">Proposer d'autres créneaux (facultatif) :</p>
-                {altSlots.map((slot, i) => (
-                  <input
-                    key={i}
-                    type="text"
-                    placeholder={`Proposition ${i + 1} (ex. mardi 9 sept. 14h-15h)`}
-                    value={slot}
-                    onChange={(e) => setAltSlots((prev) => prev.map((s, j) => (j === i ? e.target.value : s)))}
-                    className="w-full bg-[#050f14] border border-[#182e38] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500/40"
-                  />
-                ))}
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-2 border-t border-[#142832]">
+            {/* Footer fixe avec boutons ergonomiques tactiles */}
+            <div className="shrink-0 p-3 sm:p-4 bg-[var(--nv-surface-1)] border-t border-[var(--nv-border-1)] pb-safe">
               {showRefusePanel ? (
-                <>
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => setShowRefusePanel(false)}
-                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
+                    className="h-12 rounded-xl text-xs sm:text-sm font-bold border border-[var(--nv-border-1)] text-[var(--ink-2)] hover:text-[var(--ink-1)] active:scale-95 transition-all flex items-center justify-center"
                   >
                     Annuler
                   </button>
                   <button
                     type="button"
+                    disabled={reviewingId === detailReservation.id}
                     onClick={async () => {
                       await reviewReservation(detailReservation, false, { reason: refuseReason, alternativeSlots: altSlots });
                       setDetailReservation(null);
                     }}
-                    disabled={reviewingId === detailReservation.id}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 disabled:opacity-40 flex items-center gap-2"
+                    className="h-12 rounded-xl text-xs sm:text-sm font-bold bg-rose-500/20 border border-rose-500/40 text-rose-300 hover:bg-rose-500/30 disabled:opacity-40 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                   >
-                    <XCircle className="w-4 h-4" /> Confirmer le refus
+                    <XCircle className="w-4 h-4 shrink-0" />
+                    <span>Confirmer refus</span>
                   </button>
-                </>
+                </div>
               ) : (
-                <>
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setShowRefusePanel(true)}
                     disabled={reviewingId === detailReservation.id}
-                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 disabled:opacity-40 flex items-center gap-2"
+                    onClick={() => setShowRefusePanel(true)}
+                    className="h-12 rounded-xl text-xs sm:text-sm font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                   >
-                    <XCircle className="w-4 h-4" /> Refuser
+                    <XCircle className="w-4 h-4 shrink-0" />
+                    <span>Refuser</span>
                   </button>
                   <button
                     type="button"
+                    disabled={reviewingId === detailReservation.id}
                     onClick={async () => {
                       await reviewReservation(detailReservation, true);
                       setDetailReservation(null);
                     }}
-                    disabled={reviewingId === detailReservation.id}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 flex items-center gap-2"
+                    className="h-12 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950/40 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                   >
-                    <CheckCircle2 className="w-4 h-4" /> Valider
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Valider</span>
                   </button>
-                </>
+                </div>
               )}
             </div>
           </div>

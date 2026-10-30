@@ -643,7 +643,7 @@ export function FormulaireReservationMateriel({
           );
         })}
       </nav>
-      <div className={mobile ? 'space-y-3' : 'grid grid-cols-2 xl:grid-cols-4 gap-6 items-start'}>
+      <div className={mobile ? 'space-y-3 pb-8' : 'grid grid-cols-2 xl:grid-cols-4 gap-6 items-start'}>
         <Etape mobile={mobile} numero={1} titre="Choisir une date" ouvert={etape === 1} resume={resumes[0]} onOuvrir={() => onEtape(1)} ancreId="etape-reservation-1">
           {calendrier}
         </Etape>
@@ -658,17 +658,21 @@ export function FormulaireReservationMateriel({
         </Etape>
       </div>
 
-      <div className="sticky bottom-0 z-10 flex items-center justify-end gap-3 border-t border-[var(--nv-border-1)] bg-[var(--nv-surface-1)] py-3">
-        <button type="button" onClick={onAnnuler} className="px-4 py-2.5 text-sm font-medium text-[var(--ink-2)] hover:text-[var(--ink-1)]">
+      <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2.5 border-t border-[var(--nv-border-1)] bg-[var(--nv-surface-1)]/95 backdrop-blur-md pt-3 pb-safe pb-3">
+        <button
+          type="button"
+          onClick={onAnnuler}
+          className="h-11 px-4 rounded-xl border border-[var(--nv-border-1)] text-xs sm:text-sm font-semibold text-[var(--ink-2)] hover:text-[var(--ink-1)] active:scale-95 transition-all shrink-0"
+        >
           Annuler
         </button>
         <button
           type="submit"
           disabled={confirmationDesactivee}
-          className="px-5 py-3 rounded-full bg-[#F5C451] hover:bg-[#e6b43a] text-[#1a1230] text-sm font-semibold shadow-sm inline-flex items-center gap-2 disabled:opacity-50 transition-colors"
+          className="flex-1 h-11 px-4 rounded-xl bg-[#F5C451] hover:bg-[#e6b43a] text-[#1a1230] text-xs sm:text-sm font-bold shadow-md shadow-amber-950/20 inline-flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-all truncate"
         >
-          <Send className="w-4 h-4" />
-          {confirmationLabel}
+          <Send className="w-4 h-4 shrink-0" />
+          <span className="truncate">{confirmationLabel}</span>
         </button>
       </div>
     </form>

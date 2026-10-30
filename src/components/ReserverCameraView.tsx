@@ -103,36 +103,37 @@ const ReviewRow: React.FC<{
   if (!isCameraAdmin || (!isPending && !isConfirmed)) return null;
 
   return (
-    <div className="mt-3 pt-3 border-t border-white/10 space-y-2.5">
+    <div className="mt-3 pt-3 border-t border-[var(--nv-hairline)] space-y-2.5">
       {showRefusePanel && (
-        <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 space-y-2">
+        <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/25 space-y-2.5">
+          <p className="text-xs font-bold text-rose-300">Refuser cette réservation</p>
           <textarea
             rows={2}
             placeholder="Motif du refus (optionnel)..."
             value={refuseReason}
             onChange={(e) => setRefuseReason(e.target.value)}
-            className="w-full bg-[var(--nv-field)] border border-[var(--nv-field-border)] rounded-lg p-2.5 text-xs text-[var(--ink-1)] placeholder:text-[var(--ink-3)] focus:outline-none focus:border-rose-500/40 resize-none"
+            className="w-full bg-[var(--nv-field)] border border-[var(--nv-field-border)] rounded-xl p-2.5 text-xs text-[var(--ink-1)] placeholder:text-[var(--ink-3)] focus:outline-none focus:border-rose-500/40 resize-none"
           />
-          <p className="text-[10px] text-slate-400">Proposer d'autres créneaux (facultatif) :</p>
+          <p className="text-[10px] text-[var(--ink-3)] font-semibold uppercase tracking-wider">Créneaux alternatifs (facultatif) :</p>
           {altSlots.map((slot, i) => (
             <input
               key={i}
               type="text"
-              placeholder={`Proposition ${i + 1} (ex. mardi 9 sept. 14h-15h)`}
+              placeholder={`Proposition ${i + 1} (ex: mar. 14h-15h)`}
               value={slot}
               onChange={(e) => setAltSlots((prev) => prev.map((s, j) => (j === i ? e.target.value : s)))}
-              className="w-full bg-[var(--nv-field)] border border-[var(--nv-field-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--ink-1)] placeholder:text-[var(--ink-3)] focus:outline-none focus:border-rose-500/40"
+              className="w-full bg-[var(--nv-field)] border border-[var(--nv-field-border)] rounded-xl px-2.5 py-2 text-xs text-[var(--ink-1)] placeholder:text-[var(--ink-3)] focus:outline-none focus:border-rose-500/40"
             />
           ))}
         </div>
       )}
-      <div className="flex items-center justify-end gap-2">
+      <div>
         {showRefusePanel ? (
-          <>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-end">
             <button
               type="button"
               onClick={() => setShowRefusePanel(false)}
-              className="px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
+              className="h-11 sm:h-9 px-4 rounded-xl text-xs font-bold border border-[var(--nv-border-1)] text-[var(--ink-2)] hover:text-[var(--ink-1)] active:scale-95 transition-all flex items-center justify-center"
             >
               Annuler
             </button>
@@ -140,32 +141,35 @@ const ReviewRow: React.FC<{
               type="button"
               disabled={busy}
               onClick={() => void reviewReservation(res, false, { reason: refuseReason, alternativeSlots: altSlots })}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 disabled:opacity-40 flex items-center gap-2"
+              className="h-11 sm:h-9 px-4 rounded-xl text-xs font-bold bg-rose-500/20 border border-rose-500/40 text-rose-300 hover:bg-rose-500/30 disabled:opacity-40 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
             >
-              <XCircle className="w-3.5 h-3.5" /> Confirmer le refus
+              <XCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>Confirmer refus</span>
             </button>
-          </>
+          </div>
         ) : (
-          <>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-end">
             <button
               type="button"
               disabled={busy}
               onClick={() => setShowRefusePanel(true)}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 disabled:opacity-40 flex items-center gap-2"
+              className="h-11 sm:h-9 px-3.5 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 disabled:opacity-40 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
             >
-              <XCircle className="w-3.5 h-3.5" /> Refuser
+              <XCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>Refuser</span>
             </button>
             {isPending && (
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void reviewReservation(res, true)}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 flex items-center gap-2"
+                className="h-11 sm:h-9 px-4 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-950/30 disabled:opacity-40 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" /> Valider
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Valider</span>
               </button>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -318,16 +322,18 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
             return (
             <article
               key={r.id}
-              className={`p-4 bg-[var(--nv-surface-1)] border rounded-2xl ${
-                r.status === 'En attente' ? 'border-[#F7BC5F]/40' : 'border-[var(--nv-hairline)]'
+              className={`p-3.5 sm:p-4 bg-[var(--nv-surface-1)] border rounded-2xl transition-all ${
+                r.status === 'En attente'
+                  ? 'border-[#F7BC5F]/50 ring-1 ring-[#F7BC5F]/20'
+                  : 'border-[var(--nv-hairline)]'
               }`}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-2.5 sm:gap-3">
                 <LogoAgent nom={r.agentName} src={photo.src} secours={photo.secours} />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-[var(--ink-1)] truncate">{r.agentName}</p>
-                    <span className={`shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
+                  <div className="flex items-center justify-between gap-1.5 sm:gap-2">
+                    <p className="text-sm font-bold text-[var(--ink-1)] truncate">{r.agentName}</p>
+                    <span className={`shrink-0 text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full border ${
                       r.status === 'Confirmée'
                         ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                         : r.status === 'Refusée'
@@ -337,17 +343,17 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
                       {r.status}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-sm text-[var(--ink-2)] flex items-center gap-1.5">
+                  <p className="mt-0.5 text-xs sm:text-sm text-[var(--ink-2)] flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 shrink-0 text-purple-300" />
-                    <span>{formatReservationDateFr(r)}</span>
+                    <span className="truncate">{formatReservationDateFr(r)}</span>
                   </p>
                 </div>
               </div>
 
               {lieu && (
-                <h3 className="mt-3 text-[15px] font-semibold leading-snug text-[var(--ink-1)] flex items-start gap-1.5">
+                <h3 className="mt-2.5 text-sm sm:text-[15px] font-semibold leading-snug text-[var(--ink-1)] flex items-start gap-1.5">
                   <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[var(--ink-3)]" />
-                  <span>{lieu}</span>
+                  <span className="break-words">{lieu}</span>
                 </h3>
               )}
 
@@ -379,38 +385,43 @@ export const ReserverCameraView: React.FC<ReserverCameraViewProps> = ({ onOpenMo
               )}
 
               {r.note && (
-                <p className="mt-2 text-xs leading-relaxed text-[var(--ink-2)] line-clamp-3">{r.note}</p>
+                <p className="mt-2 text-xs leading-relaxed text-[var(--ink-2)] line-clamp-3 bg-[var(--nv-field)] p-2 rounded-xl border border-[var(--nv-border-1)]">
+                  {r.note}
+                </p>
               )}
               {r.status === 'Refusée' && r.refusalReason && (
-                <p className="mt-2 text-xs text-rose-300 bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+                <p className="mt-2 text-xs text-rose-300 bg-rose-500/10 p-2 rounded-xl border border-rose-500/20">
                   {r.refusalReason}
                 </p>
               )}
 
               {(canEdit(r) || isCameraAdmin) && (
-                <div className="mt-3 flex items-center justify-end gap-2">
-                  {canEdit(r) && (
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(r)}
-                      aria-label="Modifier cette réservation"
-                      className="h-9 px-3 rounded-xl border border-[var(--nv-border-1)] text-[var(--ink-2)] hover:text-[var(--ink-1)] inline-flex items-center gap-1.5 text-xs font-semibold"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                      Modifier
-                    </button>
-                  )}
-                  {isCameraAdmin && (
-                    <button
-                      type="button"
-                      disabled={reviewingId === r.id}
-                      onClick={() => void handleDelete(r)}
-                      aria-label="Supprimer définitivement cette réservation"
-                      className="h-9 w-9 rounded-xl border border-[var(--nv-border-1)] text-[var(--ink-2)] hover:text-rose-300 inline-flex items-center justify-center disabled:opacity-40"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                <div className="mt-3 pt-2.5 border-t border-[var(--nv-hairline)] flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-[var(--ink-3)] font-medium">Gestion</span>
+                  <div className="flex items-center gap-1.5">
+                    {canEdit(r) && (
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(r)}
+                        aria-label="Modifier cette réservation"
+                        className="h-8 sm:h-9 px-3 rounded-xl border border-[var(--nv-border-1)] bg-[var(--nv-field)] text-[var(--ink-2)] hover:text-[var(--ink-1)] inline-flex items-center gap-1.5 text-xs font-semibold active:scale-95 transition-all"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>Modifier</span>
+                      </button>
+                    )}
+                    {isCameraAdmin && (
+                      <button
+                        type="button"
+                        disabled={reviewingId === r.id}
+                        onClick={() => void handleDelete(r)}
+                        aria-label="Supprimer définitivement cette réservation"
+                        className="h-8 sm:h-9 w-8 sm:w-9 rounded-xl border border-[var(--nv-border-1)] bg-[var(--nv-field)] text-[var(--ink-2)] hover:text-rose-300 inline-flex items-center justify-center disabled:opacity-40 active:scale-95 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
