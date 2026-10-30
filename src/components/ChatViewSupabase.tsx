@@ -2134,8 +2134,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const sendConvMessage = async () => {
     const body = convDraft.trim();
+    const pendingMedia = convPendingMedia;
     if (!activeConversationId || !currentUser) return;
-    if (!body) {
+    if (!body && !pendingMedia) {
       // Audit (10 septembre, Sylvain → Natacha) : « le vocal n'est pas
       // parti, il a dû le refaire ». Cause trouvée : un vocal enregistré
       // reste en attente de réécoute (convVocalPret) jusqu'au clic sur le
@@ -2157,6 +2158,29 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     sendingConvRef.current = true;
     const convId = activeConversationId;
     setConvDraft('');
+    setConvPendingMedia(null);
+
+    // Si une pièce jointe (photo, vidéo, pdf) est attachée : envoi combiné média + texte en un seul post !
+    if (pendingMedia) {
+      try {
+        const err = await insertConvMessage(
+          pendingMedia.kind,
+          pendingMedia.url,
+          undefined,
+          pendingMedia.mime,
+          pendingMedia.fileName,
+          body
+        );
+        if (err) {
+          toast.error(err);
+          setConvDraft(body);
+          setConvPendingMedia(pendingMedia);
+        }
+      } finally {
+        sendingConvRef.current = false;
+      }
+      return;
+    }
 
     // Signalé : le message met ~18s à apparaître, et le destinataire le
     // reçoit avant même que l'expéditeur ne le voie comme envoyé sur son
@@ -2476,6 +2500,29 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
   useEffect(() => { ajusterHauteur(convTextareaRef.current); }, [convDraft]);
   useEffect(() => { ajusterHauteur(channelTextareaRef.current); }, [draft]);
+
+  // Pièces jointes en attente d'envoi dans le composeur (image, vidéo, pdf)
+  // Permet de combiner média et texte dans un seul et même message sans double post
+  const [convPendingMedia, setConvPendingMedia] = useState<{
+    kind: 'image' | 'video' | 'file';
+    url: string;
+    previewUrl?: string;
+    fileName: string;
+    mime?: string;
+    count?: number;
+  } | null>(null);
+
+  const [channelPendingMedia, setChannelPendingMedia] = useState<{
+    kind: 'image' | 'video' | 'file';
+    url: string;
+    previewUrl?: string;
+    fileName: string;
+    mime?: string;
+    count?: number;
+  } | null>(null);
+
+  useEffect(() => { setConvPendingMedia(null); }, [activeConversationId]);
+  useEffect(() => { setChannelPendingMedia(null); }, [activeChannel?.id]);
   // Envoi différé — demande explicite : pouvoir programmer un message pour
   // plus tard au lieu de l'envoyer tout de suite, dans un canal comme dans
   // une conversation directe. Même mécanisme de popover (fermeture au clic
@@ -2789,6 +2836,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     e: React.KeyboardEvent<HTMLTextAreaElement>,
     context: 'conv' | 'channel' | 'editConv' | 'editChannel'
   ) => {
+    // Sur ordinateur, la touche Entrée (sans Shift) envoie le post (texte et/ou pièce jointe)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      if (!isMobile) {
+        if (context === 'conv') {
+          e.preventDefault();
+          void sendConvMessage();
+          return;
+        }
+        if (context === 'channel') {
+          e.preventDefault();
+          void sendMessage();
+          return;
+        }
+      }
+    }
     if (e.metaKey || e.ctrlKey) {
       const k = e.key.toLowerCase();
       if (k === 'b') {
@@ -3349,7 +3411,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     attachmentUrl: string,
     attachmentDuration?: number,
     attachmentMime?: string,
-    fileName?: string
+    fileName?: string,
+    customBody?: string
   ): Promise<string | null> => {
     if (!activeConversationId || !currentUser) return 'Conversation introuvable.';
     const convId = activeConversationId;
@@ -3360,12 +3423,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // rattrapé (l'appelant n'a pas de .catch) : le bouton "Envoyer"
     // semblait n'avoir rien fait, sans le moindre message d'erreur.
     const optimisticId = `optimistic-${crypto.randomUUID()}`;
+    const messageBody = customBody?.trim() ? customBody.trim() : (fileName ?? null);
     integrerMessageDirect(convId, {
       id: optimisticId,
       conversation_id: convId,
       user_id: currentUser.uid,
       kind,
-      body: fileName ?? null,
+      body: messageBody,
       attachment_url: attachmentUrl,
       attachment_mime: attachmentMime ?? null,
       attachment_duration: attachmentDuration ?? null,
@@ -3378,7 +3442,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         conversation_id: convId,
         user_id: currentUser.uid,
         kind,
-        body: fileName ?? null,
+        body: messageBody,
         attachment_url: attachmentUrl,
         attachment_mime: attachmentMime ?? null,
         attachment_duration: attachmentDuration ?? null,
@@ -3424,30 +3488,34 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
       if (dataUrls.length === 0) return;
 
-      // Un SEUL message regroupant les photos sélectionnées en carrousel
+      // Prépare le média pour envoi combiné avec le texte
       const payloadUrl = dataUrls.length === 1 ? dataUrls[0] : JSON.stringify(dataUrls);
       const mime = files[0]?.type || 'image/jpeg';
       const label = dataUrls.length === 1 ? (files[0]?.name || 'Photo') : `${dataUrls.length} photos`;
 
-      const err = await insertConvMessage('image', payloadUrl, undefined, mime, label);
-      if (err) {
-        toast.error(`Erreur d'envoi : ${err}`, { id: toastId });
-      } else if (files.length > 1 && toastId) {
-        toast.success(`Carrousel de ${files.length} photos envoyé !`, { id: toastId });
+      setConvPendingMedia({
+        kind: 'image',
+        url: payloadUrl,
+        previewUrl: dataUrls[0],
+        fileName: label,
+        mime,
+        count: files.length,
+      });
+
+      if (files.length > 1 && toastId) {
+        toast.success(`Carrousel de ${files.length} photos prêt. Tapez votre message et appuyez sur Envoyer.`, { id: toastId });
+      } else {
+        toast.info('Photo prête. Tapez votre message et appuyez sur Envoyer.');
       }
+      convTextareaRef.current?.focus();
     } catch (err: any) {
-      toast.error(err?.message || "Erreur d'envoi des photos.", { id: toastId });
+      toast.error(err?.message || "Erreur de traitement des photos.", { id: toastId });
     } finally {
       setUploadingConvMedia(false);
     }
   };
 
-  // Envoi d'un PDF dans une conversation directe — demandé le 5 octobre
-  // (« je veux avoir la possibilité d'intégrer des pdfs dans les
-  // messages »). Même mécanique que l'image (data URL rangée directement
-  // dans `attachment_url`, pas d'upload Storage séparé) : le rendu du
-  // message (`m.kind === 'file'`) existait déjà, pensé à l'avance mais
-  // jamais atteignable faute de bouton pour l'envoyer.
+  // Envoi d'un PDF dans une conversation directe
   const handleConvFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -3457,28 +3525,22 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       return;
     }
     const reader = new FileReader();
-    reader.onload = async (ev) => {
+    reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
       if (!dataUrl) return;
-      setUploadingConvMedia(true);
-      try {
-        const erreur = await insertConvMessage('file', dataUrl, undefined, file.type || 'application/pdf', file.name);
-        if (erreur) toast.error(erreur);
-      } finally {
-        setUploadingConvMedia(false);
-      }
+      setConvPendingMedia({
+        kind: 'file',
+        url: dataUrl,
+        fileName: file.name,
+        mime: file.type || 'application/pdf',
+      });
+      toast.info('Document prêt. Tapez votre message et appuyez sur Envoyer.');
+      convTextareaRef.current?.focus();
     };
     reader.readAsDataURL(file);
   };
 
-  // Envoi d'une vidéo dans une conversation directe (23 octobre, signalé :
-  // « on ne peut pas uploader de vidéos mp4 dans les discussions chats »).
-  // Contrairement à l'image/au PDF ci-dessus, une vidéo ne tient pas en data
-  // URL dans la ligne — on la dépose sur le Drive Google de l'utilisateur
-  // (même mécanique que ClientProfileView.tsx, handleChatVideoSelected) et
-  // seul le lien est stocké comme attachment_url. Sans compte Workspace
-  // connecté, repli sur une URL locale au navigateur (perdue à la fermeture
-  // de l'onglet, mais au moins le message part).
+  // Envoi d'une vidéo dans une conversation directe
   const handleConvVideoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -3488,16 +3550,23 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       return;
     }
     setUploadingConvMedia(true);
+    const toastId = toast.loading('Préparation de la vidéo...');
     try {
       let token = getCachedAccessToken();
       if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
       const url = token
         ? (await uploadVideoToDriveFolder(token, file, 'Messagerie interne')).fileUrl
         : URL.createObjectURL(file);
-      const erreur = await insertConvMessage('video', url, undefined, file.type || 'video/mp4', file.name);
-      if (erreur) toast.error(erreur);
+      setConvPendingMedia({
+        kind: 'video',
+        url,
+        fileName: file.name,
+        mime: file.type || 'video/mp4',
+      });
+      toast.success('Vidéo prête. Tapez votre message et appuyez sur Envoyer.', { id: toastId });
+      convTextareaRef.current?.focus();
     } catch (err: any) {
-      toast.error(err?.message || "Impossible d'envoyer la vidéo");
+      toast.error(err?.message || "Impossible de préparer la vidéo", { id: toastId });
     } finally {
       setUploadingConvMedia(false);
     }
@@ -3516,7 +3585,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     attachmentUrl: string,
     attachmentDuration?: number,
     attachmentMime?: string,
-    fileName?: string
+    fileName?: string,
+    customBody?: string
   ): Promise<string | null> => {
     if (!activeChannel || !currentUser) return 'Canal introuvable.';
     const canalId = activeChannel.id;
@@ -3525,6 +3595,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // promesse jamais rattrapé au lieu de remonter un message d'erreur.
     const messageId = crypto.randomUUID();
     const creeLe = new Date().toISOString();
+    const messageBody = customBody?.trim() ? customBody.trim() : (fileName ?? '');
     integrerMessageCanal(canalId, {
       id: messageId,
       channel: canalId,
@@ -3533,12 +3604,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       is_deleted: false,
       read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
       data: {
-        body: fileName ?? '',
+        body: messageBody,
         kind,
         attachmentUrl,
         attachment_url: attachmentUrl,
         attachmentMime: attachmentMime ?? undefined,
         attachmentDuration: attachmentDuration ?? undefined,
+        fileName: fileName ?? undefined,
         sender_id: currentUser.uid,
         sender_name: displayName,
         created_at: creeLe,
@@ -3553,12 +3625,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         is_deleted: false,
         read_by: [{ userId: currentUser.uid, userName: displayName, readAt: creeLe }],
         data: {
-          body: fileName ?? '',
+          body: messageBody,
           kind,
           attachmentUrl,
           attachment_url: attachmentUrl,
           attachmentMime: attachmentMime ?? null,
           attachmentDuration: attachmentDuration ?? null,
+          fileName: fileName ?? null,
           sender_id: currentUser.uid,
           sender_name: displayName,
           created_at: creeLe,
@@ -3604,18 +3677,28 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
       if (dataUrls.length === 0) return;
 
+      // Prépare le média pour envoi combiné avec le texte
       const payloadUrl = dataUrls.length === 1 ? dataUrls[0] : JSON.stringify(dataUrls);
       const mime = files[0]?.type || 'image/jpeg';
       const label = dataUrls.length === 1 ? (files[0]?.name || 'Photo') : `${dataUrls.length} photos`;
 
-      const err = await insertChannelMedia('image', payloadUrl, undefined, mime, label);
-      if (err) {
-        toast.error(`Erreur d'envoi : ${err}`, { id: toastId });
-      } else if (files.length > 1 && toastId) {
-        toast.success(`Carrousel de ${files.length} photos envoyé !`, { id: toastId });
+      setChannelPendingMedia({
+        kind: 'image',
+        url: payloadUrl,
+        previewUrl: dataUrls[0],
+        fileName: label,
+        mime,
+        count: files.length,
+      });
+
+      if (files.length > 1 && toastId) {
+        toast.success(`Carrousel de ${files.length} photos prêt. Tapez votre message et appuyez sur Envoyer.`, { id: toastId });
+      } else {
+        toast.info('Photo prête. Tapez votre message et appuyez sur Envoyer.');
       }
+      channelTextareaRef.current?.focus();
     } catch (err: any) {
-      toast.error(err?.message || "Erreur lors de l'envoi des photos.", { id: toastId });
+      toast.error(err?.message || "Erreur lors de la préparation des photos.", { id: toastId });
     } finally {
       setUploadingChannelMedia(false);
       if (channelImageInputRef.current) channelImageInputRef.current.value = '';
@@ -3638,8 +3721,14 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
-      const erreur = await insertChannelMedia('file', dataUrl, undefined, file.type || 'application/pdf', file.name);
-      if (erreur) toast.error(erreur);
+      setChannelPendingMedia({
+        kind: 'file',
+        url: dataUrl,
+        fileName: file.name,
+        mime: file.type || 'application/pdf',
+      });
+      toast.info('Document prêt. Tapez votre message et appuyez sur Envoyer.');
+      channelTextareaRef.current?.focus();
     } finally {
       setUploadingChannelMedia(false);
       if (channelFileInputRef.current) channelFileInputRef.current.value = '';
@@ -3655,16 +3744,23 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       return;
     }
     setUploadingChannelMedia(true);
+    const toastId = toast.loading('Préparation de la vidéo...');
     try {
       let token = getCachedAccessToken();
       if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
       const url = token
         ? (await uploadVideoToDriveFolder(token, file, `Canal - ${activeChannel?.name || 'Messagerie'}`)).fileUrl
         : URL.createObjectURL(file);
-      const erreur = await insertChannelMedia('video', url, undefined, file.type || 'video/mp4', file.name);
-      if (erreur) toast.error(erreur);
+      setChannelPendingMedia({
+        kind: 'video',
+        url,
+        fileName: file.name,
+        mime: file.type || 'video/mp4',
+      });
+      toast.success('Vidéo prête. Tapez votre message et appuyez sur Envoyer.', { id: toastId });
+      channelTextareaRef.current?.focus();
     } catch (err: any) {
-      toast.error(err?.message || "Impossible d'envoyer la vidéo");
+      toast.error(err?.message || "Impossible de préparer la vidéo", { id: toastId });
     } finally {
       setUploadingChannelMedia(false);
       if (channelVideoInputRef.current) channelVideoInputRef.current.value = '';
@@ -4500,7 +4596,9 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
   const sendMessage = async () => {
     if (!activeChannel || !currentUser) return;
-    if (!draft.trim()) {
+    const body = draft.trim();
+    const pendingMedia = channelPendingMedia;
+    if (!body && !pendingMedia) {
       // Même correctif que sendConvMessage (voir son commentaire) : un
       // vocal en attente (channelVocalPret) ne doit pas rester bloqué
       // silencieusement si on utilise ce bouton/Entrée plutôt que celui de
@@ -4511,11 +4609,32 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     // Même garde que pour les conversations directes : voir sendConvMessage.
     if (sendingChannelRef.current) return;
     sendingChannelRef.current = true;
-    const body = draft.trim();
     const canal = activeChannel;
     const canalId = canal.id;
-    const creeLe = new Date().toISOString();
     setDraft('');
+    setChannelPendingMedia(null);
+
+    // Si une pièce jointe (photo, vidéo, pdf) est attachée : envoi combiné média + texte en un seul post !
+    if (pendingMedia) {
+      try {
+        const err = await insertChannelMedia(
+          pendingMedia.kind,
+          pendingMedia.url,
+          undefined,
+          pendingMedia.mime,
+          pendingMedia.fileName,
+          body
+        );
+        if (err) {
+          toast.error(err);
+          setDraft(body);
+          setChannelPendingMedia(pendingMedia);
+        }
+      } finally {
+        sendingChannelRef.current = false;
+      }
+      return;
+    }
     try {
     const messageId = crypto.randomUUID();
     // Même id que l'insert : le retour temps réel fusionne cette bulle au
@@ -6127,11 +6246,16 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                       par un <video>, d'où l'iframe. Le repli local (pas de Workspace
                                       connecté) reste un vrai fichier, lisible en <video>. */}
                                   {m.kind === 'video' && m.attachment_url && (
-                                    isDriveEmbedUrl(m.attachment_url) ? (
-                                      <iframe src={m.attachment_url} allow="autoplay" className="max-w-[220px] w-[220px] h-[160px] rounded-xl bg-black border-0" />
-                                    ) : (
-                                      <video src={m.attachment_url} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
-                                    )
+                                    <div className="space-y-1.5">
+                                      {isDriveEmbedUrl(m.attachment_url) ? (
+                                        <iframe src={m.attachment_url} allow="autoplay" className="max-w-[220px] w-[220px] h-[160px] rounded-xl bg-black border-0" />
+                                      ) : (
+                                        <video src={m.attachment_url} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
+                                      )}
+                                      {m.body && m.body !== 'video' && !m.body.endsWith('.mp4') && !m.body.endsWith('.mov') && (
+                                        <p className="whitespace-pre-line select-text leading-relaxed mt-1">{linkifyText(m.body)}</p>
+                                      )}
+                                    </div>
                                   )}
                                   {m.kind === 'voice' && m.attachment_url && (
                                     <div className="flex items-center gap-2">
@@ -6140,13 +6264,19 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                     </div>
                                   )}
                                   {m.kind === 'file' && m.attachment_url && (
-                                    <button
-                                      type="button"
-                                      onClick={() => void ouvrirPieceJointe(m.attachment_url as string)}
-                                      className="underline text-xs text-left"
-                                    >
-                                      {m.body || 'Document'}
-                                    </button>
+                                    <div className="space-y-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => void ouvrirPieceJointe(m.attachment_url as string)}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs text-white border border-white/10 transition-colors text-left"
+                                      >
+                                        <Paperclip className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
+                                        <span className="underline truncate max-w-[200px]">{m.body?.endsWith('.pdf') ? m.body : 'Document PDF'}</span>
+                                      </button>
+                                      {m.body && !m.body.endsWith('.pdf') && (
+                                        <p className="whitespace-pre-line select-text leading-relaxed mt-1">{linkifyText(m.body)}</p>
+                                      )}
+                                    </div>
                                   )}
                                   {m.edited_at && <span className="text-[9px] italic opacity-60 ml-1">(modifié)</span>}
                                 </>
@@ -6442,6 +6572,52 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       toujours ; Maj+Entrée fait un retour à la ligne. Le coin
                       arrondi passe de `rounded-full` à `rounded-3xl` : un
                       arrondi total sur plusieurs lignes rognerait le texte. */}
+                  {/* Prévisualisation de la pièce jointe attachée au composeur (image, vidéo ou document) */}
+                  {convPendingMedia && (
+                    <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-white/5 border border-[#F7BC5F]/35 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {convPendingMedia.kind === 'image' && convPendingMedia.previewUrl && (
+                          <img
+                            src={convPendingMedia.previewUrl}
+                            alt="Aperçu"
+                            className="w-10 h-10 rounded-lg object-cover border border-white/10 shrink-0 bg-black/40"
+                          />
+                        )}
+                        {convPendingMedia.kind === 'video' && (
+                          <div className="w-10 h-10 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center shrink-0">
+                            <VideoIcon className="w-5 h-5 text-sky-400" />
+                          </div>
+                        )}
+                        {convPendingMedia.kind === 'file' && (
+                          <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                            <FileText className="w-5 h-5 text-amber-400" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-white truncate flex items-center gap-1.5">
+                            <span className="truncate">{convPendingMedia.fileName}</span>
+                            {convPendingMedia.count && convPendingMedia.count > 1 && (
+                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#F7BC5F] text-slate-950 shrink-0">
+                                +{convPendingMedia.count - 1}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            Pièce jointe attachée · Rédigez votre texte puis envoyez
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setConvPendingMedia(null)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                        title="Retirer la pièce jointe"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="relative flex items-center gap-1.5 bg-[#081b1f] border border-white/15 focus-within:border-[#F7BC5F]/60 rounded-2xl px-2 py-1.5 shadow-inner transition-colors">
                     {renderFormatToolbar('conv')}
                     {/* Téléphone : un seul « + » à gauche */}
@@ -6600,8 +6776,15 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                             try {
                               const dataUrl = await compresserImage(file);
                               if (dataUrl) {
-                                const err = await insertConvMessage('image', dataUrl, undefined, file.type || 'image/jpeg', file.name);
-                                if (err) toast.error(err);
+                                setConvPendingMedia({
+                                  kind: 'image',
+                                  url: dataUrl,
+                                  previewUrl: dataUrl,
+                                  fileName: 'Image collée',
+                                  mime: file.type || 'image/jpeg',
+                                });
+                                toast.info('Image collée prête. Tapez votre message et appuyez sur Envoyer.');
+                                convTextareaRef.current?.focus();
                               }
                             } finally {
                               setUploadingConvMedia(false);
@@ -6838,8 +7021,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
                     <button
                       onClick={sendConvMessage}
-                      disabled={(!convDraft.trim() && !convVocalPret) || isRecordingConv}
-                      className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F7BC5F] hover:bg-[#f9c978] active:scale-95 disabled:opacity-30 text-slate-950 shadow-sm transition-all shrink-0"
+                      disabled={(!convDraft.trim() && !convVocalPret && !convPendingMedia) || isRecordingConv}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F7BC5F] hover:bg-[#f9c978] active:scale-95 disabled:opacity-30 text-slate-950 shadow-sm transition-all shrink-0 cursor-pointer"
                     >
                       <Send className="w-4 h-4" />
                     </button>
@@ -6988,10 +7171,17 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           }
                           const videoUrl = m.data?.kind === 'video' ? (m.data?.attachmentUrl || m.data?.attachment_url || (m as any).attachment_url) : null;
                           if (videoUrl) {
-                            return isDriveEmbedUrl(videoUrl) ? (
-                              <iframe src={videoUrl} allow="autoplay" className="max-w-[220px] w-[220px] h-[160px] rounded-xl bg-black border-0" />
-                            ) : (
-                              <video src={videoUrl} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
+                            return (
+                              <div className="space-y-1.5">
+                                {isDriveEmbedUrl(videoUrl) ? (
+                                  <iframe src={videoUrl} allow="autoplay" className="max-w-[220px] w-[220px] h-[160px] rounded-xl bg-black border-0" />
+                                ) : (
+                                  <video src={videoUrl} controls controlsList="nofullscreen" className="max-w-[220px] rounded-xl bg-black" />
+                                )}
+                                {m.data?.body && m.data.body !== 'video' && !m.data.body.endsWith('.mp4') && !m.data.body.endsWith('.mov') && (
+                                  <p className="whitespace-pre-line select-text leading-relaxed mt-1">{linkifyText(m.data.body)}</p>
+                                )}
+                              </div>
                             );
                           }
                           const voiceUrl = m.data?.kind === 'voice' ? (m.data?.attachmentUrl || m.data?.attachment_url || (m as any).attachment_url) : null;
@@ -7008,14 +7198,19 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           const fileUrl = m.data?.kind === 'file' ? (m.data?.attachmentUrl || m.data?.attachment_url || (m as any).attachment_url) : null;
                           if (fileUrl) {
                             return (
-                              <button
-                                type="button"
-                                onClick={() => void ouvrirPieceJointe(fileUrl as string)}
-                                className="underline text-xs flex items-center gap-1.5 text-left"
-                              >
-                                <Paperclip className="w-3.5 h-3.5 shrink-0" />
-                                {m.data?.body || 'Document'}
-                              </button>
+                              <div className="space-y-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => void ouvrirPieceJointe(fileUrl as string)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs text-white border border-white/10 transition-colors text-left"
+                                >
+                                  <Paperclip className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
+                                  <span className="underline truncate max-w-[200px]">{m.data?.fileName || (m.data?.body?.endsWith('.pdf') ? m.data.body : 'Document PDF')}</span>
+                                </button>
+                                {m.data?.body && m.data.body !== m.data?.fileName && !m.data.body.endsWith('.pdf') && (
+                                  <p className="whitespace-pre-line select-text leading-relaxed mt-1">{linkifyText(m.data.body)}</p>
+                                )}
+                              </div>
                             );
                           }
                           if (m.data?.body?.trim()) {
@@ -7227,6 +7422,53 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     </button>
                   </div>
                 )}
+
+                {/* Prévisualisation de la pièce jointe attachée au composeur du canal (image, vidéo ou document) */}
+                {channelPendingMedia && (
+                  <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-white/5 border border-[#F7BC5F]/35 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {channelPendingMedia.kind === 'image' && channelPendingMedia.previewUrl && (
+                        <img
+                          src={channelPendingMedia.previewUrl}
+                          alt="Aperçu"
+                          className="w-10 h-10 rounded-lg object-cover border border-white/10 shrink-0 bg-black/40"
+                        />
+                      )}
+                      {channelPendingMedia.kind === 'video' && (
+                        <div className="w-10 h-10 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center shrink-0">
+                          <VideoIcon className="w-5 h-5 text-sky-400" />
+                        </div>
+                      )}
+                      {channelPendingMedia.kind === 'file' && (
+                        <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                          <FileText className="w-5 h-5 text-amber-400" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white truncate flex items-center gap-1.5">
+                          <span className="truncate">{channelPendingMedia.fileName}</span>
+                          {channelPendingMedia.count && channelPendingMedia.count > 1 && (
+                            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#F7BC5F] text-slate-950 shrink-0">
+                              +{channelPendingMedia.count - 1}
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-slate-400">
+                          Pièce jointe attachée · Rédigez votre texte puis envoyez
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setChannelPendingMedia(null)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                      title="Retirer la pièce jointe"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
                 <div className="relative flex items-center gap-1.5 bg-[#081b1f] border border-white/15 focus-within:border-[#F7BC5F]/60 rounded-2xl px-2 py-1.5 shadow-inner transition-colors">
                   {renderFormatToolbar('channel')}
                 <div className="sm:hidden shrink-0">
@@ -7658,8 +7900,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                 )}
                 <button
                   onClick={sendMessage}
-                  disabled={(!draft.trim() && !channelVocalPret) || isRecordingChannel}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F7BC5F] hover:bg-[#f9c978] active:scale-95 disabled:opacity-30 text-slate-950 shadow-sm transition-all shrink-0"
+                  disabled={(!draft.trim() && !channelVocalPret && !channelPendingMedia) || isRecordingChannel}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F7BC5F] hover:bg-[#f9c978] active:scale-95 disabled:opacity-30 text-slate-950 shadow-sm transition-all shrink-0 cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
                 </button>
