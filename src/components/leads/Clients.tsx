@@ -679,7 +679,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                   </div>
                 </div>
 
-                {/* Badges lead type / ville / rappel */}
+                {/* Badges lead type / ville / consentement */}
                 <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-400 mt-1">
                   {l.lead_type && (
                     <span className="px-2 py-0.5 rounded-md bg-[#F7BC5F]/15 border border-[#F7BC5F]/30 text-[#F9C977] text-[10px] font-bold">
@@ -687,17 +687,6 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                     </span>
                   )}
                   {l.agency_id === IMMOSPHERA_ID && <ConsentStatusBadge record={l.latest_consent} />}
-                  {statusCfg && (
-                    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border", statusCfg.chip)}>
-                      <statusCfg.Icon className="w-2.5 h-2.5" />
-                      {statusCfg.label}
-                    </span>
-                  )}
-                  {l.pipeline_stages?.name && (
-                    <span className="text-[11px] text-slate-400 truncate">
-                      · {l.pipeline_stages.name}
-                    </span>
-                  )}
                 </div>
 
                 {/* Actions 1-tap: Appel + Email + Fiche */}
@@ -743,7 +732,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
               className={cn(
                 // Ticket #4 (nouvelle base) : fond de carte plus marqué, moins
                 // transparent (bg-card/96 laissait trop transparaître le fond).
-                "group relative flex h-full min-h-[220px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card cursor-pointer [content-visibility:auto] [contain-intrinsic-size:0_220px]",
+                "group relative flex h-full min-h-[175px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card cursor-pointer [content-visibility:auto] [contain-intrinsic-size:0_175px]",
                 "hover:border-[hsl(43_55%_40%/0.42)] hover:shadow-[0_16px_40px_hsl(43_70%_28%/0.13)] hover:-translate-y-0.5 transition-all duration-200",
                 l.archived_at && "opacity-35 grayscale border-dashed",
               )}
@@ -854,17 +843,6 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                       Attribué à {getAssignedName(l)}
                     </span>
                   )}
-                  {statusCfg && (
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border",
-                        statusCfg.chip,
-                      )}
-                    >
-                      <statusCfg.Icon className="w-3 h-3" />
-                      {statusCfg.label}
-                    </span>
-                  )}
                 </div>
 
                 {/* ── Contact ── */}
@@ -915,16 +893,6 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                     </p>
                   )}
                 </div>
-
-                {/* ── Pipeline ── */}
-                {l.pipeline_stages?.name && (
-                  <div className="border-t border-border/60 pt-2.5 text-[13px]">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">
-                      Pipeline
-                    </p>
-                    <p className="font-semibold text-foreground">{l.pipeline_stages.name}</p>
-                  </div>
-                )}
               </div>
 
               {/* ── Footer : créateur + flèche ── */}
