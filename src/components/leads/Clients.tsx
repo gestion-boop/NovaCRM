@@ -1,6 +1,6 @@
 import { matchesAgency } from "@/hooks/useContacts";
 import { clicMailCrm } from '@/lib/composerMail';
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useRef, useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -99,6 +99,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
   // (lead_type), à côté du filtre de température déjà existant.
   const [typeFilter, setTypeFilter] = useState<"all" | "Acquéreur" | "Vendeur">("all");
   const [scope, setScope] = useState<"mine" | "shared" | "all">("mine");
+  const [, startTransition] = useTransition();
 
   // 30/09/2026, demande explicite : dans l'agence Immosphera, chaque
   // utilisateur ne voit que SES clients — le sélecteur « Tous (agence) » est
@@ -112,7 +113,9 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
   const scopeEffectif: "mine" | "shared" | "all" = scope === "all" && !peutVoirToutAgence ? "mine" : scope;
 
   useEffect(() => {
-    if (!peutVoirToutAgence && scope === "all") setScope("mine");
+    if (!peutVoirToutAgence && scope === "all") {
+      startTransition(() => setScope("mine"));
+    }
   }, [peutVoirToutAgence, scope]);
   const [editing, setEditing] = useState<any | null>(null);
   const [open, setOpen] = useState(false);
@@ -263,19 +266,21 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
     return () => { supabase.removeChannel(channel); };
   }, [qc]);
 
-  const filtered = leads.filter((l: any) => {
-    if (filter !== "all" && l.temperature !== filter) return false;
-    if (typeFilter !== "all" && l.lead_type !== typeFilter) return false;
-    if (search) {
-      const s = search.toLowerCase();
-      return (
-        l.full_name?.toLowerCase().includes(s) ||
-        l.email?.toLowerCase().includes(s) ||
-        l.phone?.toLowerCase().includes(s)
-      );
-    }
-    return true;
-  });
+  const filtered = useMemo(() => {
+    return leads.filter((l: any) => {
+      if (filter !== "all" && l.temperature !== filter) return false;
+      if (typeFilter !== "all" && l.lead_type !== typeFilter) return false;
+      if (search) {
+        const s = search.toLowerCase();
+        return (
+          l.full_name?.toLowerCase().includes(s) ||
+          l.email?.toLowerCase().includes(s) ||
+          l.phone?.toLowerCase().includes(s)
+        );
+      }
+      return true;
+    });
+  }, [leads, filter, typeFilter, search]);
 
   /**
    * Extrait le nom de famille pour classer les contacts archivés.
@@ -293,33 +298,68 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
    * 1. Tous les contacts actifs en premier, dans leur ordre actuel.
    * 2. Tous les contacts archivés à la fin, classés par nom de famille.
    */
-  const displayedLeads = filtered
-    .map((lead: any, originalIndex: number) => ({ lead, originalIndex }))
-    .sort((a, b) => {
-      const aArchived = Boolean(a.lead.archived_at);
-      const bArchived = Boolean(b.lead.archived_at);
+  const displayedLeads = useMemo(() => {
+    return filtered
+      .map((lead: any, originalIndex: number) => ({ lead, originalIndex }))
+      .sort((a, b) => {
+        const aArchived = Boolean(a.lead.archived_at);
+        const bArchived = Boolean(b.lead.archived_at);
 
-      if (aArchived !== bArchived) {
-        return aArchived ? 1 : -1;
-      }
+        if (aArchived !== bArchived) {
+          return aArchived ? 1 : -1;
+        }
 
-      if (!aArchived && !bArchived) {
-        return a.originalIndex - b.originalIndex;
-      }
+        if (!aArchived && !bArchived) {
+          return a.originalIndex - b.originalIndex;
+        }
 
-      const lastNameComparison = getLastName(a.lead.full_name).localeCompare(getLastName(b.lead.full_name), "fr", {
-        sensitivity: "base",
-        ignorePunctuation: true,
-      });
+        const lastNameComparison = getLastName(a.lead.full_name).localeCompare(getLastName(b.lead.full_name), "fr", {
+          sensitivity: "base",
+          ignorePunctuation: true,
+        });
 
-      if (lastNameComparison !== 0) return lastNameComparison;
+        if (lastNameComparison !== 0) return lastNameComparison;
 
-      return (a.lead.full_name ?? "").localeCompare(b.lead.full_name ?? "", "fr", {
-        sensitivity: "base",
-        ignorePunctuation: true,
-      });
-    })
-    .map(({ lead }) => lead);
+        return (a.lead.full_name ?? "").localeCompare(b.lead.full_name ?? "", "fr", {
+          sensitivity: "base",
+          ignorePunctuation: true,
+        });
+      })
+      .map(({ lead }) => lead);
+  }, [filtered]);
+
+  // Performance CWV (INP) : rendu progressif par lots de 36 cartes pour éviter
+  // de saturer le thread principal lors du rendu simultané de centaines de clients.
+  const BATCH_SIZE = 36;
+  const [visibleCount, setVisibleCount] = useState(BATCH_SIZE);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setVisibleCount(BATCH_SIZE);
+  }, [scopeEffectif, filter, typeFilter, search]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || visibleCount >= displayedLeads.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          startTransition(() => {
+            setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, displayedLeads.length));
+          });
+        }
+      },
+      { rootMargin: "450px" }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [visibleCount, displayedLeads.length]);
+
+  const leadsToRender = useMemo(() => {
+    return displayedLeads.slice(0, visibleCount);
+  }, [displayedLeads, visibleCount]);
 
   const handleDelete = async (id: string) => {
     if (scopeEffectif === "shared") return;
@@ -408,9 +448,9 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
           {scopesDisponibles.map((s) => (
             <button
               key={s}
-              onClick={() => setScope(s)}
+              onClick={() => startTransition(() => setScope(s))}
               className={cn(
-                "flex-1 py-1.5 px-2 rounded-xl text-xs font-bold text-center transition-all",
+                "flex-1 py-1.5 px-2 rounded-xl text-xs font-bold text-center transition-all cursor-pointer",
                 scopeEffectif === s
                   ? "bg-gradient-to-r from-[#FAD592] via-[#F9C977] to-[#D9A34E] text-[#1a1230] shadow-sm font-extrabold"
                   : "text-slate-400 hover:text-slate-200"
@@ -511,9 +551,9 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
           {scopesDisponibles.map((s) => (
             <button
               key={s}
-              onClick={() => setScope(s)}
+              onClick={() => startTransition(() => setScope(s))}
               className={cn(
-                "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-150",
+                "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-150 cursor-pointer",
                 // Signalé : "gradient-gold"/"shadow-gold" n'existent nulle
                 // part dans la config Tailwind du projet — aucun style
                 // généré, donc le bouton actif se retrouvait sans fond ni
@@ -548,9 +588,9 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
           {(["all", "chaud", "tiede", "froid"] as const).map((f) => (
             <button
               key={f}
-              onClick={() => setFilter(f)}
+              onClick={() => startTransition(() => setFilter(f))}
               className={cn(
-                "px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-150",
+                "px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-150 cursor-pointer",
                 // "gradient-gold"/"shadow-gold" n'existent pas dans la config
                 // Tailwind du projet, aucun style généré — bouton actif sans
                 // fond ni bordure. Signalé le 7 octobre (« celui sélectionné
@@ -571,9 +611,9 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
           {(["all", "Acquéreur", "Vendeur"] as const).map((t) => (
             <button
               key={t}
-              onClick={() => setTypeFilter(t)}
+              onClick={() => startTransition(() => setTypeFilter(t))}
               className={cn(
-                "px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-150",
+                "px-4 py-1.5 rounded-full text-sm font-semibold border transition-all duration-150 cursor-pointer",
                 typeFilter === t
                   ? "bg-gradient-to-r from-[#FAD592] via-[#F9C977] to-[#D9A34E] text-[#1a1230] border-transparent shadow-lg shadow-[#F7BC5F]/30"
                   : "border-border hover:bg-accent",
@@ -587,7 +627,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
 
       {/* ── Grille de cartes ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
-        {displayedLeads.map((l: any) => {
+        {leadsToRender.map((l: any) => {
           const reminderStatus = getReminderStatus(l.reminders ?? []);
           const statusCfg = reminderStatus ? STATUS_CONFIG[reminderStatus] : null;
 
@@ -598,7 +638,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                 data-lead-id={l.id}
                 onClick={() => openContact(l.id)}
                 className={cn(
-                  "group relative flex flex-col overflow-hidden rounded-2xl border border-teal-500/20 bg-[#081e22]/95 shadow-md cursor-pointer p-3.5 pl-4 transition-all duration-150 active:scale-[0.99]",
+                  "group relative flex flex-col overflow-hidden rounded-2xl border border-teal-500/20 bg-[#081e22]/95 shadow-md cursor-pointer p-3.5 pl-4 transition-all duration-150 active:scale-[0.99] [content-visibility:auto] [contain-intrinsic-size:0_140px]",
                   l.archived_at && "opacity-40 grayscale border-dashed"
                 )}
               >
@@ -703,7 +743,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
               className={cn(
                 // Ticket #4 (nouvelle base) : fond de carte plus marqué, moins
                 // transparent (bg-card/96 laissait trop transparaître le fond).
-                "group relative flex h-full min-h-[286px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card cursor-pointer",
+                "group relative flex h-full min-h-[286px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card cursor-pointer [content-visibility:auto] [contain-intrinsic-size:0_286px]",
                 "hover:border-[hsl(43_55%_40%/0.42)] hover:shadow-[0_16px_40px_hsl(43_70%_28%/0.13)] hover:-translate-y-0.5 transition-all duration-200",
                 l.archived_at && "opacity-35 grayscale border-dashed",
               )}
@@ -911,6 +951,19 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
           );
         })}
       </div>
+
+      {/* Sentinelle / Chargement progressif pour fluidité INP */}
+      {visibleCount < displayedLeads.length && (
+        <div ref={sentinelRef} className="py-6 flex flex-col items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => startTransition(() => setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, displayedLeads.length)))}
+            className="px-5 py-2.5 rounded-xl bg-card border border-border hover:bg-accent text-xs font-bold text-foreground transition-all cursor-pointer shadow-sm active:scale-95"
+          >
+            Afficher plus de clients ({displayedLeads.length - visibleCount} restants)
+          </button>
+        </div>
+      )}
 
       {filtered.length === 0 && (
         <div className="text-center py-20 text-muted-foreground">
