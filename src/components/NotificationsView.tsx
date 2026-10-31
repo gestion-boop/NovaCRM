@@ -825,6 +825,62 @@ export const NotificationsView: React.FC<
 
   return (
     <div className="p-4 sm:p-5 max-w-full space-y-4 text-white">
+      {/* État système & version — demandé (31 octobre) : remonté tout en
+          haut du panneau (après être passé par le bas, puis en vedette dans
+          le header via UpdateStatusBadge) pour que la mise à jour soit la
+          toute première chose vue en ouvrant la clochette. */}
+      <div className="space-y-2">
+        {isUpdatePending ? (
+          <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 shadow-md">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+              </span>
+              <span className="font-bold text-xs text-amber-300">Mise à jour disponible</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!applyUpdateOnNavigation({})) {
+                  window.location.reload();
+                }
+              }}
+              className="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-md"
+            >
+              Appliquer la mise à jour maintenant
+            </button>
+          </div>
+        ) : (
+          <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-emerald-300 truncate">Mise à jour : OK (À jour)</p>
+                <p className="text-[10px] text-slate-400 font-mono truncate">
+                  Déployée le {buildDateFull || buildStampText || 'récemment'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleCheckUpdates}
+              className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0 border border-white/5"
+              title="Revérifier immédiatement les mises à jour"
+            >
+              Vérifier
+            </button>
+          </div>
+        )}
+
+        {buildSha && (
+          <div className="flex items-center justify-between px-1 text-[10px] text-slate-500 font-mono">
+            <span>Version build :</span>
+            <span>{buildSha}</span>
+          </div>
+        )}
+      </div>
+
       {/* Barre de statut KPI & Actions */}
       <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#07191b]/90 via-[#0d282b]/80 to-[#07191b]/90 border border-teal-500/20 shadow-lg backdrop-blur-xl flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -979,59 +1035,6 @@ export const NotificationsView: React.FC<
           {visibleNotifications.map((notification) => renderNotificationRow(notification))}
         </div>
       )}
-
-      {/* État système & version — positionné clairement tout en bas du panneau latéral droit */}
-      <div className="pt-3 pb-1 border-t border-white/10 space-y-2">
-        {isUpdatePending ? (
-          <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 shadow-md">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="relative flex h-2.5 w-2.5 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-              </span>
-              <span className="font-bold text-xs text-amber-300">Mise à jour disponible</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (!applyUpdateOnNavigation({})) {
-                  window.location.reload();
-                }
-              }}
-              className="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-md"
-            >
-              Appliquer la mise à jour maintenant
-            </button>
-          </div>
-        ) : (
-          <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-emerald-300 truncate">Mise à jour : OK (À jour)</p>
-                <p className="text-[10px] text-slate-400 font-mono truncate">
-                  Déployée le {buildDateFull || buildStampText || 'récemment'}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleCheckUpdates}
-              className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0 border border-white/5"
-              title="Revérifier immédiatement les mises à jour"
-            >
-              Vérifier
-            </button>
-          </div>
-        )}
-
-        {buildSha && (
-          <div className="flex items-center justify-between px-1 text-[10px] text-slate-500 font-mono">
-            <span>Version build :</span>
-            <span>{buildSha}</span>
-          </div>
-        )}
-      </div>
     </div>
   );
 
