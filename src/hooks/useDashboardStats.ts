@@ -221,7 +221,7 @@ export function useDashboardStats() {
   // eux, la pastille mobile s'allumait pour ces notifications sans que rien
   // de correspondant n'apparaisse dans la liste — même incohérence déjà
   // corrigée une fois pour les autres types (voir commentaire plus bas).
-  const MOBILE_VISIBLE_TYPES = ['message', 'mention', 'shared_message', 'reaction', 'task_message', 'announcement', 'daily_summary', 'shared_note', 'shared_document', 'shared_chat_message'];
+  const MOBILE_VISIBLE_TYPES = ['message', 'mention', 'shared_message', 'reaction', 'announcement', 'daily_summary', 'shared_note', 'shared_document', 'shared_chat_message'];
 
   const refreshUnreadNotifications = async () => {
     if (!currentUser) {
@@ -245,7 +245,7 @@ export function useDashboardStats() {
         .eq('user_id', currentUser.uid)
         .eq('is_read', false)
         .is('dismissed_at', null)
-        .neq('type', 'app_update'),
+        .not('type', 'in', '(app_update,task_assigned,shared_task,task_message)'),
       supabase
         .from('notifications')
         .select('id', { count: 'exact', head: true })

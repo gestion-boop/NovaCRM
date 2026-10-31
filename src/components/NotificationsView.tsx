@@ -45,6 +45,10 @@ import { isStandaloneApp } from '@/hooks/useIsStandalone';
 import { UpdateStatusBadge } from './UpdateStatusBadge';
 import { formatBuildDate, useAppUpdateStatus, applyUpdateOnNavigation, fetchServerVersion, setServerVersion } from '@/lib/updateStatus';
 
+// Demande explicite (31 octobre) : plus d'alertes de tâches dans la clochette.
+const TYPES_ALERTE_TACHE = ['task_assigned', 'shared_task', 'task_message', 'internal_task', 'internal_task_message'];
+const estAlerteTache = (rawType?: string) => !!rawType && TYPES_ALERTE_TACHE.includes(rawType);
+
 interface RealNotificationRow {
   id: string;
   user_id: string;
@@ -762,7 +766,7 @@ export const NotificationsView: React.FC<
   const allNotifications = useMemo(
     () =>
       [...mockNotifications, ...notifications].filter(
-        (n) => n.rawType !== 'app_update' && n.navTarget !== 'update'
+        (n) => n.rawType !== 'app_update' && n.navTarget !== 'update' && !estAlerteTache(n.rawType)
       ),
     [mockNotifications, notifications]
   );
