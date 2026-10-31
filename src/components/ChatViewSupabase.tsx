@@ -7528,8 +7528,21 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               );
                             })()}
                           </div>
-                          {isImg && imgUrl && (() => {
-                            const imgs = extraireImagesMessage(imgUrl);
+                          {(() => {
+                            const cImgUrl =
+                              m.data?.attachmentUrl ||
+                              m.data?.attachment_url ||
+                              (m as any).attachment_url ||
+                              (m as any).attachmentUrl ||
+                              m.data?.url ||
+                              (typeof m.data?.body === 'string' &&
+                              (m.data.body.startsWith('data:image/') ||
+                                m.data.body.startsWith('blob:') ||
+                                /^https?:\/\/.*\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(m.data.body))
+                                ? m.data.body
+                                : null);
+                            if (!cImgUrl) return null;
+                            const imgs = extraireImagesMessage(cImgUrl);
                             if (imgs.length <= 1 || (!mine && !isAdmin)) return null;
                             return (
                               <button
