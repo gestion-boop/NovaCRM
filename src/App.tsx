@@ -31,6 +31,7 @@ import ProductTour, { TourStep } from './components/ProductTour';
 import SqlImportModal from './components/SqlImportModal';
 import CameraReservationModal from './components/CameraReservationModal';
 import AnnouncementBanner from './components/AnnouncementBanner';
+import AnnouncementTopBanner from './components/AnnouncementTopBanner';
 
 // Subview components
 const ProjetsInternes = lazy(() => import('./components/ProjetsInternes'));
@@ -337,6 +338,10 @@ function App() {
     return !isLight;
   };
   const [isDarkMode, setIsDarkMode] = useState(computeIsDarkFromTheme);
+  // Bandeau d'annonce défilant (31 octobre) : remplace <Header> (tablette/
+  // ordinateur) tant qu'une annonce show_in_banner est active — voir
+  // AnnouncementTopBanner.tsx, qui pilote cet état via son effet de chargement.
+  const [bannerAnnouncementActive, setBannerAnnouncementActive] = useState(false);
 
   useEffect(() => {
     const handleThemeChanged = () => setIsDarkMode(computeIsDarkFromTheme());
@@ -970,8 +975,11 @@ function App() {
       <AutoEnablePush />
       <EnablePushPrompt />
       <AnnouncementBanner />
-      {/* Top Header Bar - collée tout en haut de l'écran */}
-      <Header
+      <AnnouncementTopBanner onActiveChange={setBannerAnnouncementActive} />
+      {/* Top Header Bar - collée tout en haut de l'écran — masquée tant que
+          le bandeau d'annonce défilant ci-dessus est actif (même emplacement,
+          AnnouncementTopBanner.tsx le remplace exactement). */}
+      {!bannerAnnouncementActive && <Header
         onOpenNouveauLead={() => setShowNouveauLead(true)}
         onOpenClientDictation={() => setShowQuickClientDictation(true)}
         onOpenSqlImport={() => setShowSqlImport(true)}
@@ -1008,7 +1016,7 @@ function App() {
         onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
         onToggleNotifications={() => setNotificationsPanelOpen((open) => !open)}
         menuOpen={mobileMenuOpen}
-      />
+      />}
 
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Sidebar — masquée en mode plein écran Mail */}

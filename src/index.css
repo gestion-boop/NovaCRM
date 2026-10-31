@@ -216,6 +216,14 @@ body {
   background: #256064;
 }
 
+/* Bandeau d'annonce défilant (AnnouncementTopBanner.tsx, 31 octobre) : le
+   texte est dupliqué dans le marquage pour un défilement continu, donc on
+   ne translate que de -50% (longueur d'une seule copie) plutôt que -100%. */
+@keyframes nv-banner-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
 /* Custom fade-in and slide-up animations */
 @keyframes fadeIn {
   from { opacity: 0; }

@@ -273,6 +273,21 @@ const writeStorage = (key: string, value: unknown) => localStorage.setItem(key, 
 const reorder = <T,>(items: T[], from: number, to: number) => { if (to < 0 || to >= items.length) return items; const next=[...items]; const [item]=next.splice(from,1); next.splice(to,0,item); return next; };
 const notify = (message: string) => window.alert(message);
 
+// Refonte historique des annonces (31 octobre) : barre colorée + badge par
+// niveau dans la liste — mêmes 8 niveaux que NIVEAUX_ANNONCE (ChoixAnnonce.tsx),
+// couleurs plus sobres (cette liste n'a pas besoin du style "bouton néon").
+const HIST_LEVEL_META: Record<NiveauAnnonce, { label: string; bar: string; badgeBg: string; badgeText: string }> = {
+  info: { label: 'Information', bar: 'bg-[#F7BC5F]', badgeBg: 'bg-[#F7BC5F]/15', badgeText: 'text-[#F9C977]' },
+  a_verifier: { label: 'À vérifier', bar: 'bg-amber-500', badgeBg: 'bg-amber-500/15', badgeText: 'text-amber-300' },
+  important: { label: 'Important', bar: 'bg-rose-500', badgeBg: 'bg-rose-500/15', badgeText: 'text-rose-300' },
+  succes: { label: 'Succès', bar: 'bg-emerald-500', badgeBg: 'bg-emerald-500/15', badgeText: 'text-emerald-300' },
+  veille: { label: 'Veille', bar: 'bg-sky-500', badgeBg: 'bg-sky-500/15', badgeText: 'text-sky-300' },
+  reponse_demandee: { label: 'Réponse demandée', bar: 'bg-pink-500', badgeBg: 'bg-pink-500/15', badgeText: 'text-pink-300' },
+  signature_compromis: { label: 'Signature compromis', bar: 'bg-amber-400', badgeBg: 'bg-amber-400/15', badgeText: 'text-[#F9C977]' },
+  signature_acte: { label: 'Signature acte', bar: 'bg-[#F7BC5F]', badgeBg: 'bg-[#F7BC5F]/20', badgeText: 'text-[#FAD592]' },
+};
+const NIVEAUX_IMPORTANTS: NiveauAnnonce[] = ['important', 'reponse_demandee', 'a_verifier'];
+
 const inputClass = 'w-full rounded-xl bg-[#071f21] border border-[#1c4448] px-3 py-2.5 text-sm text-white outline-none focus:border-[#F7BC5F]';
 const goldButton = 'px-4 py-2 rounded-xl bg-[#F7BC5F] text-[#07191b] text-xs font-bold flex items-center gap-2 hover:bg-[#f0c557] disabled:opacity-50 disabled:cursor-not-allowed';
 
@@ -351,7 +366,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
 
   const loadAnnouncementsAdmin = async () => {
     const [{ data: list }, { data: reads }, { data: options }, { data: votes }] = await Promise.all([
-      supabase.from('announcements').select('id, message, created_at, is_poll').order('created_at', { ascending: false }).limit(20),
+      supabase.from('announcements').select('id, message, created_at, is_poll, level, show_in_banner').order('created_at', { ascending: false }).limit(20),
       supabase.from('announcement_reads').select('announcement_id, user_id'),
       supabase.from('announcement_poll_options' as any).select('id, announcement_id, label, sort_order').order('sort_order', { ascending: true }),
       supabase.from('announcement_poll_votes' as any).select('announcement_id, option_id, user_id'),
@@ -610,6 +625,11 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
   const [announcementLink, setAnnouncementLink] = useState('');
   const [announcementExpiresAt, setAnnouncementExpiresAt] = useState('');
   const [announcementTargetUserId, setAnnouncementTargetUserId] = useState('');
+  // Bandeau défilant (31 octobre, AnnouncementTopBanner.tsx) : en plus du
+  // message plein écran habituel, affiche aussi cette annonce dans la barre
+  // du haut (tablette/ordinateur) tant qu'elle n'est pas fermée. Ignoré côté
+  // serveur si un sondage est activé (voir api/admin/announcements.ts).
+  const [announcementShowInBanner, setAnnouncementShowInBanner] = useState(false);
   // Demande explicite : "possibilité de créer un sondage avec possibilité
   // de rajouter des choix (oui/non/peut-être/intéressé/pas intéressé/
   // présent/absent...)" — options libres + quelques suggestions rapides
@@ -699,7 +719,11 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
   }, []);
   // Ticket #22 (nouvelle base) : le super admin doit pouvoir savoir qui a
   // consulté une annonce — historique + lecteurs par annonce.
-  const [pastAnnouncements, setPastAnnouncements] = useState<Array<{ id: string; message: string; created_at: string; is_poll?: boolean }>>([]);
+  const [pastAnnouncements, setPastAnnouncements] = useState<Array<{ id: string; message: string; created_at: string; is_poll?: boolean; level?: NiveauAnnonce; show_in_banner?: boolean }>>([]);
+  // Refonte historique (31 octobre) : filtre rapide + recherche texte, sans
+  // toucher au chargement (toujours les 20 dernières, voir loadAnnouncementsAdmin).
+  const [announcementHistFilter, setAnnouncementHistFilter] = useState<'toutes' | 'importantes' | 'sondages'>('toutes');
+  const [announcementHistQuery, setAnnouncementHistQuery] = useState('');
   // Signalé (5 septembre, capture à l'appui) : dans « Annonces précédentes —
   // qui a lu », le lecteur s'affichait comme « 4f6eea64-ce42-40ff-… », son
   // identifiant technique, au lieu de son nom.
@@ -1233,6 +1257,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
           expiresAt: announcementExpiresAt || null,
           targetUserId: announcementTargetUserId || null,
           pollOptions: pollEnabled ? pollOptions : [],
+          showInBanner: announcementShowInBanner,
         }),
       });
       setAnnouncement('');
@@ -1241,6 +1266,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
       setAnnouncementTargetUserId('');
       setAnnouncementLevel('info');
       setAnnouncementAgencyIds(agencesCibleAnnonce(selectedAgency.id));
+      setAnnouncementShowInBanner(false);
       setPollEnabled(false);
       setPollOptions([]);
       setNewPollOption('');
@@ -1554,8 +1580,12 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
 
             <div className="flex items-center justify-between pb-2 border-b border-white/[0.08] min-w-0 gap-2 flex-wrap">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="w-2 h-2 rounded-full bg-[#F7BC5F] shadow-[0_0_8px_rgba(247,188,95,0.8)] shrink-0" />
-                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider truncate">Rédiger un message</span>
+                {/* Refonte (31 octobre) : numéros d'étape (1 message, 2
+                    niveau, 3 diffusion) pour rendre le parcours de
+                    composition plus lisible, sans retirer aucun contrôle
+                    existant — seulement un regroupement visuel plus clair. */}
+                <span className="w-5 h-5 rounded-full bg-[#F7BC5F] text-[#061719] text-[10px] font-black flex items-center justify-center shrink-0">1</span>
+                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider truncate">Votre message</span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {/* Bouton exact de la capture utilisateur — 100% interactif */}
@@ -1686,8 +1716,17 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
               </div>
             </div>
 
+            <div className="flex items-center gap-2 pt-1">
+              <span className="w-5 h-5 rounded-full bg-[#F7BC5F] text-[#061719] text-[10px] font-black flex items-center justify-center shrink-0">2</span>
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">Niveau</span>
+            </div>
             <NiveauxAnnonce value={announcementLevel} onChange={setAnnouncementLevel} />
 
+            <div className="flex items-center gap-2 pt-1">
+              <span className="w-5 h-5 rounded-full bg-[#F7BC5F] text-[#061719] text-[10px] font-black flex items-center justify-center shrink-0">3</span>
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">Diffusion</span>
+            </div>
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-black/20 p-3.5 sm:p-4 w-full min-w-0">
             <div className="space-y-1.5 w-full min-w-0">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Lien ou document joint (facultatif)</span>
               <div className="relative rounded-xl border border-white/10 bg-black/40 focus-within:border-[#F7BC5F]/70 focus-within:ring-2 focus-within:ring-[#F7BC5F]/20 transition-all w-full min-w-0">
@@ -1704,7 +1743,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
             {/* L'agence ouverte est le destinataire. « Une personne » ouvre
                 le sélecteur (avatars, filtre, recherche) et la liste démarre
                 sur cette agence. */}
-            <div className="space-y-1.5 pt-1 w-full min-w-0">
+            <div className="space-y-1.5 w-full min-w-0">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Destinataires</span>
               <div className="flex flex-wrap items-center gap-2">
                 {!announcementTargetUserId && (
@@ -1744,7 +1783,31 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
                 );
               })()}
             </div>
-          </div>
+            </div>
+
+            {/* Bandeau défilant (31 octobre) : en plus du message plein
+                écran habituel, affiche aussi cette annonce dans la barre du
+                haut (tablette/ordinateur) tant qu'elle n'est pas fermée —
+                voir AnnouncementTopBanner.tsx. Jamais pour un sondage (voir
+                plus bas, et api/admin/announcements.ts côté serveur). */}
+            {!pollEnabled && (
+              <label className="flex items-center justify-between gap-3 cursor-pointer select-none rounded-2xl border border-white/10 bg-black/20 px-3.5 py-3">
+                <span className="flex items-center gap-2 min-w-0">
+                  <Megaphone className="w-4 h-4 text-[#F7BC5F] shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-bold text-white">Aussi en bandeau défilant tout en haut</span>
+                    <span className="block text-[11px] text-slate-500">Remplace la barre du haut (tablette/ordinateur) jusqu'au clic sur « OK ».</span>
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={announcementShowInBanner}
+                  onChange={(e) => setAnnouncementShowInBanner(e.target.checked)}
+                  className="w-4 h-4 accent-[#F7BC5F] rounded cursor-pointer shrink-0"
+                />
+              </label>
+            )}
+            </div>
 
           {showUserPicker && (() => {
             const agenceOuverte = agenceUniqueAnnonce(selectedAgency.id);
@@ -1934,7 +1997,29 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
             {showPastAnnouncements && (
               <>
             {pastAnnouncements.length > 0 && (
-              <div className="flex justify-end -mt-1">
+              <div className="flex items-center justify-between gap-2 -mt-1">
+                {/* Refonte (31 octobre) : filtre rapide + recherche, pour
+                    retrouver une annonce sans dérouler toute la liste. */}
+                <div className="flex items-center gap-1.5 overflow-x-auto">
+                  {([
+                    ['toutes', 'Toutes'],
+                    ['importantes', 'Importantes'],
+                    ['sondages', 'Sondages'],
+                  ] as const).map(([valeur, libelle]) => (
+                    <button
+                      key={valeur}
+                      type="button"
+                      onClick={() => setAnnouncementHistFilter(valeur)}
+                      className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors cursor-pointer ${
+                        announcementHistFilter === valeur
+                          ? 'bg-white/15 text-white'
+                          : 'border border-white/10 text-slate-400 hover:text-white hover:border-white/20'
+                      }`}
+                    >
+                      {libelle}
+                    </button>
+                  ))}
+                </div>
                 <button
                   type="button"
                   onClick={() => void deleteAllAnnouncements()}
@@ -1947,23 +2032,57 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
                 </button>
               </div>
             )}
+            {pastAnnouncements.length > 0 && (
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  value={announcementHistQuery}
+                  onChange={(e) => setAnnouncementHistQuery(e.target.value)}
+                  placeholder="Rechercher dans l'historique…"
+                  className="w-full bg-black/30 border border-white/10 rounded-full pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-[#F7BC5F]/50"
+                />
+              </div>
+            )}
             {pastAnnouncements.length === 0 ? (
               <p className="text-xs text-slate-500 py-4 text-center">Aucune annonce publiée pour l'instant.</p>
-            ) : (
+            ) : (() => {
+              const q = announcementHistQuery.trim().toLowerCase();
+              const filtered = pastAnnouncements.filter((a) => {
+                if (announcementHistFilter === 'sondages' && !a.is_poll) return false;
+                if (announcementHistFilter === 'importantes' && !NIVEAUX_IMPORTANTS.includes((a.level || 'info') as NiveauAnnonce)) return false;
+                if (q && !a.message.toLowerCase().includes(q)) return false;
+                return true;
+              });
+              if (filtered.length === 0) {
+                return <p className="text-xs text-slate-500 py-4 text-center">Aucune annonce ne correspond à ce filtre.</p>;
+              }
+              return (
               <div className="space-y-2">
-                {pastAnnouncements.map((a) => {
+                {filtered.map((a) => {
                   const readers = announcementReaders[a.id] || [];
                   const isOpen = expandedAnnouncementId === a.id;
+                  const meta = HIST_LEVEL_META[(a.level || 'info') as NiveauAnnonce] || HIST_LEVEL_META.info;
                   return (
-                    <div key={a.id} className="group/item relative rounded-xl border border-white/10 bg-black/50 hover:border-[#F7BC5F]/40 transition-all overflow-hidden shadow-sm">
-                      <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent group-hover/item:via-[#F7BC5F]/40 transition-all" />
-                      <div className="w-full flex items-center gap-2 px-3.5 py-3">
+                    <div key={a.id} className="group/item relative rounded-xl border border-white/10 bg-black/50 hover:border-[#F7BC5F]/40 transition-all overflow-hidden shadow-sm flex">
+                      <span className={`w-1 shrink-0 ${meta.bar}`} />
+                      <div className="flex-1 min-w-0">
+                      <div className="w-full flex items-center gap-2 pl-2.5 pr-3.5 py-3">
                         <button
                           type="button"
                           onClick={() => setExpandedAnnouncementId(isOpen ? null : a.id)}
                           className="flex-1 min-w-0 flex items-center justify-between gap-3 text-left cursor-pointer"
                         >
                           <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded ${meta.badgeBg} ${meta.badgeText}`}>
+                                {a.is_poll ? 'Sondage' : meta.label}
+                              </span>
+                              {a.show_in_banner && !a.is_poll && (
+                                <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 flex items-center gap-0.5">
+                                  <Megaphone className="w-2.5 h-2.5" /> Bandeau
+                                </span>
+                              )}
+                            </div>
                             <p className="text-sm font-semibold text-white truncate">{a.message}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-[10px] text-slate-400">{new Date(a.created_at).toLocaleString('fr-FR')}</span>
@@ -2020,11 +2139,13 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
                           </div>
                         </div>
                       )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            )}
+              );
+            })()}
               </>
             )}
         </div>

@@ -173,6 +173,10 @@ export default async function handler(req: any, res: any) {
       .filter(Boolean)
       .slice(0, 12);
     const isPoll = pollOptions.length >= 2;
+    // Bandeau défilant (31 octobre) : voir AnnouncementTopBanner.tsx — un
+    // sondage ne passe jamais en bandeau (voter ne tient pas dans une ligne
+    // qui défile), quel que soit ce que le client envoie.
+    const showInBanner = !isPoll && req.body?.showInBanner === true;
 
     const { data: rows, error } = await supabaseAdmin
       .from('announcements')
@@ -185,6 +189,7 @@ export default async function handler(req: any, res: any) {
         expires_at: expiresAt,
         target_user_id: targetUserId,
         is_poll: isPoll,
+        show_in_banner: showInBanner,
       })
       .select('*')
       .limit(1);

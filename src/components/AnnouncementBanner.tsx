@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Megaphone, Info, AlertTriangle, CheckCircle2, Eye, ExternalLink, AlertCircle, PenTool, BarChart3 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import FireworksOverlay from './FireworksOverlay';
 import ConfettiOverlay from './ConfettiOverlay';
 
@@ -176,6 +177,7 @@ const POLL_META = {
 
 const AnnouncementBanner = () => {
   const { currentUser, activeAgency, userProfile } = useAuth();
+  const isMobile = useIsMobile();
   const [announcement, setAnnouncement] = useState<ActiveAnnouncement | null>(null);
   const [dismissing, setDismissing] = useState(false);
   // Demande explicite : "possibilité de créer un sondage" — options de
@@ -189,7 +191,7 @@ const AnnouncementBanner = () => {
 
     (async () => {
       const [{ data: active }, { data: reads }, { data: restrictions }] = await Promise.all([
-        supabase.from('announcements').select('id, message, created_at, level, link, expires_at, target_user_id, is_poll').eq('is_active', true).order('created_at', { ascending: false }) as unknown as Promise<{ data: any[] | null }>,
+        supabase.from('announcements').select('id, message, created_at, level, link, expires_at, target_user_id, is_poll, show_in_banner').eq('is_active', true).order('created_at', { ascending: false }) as unknown as Promise<{ data: any[] | null }>,
         supabase.from('announcement_reads').select('announcement_id').eq('user_id', currentUser.uid),
         supabase.from('announcement_agencies').select('announcement_id, agency_id'),
       ]);
@@ -212,6 +214,13 @@ const AnnouncementBanner = () => {
 
       const next = (active || []).find((a: any) => {
         if (readIds.has(a.id)) return false;
+        // Bandeau défilant (31 octobre, AnnouncementTopBanner.tsx) : une
+        // annonce marquée `show_in_banner` (hors sondage, qui ne passe
+        // jamais en bandeau — voir ce composant) s'affiche dans la barre du
+        // haut sur tablette/ordinateur, PAS ici, pour ne pas la montrer en
+        // double. Sur mobile, où il n'y a pas de barre du haut à remplacer,
+        // ce message plein écran reste le seul affichage.
+        if (!isMobile && a.show_in_banner && !a.is_poll) return false;
         if (new Date(a.created_at).getTime() < accountCreatedAt) return false;
         // Expiration automatique — une annonce expirée n'est plus montrée,
         // même jamais lue.
@@ -244,7 +253,7 @@ const AnnouncementBanner = () => {
     })();
 
     return () => { cancelled = true; };
-  }, [currentUser, activeAgency.id, userProfile?.agencyIds]);
+  }, [currentUser, activeAgency.id, userProfile?.agencyIds, isMobile]);
 
   const dismiss = async () => {
     if (!announcement || !currentUser || dismissing) return;
