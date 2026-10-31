@@ -5,7 +5,7 @@ import {
   MessageSquare, Users, Share2, X, UserPlus, Crown, Search, Pencil,
   Image as ImageIcon, Smile, Mic, Mic2, Square, Eye, ArrowLeft, Check, CheckCheck,
   Clock, Camera, Lock, Paperclip, FileText, Loader2, Video as VideoIcon,
-  Bold, Italic, Underline, GripVertical, AlertTriangle,
+  Bold, Italic, Underline, GripVertical, AlertTriangle, ArrowUpDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -2519,6 +2519,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     fileName: string;
     mime?: string;
     count?: number;
+    images?: string[];
   } | null>(null);
 
   const [channelPendingMedia, setChannelPendingMedia] = useState<{
@@ -2528,7 +2529,136 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     fileName: string;
     mime?: string;
     count?: number;
+    images?: string[];
   } | null>(null);
+
+  // Modification de l'ordre d'un carrousel existant sur un message déjà envoyé
+  const [reorderingMsg, setReorderingMsg] = useState<{
+    type: 'conv' | 'channel';
+    messageId: string;
+    images: string[];
+  } | null>(null);
+
+  const moveConvImage = (fromIdx: number, toIdx: number) => {
+    setConvPendingMedia((prev) => {
+      if (!prev || !prev.images || prev.images.length <= 1) return prev;
+      if (toIdx < 0 || toIdx >= prev.images.length) return prev;
+      const nextImages = [...prev.images];
+      const [moved] = nextImages.splice(fromIdx, 1);
+      nextImages.splice(toIdx, 0, moved);
+      return {
+        ...prev,
+        images: nextImages,
+        url: nextImages.length === 1 ? nextImages[0] : JSON.stringify(nextImages),
+        previewUrl: nextImages[0],
+        fileName: nextImages.length === 1 ? 'Photo' : `${nextImages.length} photos`,
+        count: nextImages.length,
+      };
+    });
+  };
+
+  const removeConvImage = (idx: number) => {
+    setConvPendingMedia((prev) => {
+      if (!prev || !prev.images) return null;
+      const nextImages = prev.images.filter((_, i) => i !== idx);
+      if (nextImages.length === 0) return null;
+      return {
+        ...prev,
+        images: nextImages,
+        url: nextImages.length === 1 ? nextImages[0] : JSON.stringify(nextImages),
+        previewUrl: nextImages[0],
+        fileName: nextImages.length === 1 ? 'Photo' : `${nextImages.length} photos`,
+        count: nextImages.length,
+      };
+    });
+  };
+
+  const moveChannelImage = (fromIdx: number, toIdx: number) => {
+    setChannelPendingMedia((prev) => {
+      if (!prev || !prev.images || prev.images.length <= 1) return prev;
+      if (toIdx < 0 || toIdx >= prev.images.length) return prev;
+      const nextImages = [...prev.images];
+      const [moved] = nextImages.splice(fromIdx, 1);
+      nextImages.splice(toIdx, 0, moved);
+      return {
+        ...prev,
+        images: nextImages,
+        url: nextImages.length === 1 ? nextImages[0] : JSON.stringify(nextImages),
+        previewUrl: nextImages[0],
+        fileName: nextImages.length === 1 ? 'Photo' : `${nextImages.length} photos`,
+        count: nextImages.length,
+      };
+    });
+  };
+
+  const removeChannelImage = (idx: number) => {
+    setChannelPendingMedia((prev) => {
+      if (!prev || !prev.images) return null;
+      const nextImages = prev.images.filter((_, i) => i !== idx);
+      if (nextImages.length === 0) return null;
+      return {
+        ...prev,
+        images: nextImages,
+        url: nextImages.length === 1 ? nextImages[0] : JSON.stringify(nextImages),
+        previewUrl: nextImages[0],
+        fileName: nextImages.length === 1 ? 'Photo' : `${nextImages.length} photos`,
+        count: nextImages.length,
+      };
+    });
+  };
+
+  const moveReorderingImage = (fromIdx: number, toIdx: number) => {
+    setReorderingMsg((prev) => {
+      if (!prev || prev.images.length <= 1) return prev;
+      if (toIdx < 0 || toIdx >= prev.images.length) return prev;
+      const next = [...prev.images];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return { ...prev, images: next };
+    });
+  };
+
+  const saveReorderedImages = async () => {
+    if (!reorderingMsg) return;
+    const { type, messageId, images } = reorderingMsg;
+    const payloadUrl = images.length === 1 ? images[0] : JSON.stringify(images);
+    try {
+      if (type === 'conv') {
+        const { error } = await supabase
+          .from('messages')
+          .update({ attachment_url: payloadUrl } as any)
+          .eq('id', messageId);
+        if (error) throw error;
+        setConvMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, attachment_url: payloadUrl } : m))
+        );
+        if (convMessagesCacheRef.current[activeConversationId || '']) {
+          convMessagesCacheRef.current[activeConversationId || ''] = (
+            convMessagesCacheRef.current[activeConversationId || ''] || []
+          ).map((m) => (m.id === messageId ? { ...m, attachment_url: payloadUrl } : m));
+        }
+      } else {
+        const target = messages.find((m) => m.id === messageId);
+        const nextData = {
+          ...(target?.data || {}),
+          attachmentUrl: payloadUrl,
+          attachment_url: payloadUrl,
+        };
+        const { error } = await supabase
+          .from('chat_messages')
+          .update({ data: nextData } as any)
+          .eq('id', messageId);
+        if (error) throw error;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, data: nextData } : m))
+        );
+      }
+      toast.success("Ordre des photos mis à jour avec succès !");
+      setReorderingMsg(null);
+    } catch (e: any) {
+      toast.error(e?.message || "Impossible de sauvegarder l'ordre des photos.");
+    }
+  };
 
   useEffect(() => { setConvPendingMedia(null); }, [activeConversationId]);
   useEffect(() => { setChannelPendingMedia(null); }, [activeChannel?.id]);
@@ -3510,6 +3640,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         fileName: label,
         mime,
         count: files.length,
+        images: dataUrls,
       });
 
       if (files.length > 1 && toastId) {
@@ -3699,6 +3830,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         fileName: label,
         mime,
         count: files.length,
+        images: dataUrls,
       });
 
       if (files.length > 1 && toastId) {
@@ -6401,6 +6533,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                     <Eye className="w-3.5 h-3.5" />
                                   </button>
                                 )}
+                                {m.kind === 'image' && m.attachment_url && (() => {
+                                  const imgs = extraireImagesMessage(m.attachment_url);
+                                  if (imgs.length <= 1 || (!mine && !isAdmin)) return null;
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => setReorderingMsg({ type: 'conv', messageId: m.id, images: [...imgs] })}
+                                      className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-[#F7BC5F]"
+                                      title="Modifier l'ordre des photos"
+                                    >
+                                      <ArrowUpDown className="w-3.5 h-3.5" />
+                                    </button>
+                                  );
+                                })()}
                                 {mine && m.kind === 'text' && (
                                   <button
                                     type="button"
@@ -6610,47 +6756,111 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       arrondi total sur plusieurs lignes rognerait le texte. */}
                   {/* Prévisualisation de la pièce jointe attachée au composeur (image, vidéo ou document) */}
                   {convPendingMedia && (
-                    <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-white/5 border border-[#F7BC5F]/35 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        {convPendingMedia.kind === 'image' && convPendingMedia.previewUrl && (
-                          <img
-                            src={convPendingMedia.previewUrl}
-                            alt="Aperçu"
-                            className="w-10 h-10 rounded-lg object-cover border border-white/10 shrink-0 bg-black/40"
-                          />
-                        )}
-                        {convPendingMedia.kind === 'video' && (
-                          <div className="w-10 h-10 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center shrink-0">
-                            <VideoIcon className="w-5 h-5 text-sky-400" />
-                          </div>
-                        )}
-                        {convPendingMedia.kind === 'file' && (
-                          <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
-                            <FileText className="w-5 h-5 text-amber-400" />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-white truncate flex items-center gap-1.5">
+                    <div className="flex flex-col gap-2 p-2.5 rounded-xl bg-white/5 border border-[#F7BC5F]/35 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
                             <span className="truncate">{convPendingMedia.fileName}</span>
                             {convPendingMedia.count && convPendingMedia.count > 1 && (
-                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#F7BC5F] text-slate-950 shrink-0">
-                                +{convPendingMedia.count - 1}
+                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#F7BC5F] text-slate-950 shrink-0">
+                                {convPendingMedia.count} images
                               </span>
                             )}
-                          </p>
-                          <p className="text-[10px] text-slate-400">
-                            Pièce jointe attachée · Rédigez votre texte puis envoyez
-                          </p>
+                          </span>
+                          {convPendingMedia.images && convPendingMedia.images.length > 1 && (
+                            <span className="text-[10px] text-[#FAD592] truncate hidden sm:inline">
+                              • Flèches ◀ ▶ pour changer l'ordre (la 1ère est en couverture)
+                            </span>
+                          )}
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setConvPendingMedia(null)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                          title="Tout retirer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setConvPendingMedia(null)}
-                        className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
-                        title="Retirer la pièce jointe"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+
+                      {/* Si plusieurs images : pellicule avec boutons ◀ ▶ pour réorganiser l'ordre d'affichage */}
+                      {convPendingMedia.images && convPendingMedia.images.length > 1 ? (
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+                          {convPendingMedia.images.map((img, idx) => (
+                            <div
+                              key={idx}
+                              className="relative group shrink-0 flex flex-col items-center rounded-xl bg-black/40 border border-white/15 p-1 transition-all hover:border-[#F7BC5F]/60"
+                            >
+                              <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-black/60">
+                                <img
+                                  src={img}
+                                  alt={`Photo ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                                <span className={`absolute top-0.5 left-0.5 px-1 py-0.2 rounded text-[8px] font-black ${idx === 0 ? 'bg-[#F7BC5F] text-slate-950 shadow' : 'bg-black/75 text-white'}`}>
+                                  {idx === 0 ? '★ 1ère' : `#${idx + 1}`}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeConvImage(idx)}
+                                  className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/80 hover:bg-rose-500 text-white flex items-center justify-center transition-colors"
+                                  title="Supprimer cette photo"
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                              <div className="flex items-center justify-between w-full mt-1 gap-1">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => moveConvImage(idx, idx - 1)}
+                                  className="flex-1 py-0.5 rounded bg-white/10 hover:bg-[#F7BC5F] hover:text-slate-950 text-white disabled:opacity-20 flex items-center justify-center transition-colors text-[10px]"
+                                  title="Déplacer vers la gauche"
+                                >
+                                  <ChevronLeft className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === convPendingMedia.images!.length - 1}
+                                  onClick={() => moveConvImage(idx, idx + 1)}
+                                  className="flex-1 py-0.5 rounded bg-white/10 hover:bg-[#F7BC5F] hover:text-slate-950 text-white disabled:opacity-20 flex items-center justify-center transition-colors text-[10px]"
+                                  title="Déplacer vers la droite"
+                                >
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {convPendingMedia.kind === 'image' && convPendingMedia.previewUrl && (
+                            <img
+                              src={convPendingMedia.previewUrl}
+                              alt="Aperçu"
+                              className="w-10 h-10 rounded-lg object-cover border border-white/10 shrink-0 bg-black/40"
+                            />
+                          )}
+                          {convPendingMedia.kind === 'video' && (
+                            <div className="w-10 h-10 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center shrink-0">
+                              <VideoIcon className="w-5 h-5 text-sky-400" />
+                            </div>
+                          )}
+                          {convPendingMedia.kind === 'file' && (
+                            <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                              <FileText className="w-5 h-5 text-amber-400" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-white truncate">
+                              {convPendingMedia.fileName}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              Pièce jointe attachée · Rédigez votre texte puis envoyez
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -7318,6 +7528,20 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               );
                             })()}
                           </div>
+                          {isImg && imgUrl && (() => {
+                            const imgs = extraireImagesMessage(imgUrl);
+                            if (imgs.length <= 1 || (!mine && !isAdmin)) return null;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setReorderingMsg({ type: 'channel', messageId: m.id, images: [...imgs] })}
+                                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-[#F7BC5F]"
+                                title="Modifier l'ordre des photos"
+                              >
+                                <ArrowUpDown className="w-3.5 h-3.5" />
+                              </button>
+                            );
+                          })()}
                           {mine && !isNova && (
                             <button
                               type="button"
@@ -7495,47 +7719,111 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
 
                 {/* Prévisualisation de la pièce jointe attachée au composeur du canal (image, vidéo ou document) */}
                 {channelPendingMedia && (
-                  <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-white/5 border border-[#F7BC5F]/35 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {channelPendingMedia.kind === 'image' && channelPendingMedia.previewUrl && (
-                        <img
-                          src={channelPendingMedia.previewUrl}
-                          alt="Aperçu"
-                          className="w-10 h-10 rounded-lg object-cover border border-white/10 shrink-0 bg-black/40"
-                        />
-                      )}
-                      {channelPendingMedia.kind === 'video' && (
-                        <div className="w-10 h-10 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center shrink-0">
-                          <VideoIcon className="w-5 h-5 text-sky-400" />
-                        </div>
-                      )}
-                      {channelPendingMedia.kind === 'file' && (
-                        <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
-                          <FileText className="w-5 h-5 text-amber-400" />
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-white truncate flex items-center gap-1.5">
+                  <div className="flex flex-col gap-2 p-2.5 rounded-xl bg-white/5 border border-[#F7BC5F]/35 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
                           <span className="truncate">{channelPendingMedia.fileName}</span>
                           {channelPendingMedia.count && channelPendingMedia.count > 1 && (
-                            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#F7BC5F] text-slate-950 shrink-0">
-                              +{channelPendingMedia.count - 1}
+                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#F7BC5F] text-slate-950 shrink-0">
+                              {channelPendingMedia.count} images
                             </span>
                           )}
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          Pièce jointe attachée · Rédigez votre texte puis envoyez
-                        </p>
+                        </span>
+                        {channelPendingMedia.images && channelPendingMedia.images.length > 1 && (
+                          <span className="text-[10px] text-[#FAD592] truncate hidden sm:inline">
+                            • Flèches ◀ ▶ pour changer l'ordre (la 1ère est en couverture)
+                          </span>
+                        )}
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setChannelPendingMedia(null)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                        title="Tout retirer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setChannelPendingMedia(null)}
-                      className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
-                      title="Retirer la pièce jointe"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+
+                    {/* Si plusieurs images : pellicule avec boutons ◀ ▶ pour réorganiser l'ordre d'affichage */}
+                    {channelPendingMedia.images && channelPendingMedia.images.length > 1 ? (
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+                        {channelPendingMedia.images.map((img, idx) => (
+                          <div
+                            key={idx}
+                            className="relative group shrink-0 flex flex-col items-center rounded-xl bg-black/40 border border-white/15 p-1 transition-all hover:border-[#F7BC5F]/60"
+                          >
+                            <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-black/60">
+                              <img
+                                src={img}
+                                alt={`Photo ${idx + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                              <span className={`absolute top-0.5 left-0.5 px-1 py-0.2 rounded text-[8px] font-black ${idx === 0 ? 'bg-[#F7BC5F] text-slate-950 shadow' : 'bg-black/75 text-white'}`}>
+                                {idx === 0 ? '★ 1ère' : `#${idx + 1}`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeChannelImage(idx)}
+                                className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/80 hover:bg-rose-500 text-white flex items-center justify-center transition-colors"
+                                title="Supprimer cette photo"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between w-full mt-1 gap-1">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => moveChannelImage(idx, idx - 1)}
+                                className="flex-1 py-0.5 rounded bg-white/10 hover:bg-[#F7BC5F] hover:text-slate-950 text-white disabled:opacity-20 flex items-center justify-center transition-colors text-[10px]"
+                                title="Déplacer vers la gauche"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === channelPendingMedia.images!.length - 1}
+                                onClick={() => moveChannelImage(idx, idx + 1)}
+                                className="flex-1 py-0.5 rounded bg-white/10 hover:bg-[#F7BC5F] hover:text-slate-950 text-white disabled:opacity-20 flex items-center justify-center transition-colors text-[10px]"
+                                title="Déplacer vers la droite"
+                              >
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {channelPendingMedia.kind === 'image' && channelPendingMedia.previewUrl && (
+                          <img
+                            src={channelPendingMedia.previewUrl}
+                            alt="Aperçu"
+                            className="w-10 h-10 rounded-lg object-cover border border-white/10 shrink-0 bg-black/40"
+                          />
+                        )}
+                        {channelPendingMedia.kind === 'video' && (
+                          <div className="w-10 h-10 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center shrink-0">
+                            <VideoIcon className="w-5 h-5 text-sky-400" />
+                          </div>
+                        )}
+                        {channelPendingMedia.kind === 'file' && (
+                          <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                            <FileText className="w-5 h-5 text-amber-400" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-white truncate">
+                            {channelPendingMedia.fileName}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            Pièce jointe attachée · Rédigez votre texte puis envoyez
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -9118,6 +9406,86 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                     <span>Enregistrer les modifications</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modale de réorganisation de photos sur un carrousel existant */}
+      {reorderingMsg && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-[#0b1c1e] border border-[#F7BC5F]/40 rounded-2xl p-5 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <ArrowUpDown className="w-4 h-4 text-[#F7BC5F]" />
+                  Modifier l'ordre des photos
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  La 1ère photo sera celle affichée par défaut en couverture du carrousel.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReorderingMsg(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 overflow-x-auto py-2 scrollbar-thin">
+              {reorderingMsg.images.map((img, idx) => (
+                <div
+                  key={idx}
+                  className="relative shrink-0 flex flex-col items-center rounded-xl bg-black/50 border border-white/15 p-1.5 hover:border-[#F7BC5F]/70 transition-all"
+                >
+                  <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-black/60">
+                    <img src={img} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                    <span className={`absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-black ${idx === 0 ? 'bg-[#F7BC5F] text-slate-950 shadow' : 'bg-black/75 text-white'}`}>
+                      {idx === 0 ? '★ Couverture' : `#${idx + 1}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between w-full mt-2 gap-1.5">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => moveReorderingImage(idx, idx - 1)}
+                      className="flex-1 py-1 rounded-lg bg-white/10 hover:bg-[#F7BC5F] hover:text-slate-950 text-white disabled:opacity-20 flex items-center justify-center transition-colors"
+                      title="Déplacer vers la gauche"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === reorderingMsg.images.length - 1}
+                      onClick={() => moveReorderingImage(idx, idx + 1)}
+                      className="flex-1 py-1 rounded-lg bg-white/10 hover:bg-[#F7BC5F] hover:text-slate-950 text-white disabled:opacity-20 flex items-center justify-center transition-colors"
+                      title="Déplacer vers la droite"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setReorderingMsg(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveReorderedImages()}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#F7BC5F] hover:bg-[#f9c978] text-slate-950 transition-colors shadow-sm"
+              >
+                Enregistrer l'ordre
               </button>
             </div>
           </div>
