@@ -988,6 +988,8 @@ function App() {
         onOpenTutorial={() => setShowTutorial(true)}
         onOpenCameraReservation={() => setShowCameraModal(true)}
         unreadCount={unreadNotificationsCount}
+        unreadMessagesCount={unreadMessagesCount}
+        overdueTasksCount={unreadRemindersCount}
         isDarkMode={isDarkMode}
         onToggleTheme={handleToggleTheme}
         selectedAgencyName={activeAgency.name}

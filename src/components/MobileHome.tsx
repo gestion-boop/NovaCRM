@@ -13,6 +13,7 @@ import {
   ExternalLink, Bookmark, Target, Shield, Award, Sparkles, CheckSquare, Image as ImageIcon, MapPin, Settings,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useAppUpdateStatus } from '@/lib/updateStatus';
 import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
 import { estAgenceImmosphera, estBlocNotes, estDossierImmosphera, estDossierPasserelle } from '@/lib/tuilesAccueilVisibles';
 import { TEAM_MEMBERS } from '@/data/teamMembers';
@@ -198,6 +199,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   onOpenClientDictation,
 }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
+  const { isUpdatePending } = useAppUpdateStatus();
 
   // ── Horloge & salutation ──────────────────────────────────────────────
   const [now, setNow] = useState(new Date());
@@ -924,20 +926,36 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
               <Plus className="w-5 h-5 stroke-[3]" />
             </button>
           )}
-          {/* Loupe retirée (demande explicite) ; clochette agrandie à la
-              même taille que la photo de profil (48px) juste à côté. */}
-          {onOpenNotifications && (
-            <button
-              onClick={onOpenNotifications}
-              title="Notifications"
-              className="relative w-11 h-11 rounded-full bg-[#081e22]/90 border border-teal-500/25 flex items-center justify-center text-slate-300 hover:text-white hover:bg-teal-500/10 active:scale-95 transition-all cursor-pointer shadow-xs"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadNotificationsCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-[#050d0f] shadow-xs" />
-              )}
-            </button>
-          )}
+          {/* Clochette tricolore mobile : ROUGE (Màj/Retard), ORANGE (notifs/messages), VERT (Tout est bon) */}
+          {onOpenNotifications && (() => {
+            const hasRed = Boolean(isUpdatePending || (unreadRemindersCount && unreadRemindersCount > 0));
+            const hasOrange = !hasRed && ((unreadNotificationsCount || 0) + (unreadMessagesCount || 0) > 0);
+            const isGood = !hasRed && !hasOrange;
+            return (
+              <button
+                onClick={onOpenNotifications}
+                title="Notifications"
+                className={`relative w-11 h-11 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 ${
+                  hasRed
+                    ? 'bg-rose-500/20 text-rose-400 border-rose-500/50 hover:bg-rose-500/30'
+                    : hasOrange
+                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30'
+                      : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35 hover:bg-emerald-500/25'
+                }`}
+              >
+                <Bell className="w-5 h-5" />
+                {hasRed && (
+                  <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-rose-500 rounded-full ring-2 ring-[#050d0f] shadow-xs animate-pulse" />
+                )}
+                {hasOrange && (
+                  <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-amber-500 rounded-full ring-2 ring-[#050d0f] shadow-xs" />
+                )}
+                {isGood && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full ring-2 ring-[#050d0f] shadow-xs" />
+                )}
+              </button>
+            );
+          })()}
           <button
             onClick={() => onNavigate('parametres')}
             className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-teal-500/40 hover:border-[#F7BC5F]/70 shrink-0 bg-black/40 shadow-sm active:scale-95 transition-all cursor-pointer"
