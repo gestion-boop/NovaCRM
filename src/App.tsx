@@ -655,29 +655,19 @@ function App() {
       text: "Basculez l'interface entre thème sombre et clair.",
     },
     {
-      selector: '[data-tour="header-fullscreen"]',
-      title: 'Plein écran',
-      text: 'Masque les barres du navigateur pour plus de confort.',
-    },
-    {
       selector: '[data-tour="header-tutoriel"]',
       title: 'Tutoriel',
       text: 'Rouvre ce guide et son quiz à tout moment.',
     },
     {
-      selector: '[data-tour="header-avatar"]',
-      title: 'Votre profil',
-      text: 'Accès direct à votre fiche personnelle dans les Paramètres.',
-    },
-    {
       selector: '[data-tour="header-settings"]',
-      title: 'Paramètres',
-      text: 'Préférences, équipe, notifications, automatisations...',
+      title: 'Paramètres et profil',
+      text: 'Votre fiche personnelle, préférences, équipe, notifications, automatisations...',
     },
     {
       selector: '[data-tour="header-bell"]',
       title: 'Notifications',
-      text: 'La clochette centralise tout : messages, rappels, réservations, annonces.',
+      text: 'La clochette centralise tout. Rouge : mise à jour ou tâches en retard. Orange : messages et notifications non lus. Vert : tout est à jour.',
     },
     {
       selector: '[data-tour="header-nouveau-lead"]',

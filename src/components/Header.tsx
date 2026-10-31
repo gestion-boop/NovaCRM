@@ -207,6 +207,9 @@ export const Header: React.FC<
     return '🟢 Tout est bon et à jour';
   }, [hasRedAlert, hasOrangeAlert, isUpdatePending, overdueTasksCount, otherNotificationsCount]);
 
+  const iconBtnClass =
+    'w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 transition-colors shrink-0 cursor-pointer';
+
   const handleNotificationsClick = () => {
     onToggleNotifications?.();
   };
@@ -422,21 +425,24 @@ export const Header: React.FC<
       </div>
 
       {/* OUTILS HEADER */}
-      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         <button
           data-tour="header-nouveau-lead"
           onClick={onOpenNouveauLead}
           title="Nouveau lead"
-          className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-r from-[#c68e36] to-[#a36f20] hover:from-[#d49b3f] hover:to-[#b07b27] text-slate-950 font-black flex items-center justify-center shadow-md border border-[#F7BC5F]/30 active:scale-95 transition-all shrink-0 cursor-pointer"
+          className="w-9 h-9 rounded-xl bg-gradient-to-r from-[#c68e36] to-[#a36f20] hover:from-[#d49b3f] hover:to-[#b07b27] text-slate-950 font-black flex items-center justify-center shadow-md border border-[#F7BC5F]/30 active:scale-95 transition-all shrink-0 cursor-pointer"
         >
           <Plus className="w-5 h-5 stroke-[2.5]" />
         </button>
 
+        {/* Outils harmonisés (31/10) : mêmes boutons carrés 36px, même
+            style — plein écran, libellé « Tutoriel » et avatar retirés
+            pour alléger la barre (le profil reste accessible via la roue). */}
         <button
           data-tour="header-theme"
           onClick={onToggleTheme}
           title="Changer de thème"
-          className="p-1.5 sm:p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors border border-white/5 shrink-0"
+          className={iconBtnClass}
         >
           {isDarkMode ? (
             <Sun className="w-4 h-4 text-[#F9C977]" />
@@ -446,49 +452,19 @@ export const Header: React.FC<
         </button>
 
         <button
-          data-tour="header-fullscreen"
-          onClick={toggleFullscreen}
-          title={isFullscreen ? 'Quitter le plein écran' : 'Passer en plein écran (comme sur mobile)'}
-          className="hidden md:flex p-1.5 sm:p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors border border-white/5 shrink-0"
-        >
-          {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-        </button>
-
-        <button
           data-tour="header-tutoriel"
           onClick={onOpenTutorial}
-          className="hidden md:flex items-center gap-1.5 text-xs text-gray-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+          title="Tutoriel"
+          className={`${iconBtnClass.replace(/(^|\s)flex(\s|$)/, ' ')} hidden md:flex`}
         >
           <HelpCircle className="w-4 h-4 text-[#F7BC5F]" />
-          <span>Tutoriel</span>
         </button>
 
-        {/* Bouton "Réserver caméra" retiré du header (la tuile "Réserver
-            caméra" dans "Mes espaces" reste le seul accès désormais). */}
-
-        {/* AVATAR — ticket #17 (nouvelle base) : l'avatar tout à droite du
-            header restait toujours en initiales, jamais la vraie photo,
-            même quand le profil (ou l'annuaire équipe) en a une. */}
-        <button
-          data-tour="header-avatar"
-          onClick={() => onNavigate?.('parametres')}
-          title={displayName}
-          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#F7BC5F]/15 border border-[#F7BC5F]/40 text-[#F7BC5F] font-bold text-xs sm:text-sm flex items-center justify-center shrink-0 hover:bg-[#F7BC5F]/25 transition-colors overflow-hidden"
-        >
-          {avatarPhotoUrl ? (
-            <img src={avatarPhotoUrl} alt={displayName} className="w-full h-full object-cover" />
-          ) : (
-            avatarInitials
-          )}
-        </button>
-
-        {/* ROUE PARAMÈTRES — remplace l'ancienne tuile "Paramètres Système"
-            de l'accueil, placée juste à côté de la clochette. */}
         <button
           data-tour="header-settings"
           onClick={() => onNavigate?.('parametres')}
-          title="Paramètres"
-          className="p-1.5 sm:p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors border border-white/5 shrink-0"
+          title="Paramètres et profil"
+          className={iconBtnClass}
         >
           <Settings className="w-4 h-4" />
         </button>
@@ -500,7 +476,7 @@ export const Header: React.FC<
         <button
           data-tour="header-bell"
           onClick={handleNotificationsClick}
-          className={`p-1.5 sm:p-2 rounded-lg transition-all border relative shrink-0 cursor-pointer ${
+          className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all border relative shrink-0 cursor-pointer ${
             hasRedAlert
               ? 'bg-rose-500/20 text-rose-400 border-rose-500/50 hover:bg-rose-500/30 hover:text-white shadow-[0_0_12px_rgba(244,63,94,0.35)] animate-pulse'
               : hasOrangeAlert
