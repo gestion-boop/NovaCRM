@@ -1578,6 +1578,43 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
           <div className="rounded-2xl nv-activity-shell p-4 sm:p-6 space-y-4 shadow-xl relative overflow-hidden min-w-0 w-full backdrop-blur-xl">
             <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[#F7BC5F] to-transparent opacity-85" />
 
+            {/* Choix du type (31 octobre) : demandé tout en haut, avant même
+                le message — remplace l'interrupteur discret qui vivait plus
+                bas dans « 3 Diffusion ». Un sondage ne peut jamais être un
+                bandeau (voir plus bas et api/admin/announcements.ts côté
+                serveur) : le bouton Bandeau se désactive alors. */}
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl border border-white/10 bg-black/30 w-full min-w-0">
+              <button
+                type="button"
+                onClick={() => setAnnouncementShowInBanner(false)}
+                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs sm:text-sm font-black uppercase tracking-wide transition-all cursor-pointer ${
+                  !announcementShowInBanner
+                    ? 'bg-[#F7BC5F] text-[#061719] shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Bell className="w-4 h-4 shrink-0" /> Annonce
+              </button>
+              <button
+                type="button"
+                onClick={() => setAnnouncementShowInBanner(true)}
+                disabled={pollEnabled}
+                title={pollEnabled ? "Un sondage ne peut pas s'afficher en bandeau" : undefined}
+                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs sm:text-sm font-black uppercase tracking-wide transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                  announcementShowInBanner && !pollEnabled
+                    ? 'bg-sky-500 text-sky-950 shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Megaphone className="w-4 h-4 shrink-0" /> Bandeau
+              </button>
+            </div>
+            {announcementShowInBanner && !pollEnabled && (
+              <p className="text-[11px] text-sky-300/80 px-1 -mt-1">
+                Remplace la barre du haut (tablette/ordinateur) jusqu'au clic sur « OK ». Jamais affiché sur mobile, ni pour un sondage.
+              </p>
+            )}
+
             <div className="flex items-center justify-between pb-2 border-b border-white/[0.08] min-w-0 gap-2 flex-wrap">
               <div className="flex items-center gap-2 min-w-0">
                 {/* Refonte (31 octobre) : numéros d'étape (1 message, 2
@@ -1784,29 +1821,6 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
               })()}
             </div>
             </div>
-
-            {/* Bandeau défilant (31 octobre) : en plus du message plein
-                écran habituel, affiche aussi cette annonce dans la barre du
-                haut (tablette/ordinateur) tant qu'elle n'est pas fermée —
-                voir AnnouncementTopBanner.tsx. Jamais pour un sondage (voir
-                plus bas, et api/admin/announcements.ts côté serveur). */}
-            {!pollEnabled && (
-              <label className="flex items-center justify-between gap-3 cursor-pointer select-none rounded-2xl border border-white/10 bg-black/20 px-3.5 py-3">
-                <span className="flex items-center gap-2 min-w-0">
-                  <Megaphone className="w-4 h-4 text-[#F7BC5F] shrink-0" />
-                  <span className="min-w-0">
-                    <span className="block text-xs font-bold text-white">Aussi en bandeau défilant tout en haut</span>
-                    <span className="block text-[11px] text-slate-500">Remplace la barre du haut (tablette/ordinateur) jusqu'au clic sur « OK ».</span>
-                  </span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={announcementShowInBanner}
-                  onChange={(e) => setAnnouncementShowInBanner(e.target.checked)}
-                  className="w-4 h-4 accent-[#F7BC5F] rounded cursor-pointer shrink-0"
-                />
-              </label>
-            )}
             </div>
 
           {showUserPicker && (() => {
@@ -1899,7 +1913,10 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
                 <input
                   type="checkbox"
                   checked={pollEnabled}
-                  onChange={(e) => setPollEnabled(e.target.checked)}
+                  onChange={(e) => {
+                    setPollEnabled(e.target.checked);
+                    if (e.target.checked) setAnnouncementShowInBanner(false);
+                  }}
                   className="w-4 h-4 accent-[#F7BC5F] rounded cursor-pointer"
                 />
                 <div className="flex items-center gap-2">
