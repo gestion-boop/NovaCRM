@@ -2074,14 +2074,20 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1 mb-1">
+                              {/* Demandé (31 octobre) : différencier dès le
+                                  premier coup d'œil une annonce plein écran
+                                  d'une annonce en bandeau — ce badge de TYPE
+                                  est toujours affiché en premier (pas
+                                  seulement quand c'est un bandeau), avant le
+                                  badge de NIVEAU juste à côté. */}
+                              <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded flex items-center gap-0.5 ${
+                                a.show_in_banner && !a.is_poll ? 'bg-sky-500/15 text-sky-300' : 'bg-white/10 text-slate-300'
+                              }`}>
+                                {a.show_in_banner && !a.is_poll ? (<><Megaphone className="w-2.5 h-2.5" /> Bandeau</>) : 'Annonce'}
+                              </span>
                               <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded ${meta.badgeBg} ${meta.badgeText}`}>
                                 {a.is_poll ? 'Sondage' : meta.label}
                               </span>
-                              {a.show_in_banner && !a.is_poll && (
-                                <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 flex items-center gap-0.5">
-                                  <Megaphone className="w-2.5 h-2.5" /> Bandeau
-                                </span>
-                              )}
                             </div>
                             <p className="text-sm font-semibold text-white truncate">{a.message}</p>
                             <div className="flex items-center gap-2 mt-1">
