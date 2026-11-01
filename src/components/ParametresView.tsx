@@ -578,6 +578,19 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
         ecrireHorodatageLocal(tilesKey, Date.now());
       }
 
+      // La case que la tuile occupait avant d'être masquée est conservée :
+      // elle revenait donc tout en bas. On la libère pour que l'accueil la
+      // replace dans la première case vide, tout en haut.
+      const slotsKey = `novasphere_home_slots_v5_${currentUser?.uid || 'anon'}_${agencyId}`;
+      const rawSlots = localStorage.getItem(slotsKey);
+      if (rawSlots) {
+        const slots: Array<string | null> = JSON.parse(rawSlots);
+        if (Array.isArray(slots) && slots.includes(id)) {
+          localStorage.setItem(slotsKey, JSON.stringify(slots.map((x) => (x === id ? null : x))));
+          ecrireHorodatageLocal(slotsKey, Date.now());
+        }
+      }
+
       window.dispatchEvent(new Event('novasphere:home-tiles-changed'));
     } catch (err) {
       console.warn('Erreur lors du réaffichage de la tuile :', err);
