@@ -262,7 +262,8 @@ export const useContacts = () => {
             .eq('pipeline_id', pipelineUuid)
             .order('position', { ascending: true });
           const l = (etapes as { id: string; name: string }[]) || [];
-          stageUuid = l[0]?.id || null;
+          const choisie = toValidUuidOrNull(newContact.stageId);
+          stageUuid = (choisie && l.some((e) => e.id === choisie) ? choisie : l[0]?.id) || null;
         } catch (e) {
           console.warn('Étape du pipeline introuvable :', e);
         }
@@ -537,6 +538,13 @@ export const useContacts = () => {
 
       if (updates.pipeline !== undefined) {
         patch.pipeline_id = toValidUuidOrNull(updates.pipeline);
+      }
+
+      // Colonne choisie dans le formulaire (avec son pipeline) : posée
+      // ensemble, sinon le trigger de synchronisation remet le pipeline à
+      // NULL quand l'étape reste celle de l'ancien pipeline.
+      if (updates.pipeline !== undefined && updates.stageId !== undefined) {
+        patch.stage_id = toValidUuidOrNull(updates.stageId);
       }
 
       if (updates.coBorrower !== undefined) {

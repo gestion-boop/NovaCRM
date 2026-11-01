@@ -134,6 +134,8 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
   // La liste vient maintenant de la table `pipelines`, filtrée sur l'agence
   // du lead, et les valeurs sont les vrais identifiants.
   const [pipeline, setPipeline] = useState('');
+  const [stageId, setStageId] = useState('');
+  const [pipelineStages, setPipelineStages] = useState<{ id: string; name: string }[]>([]);
   const [agencyPipelines, setAgencyPipelines] = useState<{ id: string; name: string }[]>([]);
   const [statutLead, setStatutLead] = useState('froid');
   // Renommé « Commission agence » (demande ImmoSphera). S'y ajoutent la
@@ -258,6 +260,32 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
     })();
     return () => { cancelled = true; };
   }, [isOpen, agencyId, currentUser?.uid, currentUser?.email, initial?.pipeline]);
+
+  // Colonnes (étapes) du pipeline choisi — demandé : pouvoir choisir la
+  // colonne dès qu'on choisit le pipeline (toutes agences). En modification,
+  // l'étape actuelle de la fiche est présélectionnée.
+  useEffect(() => {
+    if (!isOpen || !pipeline) { setPipelineStages([]); setStageId(''); return; }
+    let cancelled = false;
+    (async () => {
+      const { data: etapes } = await supabase
+        .from('pipeline_stages')
+        .select('id, name, position')
+        .eq('pipeline_id', pipeline as any)
+        .order('position', { ascending: true });
+      if (cancelled) return;
+      const liste = ((etapes as { id: string; name: string }[]) || []).map((e) => ({ id: e.id, name: e.name }));
+      setPipelineStages(liste);
+      let actuelle = '';
+      if (initial?.id && initial?.pipeline === pipeline) {
+        const { data: ligne } = await supabase.from('leads').select('stage_id').eq('id', initial.id).maybeSingle();
+        actuelle = (ligne as { stage_id: string | null } | null)?.stage_id || '';
+        if (cancelled) return;
+      }
+      setStageId((cur) => (cur && liste.some((e) => e.id === cur) ? cur : (liste.some((e) => e.id === actuelle) ? actuelle : (liste[0]?.id || ''))));
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, pipeline, initial?.id, initial?.pipeline]);
 
   // Collapsible sections
   const [showCoContact, setShowCoContact] = useState(false);
@@ -460,6 +488,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
         secteur: formatVille(secteur.trim()),
         typeBien: typeBien.trim(),
         pipeline,
+        stageId: pipeline && stageId ? stageId : undefined,
         statutLead,
         // Saisi en TTC, stocké en HT — voir lib/utils. Conseils Finances :
         // tout en TTC, enregistré tel quel.
@@ -778,7 +807,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                   <div className="relative">
                     <select
                       value={pipeline}
-                      onChange={(e) => setPipeline(e.target.value)}
+                      onChange={(e) => { setPipeline(e.target.value); setStageId(''); }}
                       className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 pr-7 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none"
                     >
                       <option value="">Aucun (libre)</option>
@@ -789,6 +818,24 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                   </div>
                 </div>
+
+                {pipeline && pipelineStages.length > 0 && (
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-200">Colonne du pipeline</label>
+                    <div className="relative">
+                      <select
+                        value={stageId}
+                        onChange={(e) => setStageId(e.target.value)}
+                        className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 pr-7 text-sm text-white focus:outline-none focus:border-[#F7BC5F] appearance-none"
+                      >
+                        {pipelineStages.map((e) => (
+                          <option key={e.id} value={e.id}>{e.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+                )}
 
                 {/* Statut du lead */}
                 <div className="space-y-1.5">

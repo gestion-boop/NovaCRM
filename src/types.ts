@@ -48,6 +48,8 @@ export interface Contact {
   secteur?: string;
   typeBien?: string;
   pipeline?: string;
+  /** Colonne (étape) choisie dans le pipeline, à la création/modification. */
+  stageId?: string;
   statutLead?: string;
   // Renommé « Commission agence » dans l'interface ImmoSphera : c'est le
   // chiffre d'affaires que l'agence encaisse. Montants déjà saisis = HT.
