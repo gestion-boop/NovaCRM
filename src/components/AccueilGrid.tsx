@@ -2135,7 +2135,14 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         const brutTuilesLocal = localStorage.getItem(cleTuiles);
         let tuilesLocales: TileItemNode[] = [];
         try { if (brutTuilesLocal) tuilesLocales = JSON.parse(brutTuilesLocal); } catch { /* ignore */ }
-        const aDesTuilesLocales = Array.isArray(tuilesLocales) && tuilesLocales.length > 0;
+        const lectureTuiles = lireDispositionAgence((data as any)?.home_tiles, agencyId);
+        const tuilesServeur = lectureTuiles.items;
+        const majLocaleTuiles = lireHorodatageLocal(cleTuiles) ?? 0;
+        // Un serveur STRICTEMENT plus récent (autre appareil) l'emporte : on ne
+        // fabrique plus d'horodatage « maintenant » qui ferait gagner le
+        // dernier appareil à recharger après une mise à jour.
+        const serveurPlusRecentTuiles = !!(tuilesServeur && tuilesServeur.length > 0) && (lectureTuiles.maj ?? 0) > majLocaleTuiles;
+        const aDesTuilesLocales = Array.isArray(tuilesLocales) && tuilesLocales.length > 0 && !serveurPlusRecentTuiles;
 
         if (aDesTuilesLocales) {
           homeSyncReadyAgencies.add(clefSync);
@@ -2149,9 +2156,11 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
               setTiles(locales);
             }
           }
-          const maj = Date.now();
-          ecrireHorodatageLocal(cleTuiles, maj);
-          void ecrireDispositionAgence('home_tiles', currentUser.uid, agencyId, locales, maj);
+          let majTuiles = majLocaleTuiles;
+          if (!majTuiles) { majTuiles = Date.now(); ecrireHorodatageLocal(cleTuiles, majTuiles); }
+          if (majTuiles > (lectureTuiles.maj ?? 0)) {
+            void ecrireDispositionAgence('home_tiles', currentUser.uid, agencyId, locales, majTuiles);
+          }
         } else if (tuilesServeur && tuilesServeur.length > 0) {
           // Premier chargement sur un appareil vierge uniquement
           const normalisees = reinjecterReserverCamera(
@@ -2183,15 +2192,19 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         const brutSlotsLocal = localStorage.getItem(cleSlots);
         let slotsLocaux: (string | null)[] = [];
         try { if (brutSlotsLocal) slotsLocaux = JSON.parse(brutSlotsLocal); } catch { /* ignore */ }
-        const aDesSlotsLocaux = Array.isArray(slotsLocaux) && slotsLocaux.some(Boolean);
+        const majLocaleSlots = lireHorodatageLocal(cleSlots) ?? 0;
+        const serveurPlusRecentSlots = !!(slotsServeur && Array.isArray(slotsServeur) && slotsServeur.some(Boolean)) && (lectureSlots.maj ?? 0) > majLocaleSlots;
+        const aDesSlotsLocaux = Array.isArray(slotsLocaux) && slotsLocaux.some(Boolean) && !serveurPlusRecentSlots;
 
         if (aDesSlotsLocaux) {
           // RÈGLE ABSOLUE : sanctuarise les positions de cases locales, pas d'écrasement serveur
           homeSyncReadyAgencies.add(clefSync);
           const locaux = toujoursActive() ? rootSlotsRef.current : slotsLocaux;
-          const maj = Date.now();
-          ecrireHorodatageLocal(cleSlots, maj);
-          void ecrireDispositionAgence('home_root_slots', currentUser.uid, agencyId, locaux, maj);
+          let majSlots = majLocaleSlots;
+          if (!majSlots) { majSlots = Date.now(); ecrireHorodatageLocal(cleSlots, majSlots); }
+          if (majSlots > (lectureSlots.maj ?? 0)) {
+            void ecrireDispositionAgence('home_root_slots', currentUser.uid, agencyId, locaux, majSlots);
+          }
         } else if (slotsServeur && Array.isArray(slotsServeur) && slotsServeur.some(Boolean)) {
           // Premier chargement sur un appareil vierge uniquement
           const valeur = slotsServeur as (string | null)[];

@@ -65,11 +65,11 @@ export function cleTuilesBureauAnonyme(agencyId: string | null | undefined): str
 }
 
 export function cleCasesBureau(uid: string | null | undefined, agencyId: string | null | undefined): string {
-  return `novasphere_home_slots_v1_${uid || 'anon'}_${agencyId || 'default'}`;
+  return `novasphere_home_slots_v5_${uid || 'anon'}_${agencyId || 'default'}`;
 }
 
 export function cleCasesBureauAnonyme(agencyId: string | null | undefined): string {
-  return `novasphere_home_slots_v1_anon_${agencyId || 'default'}`;
+  return `novasphere_home_slots_v5_anon_${agencyId || 'default'}`;
 }
 
 export function cleArrangementTelephone(uid: string | null | undefined, agencyId: string | null | undefined): string {

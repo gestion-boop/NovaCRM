@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAppUpdateStatus, applyUpdateOnNavigation, formatBuildDate, fetchServerVersion, setServerVersion } from '@/lib/updateStatus';
 import { toast } from 'sonner';
+import { figerDispositionAvantMiseAJour } from '@/lib/dispositionAccueil';
 
 interface UpdateStatusBadgeProps {
   className?: string;
@@ -58,7 +59,7 @@ export const UpdateStatusBadge: React.FC<UpdateStatusBadgeProps> = ({
         type="button"
         onClick={() => {
           if (!applyUpdateOnNavigation({})) {
-            window.location.reload();
+            figerDispositionAvantMiseAJour().catch(() => {}).finally(() => window.location.reload());
           }
         }}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all duration-300 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/50 shadow-[0_0_14px_rgba(245,158,11,0.35)] select-none shrink-0 cursor-pointer ${pendingClass}`}

@@ -34,6 +34,7 @@ import { cibleDepuisLien } from '@/lib/lienNotification';
 import { filOuvert, notifsChatAAnnoncer, regardeDejaLeFil, texteAnnonce } from '@/lib/alerteChat';
 import { fermerNotificationsSysteme, notificationsDisparues } from '@/lib/notificationsLues';
 import { toast } from 'sonner';
+import { figerDispositionAvantMiseAJour } from '@/lib/dispositionAccueil';
 
 import {
   useAuth,
@@ -847,7 +848,7 @@ export const NotificationsView: React.FC<
               type="button"
               onClick={() => {
                 if (!applyUpdateOnNavigation({})) {
-                  window.location.reload();
+                  figerDispositionAvantMiseAJour().catch(() => {}).finally(() => window.location.reload());
                 }
               }}
               className="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-md"
