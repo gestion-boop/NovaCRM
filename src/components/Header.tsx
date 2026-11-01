@@ -167,45 +167,27 @@ export const Header: React.FC<
 
   const { isUpdatePending } = useAppUpdateStatus();
 
-  // Météo tricolore de la clochette :
-  // 🔴 ROUGE (Urgence / Action requise) : Mise à jour prête OU Tâche(s) en retard
-  const hasRedAlert = Boolean(isUpdatePending || overdueTasksCount > 0);
-
-  // 🟠 ORANGE (Nouveautés) : Pas d'alerte rouge, mais des messages ou notifications non lus
+  // Clochette bicolore (demande du 1er novembre) : ROUGE s'il y a un message /
+  // une notification non lue (ou une mise à jour à appliquer), VERT sinon.
+  // Les tâches en retard n'y figurent plus (plus d'alertes de tâches).
   const otherNotificationsCount = (unreadCount || 0) + (unreadMessagesCount || 0);
-  const hasOrangeAlert = !hasRedAlert && otherNotificationsCount > 0;
-
-  // 🟢 VERT (Tout est bon) : Pas de mise à jour, aucune tâche en retard, aucune notification en attente
-  const isAllGood = !hasRedAlert && !hasOrangeAlert;
+  const hasRedAlert = Boolean(isUpdatePending || otherNotificationsCount > 0);
+  const isAllGood = !hasRedAlert;
 
   const bellBadgeText = useMemo(() => {
-    if (hasRedAlert) {
-      if (overdueTasksCount > 0) {
-        return overdueTasksCount > 99 ? '99+' : `${overdueTasksCount}`;
-      }
-      return '!';
-    }
-    if (hasOrangeAlert) {
-      return otherNotificationsCount > 99 ? '99+' : `${otherNotificationsCount}`;
-    }
+    if (otherNotificationsCount > 0) return otherNotificationsCount > 99 ? '99+' : `${otherNotificationsCount}`;
+    if (isUpdatePending) return '!';
     return null;
-  }, [hasRedAlert, hasOrangeAlert, overdueTasksCount, otherNotificationsCount]);
+  }, [isUpdatePending, otherNotificationsCount]);
 
   const bellTitle = useMemo(() => {
-    if (hasRedAlert) {
-      if (isUpdatePending && overdueTasksCount > 0) {
-        return `🔴 Mise à jour disponible & ${overdueTasksCount} tâche(s) en retard (cliquez pour ouvrir)`;
-      }
-      if (isUpdatePending) {
-        return '🔴 Nouvelle mise à jour disponible (cliquez pour appliquer)';
-      }
-      return `🔴 ${overdueTasksCount} tâche(s) en retard (cliquez pour consulter)`;
+    if (isUpdatePending && otherNotificationsCount > 0) {
+      return `🔴 Mise à jour disponible & ${otherNotificationsCount} notification(s) / message(s) non lu(s)`;
     }
-    if (hasOrangeAlert) {
-      return `🟠 ${otherNotificationsCount} notification(s) / message(s) non lu(s)`;
-    }
-    return '🟢 Tout est bon et à jour';
-  }, [hasRedAlert, hasOrangeAlert, isUpdatePending, overdueTasksCount, otherNotificationsCount]);
+    if (isUpdatePending) return '🔴 Nouvelle mise à jour disponible (cliquez pour appliquer)';
+    if (otherNotificationsCount > 0) return `🔴 ${otherNotificationsCount} notification(s) / message(s) non lu(s)`;
+    return '🟢 Aucun nouveau message';
+  }, [isUpdatePending, otherNotificationsCount]);
 
   const iconBtnClass =
     'w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 transition-colors shrink-0 cursor-pointer';
@@ -469,19 +451,14 @@ export const Header: React.FC<
           <Settings className="w-4 h-4" />
         </button>
 
-        {/* CLOCHETTE TRICOLORE : CENTRE NOTIFICATIONS
-            - ROUGE : Mise à jour en attente OU Tâche(s) en retard
-            - ORANGE : Nouveaux messages ou notifications non lues
-            - VERT : Tout est sous contrôle et à jour */}
+        {/* CLOCHETTE : ROUGE = message / notification non lue (ou mise à jour), VERT = rien de nouveau */}
         <button
           data-tour="header-bell"
           onClick={handleNotificationsClick}
           className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all border relative shrink-0 cursor-pointer ${
             hasRedAlert
               ? 'bg-rose-500/20 text-rose-400 border-rose-500/50 hover:bg-rose-500/30 hover:text-white shadow-[0_0_12px_rgba(244,63,94,0.35)] animate-pulse'
-              : hasOrangeAlert
-                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30 hover:text-amber-200 shadow-[0_0_10px_rgba(245,158,11,0.25)]'
-                : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35 hover:bg-emerald-500/25 hover:text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
+              : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35 hover:bg-emerald-500/25 hover:text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
           }`}
           title={bellTitle}
         >
@@ -491,9 +468,7 @@ export const Header: React.FC<
           {bellBadgeText && (
             <span
               className={`absolute -top-1 -right-1 font-bold text-[9px] min-w-3.5 h-3.5 px-1 rounded-full flex items-center justify-center shadow-md ${
-                hasRedAlert
-                  ? 'bg-rose-500 text-white'
-                  : 'bg-amber-500 text-slate-950 font-black'
+                'bg-rose-500 text-white'
               }`}
             >
               {bellBadgeText}
