@@ -123,10 +123,11 @@ export async function masquerTuile(userId: string | null | undefined, tuile: Tui
 
 export async function reafficherTuile(userId: string | null | undefined, id: string): Promise<void> {
   const locale = lireMasquees().filter((t) => t.id !== id);
-  if (!userId) {
-    ecrireMasquees(locale);
-    return;
-  }
+  // Écriture locale IMMÉDIATE : l'accueil, rouvert aussitôt après, filtre ses
+  // tuiles avec cette liste — attendre la lecture serveur le laissait
+  // re-masquer la tuile qu'on venait de réafficher.
+  ecrireMasquees(locale);
+  if (!userId) return;
   const serveur = await listeServeurFraiche(userId);
   const fraiche = fusionner(serveur, locale).filter((t) => t.id !== id);
   ecrireMasquees(fraiche);

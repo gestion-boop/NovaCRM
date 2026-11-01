@@ -17,6 +17,7 @@ import { getAgencyLogo, sortByAgencyOrder } from '@/lib/agency-logos';
 import { agencesCibleAnnonce, agenceUniqueAnnonce } from '@/lib/agencesAnnonce';
 import { AgencesAnnonce, NiveauxAnnonce, type NiveauAnnonce } from '@/components/annonces/ChoixAnnonce';
 import { reafficherTuile } from '@/lib/tuilesMasquees';
+import { ecrireHorodatageLocal } from '@/lib/dispositionAccueil';
 import { matchesAgency } from '@/hooks/useContacts';
 import { toast } from 'sonner';
 import { requestWorkspaceAccessToken, getCachedAccessToken, reconnectGoogleWorkspace } from '@/lib/workspace';
@@ -564,11 +565,17 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
       void reafficherTuile(currentUser?.uid, id);
 
       const agencyId = activeAgency?.id || 'default';
-      const tilesKey = `novasphere_home_tiles_v3_${agencyId}`;
+      // Même clé que l'accueil (AccueilGrid : HOME_TILES_KEY) : uid + agence.
+      // Avant, l'uid manquait → la tuile était écrite dans une clé que
+      // personne ne lit et ne réapparaissait jamais sur l'accueil.
+      const tilesKey = `novasphere_home_tiles_v3_${currentUser?.uid || 'anon'}_${agencyId}`;
       const rawTiles = localStorage.getItem(tilesKey);
       const tiles: Array<{ id: string; [k: string]: unknown }> = rawTiles ? JSON.parse(rawTiles) : [];
       if (!tiles.some((t) => t.id === id)) {
         localStorage.setItem(tilesKey, JSON.stringify([...tiles, tile]));
+        // Date fraîche : sans elle, une copie serveur plus récente écraserait
+        // ce réaffichage au prochain chargement de l'accueil.
+        ecrireHorodatageLocal(tilesKey, Date.now());
       }
 
       window.dispatchEvent(new Event('novasphere:home-tiles-changed'));
