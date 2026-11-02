@@ -17,6 +17,7 @@ import Auth from './components/Auth';
 import ClientAuth from './components/ClientAuth';
 import Header from './components/Header';
 import DesktopBottomDock from './components/DesktopBottomDock';
+import DesktopTopStatusBar from './components/DesktopTopStatusBar';
 import Sidebar, { NAV_ITEMS } from './components/Sidebar';
 import TabBar from './components/TabBar';
 import AccueilGrid from './components/AccueilGrid';
@@ -992,6 +993,15 @@ function App() {
       {/* Top Header Bar - collée tout en haut de l'écran — masquée tant que
           le bandeau d'annonce défilant ci-dessus est actif (même emplacement,
           AnnouncementTopBanner.tsx le remplace exactement). */}
+      {barreBasBureau && !isMobile && !bannerAnnouncementActive && (
+        <DesktopTopStatusBar
+          currentNav={currentNav}
+          onNavigate={(nav) => { setNovaOpen(false); setCurrentNav(nav); setSelectedClientProfileId(null); }}
+          rappels={unreadRemindersCount || 0}
+          chat={unreadMessagesCount || 0}
+          mail={unreadMailCount || 0}
+        />
+      )}
       {!bannerAnnouncementActive && <div className={enteteMasquee ? 'hidden' : 'contents'}><Header
         onOpenNouveauLead={() => setShowNouveauLead(true)}
         onOpenClientDictation={() => setShowQuickClientDictation(true)}

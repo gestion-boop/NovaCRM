@@ -4026,7 +4026,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       {/* "Ma journée" / "Priorités" — masqués sur mobile (MobileHome a sa
           propre version de ces blocs) ; uniquement pour l'accueil desktop,
           alignés sur la même hauteur, avec des données 100% dynamiques. */}
-      {!openFolderStack.length && (
+      {!openFolderStack.length && !(typeof window !== 'undefined' && window.innerWidth >= 768 && typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref !== 'main') && (
         <div className="hidden sm:flex flex-col max-w-7xl mx-auto w-full mb-3 z-10">
           {/* Cases d'activité & priorités (format cartes individuelles comme au début) */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-5 gap-3 sm:gap-3.5 w-full">
