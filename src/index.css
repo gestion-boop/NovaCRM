@@ -654,12 +654,12 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#144447" i],
 [class*="bg-[#153c3f" i],
 [class*="bg-[#161022" i],
-[class*="bg-[#173137" i],
 [class*="bg-[#173d40" i],
 [class*="bg-[#1b1712" i],
 [class*="bg-[#1b2b2e" i],
 [class*="bg-[#282112" i],
 [class*="bg-[#2a2211" i],
+[class*="bg-[#2a4a50" i],
 [class*="bg-[#6b5220" i] {
   background-color: var(--nv-surface-1) !important;
 }
@@ -748,12 +748,12 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#144447" i],
 [class*="bg-[#153c3f" i],
 [class*="bg-[#161022" i],
-[class*="bg-[#173137" i],
 [class*="bg-[#173d40" i],
 [class*="bg-[#1b1712" i],
 [class*="bg-[#1b2b2e" i],
 [class*="bg-[#282112" i],
 [class*="bg-[#2a2211" i],
+[class*="bg-[#2a4a50" i],
 [class*="bg-[#2b2b2b" i],
 [class*="bg-[#6b5220" i],
 .dash-card,
@@ -824,12 +824,12 @@ main[class*="bg-[#071015]/55" i] {
 [class*="bg-[#144447" i],
 [class*="bg-[#153c3f" i],
 [class*="bg-[#161022" i],
-[class*="bg-[#173137" i],
 [class*="bg-[#173d40" i],
 [class*="bg-[#1b1712" i],
 [class*="bg-[#1b2b2e" i],
 [class*="bg-[#282112" i],
 [class*="bg-[#2a2211" i],
+[class*="bg-[#2a4a50" i],
 [class*="bg-[#2b2b2b" i],
 [class*="bg-[#6b5220" i]
 ) {
@@ -887,7 +887,6 @@ main[class*="bg-[#071015]/55" i] {
 .light-mode [class*="border-[#1f4f55" i],
 .light-mode [class*="border-[#226368" i],
 .light-mode [class*="border-[#256064" i],
-.light-mode [class*="border-[#28474c" i],
 .light-mode [class*="border-[#285057" i],
 .light-mode [class*="border-[#2a6a6f" i],
 .light-mode [class*="border-[#3a2f1a" i],
@@ -909,7 +908,8 @@ main[class*="bg-[#071015]/55" i] {
 .light-mode [class*="ring-[#050d0f" i],
 .light-mode [class*="ring-[#071317" i],
 .light-mode [class*="ring-[#07191c" i],
-.light-mode [class*="ring-[#081318" i] {
+.light-mode [class*="ring-[#081318" i],
+.light-mode [class*="ring-[#0d181c" i] {
   --tw-ring-color: var(--nv-surface-1) !important;
 }
 
@@ -947,6 +947,7 @@ main[class*="bg-[#071015]/55" i] {
 [class~="bg-lime-500"],
 [class~="bg-orange-500"],
 [class~="bg-orange-700"],
+[class~="bg-pink-500"],
 [class~="bg-red-500"],
 [class~="bg-red-600"],
 [class~="bg-rose-500"],
