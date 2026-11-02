@@ -1899,7 +1899,7 @@ function App() {
           onOpenSearch={() => window.dispatchEvent(new Event('novasphere:open-search'))}
           onOpenNova={() => openNovaFullscreen()}
           onOpenNotifications={() => setNotificationsPanelOpen((o) => !o)}
-          unreadCount={(unreadNotificationsCount || 0) + (unreadMessagesCount || 0)}
+          unreadCount={unreadNotificationsCount || 0}
           actifs={{ menu: mobileMenuOpen, plus: showNouveauLead, nova: novaOpen || novaPopupOpen, search: rechercheOuverte, bell: notificationsPanelOpen }}
         />
       )}
