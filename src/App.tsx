@@ -325,7 +325,7 @@ function App() {
   // uniquement hors production (branche test) ; elle remplace la barre du
   // haut sur les fenêtres de travail (tout sauf l'accueil).
   const barreBasBureau = typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref !== 'main';
-  const enteteMasquee = barreBasBureau && currentNav !== 'accueil';
+  const enteteMasquee = barreBasBureau;
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   // Signalé : "pense à mettre le mode jour sur le téléphone portable" — en
   // creusant, deux mécanismes de thème coexistaient sans être synchronisés :
@@ -1390,6 +1390,14 @@ function App() {
               onSelectAgency={setActiveAgency}
               onClose={() => setCurrentNav('accueil')}
               onNavigate={setCurrentNav}
+              actionsRapides={barreBasBureau ? {
+                isDarkMode,
+                onToggleTheme: handleToggleTheme,
+                onOpenTutorial: () => setShowTutorial(true),
+                onOpenCameraReservation: () => setShowCameraModal(true),
+                onOpenClientDictation: () => setShowQuickClientDictation(true),
+                onOpenSqlImport: () => setShowSqlImport(true),
+              } : undefined}
             />
           )}
 

@@ -1,6 +1,5 @@
 import React from 'react';
 import { Bell, Home, Menu, Plus, Search, Settings } from 'lucide-react';
-import NovaMascotte from './NovaMascotte';
 
 interface DesktopBottomDockProps {
   currentNav: string;
@@ -33,8 +32,10 @@ export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
       <button onClick={onOpenNouveauLead} title="Créer un lead" aria-label="Créer un lead" className={btn}>
         <Plus className="w-7 h-7" strokeWidth={2.4} />
       </button>
-      <button onClick={onOpenNova} title="Nova" aria-label="Nova" className="relative flex items-center justify-center h-12 w-14 active:scale-90 transition-transform cursor-pointer">
-        <NovaMascotte taille={42} fixe />
+      <button onClick={onOpenNova} title="Nova" aria-label="Nova" className="relative flex items-center justify-center h-14 w-16 active:scale-90 transition-transform cursor-pointer group">
+        <span className="flex items-center justify-center w-13 h-13 rounded-full bg-[#0a2528]/95 border-2 border-[#F7BC5F] ring-2 ring-[#F7BC5F]/30 shadow-[0_0_14px_rgba(247,188,95,0.4)] group-hover:scale-105 transition-transform" style={{ width: 52, height: 52 }}>
+          <img src="/nova-mascotte.png" alt="" className="w-10 h-10 object-contain" />
+        </span>
       </button>
       <button onClick={onOpenSearch} title="Rechercher" aria-label="Rechercher" className={btn}>
         <Search className="w-7 h-7" strokeWidth={2} />

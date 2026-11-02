@@ -13,7 +13,8 @@ import {
 import { creerAccumulateurDictee } from '@/lib/dictee';
 import { AGENCIES, Agency } from '@/types';
 import { useAuth } from '@/context/AuthContext';
-import { getAgencyLogo, sortByAgencyOrder } from '@/lib/agency-logos';
+import { getAgencyLogo, sortByAgencyOrder, agencesDisponibles } from '@/lib/agency-logos';
+import AgencyLogoSwitcher from './AgencyLogoSwitcher';
 import { agencesCibleAnnonce, agenceUniqueAnnonce } from '@/lib/agencesAnnonce';
 import { AgencesAnnonce, NiveauxAnnonce, type NiveauAnnonce } from '@/components/annonces/ChoixAnnonce';
 import { reafficherTuile } from '@/lib/tuilesMasquees';
@@ -29,6 +30,16 @@ import { NAV_ITEMS } from './Sidebar';
 import { familleMenu, ordonnerParFamille, titreFamille } from '@/lib/famillesMenu';
 
 interface ParametresViewProps {
+  // Test (2 novembre) : actions de la barre du haut, supprimée sur la branche
+  // test, regroupées ici. Absent en production.
+  actionsRapides?: {
+    isDarkMode: boolean;
+    onToggleTheme: () => void;
+    onOpenTutorial: () => void;
+    onOpenCameraReservation: () => void;
+    onOpenClientDictation: () => void;
+    onOpenSqlImport: () => void;
+  };
   selectedAgency: Agency;
   onSelectAgency: (agency: Agency) => void;
   onClose?: () => void;
@@ -39,7 +50,7 @@ interface ParametresViewProps {
 // la gestion des utilisateurs est désormais centralisée dans Équipe (onglet
 // "Gestion des utilisateurs", EquipeView.tsx), suite logique du ticket #153
 // qui avait déjà retiré les boutons de création d'ici.
-type SectionId = 'drive' | 'profile' | 'announcements' | 'notifications' | 'mail' | 'export' | 'event-titles' | 'sidebar-order' | 'contact-types' | 'appearance' | 'home-tiles' | 'automations' | 'pipeline-automations' | 'corbeille-clients' | 'journal-clients';
+type SectionId = 'quick-actions' | 'drive' | 'profile' | 'announcements' | 'notifications' | 'mail' | 'export' | 'event-titles' | 'sidebar-order' | 'contact-types' | 'appearance' | 'home-tiles' | 'automations' | 'pipeline-automations' | 'corbeille-clients' | 'journal-clients';
 type SectionConfig = { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }>; adminOnly?: boolean };
 
 type UserRow = {
@@ -298,7 +309,7 @@ const Toggle: React.FC<{ checked: boolean; onChange: (value: boolean) => void; d
   </button>
 );
 
-export default function ParametresView({ selectedAgency, onSelectAgency, onClose, onNavigate }: ParametresViewProps) {
+export default function ParametresView({ selectedAgency, onSelectAgency, onClose, onNavigate, actionsRapides }: ParametresViewProps) {
   const { currentUser, userProfile, logout, activeAgency } = useAuth();
   const isAdmin = userProfile?.role === 'super_admin';
   const uid = currentUser?.uid;
@@ -432,7 +443,13 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
     return nom || 'Compte supprimé';
   };
   const isMobile = useIsMobile();
-  const visibleSections = useMemo(() => DEFAULT_SECTIONS.filter(s => !s.adminOnly || isAdmin), [isAdmin]);
+  const visibleSections = useMemo(
+    () => [
+      ...(actionsRapides ? [{ id: 'quick-actions', label: 'Actions rapides', icon: Zap } as SectionConfig] : []),
+      ...DEFAULT_SECTIONS.filter(s => !s.adminOnly || isAdmin),
+    ],
+    [isAdmin, !!actionsRapides],
+  );
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(() => readStorage('novasphere:settings-order-v4', computeDefaultSectionOrder(DEFAULT_SECTIONS)));
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -1016,7 +1033,8 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
   // l'ordre déjà enregistré chez chacun : elle est ajoutée à la fin plutôt
   // que perdue.
   const orderedSections = [
-    ...(sectionOrder.map(id => visibleSections.find(s => s.id === id)).filter(Boolean) as SectionConfig[]),
+    ...visibleSections.filter((s) => s.id === 'quick-actions'),
+    ...(sectionOrder.filter((id) => id !== 'quick-actions').map(id => visibleSections.find(s => s.id === id)).filter(Boolean) as SectionConfig[]),
     ...visibleSections.filter(s => !sectionOrder.includes(s.id)),
   ];
 
@@ -2614,6 +2632,46 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
       </div>;
 
       case 'contact-types': return <div className="space-y-4"><div className="flex items-center justify-between"><div><p className="font-semibold text-white">Types de contact</p><p className="text-xs text-slate-400 mt-1">La liste est utilisée par la création d'un client.</p></div><button onClick={()=>saveContactTypes(DEFAULT_CONTACT_TYPES)} className="px-3 py-2 rounded-xl bg-[#102f32] text-white text-xs font-semibold flex items-center gap-2"><RotateCcw className="w-4 h-4"/>Réinitialiser</button></div><div className="space-y-2">{contactTypes.map((item,index)=><div key={`${item}-${index}`} className="flex items-center gap-2"><div className="flex-1 rounded-xl bg-[#071f21] border border-[#1c4448] px-3 py-2 text-sm text-white">{item}</div><button onClick={()=>saveContactTypes(reorder(contactTypes,index,index-1))} className="p-2 text-slate-400"><ArrowUp className="w-4 h-4"/></button><button onClick={()=>saveContactTypes(reorder(contactTypes,index,index+1))} className="p-2 text-slate-400"><ArrowDown className="w-4 h-4"/></button><button onClick={()=>saveContactTypes(contactTypes.filter((_,i)=>i!==index))} className="p-2 text-red-500"><Trash2 className="w-4 h-4"/></button></div>)}</div><div className="flex gap-2"><input value={newContactType} onChange={e=>setNewContactType(e.target.value)} placeholder="Nouveau type de contact" className={inputClass}/><button onClick={()=>{if(!newContactType.trim())return;saveContactTypes([...contactTypes,newContactType.trim()]);setNewContactType('');}} className={goldButton}><Plus className="w-4 h-4"/>Ajouter</button></div></div>;
+
+      case 'quick-actions': {
+        if (!actionsRapides) return null;
+        const ligne = (Icone: React.ComponentType<{ className?: string }>, titre: string, desc: string, action: () => void, label: string) => (
+          <div key={titre} className="py-4 flex items-center gap-4">
+            <Icone className="w-5 h-5 text-slate-400" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white">{titre}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+            </div>
+            <button type="button" onClick={action} className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white cursor-pointer shrink-0">{label}</button>
+          </div>
+        );
+        return (
+          <div className="space-y-5">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Société</p>
+              <AgencyLogoSwitcher
+                agencies={agencesDisponibles(AGENCIES, userProfile)}
+                selectedId={selectedAgency.id}
+                onSelect={(agency) => onSelectAgency(agency)}
+              />
+            </div>
+            <div className="divide-y divide-[#173d40]">
+              <div className="py-4 flex items-center gap-4">
+                <Palette className="w-5 h-5 text-slate-400" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-white">Mode jour / nuit</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{actionsRapides.isDarkMode ? 'Mode nuit actif' : 'Mode jour actif'}</p>
+                </div>
+                <Toggle checked={!actionsRapides.isDarkMode} onChange={() => actionsRapides.onToggleTheme()} />
+              </div>
+              {ligne(Sparkles, 'Tutoriel', 'Revoir la visite guidée de NovaCRM.', actionsRapides.onOpenTutorial, 'Ouvrir')}
+              {ligne(Camera, 'Réserver la caméra', 'Réserver la caméra 360.', actionsRapides.onOpenCameraReservation, 'Ouvrir')}
+              {ligne(Mic, 'Dictée vocale client', 'Dicter une note vers une fiche client.', actionsRapides.onOpenClientDictation, 'Ouvrir')}
+              {isAdmin && ligne(Upload, 'Import SQL', 'Importer des fiches depuis un fichier SQL.', actionsRapides.onOpenSqlImport, 'Ouvrir')}
+            </div>
+          </div>
+        );
+      }
 
       case 'appearance': return (
         <div className="space-y-8">
