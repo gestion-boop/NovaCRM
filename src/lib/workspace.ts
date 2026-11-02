@@ -867,20 +867,33 @@ export const uploadVideoToDriveFolder = async (
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   form.append('file', file);
 
-  const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: form,
-  });
-
-  if (!uploadRes.ok) {
-    const err = await uploadRes.json().catch(() => ({}));
-    throw new Error(err.error?.message || 'Erreur lors du téléversement de la vidéo sur Google Drive');
+  // XMLHttpRequest (et non fetch) : seul moyen d'obtenir la progression de
+  // l'envoi. L'état est diffusé à l'appli (barre de progression, App.tsx).
+  const signaler = (detail: { actif: boolean; pct?: number; nom?: string }) => {
+    try { window.dispatchEvent(new CustomEvent('novasphere:upload-progress', { detail })); } catch { /* ignore */ }
+  };
+  signaler({ actif: true, pct: 0, nom: file.name });
+  let uploadData: { id: string };
+  try {
+    uploadData = await new Promise<{ id: string }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink');
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) signaler({ actif: true, pct: Math.round((e.loaded / e.total) * 100), nom: file.name });
+      };
+      xhr.onerror = () => reject(new Error('Erreur réseau pendant le téléversement de la vidéo'));
+      xhr.onload = () => {
+        let data: any = {};
+        try { data = JSON.parse(xhr.responseText || '{}'); } catch { /* ignore */ }
+        if (xhr.status >= 200 && xhr.status < 300 && data.id) resolve(data);
+        else reject(new Error(data.error?.message || 'Erreur lors du téléversement de la vidéo sur Google Drive'));
+      };
+      xhr.send(form);
+    });
+  } finally {
+    signaler({ actif: false });
   }
-
-  const uploadData = await uploadRes.json();
 
   // Signalé (23 octobre) : « la vidéo ne peut pas se lire... Natacha par
   // exemple ne peut pas la lire » — le fichier venait d'être déposé sur le

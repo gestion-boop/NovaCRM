@@ -18,6 +18,7 @@ import ClientAuth from './components/ClientAuth';
 import Header from './components/Header';
 import DesktopBottomDock from './components/DesktopBottomDock';
 import DesktopTopStatusBar from './components/DesktopTopStatusBar';
+import BarreProgressionUpload from './components/BarreProgressionUpload';
 import Sidebar, { NAV_ITEMS } from './components/Sidebar';
 import TabBar from './components/TabBar';
 import AccueilGrid from './components/AccueilGrid';
@@ -1125,7 +1126,7 @@ function App() {
               ? 'pt-[calc(3.5rem+env(safe-area-inset-top,0px))] md:pt-0'
               : 'pt-[env(safe-area-inset-top,0px)] md:pt-0'
         } ${
-          isMobile && (currentNav === 'chat' || currentNav === 'mail') ? 'pb-0' : `pb-[calc(5rem+env(safe-area-inset-bottom,0px))] ${barreBasBureau ? 'md:pb-24' : 'md:pb-0'}`
+          isMobile && (currentNav === 'chat' || currentNav === 'mail') ? 'pb-0' : `pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-0`
         } ${
           // Signalé (30/08/2026, plusieurs captures) : "en haut ce n'est pas
           // top" — la photo de fond restait visible en bande dans tous les
@@ -1888,6 +1889,7 @@ function App() {
         onOpenClientProfile={(clientId) => openClientProfile(clientId)}
       />
 
+      <BarreProgressionUpload />
       {barreBasBureau && !isMobile && !novaOpen && (
         <DesktopBottomDock
           currentNav={currentNav}

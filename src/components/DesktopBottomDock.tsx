@@ -28,7 +28,7 @@ export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
   const modaleOuverte = useModaleOuverte();
   const rouge = isUpdatePending || unreadCount > 0;
   return (
-  <nav data-barre-bas className={`hidden md:flex fixed bottom-3 left-0 right-0 z-40 justify-center pointer-events-none select-none transition-all duration-200 ${modaleOuverte ? 'opacity-0 translate-y-6 invisible' : ''}`}>
+  <nav data-barre-bas className={`hidden md:flex shrink-0 relative z-40 justify-center pt-1.5 pb-3 pointer-events-none select-none transition-all duration-200 ${modaleOuverte ? 'opacity-0 translate-y-6 invisible' : ''}`}>
     <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-gradient-to-b from-[#16262b]/95 via-[#0d181c]/95 to-[#070e11]/95 backdrop-blur-2xl border border-[#F7BC5F]/45 shadow-[0_14px_30px_-6px_rgba(0,0,0,0.95),0_3px_0_0_rgba(247,188,95,0.12),inset_0_2px_3px_rgba(255,255,255,0.22),inset_0_-3px_5px_rgba(0,0,0,0.55),0_0_10px_rgba(247,188,95,0.1)] px-2 py-1.5">
       <button onClick={() => onNavigate('accueil')} title="Accueil" aria-label="Accueil" className={`${btn} ${currentNav === 'accueil' ? actif : ''}`}>
         <Home className="w-7 h-7" strokeWidth={currentNav === 'accueil' ? 2.6 : 2} />
