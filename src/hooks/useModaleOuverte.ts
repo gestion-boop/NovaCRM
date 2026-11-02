@@ -20,6 +20,14 @@ export function useModaleOuverte(): boolean {
         if (st.position !== 'fixed' || st.display === 'none' || st.visibility === 'hidden') return;
         const z = parseInt(st.zIndex, 10);
         if (!Number.isFinite(z) || z < 40) return;
+        // Une vraie fenêtre est interactive, visible et assombrit le fond : on
+        // ignore les couches transparentes ou sans clic (conteneurs
+        // permanents, filets de fermeture de menu) qui masquaient la barre
+        // pour rien.
+        if (st.pointerEvents === 'none' || parseFloat(st.opacity) < 0.5) return;
+        const m = st.backgroundColor.match(/rgba?\(([^)]+)\)/);
+        const alpha = m ? (m[1].split(',').length > 3 ? parseFloat(m[1].split(',')[3]) : 1) : 0;
+        if (alpha < 0.2 && (!st.backdropFilter || st.backdropFilter === 'none')) return;
         const r = el.getBoundingClientRect();
         if (r.width >= l * 0.9 && r.height >= h * 0.9) trouvee = true;
       });
