@@ -4,8 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App.tsx'
 import './index.css'
 import { AuthProvider } from './context/AuthContext'
+import { rechargerSiChunkPerime } from '@/lib/chunkPerime'
 
 const queryClient = new QueryClient();
+
+// Fichier d'écran périmé après un déploiement (voir lib/chunkPerime.ts).
+window.addEventListener('vite:preloadError', (e) => {
+  if (rechargerSiChunkPerime()) e.preventDefault();
+});
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

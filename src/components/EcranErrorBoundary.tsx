@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { estErreurChunk, rechargerSiChunkPerime } from '@/lib/chunkPerime';
 
 interface Props {
   children: ReactNode;
@@ -27,6 +28,7 @@ export class EcranErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error) {
     console.error('Écran interrompu :', error);
+    if (estErreurChunk(error)) rechargerSiChunkPerime();
   }
 
   componentDidUpdate(prevProps: Props) {
