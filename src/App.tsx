@@ -1002,7 +1002,7 @@ function App() {
           chat={unreadMessagesCount || 0}
           mail={unreadMailCount || 0}
           teinte={bgImage ? (currentNav === 'accueil' ? 0.35 : 0.55) : 0}
-          onRetour={typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref !== 'main' && currentNav !== 'accueil'
+          onRetour={currentNav !== 'accueil'
             ? () => { setNovaOpen(false); if (selectedClientProfileId) setSelectedClientProfileId(null); else setCurrentNav('accueil'); }
             : undefined}
         />
@@ -1905,7 +1905,7 @@ function App() {
           onOpenNotifications={() => setNotificationsPanelOpen((o) => !o)}
           unreadCount={unreadNotificationsCount || 0}
           teinte={bgImage ? (currentNav === 'accueil' ? 0.35 : 0.55) : 0}
-          repliable={typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref !== 'main' && currentNav !== 'accueil'}
+          repliable={currentNav !== 'accueil'}
           actifs={{ menu: mobileMenuOpen, plus: showNouveauLead, nova: novaOpen || novaPopupOpen, search: rechercheOuverte, bell: notificationsPanelOpen }}
         />
       )}
