@@ -116,54 +116,54 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
         {/* Barre façon Instagram (demande du 2 novembre) : Accueil · + lead ·
             Nova · Recherche · Paramètres, icônes seules. */}
-        <div className="pointer-events-auto w-full rounded-full bg-[#0b1417]/90 backdrop-blur-2xl border border-white/10 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.9)] px-2 py-1.5 flex items-center justify-between">
+        <div className="pointer-events-auto w-full rounded-full bg-gradient-to-b from-[#16262b]/95 via-[#0d181c]/95 to-[#070e11]/95 backdrop-blur-2xl border-2 border-[#F7BC5F]/80 shadow-[0_14px_30px_-6px_rgba(0,0,0,0.95),0_4px_0_0_rgba(247,188,95,0.25),inset_0_2px_3px_rgba(255,255,255,0.22),inset_0_-3px_5px_rgba(0,0,0,0.55),0_0_16px_rgba(247,188,95,0.2)] px-2 py-1.5 flex items-center justify-between">
           <button
             onClick={() => onNavigate('accueil')}
             title="Accueil"
             aria-label="Accueil"
-            className={`flex items-center justify-center h-11 w-14 rounded-full transition-all cursor-pointer active:scale-95 ${
-              currentNav === 'accueil' ? 'bg-white/15 text-white' : 'text-slate-300 hover:text-white'
+            className={`flex items-center justify-center h-12 w-14 rounded-full transition-all cursor-pointer active:scale-95 ${
+              currentNav === 'accueil' ? 'bg-white/15 text-white shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]' : 'text-slate-300 hover:text-white'
             }`}
           >
-            <Home className="w-6 h-6" strokeWidth={currentNav === 'accueil' ? 2.6 : 2} />
+            <Home className="w-7 h-7" strokeWidth={currentNav === 'accueil' ? 2.6 : 2} />
           </button>
 
           <button
             onClick={onOpenNouveauLead}
             title="Créer un lead"
             aria-label="Créer un lead"
-            className="flex items-center justify-center h-11 w-14 rounded-full text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
+            className="flex items-center justify-center h-12 w-14 rounded-full text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
           >
-            <Plus className="w-6 h-6" strokeWidth={2.4} />
+            <Plus className="w-7 h-7" strokeWidth={2.4} />
           </button>
 
           <button
             onClick={onOpenNova}
             title="Nova"
             aria-label="Nova"
-            className="relative flex items-center justify-center h-11 w-14 active:scale-90 transition-transform group cursor-pointer"
+            className="relative flex items-center justify-center h-12 w-14 active:scale-90 transition-transform group cursor-pointer"
           >
-            <NovaMascotte taille={36} fixe />
+            <NovaMascotte taille={42} fixe />
           </button>
 
           <button
             onClick={onOpenSearch}
             title="Rechercher"
             aria-label="Rechercher"
-            className="flex items-center justify-center h-11 w-14 rounded-full text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
+            className="flex items-center justify-center h-12 w-14 rounded-full text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
           >
-            <Search className="w-6 h-6" strokeWidth={2} />
+            <Search className="w-7 h-7" strokeWidth={2} />
           </button>
 
           <button
             onClick={() => onNavigate('parametres')}
             title="Paramètres"
             aria-label="Paramètres"
-            className={`flex items-center justify-center h-11 w-14 rounded-full transition-all cursor-pointer active:scale-95 ${
-              currentNav === 'parametres' ? 'bg-white/15 text-white' : 'text-slate-300 hover:text-white'
+            className={`flex items-center justify-center h-12 w-14 rounded-full transition-all cursor-pointer active:scale-95 ${
+              currentNav === 'parametres' ? 'bg-white/15 text-white shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]' : 'text-slate-300 hover:text-white'
             }`}
           >
-            <Settings className="w-6 h-6" strokeWidth={currentNav === 'parametres' ? 2.6 : 2} />
+            <Settings className="w-7 h-7" strokeWidth={currentNav === 'parametres' ? 2.6 : 2} />
           </button>
         </div>
       </div>
