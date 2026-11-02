@@ -1900,6 +1900,7 @@ function App() {
           onOpenNova={() => openNovaFullscreen()}
           onOpenNotifications={() => setNotificationsPanelOpen((o) => !o)}
           unreadCount={unreadNotificationsCount || 0}
+          onRetour={() => { setNovaOpen(false); if (selectedClientProfileId) setSelectedClientProfileId(null); else setCurrentNav('accueil'); }}
           repliable={typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref !== 'main' && currentNav !== 'accueil'}
           actifs={{ menu: mobileMenuOpen, plus: showNouveauLead, nova: novaOpen || novaPopupOpen, search: rechercheOuverte, bell: notificationsPanelOpen }}
         />
