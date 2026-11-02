@@ -304,8 +304,8 @@ const inputClass = 'w-full rounded-xl bg-[#071f21] border border-[#1c4448] px-3 
 const goldButton = 'px-4 py-2 rounded-xl bg-[#F7BC5F] text-[#07191b] text-xs font-bold flex items-center gap-2 hover:bg-[#f0c557] disabled:opacity-50 disabled:cursor-not-allowed';
 
 const Toggle: React.FC<{ checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }> = ({ checked, onChange, disabled }) => (
-  <button type="button" disabled={disabled} onClick={() => onChange(!checked)} className={`relative h-6 w-11 rounded-full border transition-all disabled:opacity-50 ${checked ? 'bg-[#F7BC5F] border-[#F7BC5F]' : 'bg-[#173137] border-[#28474c]'}`} aria-pressed={checked}>
-    <span className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-[#07191b] shadow transition-all ${checked ? 'left-[21px]' : 'left-[3px]'}`} />
+  <button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)} className={`relative h-6 w-11 shrink-0 rounded-full border-2 transition-all disabled:opacity-50 hover:ring-2 hover:ring-[#F7BC5F]/60 active:ring-[#F7BC5F] ${checked ? 'bg-[#F7BC5F] border-[#F7BC5F]' : 'bg-[#2a4a50] border-slate-400/70'}`}>
+    <span className={`absolute top-[1px] h-[18px] w-[18px] rounded-full shadow-md transition-all ${checked ? 'left-[21px] bg-[#07191b]' : 'left-[1px] bg-slate-100'}`} />
   </button>
 );
 
@@ -2642,7 +2642,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
               <p className="text-sm font-semibold text-white">{titre}</p>
               <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
             </div>
-            <button type="button" onClick={action} className="px-3.5 py-2 rounded-xl bg-white/5 nv-effet-jaune border border-white/10 text-xs font-bold text-white cursor-pointer shrink-0">{label}</button>
+            <button type="button" onClick={action} className="px-3.5 py-2 rounded-xl bg-white/10 nv-effet-jaune border border-[#F7BC5F]/50 text-xs font-bold text-[#F9C977] cursor-pointer shrink-0">{label}</button>
           </div>
         );
         return (
