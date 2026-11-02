@@ -2642,7 +2642,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
               <p className="text-sm font-semibold text-white">{titre}</p>
               <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
             </div>
-            <button type="button" onClick={action} className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white cursor-pointer shrink-0">{label}</button>
+            <button type="button" onClick={action} className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-[#F7BC5F]/20 hover:border-[#F7BC5F]/70 hover:text-[#F9C977] active:bg-[#F7BC5F]/35 active:border-[#F7BC5F] active:scale-95 transition-all border border-white/10 text-xs font-bold text-white cursor-pointer shrink-0">{label}</button>
           </div>
         );
         return (
