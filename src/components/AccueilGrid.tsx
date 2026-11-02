@@ -4256,7 +4256,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       <div className="h-16 sm:h-24" aria-hidden="true" />
 
       {/* Bouton Flottant Assistant Nova IA — Cercle Logo avec contour jaune identique du logo */}
-      {!novaOpen && !(!isMobile && typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref !== 'main') && (
+      {!novaOpen && !(typeof window !== 'undefined' && window.innerWidth >= 768 && typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref !== 'main') && (
         <div className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-40">
           <button
             onClick={() => {
