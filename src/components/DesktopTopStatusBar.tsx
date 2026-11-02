@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BarChart2, Bell, Calendar, Mail, MessageSquare } from 'lucide-react';
+import { useModaleOuverte } from '@/hooks/useModaleOuverte';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 // visible sur tous les écrans.
 export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, rappels, chat, mail }) => {
   const [agenda, setAgenda] = useState(0);
+  const modaleOuverte = useModaleOuverte();
   useEffect(() => {
     let annule = false;
     (async () => {
@@ -46,7 +48,7 @@ export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, r
   ];
 
   return (
-    <div className="hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-1">
+    <div className={`${modaleOuverte ? 'invisible ' : ''}hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-1`}>
       <div className="grid grid-cols-5 gap-2 sm:gap-3 max-w-7xl mx-auto p-2 sm:p-2.5 rounded-3xl bg-gradient-to-b from-[#16262b]/95 via-[#0d181c]/95 to-[#070e11]/95 backdrop-blur-xl border border-[#F7BC5F]/55 shadow-[0_10px_28px_-8px_rgba(0,0,0,0.9),0_3px_0_0_rgba(247,188,95,0.12),inset_0_2px_3px_rgba(255,255,255,0.15),inset_0_-3px_5px_rgba(0,0,0,0.5),0_0_10px_rgba(247,188,95,0.1)]">
         {items.map(({ nav, label, statut, alerte, Icon, gradient }) => (
           <button
