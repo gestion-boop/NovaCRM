@@ -17,7 +17,7 @@ import { getAgencyLogo, sortByAgencyOrder, agencesDisponibles } from '@/lib/agen
 import AgencyLogoSwitcher from './AgencyLogoSwitcher';
 import { agencesCibleAnnonce, agenceUniqueAnnonce } from '@/lib/agencesAnnonce';
 import { AgencesAnnonce, NiveauxAnnonce, type NiveauAnnonce } from '@/components/annonces/ChoixAnnonce';
-import { reafficherTuile } from '@/lib/tuilesMasquees';
+import { reafficherTuile, lireMasquees, definirAgenceMasquees } from '@/lib/tuilesMasquees';
 import { ecrireHorodatageLocal } from '@/lib/dispositionAccueil';
 import { matchesAgency } from '@/hooks/useContacts';
 import { toast } from 'sonner';
@@ -311,6 +311,7 @@ const Toggle: React.FC<{ checked: boolean; onChange: (value: boolean) => void; d
 
 export default function ParametresView({ selectedAgency, onSelectAgency, onClose, onNavigate, actionsRapides }: ParametresViewProps) {
   const { currentUser, userProfile, logout, activeAgency } = useAuth();
+  definirAgenceMasquees(activeAgency?.id);
   const isAdmin = userProfile?.role === 'super_admin';
   const uid = currentUser?.uid;
   const [openSection, setOpenSection] = useState<SectionId | null>(null);
@@ -559,9 +560,11 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
   // Raccourcis de l'accueil supprimés depuis la grille — déplacés ici au
   // lieu d'être perdus définitivement (voir AccueilGrid.handleDeleteTile).
   const [hiddenHomeTiles, setHiddenHomeTiles] = useState<Array<{ id: string; title: string; iconName: string }>>(
-    () => readStorage('novasphere_hidden_tiles_v1', [])
+    () => lireMasquees() as unknown as Array<{ id: string; title: string; iconName: string }>
   );
-  const refreshHiddenHomeTiles = () => setHiddenHomeTiles(readStorage('novasphere_hidden_tiles_v1', []));
+  const refreshHiddenHomeTiles = () => setHiddenHomeTiles(lireMasquees() as unknown as Array<{ id: string; title: string; iconName: string }>);
+  useEffect(() => { refreshHiddenHomeTiles(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAgency?.id]);
   // Signalé : "Réafficher" ne faisait plus rien depuis les Paramètres.
   // Cause : ça reposait entièrement sur un évènement écouté par l'accueil
   // (AccueilGrid) — qui n'est pas monté tant qu'on est sur la page
@@ -573,8 +576,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
   // resynchronise tout de suite sans attendre un rechargement.
   const restoreHomeTile = (id: string) => {
     try {
-      const rawHidden = localStorage.getItem('novasphere_hidden_tiles_v1');
-      const hidden: Array<{ id: string; [k: string]: unknown }> = rawHidden ? JSON.parse(rawHidden) : [];
+      const hidden: Array<{ id: string; [k: string]: unknown }> = lireMasquees();
       const tile = hidden.find((t) => t.id === id);
       if (!tile) return;
       // Navigateur ET compte : la liste des tuiles masquées suit désormais

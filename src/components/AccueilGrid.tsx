@@ -42,7 +42,7 @@ import {
 } from '@/lib/dispositionAccueil';
 import { EVENEMENT_OUVRIR_DOSSIER_ACCUEIL, consommerOuvrirDossierAccueil } from '@/lib/rechercheGlobale';
 import agencyImmosphera from '@/assets/agency-immosphera.png';
-import { chargerMasqueesDepuisServeur, masquerTuile, lireMasquees, reafficherTuile } from '@/lib/tuilesMasquees';
+import { chargerMasqueesDepuisServeur, masquerTuile, lireMasquees, reafficherTuile, definirAgenceMasquees } from '@/lib/tuilesMasquees';
 import NovaMascotte from './NovaMascotte';
 import { NAV_ITEMS } from './Sidebar';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
@@ -1324,6 +1324,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // l'initialisation de `tiles` pour cloisonner le stockage par agence
   // (voir HOME_TILES_KEY juste en dessous).
   const { agencies, activeAgency, isSuperAdmin, currentUser, userProfile } = useAuth() as any;
+  // Tuiles masquées cloisonnées par société : posé AVANT toute lecture de la liste.
+  definirAgenceMasquees(activeAgency?.id);
   const isAdmin = Boolean(isSuperAdmin || userProfile?.role === 'super_admin' || userProfile?.role === 'admin');
   // Vraie sélection globale, jamais substituée — voir le commentaire sur
   // l'import plus haut. Ne sert qu'au garde-fou dans enregistrerVerrous.
@@ -1476,10 +1478,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // bas) mais doit quand même respecter les tuiles masquées par l'utilisateur.
   const listerIdsMasquesAplatis = (): Set<string> => {
     try {
-      const hiddenRaw = localStorage.getItem('novasphere_hidden_tiles_v1');
       const flattenIds = (items: TileItemNode[]): string[] =>
         items.flatMap((t) => [t.id, ...(t.children ? flattenIds(t.children) : [])]);
-      return new Set(flattenIds(hiddenRaw ? JSON.parse(hiddenRaw) : []));
+      return new Set(flattenIds(lireMasquees() as unknown as TileItemNode[]));
     } catch {
       return new Set();
     }
@@ -1800,10 +1801,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     // On la retire donc explicitement ici, après toute réconciliation, quel
     // que soit le chemin par lequel elle aurait pu être rajoutée.
     try {
-      const hiddenRaw = localStorage.getItem('novasphere_hidden_tiles_v1');
-      const hiddenIds = new Set<string>(
-        (hiddenRaw ? JSON.parse(hiddenRaw) : []).map((t: TileItemNode) => t.id)
-      );
+      const hiddenIds = new Set<string>(lireMasquees().map((t) => t.id));
       // Revu (28/08/2026) : la protection "les tuiles par défaut ne peuvent
       // pas être supprimées" couvrait TOUTES les tuiles par défaut (Rappels,
       // Pipeline, Tableau de bord...), ce qui empêchait un agent de masquer

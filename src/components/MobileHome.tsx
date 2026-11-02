@@ -44,7 +44,7 @@ import {
   type TuilePartagee,
   type VisibiliteTuiles,
 } from '@/lib/tuilesPartagees';
-import { lireMasquees } from '@/lib/tuilesMasquees';
+import { lireMasquees, definirAgenceMasquees } from '@/lib/tuilesMasquees';
 import { supabase } from '@/lib/supabase';
 import { useSwipeBack } from '@/hooks/useSwipeBack';
 
@@ -196,6 +196,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   onOpenClientDictation,
 }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
+  definirAgenceMasquees(activeAgency?.id);
   const { isUpdatePending } = useAppUpdateStatus();
 
   // ── Horloge & salutation ──────────────────────────────────────────────

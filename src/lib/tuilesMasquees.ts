@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { AGENCIES } from '@/types';
 
 /**
  * Tuiles d'accueil masquées par l'utilisateur.
@@ -16,18 +17,36 @@ import { supabase } from '@/lib/supabase';
  * rester instantanée.
  */
 
-const CLE = 'novasphere_hidden_tiles_v1';
+const CLE_ANCIENNE = 'novasphere_hidden_tiles_v1';
+
+// Cloisonnement par société (demandé le 3 novembre) : masquer/réafficher une
+// tuile dans une société ne doit rien changer dans les autres. La société
+// courante est posée par l'accueil / les Paramètres (definirAgenceMasquees) ;
+// la liste locale et la liste du compte sont indexées par société.
+let agenceCourante = 'default';
+export function definirAgenceMasquees(agencyId: string | null | undefined) {
+  // « Toutes les sociétés » = même repli que l'accueil (AuthContext, AGENCIES[0]).
+  agenceCourante = !agencyId ? 'default' : agencyId === 'all' ? (AGENCIES[0]?.id || 'default') : agencyId;
+}
+const cleLocale = () => `novasphere_hidden_tiles_v2_${agenceCourante}`;
 
 export interface TuileMasquee {
   id: string;
   [k: string]: unknown;
 }
 
+const valides = (liste: unknown): TuileMasquee[] =>
+  Array.isArray(liste) ? (liste as TuileMasquee[]).filter((t) => t && typeof t.id === 'string') : [];
+
 export function lireMasquees(): TuileMasquee[] {
   try {
-    const brut = localStorage.getItem(CLE);
-    const liste = brut ? (JSON.parse(brut) as unknown) : [];
-    return Array.isArray(liste) ? (liste as TuileMasquee[]).filter((t) => t && typeof t.id === 'string') : [];
+    const brut = localStorage.getItem(cleLocale());
+    if (brut !== null) return valides(JSON.parse(brut));
+    // Première lecture dans cette société : on reprend l'ancienne liste
+    // commune (une seule fois), qui devient ensuite propre à la société.
+    const ancienne = valides(JSON.parse(localStorage.getItem(CLE_ANCIENNE) || '[]'));
+    if (ancienne.length) localStorage.setItem(cleLocale(), JSON.stringify(ancienne));
+    return ancienne;
   } catch {
     return [];
   }
@@ -35,7 +54,7 @@ export function lireMasquees(): TuileMasquee[] {
 
 function ecrireMasquees(liste: TuileMasquee[]) {
   try {
-    localStorage.setItem(CLE, JSON.stringify(liste));
+    localStorage.setItem(cleLocale(), JSON.stringify(liste));
   } catch {
     /* stockage indisponible : la copie serveur fait foi au prochain chargement */
   }
@@ -47,10 +66,39 @@ const fusionner = (a: TuileMasquee[], b: TuileMasquee[]): TuileMasquee[] => {
   return Array.from(parId.values());
 };
 
-async function ecrireSurServeur(userId: string, liste: TuileMasquee[]) {
+// Colonne serveur : ancien format = tableau commun ; nouveau = { _v: 2,
+// [société]: liste, __ancienne: ancien tableau (graine des sociétés pas
+// encore touchées) }.
+const extraireServeur = (brut: unknown): TuileMasquee[] => {
+  if (Array.isArray(brut)) return valides(brut);
+  if (brut && typeof brut === 'object') {
+    const o = brut as Record<string, unknown>;
+    return valides(o[agenceCourante] !== undefined ? o[agenceCourante] : o.__ancienne);
+  }
+  return [];
+};
+const assemblerServeur = (brut: unknown, liste: TuileMasquee[]): Record<string, unknown> => {
+  const base: Record<string, unknown> =
+    Array.isArray(brut) ? { __ancienne: brut } : brut && typeof brut === 'object' ? { ...(brut as Record<string, unknown>) } : {};
+  base._v = 2;
+  base[agenceCourante] = liste;
+  return base;
+};
+
+async function lireBrutServeur(userId: string): Promise<unknown> {
+  const { data, error } = await supabase
+    .from('user_ui_settings')
+    .select('hidden_tiles')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as any)?.hidden_tiles ?? null;
+}
+
+async function ecrireSurServeur(userId: string, brut: unknown, liste: TuileMasquee[]) {
   const { error } = await supabase
     .from('user_ui_settings')
-    .upsert({ user_id: userId, hidden_tiles: liste } as any, { onConflict: 'user_id' });
+    .upsert({ user_id: userId, hidden_tiles: assemblerServeur(brut, liste) } as any, { onConflict: 'user_id' });
   if (error) {
     // Colonne absente (migration pas encore passée) ou droits : on ne bloque
     // pas l'utilisateur, le navigateur garde la liste.
@@ -59,23 +107,19 @@ async function ecrireSurServeur(userId: string, liste: TuileMasquee[]) {
 }
 
 /**
- * Réunit la liste du navigateur et celle du compte, et met les deux à jour.
- * À appeler au chargement de l'accueil.
+ * Réunit la liste du navigateur et celle du compte POUR LA SOCIÉTÉ COURANTE,
+ * et met les deux à jour. À appeler au chargement de l'accueil.
  */
 export async function chargerMasqueesDepuisServeur(userId: string): Promise<TuileMasquee[]> {
   const locale = lireMasquees();
   try {
-    const { data, error } = await supabase
-      .from('user_ui_settings')
-      .select('hidden_tiles')
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (error) throw error;
-    const serveur = Array.isArray((data as any)?.hidden_tiles) ? ((data as any).hidden_tiles as TuileMasquee[]) : [];
+    const brut = await lireBrutServeur(userId);
+    const serveur = extraireServeur(brut);
     const union = fusionner(locale, serveur);
     ecrireMasquees(union);
-    // Si le navigateur en savait plus que le serveur, on le lui apprend.
-    if (union.length !== serveur.length) await ecrireSurServeur(userId, union);
+    // Si le navigateur en savait plus que le serveur (ou si le serveur est
+    // encore à l'ancien format), on le lui apprend.
+    if (union.length !== serveur.length || Array.isArray(brut)) await ecrireSurServeur(userId, brut, union);
     return union;
   } catch (e: any) {
     console.warn('[tuiles masquées] lecture serveur impossible :', e?.message || e);
@@ -93,19 +137,13 @@ export async function chargerMasqueesDepuisServeur(userId: string): Promise<Tuil
 // entre-temps depuis un AUTRE appareil. Les deux fonctions relisent
 // désormais la liste serveur juste avant d'écrire et fusionnent (union, pas
 // remplacement) avant d'appliquer la seule action demandée ici.
-async function listeServeurFraiche(userId: string): Promise<TuileMasquee[]> {
+async function brutServeurFrais(userId: string): Promise<unknown> {
   try {
-    const { data, error } = await supabase
-      .from('user_ui_settings')
-      .select('hidden_tiles')
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (error) throw error;
-    return Array.isArray((data as any)?.hidden_tiles) ? ((data as any).hidden_tiles as TuileMasquee[]) : [];
+    return await lireBrutServeur(userId);
   } catch {
     // Lecture fraîche indisponible (réseau, droits...) : l'appelant retombe
     // sur la seule copie locale, comme avant ce correctif.
-    return [];
+    return null;
   }
 }
 
@@ -115,10 +153,11 @@ export async function masquerTuile(userId: string | null | undefined, tuile: Tui
     ecrireMasquees(locale);
     return;
   }
-  const serveur = await listeServeurFraiche(userId);
-  const fraiche = fusionner(serveur, locale);
+  ecrireMasquees(locale);
+  const brut = await brutServeurFrais(userId);
+  const fraiche = fusionner(extraireServeur(brut), locale);
   ecrireMasquees(fraiche);
-  await ecrireSurServeur(userId, fraiche);
+  await ecrireSurServeur(userId, brut, fraiche);
 }
 
 export async function reafficherTuile(userId: string | null | undefined, id: string): Promise<void> {
@@ -128,8 +167,8 @@ export async function reafficherTuile(userId: string | null | undefined, id: str
   // re-masquer la tuile qu'on venait de réafficher.
   ecrireMasquees(locale);
   if (!userId) return;
-  const serveur = await listeServeurFraiche(userId);
-  const fraiche = fusionner(serveur, locale).filter((t) => t.id !== id);
+  const brut = await brutServeurFrais(userId);
+  const fraiche = fusionner(extraireServeur(brut), locale).filter((t) => t.id !== id);
   ecrireMasquees(fraiche);
-  await ecrireSurServeur(userId, fraiche);
+  await ecrireSurServeur(userId, brut, fraiche);
 }
