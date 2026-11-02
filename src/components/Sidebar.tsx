@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import BuildStamp from './BuildStamp';
 import {
   Home, LayoutDashboard, Users, GitFork, FolderKanban, Calendar,
@@ -460,53 +462,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   }, [mobileOpen, onCloseMobile]);
 
-  return (
-    <>
-      {/* Panneau de navigation "Menu" — coulisse depuis la gauche, sur mobile
-          ET sur desktop (avant : colonne fixe en permanence sur desktop ;
-          maintenant : ouvert à la demande via le bouton "Menu" du header,
-          ne redimensionne jamais le contenu principal puisqu'il est en
-          position fixed/overlay, pas dans le flux du layout).
-          Toujours monté (comme le tiroir des notifications) et animé
-          uniquement via les classes — sans ça, la fermeture se faisait par
-          démontage instantané du composant, donc sans aucune transition. */}
-      <div
-        id="novasphere-nav-menu"
-        className={`fixed inset-0 z-50 flex items-stretch p-3 sm:p-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] ${
-          mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        }`}
-        style={{ transition: 'opacity 350ms cubic-bezier(0.22, 1, 0.36, 1)' }}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Menu de navigation"
-      >
-        {/* Voile */}
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm"
-          onClick={onCloseMobile}
-        />
-        {/* Panneau coulissant — flottant, coins arrondis partout, liseré doré.
-            Durée/courbe posées en style inline (pas en classe Tailwind
-            arbitraire) pour éliminer tout doute sur une classe non générée
-            correctement au build — l'animation était perçue comme abrupte
-            malgré plusieurs hausses de durée en classes utilitaires. */}
-        {/* Ticket (nouvelle base, signalé) : le tiroir mobile restait un
-            panneau étroit à 85vw — texte serré, peu lisible. Il prend
-            désormais tout l'écran sur mobile (grand écrit, séparateurs
-            entre chaque entrée), et garde sa largeur fixe sur desktop. */}
-        <div
-          className={`relative w-full md:w-[270px] md:max-w-[270px] bg-[#081318] border border-[#F7BC5F]/50 rounded-3xl md:rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden ${
-            mobileOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
-          style={{ transition: 'transform 350ms cubic-bezier(0.22, 1, 0.36, 1)' }}
-        >
-          {sidebarContent(true)}
-          {/* Identité du build, tout en bas du menu : la réponse immédiate à
-              « est-ce que ma mise à jour est bien arrivée ? ». */}
-          <BuildStamp />
-        </div>
-      </div>
-    </>
+  // Même mécanique que le tiroir des notifications (App.tsx) : AnimatePresence
+  // + createPortal, pour une ouverture ET une fermeture réellement animées
+  // (le panneau reste monté pendant sa sortie). Ici il monte depuis le bas
+  // de l'écran, centré.
+  return createPortal(
+    <AnimatePresence>
+      {mobileOpen && (
+        <>
+          <motion.div
+            key="menu-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: 'easeInOut' }}
+            onClick={onCloseMobile}
+            className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm cursor-default"
+            aria-label="Fermer le menu"
+          />
+          <motion.aside
+            key="menu-drawer"
+            id="novasphere-nav-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu de navigation"
+            initial={{ y: '100%', opacity: 0.3 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: '100%', opacity: 0.3 }}
+            transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed left-1/2 -translate-x-1/2 z-[80] w-[calc(100%-1.5rem)] sm:w-[460px] bg-[#081318]/95 backdrop-blur-2xl border border-[#F7BC5F]/50 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_30px_rgba(247,188,95,0.1)] flex flex-col overflow-hidden will-change-transform"
+            style={{
+              top: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
+              bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
+            }}
+          >
+            {sidebarContent(true)}
+            {/* Identité du build, tout en bas du menu : la réponse immédiate à
+                « est-ce que ma mise à jour est bien arrivée ? ». */}
+            <BuildStamp />
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>,
+    document.body
   );
 };
 
