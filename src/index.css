@@ -2327,3 +2327,11 @@ html.agency-novavisio.light-mode .nv-activity-shell {
 .nv-effet-jaune:active { background-color: rgba(247,188,95,.4); box-shadow: 0 0 0 2px rgba(247,188,95,.95); transform: scale(.97); }
 html.agency-novavisio .nv-effet-jaune:hover { background-color: rgba(255,255,255,.2); box-shadow: 0 0 0 2px rgba(255,255,255,.6); }
 html.agency-novavisio .nv-effet-jaune:active { background-color: rgba(255,255,255,.35); box-shadow: 0 0 0 2px rgba(255,255,255,.95); }
+
+/* Paramètres : survol / appui jaunes (blancs sous NovaVisio) sur tous les boutons,
+   sauf ceux déjà pleins (actifs, danger) ou les interrupteurs. */
+.nv-parametres button:not(:disabled):not([role="switch"]):not([class*="bg-[#F7BC5F]"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-emerald"]) { transition: background-color .15s, box-shadow .15s, transform .15s; }
+.nv-parametres button:not(:disabled):not([role="switch"]):not([class*="bg-[#F7BC5F]"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-emerald"]):hover { background-color: rgba(247,188,95,.22) !important; box-shadow: 0 0 0 2px rgba(247,188,95,.6); }
+.nv-parametres button:not(:disabled):not([role="switch"]):not([class*="bg-[#F7BC5F]"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-emerald"]):active { background-color: rgba(247,188,95,.4) !important; box-shadow: 0 0 0 2px rgba(247,188,95,.95); transform: scale(.98); }
+html.agency-novavisio .nv-parametres button:not(:disabled):not([role="switch"]):not([class*="bg-[#F7BC5F]"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-emerald"]):hover { background-color: rgba(255,255,255,.2) !important; box-shadow: 0 0 0 2px rgba(255,255,255,.6); }
+html.agency-novavisio .nv-parametres button:not(:disabled):not([role="switch"]):not([class*="bg-[#F7BC5F]"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-emerald"]):active { background-color: rgba(255,255,255,.35) !important; box-shadow: 0 0 0 2px rgba(255,255,255,.95); }

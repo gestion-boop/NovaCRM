@@ -46,7 +46,7 @@ export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, r
   ];
 
   return (
-    <div className="hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2">
+    <div className="hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2 bg-[#061317]/95 backdrop-blur-xl border-b border-white/10 shadow-[0_6px_20px_-8px_rgba(0,0,0,0.8)]">
       <div className="grid grid-cols-5 gap-2 sm:gap-3 max-w-7xl mx-auto">
         {items.map(({ nav, label, statut, alerte, Icon, gradient }) => (
           <button
@@ -54,7 +54,7 @@ export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, r
             type="button"
             onClick={() => onNavigate(nav)}
             title={label}
-            className={`group p-2 sm:p-2.5 rounded-2xl bg-white/[0.05] backdrop-blur-md border shadow-[0_6px_16px_-6px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.15)] transition-all cursor-pointer flex items-center justify-between nv-effet-jaune ${
+            className={`group p-2 sm:p-2.5 rounded-2xl bg-white/[0.07] border shadow-[0_6px_16px_-6px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.15)] transition-all cursor-pointer flex items-center justify-between nv-effet-jaune ${
               currentNav === nav ? 'border-[#F7BC5F]/80' : 'border-white/10'
             }`}
           >
@@ -63,7 +63,7 @@ export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, r
                 <Icon className="w-4 h-4 text-white" />
               </div>
               <div className="truncate text-left min-w-0">
-                <p className="text-[10px] text-gray-400 font-medium truncate">{label}</p>
+                <p className="text-[10px] text-gray-300 font-medium truncate">{label}</p>
                 <p className="text-xs font-bold text-white truncate">{statut}</p>
               </div>
             </div>
