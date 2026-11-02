@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BarChart2, Bell, Calendar, Mail, MessageSquare } from 'lucide-react';
+import { ArrowLeft, BarChart2, Bell, Calendar, Mail, MessageSquare } from 'lucide-react';
 import { useModaleOuverte } from '@/hooks/useModaleOuverte';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
 
@@ -9,12 +9,14 @@ interface Props {
   rappels: number;
   chat: number;
   mail: number;
+  // Test : bouton Retour en haut à gauche sur les fenêtres de travail.
+  onRetour?: () => void;
 }
 
 // Test (branche test, tablette/ordinateur) : la rangée de tuiles de l'accueil
 // (Tableau de bord, Rappels, Chat, Agenda, Mail) devient la barre du haut,
 // visible sur tous les écrans.
-export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, rappels, chat, mail }) => {
+export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, rappels, chat, mail, onRetour }) => {
   const [agenda, setAgenda] = useState(0);
   const modaleOuverte = useModaleOuverte();
   useEffect(() => {
@@ -49,7 +51,19 @@ export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, r
 
   return (
     <div className={`${modaleOuverte ? 'invisible ' : ''}hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-1`}>
-      <div className="grid grid-cols-5 gap-2 sm:gap-3 max-w-7xl mx-auto p-2 sm:p-2.5 rounded-3xl bg-gradient-to-b from-[#16262b]/95 via-[#0d181c]/95 to-[#070e11]/95 backdrop-blur-xl border border-[#F7BC5F]/55 shadow-[0_10px_28px_-8px_rgba(0,0,0,0.9),0_3px_0_0_rgba(247,188,95,0.12),inset_0_2px_3px_rgba(255,255,255,0.15),inset_0_-3px_5px_rgba(0,0,0,0.5),0_0_10px_rgba(247,188,95,0.1)]">
+      <div className="flex items-center gap-3 max-w-7xl mx-auto">
+        {onRetour && (
+          <button
+            type="button"
+            onClick={onRetour}
+            title="Retour"
+            aria-label="Retour"
+            className="shrink-0 flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-b from-[#16262b]/95 via-[#0d181c]/95 to-[#070e11]/95 border border-[#F7BC5F]/55 text-slate-200 hover:text-[#F7BC5F] shadow-[0_10px_22px_-6px_rgba(0,0,0,0.9),inset_0_2px_3px_rgba(255,255,255,0.2)] cursor-pointer active:scale-95 transition-all"
+          >
+            <ArrowLeft className="w-6 h-6" strokeWidth={2.4} />
+          </button>
+        )}
+      <div className="grid grid-cols-5 gap-2 sm:gap-3 flex-1 min-w-0 p-2 sm:p-2.5 rounded-3xl bg-gradient-to-b from-[#16262b]/95 via-[#0d181c]/95 to-[#070e11]/95 backdrop-blur-xl border border-[#F7BC5F]/55 shadow-[0_10px_28px_-8px_rgba(0,0,0,0.9),0_3px_0_0_rgba(247,188,95,0.12),inset_0_2px_3px_rgba(255,255,255,0.15),inset_0_-3px_5px_rgba(0,0,0,0.5),0_0_10px_rgba(247,188,95,0.1)]">
         {items.map(({ nav, label, statut, alerte, Icon, gradient }) => (
           <button
             key={nav}
@@ -72,6 +86,7 @@ export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, r
             <span className={`w-2 h-2 rounded-full shrink-0 ml-1.5 ${alerte ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-white/20'}`} />
           </button>
         ))}
+      </div>
       </div>
     </div>
   );

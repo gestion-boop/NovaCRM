@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAppUpdateStatus } from '@/lib/updateStatus';
 import { useModaleOuverte } from '@/hooks/useModaleOuverte';
-import { ArrowLeft, Bell, Home, Menu, Plus, Search, Settings } from 'lucide-react';
+import { Bell, Home, Menu, Plus, Search, Settings } from 'lucide-react';
 
 interface DesktopBottomDockProps {
   currentNav: string;
@@ -15,7 +15,6 @@ interface DesktopBottomDockProps {
   // Test : sur les fenêtres de travail, la barre se replie en un bouton burger
   // en bas à gauche qui la déplie à la demande.
   repliable?: boolean;
-  onRetour?: () => void;
   actifs?: Partial<Record<'menu' | 'plus' | 'nova' | 'search' | 'bell', boolean>>;
 }
 
@@ -26,7 +25,7 @@ const btn = 'relative flex items-center justify-center h-12 w-14 rounded-full te
 const actif = 'bg-white/15 !text-[#F7BC5F] shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]';
 
 export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
-  currentNav, onNavigate, onToggleMenu, onOpenNouveauLead, onOpenSearch, onOpenNova, onOpenNotifications, unreadCount, repliable = false, onRetour, actifs = {},
+  currentNav, onNavigate, onToggleMenu, onOpenNouveauLead, onOpenSearch, onOpenNova, onOpenNotifications, unreadCount, repliable = false, actifs = {},
 }) => {
   const { isUpdatePending } = useAppUpdateStatus();
   const modaleOuverte = useModaleOuverte();
@@ -67,23 +66,8 @@ export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
     </div>
   );
   const masque = modaleOuverte ? 'opacity-0 translate-y-6 invisible' : '';
-  if (repliable) {
-    // Fenêtres de travail : un simple bouton Retour (bas gauche). Il ramène à
-    // l'écran précédent / à l'accueil, où la barre complète est affichée.
-    return (
-      <nav data-barre-bas className={`hidden md:flex fixed bottom-3 left-3 z-40 items-center pointer-events-none select-none transition-all duration-200 ${masque}`}>
-        <button
-          type="button"
-          onClick={onRetour}
-          title="Retour"
-          aria-label="Retour"
-          className="pointer-events-auto relative flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-b from-[#16262b]/95 via-[#0d181c]/95 to-[#070e11]/95 border border-[#F7BC5F]/55 text-slate-200 hover:text-[#F7BC5F] shadow-[0_10px_22px_-6px_rgba(0,0,0,0.9),inset_0_2px_3px_rgba(255,255,255,0.2)] cursor-pointer active:scale-95 transition-all"
-        >
-          <ArrowLeft className="w-6 h-6" strokeWidth={2.4} />
-        </button>
-      </nav>
-    );
-  }
+  // Fenêtres de travail : le bouton Retour est dans la barre du haut.
+  if (repliable) return null;
   return (
     <nav data-barre-bas className={`hidden md:flex shrink-0 relative z-40 justify-center pt-1.5 pb-3 pointer-events-none select-none transition-all duration-200 ${masque}`}>
       {pilule}
