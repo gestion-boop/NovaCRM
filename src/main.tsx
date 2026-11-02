@@ -5,6 +5,9 @@ import App from './App.tsx'
 import './index.css'
 import { AuthProvider } from './context/AuthContext'
 import { rechargerSiChunkPerime } from '@/lib/chunkPerime'
+import { installerStockageSecours } from '@/lib/stockageSecours'
+
+installerStockageSecours();
 
 const queryClient = new QueryClient();
 

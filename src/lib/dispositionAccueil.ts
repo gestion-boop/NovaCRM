@@ -191,10 +191,10 @@ export async function figerDispositionAvantMiseAJour(): Promise<void> {
       }
     }
 
-    localStorage.setItem(
-      'novasphere_frozen_layout_snapshot_v1',
-      JSON.stringify({ timestamp: now, keys: snapshot })
-    );
+    // Copie de secours : on la saute si elle est trop volumineuse (le stockage
+    // du navigateur est limité à ~5 Mo et se retrouvait saturé).
+    const serialise = JSON.stringify({ timestamp: now, keys: snapshot });
+    if (serialise.length <= 400_000) localStorage.setItem('novasphere_frozen_layout_snapshot_v1', serialise);
   } catch (err) {
     console.warn('[figerDispositionAvantMiseAJour]', err);
   }
