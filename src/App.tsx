@@ -16,6 +16,7 @@ import { cibleDepuisLien } from '@/lib/lienNotification';
 import Auth from './components/Auth';
 import ClientAuth from './components/ClientAuth';
 import Header from './components/Header';
+import DesktopBottomDock from './components/DesktopBottomDock';
 import Sidebar, { NAV_ITEMS } from './components/Sidebar';
 import TabBar from './components/TabBar';
 import AccueilGrid from './components/AccueilGrid';
@@ -102,6 +103,7 @@ function App() {
   const { addContact, contacts } = useContacts();
   const { tasks = [] } = useTasks();
   const isMobile = useIsMobile();
+
   const isCoarsePointer = useIsCoarsePointer();
   // Onglets (7 octobre, « ouvrir dans un nouvel onglet [...] dans
   // l'application »). Essayé d'abord réservé à l'app installée (PWA
@@ -319,6 +321,11 @@ function App() {
   const [pipelineInitialStage, setPipelineInitialStage] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // TEST (demandé le 2 novembre) : barre du bas sur tablette/ordinateur,
+  // uniquement hors production (branche test) ; elle remplace la barre du
+  // haut sur les fenêtres de travail (tout sauf l'accueil).
+  const barreBasBureau = typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref !== 'main';
+  const enteteMasquee = barreBasBureau && currentNav !== 'accueil';
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   // Signalé : "pense à mettre le mode jour sur le téléphone portable" — en
   // creusant, deux mécanismes de thème coexistaient sans être synchronisés :
@@ -979,7 +986,7 @@ function App() {
       {/* Top Header Bar - collée tout en haut de l'écran — masquée tant que
           le bandeau d'annonce défilant ci-dessus est actif (même emplacement,
           AnnouncementTopBanner.tsx le remplace exactement). */}
-      {!bannerAnnouncementActive && <Header
+      {!bannerAnnouncementActive && <div className={enteteMasquee ? 'hidden' : 'contents'}><Header
         onOpenNouveauLead={() => setShowNouveauLead(true)}
         onOpenClientDictation={() => setShowQuickClientDictation(true)}
         onOpenSqlImport={() => setShowSqlImport(true)}
@@ -1016,7 +1023,7 @@ function App() {
         onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
         onToggleNotifications={() => setNotificationsPanelOpen((open) => !open)}
         menuOpen={mobileMenuOpen}
-      />}
+      /></div>}
 
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Sidebar — masquée en mode plein écran Mail */}
@@ -1102,7 +1109,7 @@ function App() {
               ? 'pt-[calc(3.5rem+env(safe-area-inset-top,0px))] md:pt-0'
               : 'pt-[env(safe-area-inset-top,0px)] md:pt-0'
         } ${
-          isMobile && (currentNav === 'chat' || currentNav === 'mail') ? 'pb-0' : 'pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-0'
+          isMobile && (currentNav === 'chat' || currentNav === 'mail') ? 'pb-0' : `pb-[calc(5rem+env(safe-area-inset-bottom,0px))] ${barreBasBureau ? 'md:pb-24' : 'md:pb-0'}`
         } ${
           // Signalé (30/08/2026, plusieurs captures) : "en haut ce n'est pas
           // top" — la photo de fond restait visible en bande dans tous les
@@ -1856,6 +1863,19 @@ function App() {
         initialClientId={selectedClientProfileId}
         onOpenClientProfile={(clientId) => openClientProfile(clientId)}
       />
+
+      {barreBasBureau && !isMobile && !novaOpen && (
+        <DesktopBottomDock
+          currentNav={currentNav}
+          onNavigate={(nav) => { setNovaOpen(false); setCurrentNav(nav); setSelectedClientProfileId(null); }}
+          onToggleMenu={() => setMobileMenuOpen((o) => !o)}
+          onOpenNouveauLead={() => setShowNouveauLead(true)}
+          onOpenSearch={() => window.dispatchEvent(new Event('novasphere:open-search'))}
+          onOpenNova={() => openNovaFullscreen()}
+          onOpenNotifications={() => setNotificationsPanelOpen((o) => !o)}
+          unreadCount={(unreadNotificationsCount || 0) + (unreadMessagesCount || 0)}
+        />
+      )}
 
       {/* Mobile Bottom Navigation Bar — masquée sur mobile pendant le chat et
           pendant Nova IA (demande explicite) pour leur laisser tout l'écran ;
