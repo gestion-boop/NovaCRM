@@ -494,11 +494,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
             panneau étroit à 85vw — texte serré, peu lisible. Il prend
             désormais tout l'écran sur mobile (grand écrit, séparateurs
             entre chaque entrée), et garde sa largeur fixe sur desktop. */}
+        {/* Effet tiroir (2 nov.) : le panneau se déplie depuis le bouton Menu
+            (bas gauche sur mobile, haut gauche sur ordinateur) avec un léger
+            rebond à l'ouverture, et se replie vers ce même point à la
+            fermeture. Transformation/durée en style inline (voir remarque
+            ci-dessus sur les classes arbitraires). */}
         <div
-          className={`relative w-full md:w-[270px] md:max-w-[270px] bg-[#081318] border border-[#F7BC5F]/50 rounded-3xl md:rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden ${
-            mobileOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
-          style={{ transition: 'transform 350ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+          className="relative w-full md:w-[270px] md:max-w-[270px] bg-[#081318] border border-[#F7BC5F]/50 rounded-3xl md:rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden origin-bottom-left md:origin-top-left"
+          style={{
+            transform: mobileOpen ? 'scale(1) translateY(0)' : 'scale(0.08) translateY(40px)',
+            opacity: mobileOpen ? 1 : 0,
+            transition: mobileOpen
+              ? 'transform 480ms cubic-bezier(0.34, 1.45, 0.64, 1), opacity 220ms ease-out'
+              : 'transform 300ms cubic-bezier(0.55, 0, 0.7, 0.2), opacity 260ms ease-in',
+            willChange: 'transform, opacity',
+          }}
         >
           {sidebarContent(true)}
           {/* Identité du build, tout en bas du menu : la réponse immédiate à
