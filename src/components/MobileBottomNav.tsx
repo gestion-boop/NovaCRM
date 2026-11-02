@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Home, Mic, Plus, Search, Settings } from 'lucide-react';
 import NovaMascotte from './NovaMascotte';
+import { useModaleOuverte } from '@/hooks/useModaleOuverte';
 
 interface MobileBottomNavProps {
   currentNav: string;
@@ -45,6 +46,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   // élastique iOS en haut/bas de liste faisait clignoter la barre pour
   // rien ; toujours visible tant qu'on est près du tout-haut (24px).
   const [visible, setVisible] = useState(true);
+  const modaleOuverte = useModaleOuverte();
   const lastScrollTopRef = useRef(0);
 
   useEffect(() => {
@@ -99,7 +101,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   return (
     <nav
-      className={`md:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pt-0 pb-[calc(0.45rem+env(safe-area-inset-bottom,0px))] select-none pointer-events-none transition-transform duration-300 ease-out ${
+      data-barre-bas
+      className={`${modaleOuverte ? 'invisible opacity-0 ' : ''}md:hidden fixed bottom-0 left-0 right-0 z-40 px-4 pt-0 pb-[calc(0.45rem+env(safe-area-inset-bottom,0px))] select-none pointer-events-none transition-transform duration-300 ease-out ${
         visible ? 'translate-y-0' : 'translate-y-[calc(100%+2.5rem+env(safe-area-inset-bottom,0px))]'
       }`}
     >
