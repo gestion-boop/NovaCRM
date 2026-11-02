@@ -331,19 +331,14 @@ const TaskModal: React.FC<TaskModalProps> = ({
 
         {/* Corps principal en deux colonnes équilibrées : QUAND (gauche) et QUOI (droite) */}
         <div className="p-3.5 sm:p-5 overflow-y-auto overscroll-contain flex-1 min-h-0">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-7 items-start">
             
             {/* Colonne Gauche : DATE, HEURE & PLANNING DU JOUR (Pas de doublon !) */}
-            <div className="md:col-span-5 bg-[#041316]/90 rounded-2xl p-3.5 sm:p-4 border border-teal-500/20 flex flex-col space-y-3.5 shadow-inner">
+            <div className="md:col-span-5 bg-[#041316]/60 rounded-2xl p-5 border border-white/[0.06] flex flex-col space-y-5">
               
               {/* En-tête Date sélectionnée */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                  <span className="text-xs font-black uppercase tracking-wider text-teal-200">
-                    Échéance
-                  </span>
-                </div>
+                <span className="text-sm font-bold text-white">Quand ?</span>
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#06191c] border border-[#F7BC5F]/30 text-xs font-bold text-[#F9C977]">
                   <span className="capitalize">{formatFrenchDate(date)}</span>
                   <span>à</span>
@@ -386,7 +381,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
               </div>
 
               {/* Navigation Mois Calendrier */}
-              <div className="flex justify-between items-center bg-[#06181b]/90 px-3 py-1.5 rounded-xl border border-teal-500/25 shadow-inner">
+              <div className="flex justify-between items-center px-1">
                 <button
                   type="button"
                   onClick={() => setCurrentMonth(new Date(year, month - 1, 1))}
@@ -395,12 +390,9 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 >
                   <ChevronLeft className="w-3.5 h-3.5 stroke-[2.5]" />
                 </button>
-                <div className="flex items-center gap-1.5">
-                  <CalendarIcon className="w-3 h-3 text-[#F7BC5F]/80" />
-                  <span className="text-[#F7BC5F] font-black text-xs tracking-wide capitalize">
-                    {capitalizedMonth}
-                  </span>
-                </div>
+                <span className="text-white font-bold text-sm tracking-wide capitalize">
+                  {capitalizedMonth}
+                </span>
                 <button
                   type="button"
                   onClick={() => setCurrentMonth(new Date(year, month + 1, 1))}
@@ -423,7 +415,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
               </div>
 
               {/* Grille du calendrier */}
-              <div className="grid grid-cols-7 gap-1 text-center text-xs">
+              <div className="grid grid-cols-7 gap-1.5 text-center text-xs">
                 {gridCells.map((cell, idx) => {
                   const isSelected = cell.fullDate === date;
                   const isToday = cell.fullDate === todayStr;
@@ -434,7 +426,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                       type="button"
                       key={idx}
                       onClick={() => setDate(cell.fullDate)}
-                      className={`h-8 rounded-lg flex flex-col items-center justify-center relative transition-all cursor-pointer font-semibold ${
+                      className={`h-9 rounded-lg flex flex-col items-center justify-center relative transition-all cursor-pointer font-semibold ${
                         isSelected
                           ? 'bg-gradient-to-br from-[#F7BC5F] via-[#F9C977] to-[#E5A642] text-slate-950 font-black shadow-[0_0_15px_rgba(247,188,95,0.45)] scale-105 z-10'
                           : isToday
@@ -457,12 +449,9 @@ const TaskModal: React.FC<TaskModalProps> = ({
               </div>
 
               {/* Section Heure intégrée dans la colonne de gauche (Gain de temps & 0 doublon !) */}
-              <div className="pt-2.5 border-t border-teal-500/20 space-y-1.5">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-teal-200 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                    <span>Heure d'intervention *</span>
-                  </label>
+                  <label className="text-sm font-bold text-white">Heure</label>
                   <div className="relative">
                     <input
                       type="time"
@@ -476,7 +465,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 </div>
 
                 {/* Puces d'heures rapides (1 clic pour choisir l'heure !) */}
-                <div className="grid grid-cols-6 gap-1">
+                <div className="grid grid-cols-6 gap-1.5">
                   {QUICK_TIMES.map((qt) => {
                     const isSelectedTime = time === qt;
                     return (
@@ -497,61 +486,32 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 </div>
               </div>
 
-              {/* Conflits & Tâches déjà prévues ce jour-là */}
-              <div className="pt-2 border-t border-teal-500/15">
-                {tasksOnSelectedDate.length === 0 ? (
-                  <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span className="text-[11px] font-medium text-emerald-200 truncate">
-                      Journée libre · Aucun conflit d'horaire
-                    </span>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-amber-300 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
-                        {tasksOnSelectedDate.length} tâche{tasksOnSelectedDate.length > 1 ? 's' : ''} ce jour
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {tasksOnSelectedDate.some(t => t.dueDate?.includes(`T${time}`)) ? '⚠️ Créneau occupé' : 'Créneau libre'}
-                      </span>
-                    </div>
-                    <div className="max-h-20 overflow-y-auto space-y-1 pr-1">
-                      {tasksOnSelectedDate.map(t => {
-                        const displayTime = t.dueDate && t.dueDate.includes('T') ? t.dueDate.split('T')[1].slice(0, 5) : '09:00';
-                        const isConflict = displayTime === time;
-                        return (
-                          <div
-                            key={t.id}
-                            className={`px-2 py-0.5 rounded-lg text-[10px] flex items-center justify-between gap-1.5 border ${
-                              isConflict
-                                ? 'bg-rose-500/15 border-rose-500/40 text-rose-200 font-bold'
-                                : 'bg-[#06191c] border-teal-500/15 text-slate-300'
-                            }`}
-                          >
-                            <span className="truncate">{t.title}</span>
-                            <span className="font-mono text-[#F7BC5F] shrink-0 font-bold">{displayTime}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Conflit : affiché uniquement si le créneau choisi est déjà pris */}
+              {tasksOnSelectedDate.some((t) => {
+                const h = t.dueDate && t.dueDate.includes('T') ? t.dueDate.split('T')[1].slice(0, 5) : '09:00';
+                return h === time;
+              }) && (
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-200 flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-px" />
+                  <span>
+                    Créneau déjà occupé :{' '}
+                    {tasksOnSelectedDate
+                      .filter((t) => (t.dueDate && t.dueDate.includes('T') ? t.dueDate.split('T')[1].slice(0, 5) : '09:00') === time)
+                      .map((t) => t.title)
+                      .join(', ')}
+                  </span>
+                </div>
+              )}
 
             </div>
 
             {/* Colonne Droite : L'ACTION & DÉTAILS (Simplifié, rapide, 0 doublon) */}
-            <form onSubmit={handleSubmit} id="task-modal-form" className="md:col-span-7 space-y-3.5">
+            <form onSubmit={handleSubmit} id="task-modal-form" className="md:col-span-7 space-y-6">
               
               {/* 1. Type d'action * (Boutons tactiles rapides) */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-teal-200 flex items-center justify-between">
-                  <span>Type d'action *</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Sélection en 1 clic</span>
-                </label>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+              <div className="space-y-2.5">
+                <label className="text-sm font-bold text-white">Type d'action</label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                   {TASK_TYPES.map((t) => {
                     const Icon = t.icon;
                     const isCurrentType = type === t.id;
@@ -577,11 +537,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
               </div>
 
               {/* 2. Titre unifié avec puces de suggestions rapides (Élimine le double champ select + input !) */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-teal-200 flex items-center justify-between">
-                  <span>Libellé / Titre de la tâche *</span>
-                  <span className="text-[10px] text-slate-400">Tapez ou cliquez un libellé ci-dessous</span>
-                </label>
+              <div className="space-y-2.5">
+                <label className="text-sm font-bold text-white">Titre</label>
                 
                 {/* Champ texte principal */}
                 <div className="relative">
@@ -606,9 +563,9 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 </div>
 
                 {/* Suggestions rapides en 1 clic pour ce type d'action */}
-                <div className="space-y-1 pt-0.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {availablePresets.slice(0, 5).map((preset) => (
+                <div className="space-y-1 pt-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {availablePresets.slice(0, 3).map((preset) => (
                       <button
                         key={preset}
                         type="button"
@@ -624,17 +581,17 @@ const TaskModal: React.FC<TaskModalProps> = ({
                     ))}
 
                     {/* Menu déroulant pour le reste des libellés de l'agence */}
-                    {availablePresets.length > 5 && (
+                    {availablePresets.length > 3 && (
                       <div className="relative">
                         <select
-                          value={availablePresets.slice(5).includes(title) ? title : ''}
+                          value={availablePresets.slice(3).includes(title) ? title : ''}
                           onChange={(e) => {
                             if (e.target.value) setTitle(e.target.value);
                           }}
                           className="bg-[#051518] border border-teal-500/25 rounded-lg px-2 py-1 text-[11px] text-slate-300 hover:text-white focus:outline-none focus:border-[#F7BC5F] cursor-pointer appearance-none pr-6"
                         >
-                          <option value="">Autres libellés ({availablePresets.length - 5})...</option>
-                          {availablePresets.slice(5).map((preset) => (
+                          <option value="">Autres ({availablePresets.length - 3})...</option>
+                          {availablePresets.slice(3).map((preset) => (
                             <option key={preset} value={preset} className="bg-[#07191b] text-white">
                               {preset}
                             </option>
@@ -648,11 +605,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
               </div>
 
               {/* 3. Priorité de traitement */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-teal-200 flex items-center gap-1.5">
-                  <Flag className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                  <span>Priorité</span>
-                </label>
+              <div className="space-y-2.5">
+                <label className="text-sm font-bold text-white">Priorité</label>
                 <div className="grid grid-cols-4 gap-2">
                   {PRIORITIES.map((p) => {
                     const isSelectedPriority = priority === p.id;
@@ -677,12 +631,9 @@ const TaskModal: React.FC<TaskModalProps> = ({
 
               {/* 4. Client lié au dossier (Affichage compact sans encombrer la vue) */}
               {contacts && contacts.length > 0 && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-teal-200 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-[#F7BC5F]" />
-                      <span>Client lié</span>
-                    </span>
+                <div className="space-y-2.5">
+                  <label className="text-sm font-bold text-white flex items-center justify-between">
+                    <span>Client</span>
                     {currentContact && !showChangeContact && (
                       <button
                         type="button"
@@ -735,14 +686,11 @@ const TaskModal: React.FC<TaskModalProps> = ({
               )}
 
               {/* 5. Description / Notes d'intervention (Compact) */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-teal-200 flex items-center justify-between">
-                  <span>Notes d'intervention</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Optionnel</span>
-                </label>
+              <div className="space-y-2.5">
+                <label className="text-sm font-bold text-white">Notes <span className="text-xs font-normal text-slate-500">(facultatif)</span></label>
                 <textarea
-                  rows={2}
-                  placeholder="Détails de l'intervention, pièces à demander, points abordés..."
+                  rows={3}
+                  placeholder="Détails, pièces à demander, points à aborder…"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full bg-[#051518]/95 border border-teal-500/30 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-teal-200/35 focus:outline-none focus:border-[#F7BC5F] focus:ring-1 focus:ring-[#F7BC5F]/30 resize-none shadow-inner transition-all"
@@ -799,13 +747,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
               <span>{saveError}</span>
             </p>
-          ) : (
-            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400">
-              <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
-              <span>Rappel synchronisé · </span>
-              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[10px] font-mono text-slate-300">⌘+Entrée</kbd>
-            </div>
-          )}
+          ) : null}
 
           <div className="flex items-center gap-2.5 shrink-0 ml-auto w-full sm:w-auto">
             <button
