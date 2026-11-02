@@ -116,7 +116,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
         {/* Barre façon Instagram (demande du 2 novembre) : Accueil · + lead ·
             Nova · Recherche · Paramètres, icônes seules. */}
-        <div className="pointer-events-auto w-full rounded-full bg-gradient-to-b from-[#16262b]/95 via-[#0d181c]/95 to-[#070e11]/95 backdrop-blur-2xl border-2 border-[#F7BC5F]/80 shadow-[0_14px_30px_-6px_rgba(0,0,0,0.95),0_4px_0_0_rgba(247,188,95,0.25),inset_0_2px_3px_rgba(255,255,255,0.22),inset_0_-3px_5px_rgba(0,0,0,0.55),0_0_16px_rgba(247,188,95,0.2)] px-2 py-1.5 flex items-center justify-between">
+        <div className="pointer-events-auto w-full rounded-full bg-gradient-to-b from-[#16262b]/95 via-[#0d181c]/95 to-[#070e11]/95 backdrop-blur-2xl border border-[#F7BC5F]/45 shadow-[0_14px_30px_-6px_rgba(0,0,0,0.95),0_3px_0_0_rgba(247,188,95,0.12),inset_0_2px_3px_rgba(255,255,255,0.22),inset_0_-3px_5px_rgba(0,0,0,0.55),0_0_10px_rgba(247,188,95,0.1)] px-2 py-1.5 flex items-center justify-between">
           <button
             onClick={() => onNavigate('accueil')}
             title="Accueil"
