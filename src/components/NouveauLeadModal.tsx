@@ -541,20 +541,21 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
       <div className="relative w-full max-w-5xl bg-[#061a1d] border border-[#144447] rounded-2xl shadow-2xl my-auto overflow-hidden flex flex-col max-h-[92vh] h-full sm:h-auto">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 bg-[#07191b] border-b border-[#144447]/80 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#F7BC5F]/20 border border-[#F7BC5F]/40 flex items-center justify-center text-[#F7BC5F]">
+        <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-3.5 bg-[#07191b] border-b border-[#144447]/80 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="w-8 h-8 shrink-0 rounded-lg bg-[#F7BC5F]/20 border border-[#F7BC5F]/40 flex items-center justify-center text-[#F7BC5F]">
               {modification ? <Pencil className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
             </div>
-            <div>
-              <h2 className="text-lg font-extrabold text-white tracking-tight leading-none">{modification ? 'Modifier la fiche' : 'Informations du lead'}</h2>
+            <div className="min-w-0">
+              <h2 className="text-lg font-extrabold text-white tracking-tight leading-tight truncate">{modification ? 'Modifier la fiche' : 'Informations du lead'}</h2>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 {modification ? 'Mêmes informations qu\'à la création : corrige ce qu\'il faut, puis Enregistrer' : 'Saisissez les informations de votre nouveau prospect'}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Bouton d'action directe en en-tête pour ne jamais le perdre de vue sur petit écran */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Bouton d'action directe en en-tête ; sur téléphone il est masqué
+                (le bouton du pied de page suffit) — il écrasait le titre. */}
             <button
               type="submit"
               form="new-lead-form"
@@ -565,7 +566,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                 }
               }}
               disabled={submitting}
-              className="px-3.5 py-1.5 bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-60"
+              className="hidden sm:flex whitespace-nowrap px-3.5 py-1.5 bg-[#F7BC5F] hover:bg-[#d4a83b] text-slate-950 font-black text-xs rounded-xl items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-60"
               title={modification ? 'Enregistrer les modifications' : 'Créer un Lead'}
             >
               {submitting ? (
@@ -594,12 +595,12 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
             
             {/* SECTION 1: CONTACT PRINCIPAL */}
             <div className="bg-[#030d0f] border border-[#153c3f] rounded-xl p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-[#153c3f]/80 pb-2">
-                <span className="text-xs font-bold text-[#F7BC5F] uppercase tracking-wider flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[#153c3f]/80 pb-2">
+                <span className="text-xs font-bold text-[#F7BC5F] uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap">
                   <User className="w-3.5 h-3.5" />
                   Contact principal
                 </span>
-                <span className="text-[11px] text-slate-400 font-mono">* Saisie automatique: Nom en MAJUSCULES, Prénom avec Majuscule</span>
+                <span className="text-[11px] text-slate-400">* Saisie automatique: Nom en MAJUSCULES, Prénom avec Majuscule</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
