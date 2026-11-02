@@ -122,7 +122,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             title="Accueil"
             aria-label="Accueil"
             className={`flex items-center justify-center h-12 w-14 rounded-full transition-all cursor-pointer active:scale-95 ${
-              currentNav === 'accueil' ? 'bg-white/15 text-white shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]' : 'text-slate-300 hover:text-white'
+              currentNav === 'accueil' ? 'bg-white/15 text-[#F7BC5F] shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]' : 'text-slate-300 hover:text-[#F7BC5F]'
             }`}
           >
             <Home className="w-7 h-7" strokeWidth={currentNav === 'accueil' ? 2.6 : 2} />
@@ -132,7 +132,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             onClick={onOpenNouveauLead}
             title="Créer un lead"
             aria-label="Créer un lead"
-            className="flex items-center justify-center h-12 w-14 rounded-full text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
+            className="flex items-center justify-center h-12 w-14 rounded-full text-slate-300 hover:text-[#F7BC5F] transition-all cursor-pointer active:scale-95"
           >
             <Plus className="w-7 h-7" strokeWidth={2.4} />
           </button>
@@ -150,7 +150,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             onClick={onOpenSearch}
             title="Rechercher"
             aria-label="Rechercher"
-            className="flex items-center justify-center h-12 w-14 rounded-full text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
+            className="flex items-center justify-center h-12 w-14 rounded-full text-slate-300 hover:text-[#F7BC5F] transition-all cursor-pointer active:scale-95"
           >
             <Search className="w-7 h-7" strokeWidth={2} />
           </button>
@@ -160,7 +160,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             title="Paramètres"
             aria-label="Paramètres"
             className={`flex items-center justify-center h-12 w-14 rounded-full transition-all cursor-pointer active:scale-95 ${
-              currentNav === 'parametres' ? 'bg-white/15 text-white shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]' : 'text-slate-300 hover:text-white'
+              currentNav === 'parametres' ? 'bg-white/15 text-[#F7BC5F] shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]' : 'text-slate-300 hover:text-[#F7BC5F]'
             }`}
           >
             <Settings className="w-7 h-7" strokeWidth={currentNav === 'parametres' ? 2.6 : 2} />

@@ -15,8 +15,8 @@ interface DesktopBottomDockProps {
 // Test (branche test uniquement) : barre du bas tablette/ordinateur, même
 // style que la barre mobile. Sur les fenêtres de travail (Pipeline...), elle
 // remplace la barre du haut pour libérer la place en hauteur.
-const btn = 'relative flex items-center justify-center h-12 w-14 rounded-full text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95';
-const actif = 'bg-white/15 text-white shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]';
+const btn = 'relative flex items-center justify-center h-12 w-14 rounded-full text-slate-300 hover:text-[#F7BC5F] transition-all cursor-pointer active:scale-95';
+const actif = 'bg-white/15 !text-[#F7BC5F] shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]';
 
 export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
   currentNav, onNavigate, onToggleMenu, onOpenNouveauLead, onOpenSearch, onOpenNova, onOpenNotifications, unreadCount,
@@ -41,7 +41,7 @@ export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
         <Search className="w-7 h-7" strokeWidth={2} />
       </button>
       <button onClick={onOpenNotifications} title="Notifications" aria-label="Notifications" className={btn}>
-        <Bell className={`w-7 h-7 ${unreadCount > 0 ? 'text-rose-400' : 'text-emerald-400'}`} strokeWidth={2} />
+        <Bell className={`w-7 h-7 ${unreadCount > 0 ? 'text-rose-400' : 'text-emerald-400'} hover:text-[#F7BC5F]`} strokeWidth={2} />
         {unreadCount > 0 && (
           <span className="absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
             {unreadCount > 99 ? '99+' : unreadCount}
