@@ -11,12 +11,15 @@ interface Props {
   mail: number;
   // Test : bouton Retour en haut à gauche sur les fenêtres de travail.
   onRetour?: () => void;
+  // Même voile que la zone principale : sans lui, la photo de fond apparaissait
+  // plus claire en bande derrière la barre.
+  teinte?: string;
 }
 
 // Test (branche test, tablette/ordinateur) : la rangée de tuiles de l'accueil
 // (Tableau de bord, Rappels, Chat, Agenda, Mail) devient la barre du haut,
 // visible sur tous les écrans.
-export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, rappels, chat, mail, onRetour }) => {
+export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, rappels, chat, mail, onRetour, teinte = '' }) => {
   const [agenda, setAgenda] = useState(0);
   const modaleOuverte = useModaleOuverte();
   useEffect(() => {
@@ -50,7 +53,7 @@ export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, r
   ];
 
   return (
-    <div className={`${modaleOuverte ? 'invisible ' : ''}hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-1`}>
+    <div className={`${modaleOuverte ? 'invisible ' : ''}hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-1 ${teinte}`}>
       <div className="flex items-center gap-3 max-w-7xl mx-auto">
         {onRetour && (
           <button

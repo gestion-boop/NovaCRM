@@ -15,6 +15,7 @@ interface DesktopBottomDockProps {
   // Test : sur les fenêtres de travail, la barre se replie en un bouton burger
   // en bas à gauche qui la déplie à la demande.
   repliable?: boolean;
+  teinte?: string;
   actifs?: Partial<Record<'menu' | 'plus' | 'nova' | 'search' | 'bell', boolean>>;
 }
 
@@ -25,7 +26,7 @@ const btn = 'relative flex items-center justify-center h-12 w-14 rounded-full te
 const actif = 'bg-white/15 !text-[#F7BC5F] shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]';
 
 export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
-  currentNav, onNavigate, onToggleMenu, onOpenNouveauLead, onOpenSearch, onOpenNova, onOpenNotifications, unreadCount, repliable = false, actifs = {},
+  currentNav, onNavigate, onToggleMenu, onOpenNouveauLead, onOpenSearch, onOpenNova, onOpenNotifications, unreadCount, repliable = false, teinte = '', actifs = {},
 }) => {
   const { isUpdatePending } = useAppUpdateStatus();
   const modaleOuverte = useModaleOuverte();
@@ -69,7 +70,7 @@ export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
   // Fenêtres de travail : le bouton Retour est dans la barre du haut.
   if (repliable) return null;
   return (
-    <nav data-barre-bas className={`hidden md:flex shrink-0 relative z-40 justify-center pt-1.5 pb-3 pointer-events-none select-none transition-all duration-200 ${masque}`}>
+    <nav data-barre-bas className={`hidden md:flex shrink-0 relative z-40 justify-center pt-1.5 pb-3 pointer-events-none select-none transition-all duration-200 ${teinte} ${masque}`}>
       {pilule}
     </nav>
   );
