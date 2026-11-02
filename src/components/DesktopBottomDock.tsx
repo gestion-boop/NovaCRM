@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAppUpdateStatus } from '@/lib/updateStatus';
 import { Bell, Home, Menu, Plus, Search, Settings } from 'lucide-react';
 
 interface DesktopBottomDockProps {
@@ -21,7 +22,10 @@ const actif = 'bg-white/15 !text-[#F7BC5F] shadow-[inset_0_1px_2px_rgba(255,255,
 
 export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
   currentNav, onNavigate, onToggleMenu, onOpenNouveauLead, onOpenSearch, onOpenNova, onOpenNotifications, unreadCount, actifs = {},
-}) => (
+}) => {
+  const { isUpdatePending } = useAppUpdateStatus();
+  const rouge = isUpdatePending || unreadCount > 0;
+  return (
   <nav className="hidden md:flex fixed bottom-3 left-0 right-0 z-40 justify-center pointer-events-none select-none">
     <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-gradient-to-b from-[#16262b]/95 via-[#0d181c]/95 to-[#070e11]/95 backdrop-blur-2xl border border-[#F7BC5F]/45 shadow-[0_14px_30px_-6px_rgba(0,0,0,0.95),0_3px_0_0_rgba(247,188,95,0.12),inset_0_2px_3px_rgba(255,255,255,0.22),inset_0_-3px_5px_rgba(0,0,0,0.55),0_0_10px_rgba(247,188,95,0.1)] px-2 py-1.5">
       <button onClick={() => onNavigate('accueil')} title="Accueil" aria-label="Accueil" className={`${btn} ${currentNav === 'accueil' ? actif : ''}`}>
@@ -42,10 +46,10 @@ export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
         <Search className="w-7 h-7" strokeWidth={2} />
       </button>
       <button onClick={onOpenNotifications} title="Notifications" aria-label="Notifications" className={`${btn} ${actifs.bell ? actif : ''}`}>
-        <Bell className={`w-7 h-7 ${unreadCount > 0 ? 'text-rose-400' : 'text-emerald-400'} hover:text-[#F7BC5F]`} strokeWidth={2} />
-        {unreadCount > 0 && (
+        <Bell className={`w-7 h-7 ${rouge ? 'text-rose-400 animate-pulse' : 'text-emerald-400'} hover:text-[#F7BC5F]`} strokeWidth={2} />
+        {rouge && (
           <span className="absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
-            {unreadCount > 99 ? '99+' : unreadCount}
+            {unreadCount > 0 ? (unreadCount > 99 ? '99+' : unreadCount) : '!'}
           </span>
         )}
       </button>
@@ -54,6 +58,7 @@ export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
       </button>
     </div>
   </nav>
-);
+  );
+};
 
 export default DesktopBottomDock;
