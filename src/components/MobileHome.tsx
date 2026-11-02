@@ -68,8 +68,6 @@ interface MobileHomeProps {
   // navigation du bas (simplifiée à Accueil/Nova/Menu) — demande explicite.
   unreadNotificationsCount?: number;
   onOpenNotifications?: () => void;
-  // Le « + » crée un lead. Il vit dans l'en-tête, plus dans la barre du bas.
-  onOpenNouveauLead?: () => void;
   onOpenClientDictation?: () => void;
 }
 
@@ -195,7 +193,6 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
   unreadMailCount,
   unreadNotificationsCount = 0,
   onOpenNotifications,
-  onOpenNouveauLead,
   onOpenClientDictation,
 }) => {
   const { currentUser, userProfile, activeAgency } = useAuth();
@@ -915,17 +912,6 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {onOpenNouveauLead && (
-            <button
-              type="button"
-              onClick={onOpenNouveauLead}
-              title="Créer un lead"
-              aria-label="Créer un lead"
-              className="w-11 h-11 rounded-full bg-gradient-to-br from-[#F7BC5F] to-[#E5A642] text-slate-950 flex items-center justify-center shadow-[0_0_15px_rgba(247,188,95,0.35)] active:scale-95 transition-all cursor-pointer"
-            >
-              <Plus className="w-5 h-5 stroke-[3]" />
-            </button>
-          )}
           {/* Clochette tricolore mobile : ROUGE (Màj/Retard), ORANGE (notifs/messages), VERT (Tout est bon) */}
           {onOpenNotifications && (() => {
             const hasRed = Boolean(isUpdatePending || (unreadRemindersCount && unreadRemindersCount > 0));

@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Home, Menu, Mic, Plus } from 'lucide-react';
+import { Home, Mic, Plus, Search, Settings } from 'lucide-react';
 import NovaMascotte from './NovaMascotte';
 
 interface MobileBottomNavProps {
   currentNav: string;
   onNavigate: (nav: string) => void;
-  onOpenMobileMenu: () => void;
+  onOpenMobileMenu?: () => void;
+  onOpenNouveauLead?: () => void;
+  onOpenSearch?: () => void;
   onOpenNotifications: () => void;
   // Ouvre le tiroir de saisie rapide (MobileNovaSheet) au lieu de naviguer
   // directement — plus rapide sur mobile, pas de changement d'écran complet
@@ -18,12 +20,13 @@ interface MobileBottomNavProps {
   unreadRemindersCount?: number;
 }
 
-// Barre du bas : trois éléments seulement (Accueil, Nova, Menu) et un bouton
+// Barre du bas : Accueil, +, Nova, Recherche, Paramètres, et un bouton
 // micro rouge discret placé juste au-dessus du logo central Nova pour la dictée vocale directe.
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   currentNav,
   onNavigate,
-  onOpenMobileMenu,
+  onOpenNouveauLead,
+  onOpenSearch,
   onOpenNova,
   onOpenDictation,
   onOpenClientDictation,
@@ -97,7 +100,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         visible ? 'translate-y-0' : 'translate-y-[calc(100%+2.5rem+env(safe-area-inset-bottom,0px))]'
       }`}
     >
-      <div className="relative mx-auto max-w-[280px] sm:max-w-xs flex flex-col items-center">
+      <div className="relative mx-auto max-w-[360px] flex flex-col items-center">
         {/* Micro dictée vocale directe Nova — placé au-dessus du logo central en rouge discret */}
         {handleDictation && (
           <button
@@ -111,36 +114,56 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           </button>
         )}
 
-        <div className="pointer-events-auto w-full rounded-full bg-gradient-to-r from-[#081f23]/95 via-[#0a272c]/95 to-[#081f23]/95 backdrop-blur-2xl border border-teal-500/30 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.9),0_0_20px_rgba(247,188,95,0.1)] px-4 py-1.5 flex items-center justify-between relative overflow-hidden">
-          {/* Liseré supérieur doré */}
-          <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#F7BC5F]/70 to-transparent pointer-events-none" />
-
+        {/* Barre façon Instagram (demande du 2 novembre) : Accueil · + lead ·
+            Nova · Recherche · Paramètres, icônes seules. */}
+        <div className="pointer-events-auto w-full rounded-full bg-[#0b1417]/90 backdrop-blur-2xl border border-white/10 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.9)] px-2 py-1.5 flex items-center justify-between">
           <button
             onClick={() => onNavigate('accueil')}
-            className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all cursor-pointer active:scale-95 ${
-              currentNav === 'accueil' ? 'text-[#F7BC5F] font-black' : 'text-slate-400 hover:text-slate-200'
+            title="Accueil"
+            aria-label="Accueil"
+            className={`flex items-center justify-center h-11 w-14 rounded-full transition-all cursor-pointer active:scale-95 ${
+              currentNav === 'accueil' ? 'bg-white/15 text-white' : 'text-slate-300 hover:text-white'
             }`}
           >
-            <Home className="w-5 h-5 stroke-[2.2]" />
-            <span className="text-[10px] font-bold mt-0.5 tracking-tight">Accueil</span>
+            <Home className="w-6 h-6" strokeWidth={currentNav === 'accueil' ? 2.6 : 2} />
+          </button>
+
+          <button
+            onClick={onOpenNouveauLead}
+            title="Créer un lead"
+            aria-label="Créer un lead"
+            className="flex items-center justify-center h-11 w-14 rounded-full text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
+          >
+            <Plus className="w-6 h-6" strokeWidth={2.4} />
           </button>
 
           <button
             onClick={onOpenNova}
             title="Nova"
             aria-label="Nova"
-            className="relative flex items-center justify-center h-10 w-12 active:scale-90 transition-transform group cursor-pointer"
+            className="relative flex items-center justify-center h-11 w-14 active:scale-90 transition-transform group cursor-pointer"
           >
-            <div className="absolute inset-0 rounded-full bg-[#F7BC5F]/20 blur-md group-hover:bg-[#F7BC5F]/35 transition-colors" />
-            <NovaMascotte taille={42} fixe />
+            <NovaMascotte taille={36} fixe />
           </button>
 
           <button
-            onClick={onOpenMobileMenu}
-            className="flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all cursor-pointer text-slate-400 hover:text-slate-200 active:scale-95"
+            onClick={onOpenSearch}
+            title="Rechercher"
+            aria-label="Rechercher"
+            className="flex items-center justify-center h-11 w-14 rounded-full text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
           >
-            <Menu className="w-5 h-5 stroke-[2.2]" />
-            <span className="text-[10px] font-bold mt-0.5 tracking-tight">Menu</span>
+            <Search className="w-6 h-6" strokeWidth={2} />
+          </button>
+
+          <button
+            onClick={() => onNavigate('parametres')}
+            title="Paramètres"
+            aria-label="Paramètres"
+            className={`flex items-center justify-center h-11 w-14 rounded-full transition-all cursor-pointer active:scale-95 ${
+              currentNav === 'parametres' ? 'bg-white/15 text-white' : 'text-slate-300 hover:text-white'
+            }`}
+          >
+            <Settings className="w-6 h-6" strokeWidth={currentNav === 'parametres' ? 2.6 : 2} />
           </button>
         </div>
       </div>

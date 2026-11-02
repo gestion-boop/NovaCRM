@@ -1216,7 +1216,6 @@ function App() {
                     unreadMailCount={unreadMailCount}
                     unreadNotificationsCount={unreadMobileNotificationsCount}
                     onOpenNotifications={() => setNotificationsPanelOpen((open) => !open)}
-                    onOpenNouveauLead={() => setShowNouveauLead(true)}
                     onOpenClientDictation={() => setShowQuickClientDictation(true)}
                   />
                 ) : (
@@ -1874,6 +1873,8 @@ function App() {
             setSelectedClientProfileId(null);
           }}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
+          onOpenNouveauLead={() => setShowNouveauLead(true)}
+          onOpenSearch={() => window.dispatchEvent(new Event('novasphere:open-search'))}
           onOpenNotifications={() => setNotificationsPanelOpen((open) => !open)}
           // Signalé : le petit tiroir de saisie rapide (fenêtre noire) était
           // une étape en trop avant d'atteindre la vraie conversation —

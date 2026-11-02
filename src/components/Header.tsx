@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import {
   Bell,
@@ -265,6 +266,13 @@ export const Header: React.FC<
     }
   }, [isSearchModalOpen]);
 
+  // Barre du bas mobile (loupe) : ouvre la même recherche que ⌘K.
+  React.useEffect(() => {
+    const ouvrir = () => setIsSearchModalOpen(true);
+    window.addEventListener('novasphere:open-search', ouvrir);
+    return () => window.removeEventListener('novasphere:open-search', ouvrir);
+  }, []);
+
   React.useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // ⌘K (Mac) ou Ctrl+K (Windows/Linux) pour ouvrir/fermer la recherche
@@ -486,7 +494,7 @@ export const Header: React.FC<
       </div>
 
       {/* GRANDE BARRE DE RECHERCHE SPOTLIGHT (PLEINE LARGEUR, MODALE CENTRÉE) */}
-      {isSearchModalOpen && (
+      {isSearchModalOpen && createPortal(
         <div
           role="dialog"
           aria-modal="true"
@@ -631,7 +639,8 @@ export const Header: React.FC<
               </span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </header>
   );

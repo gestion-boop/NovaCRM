@@ -6,7 +6,7 @@ import { MobileBottomNav, MobileTopPlus } from './MobileBottomNav';
 afterEach(() => cleanup());
 
 describe('barre du bas mobile', () => {
-  it('ne garde que Accueil, Nova et Menu', () => {
+  it('contient Accueil, +, Nova, Recherche et Paramètres', () => {
     render(
       <MobileBottomNav
         currentNav="accueil"
@@ -18,9 +18,10 @@ describe('barre du bas mobile', () => {
     );
     expect(screen.getByRole('button', { name: 'Accueil' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Nova' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Menu' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Créer un lead' })).toBeNull();
-    expect(screen.getAllByRole('button')).toHaveLength(3);
+    expect(screen.getByRole('button', { name: 'Créer un lead' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Rechercher' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Paramètres' })).toBeTruthy();
+    expect(screen.getAllByRole('button')).toHaveLength(5);
   });
 
   it('affiche le bouton micro de dictée vocale au-dessus de Nova quand fourni', () => {
@@ -39,7 +40,7 @@ describe('barre du bas mobile', () => {
     expect(micBtn).toBeTruthy();
     fireEvent.click(micBtn);
     expect(onOpenDictation).toHaveBeenCalledTimes(1);
-    expect(screen.getAllByRole('button')).toHaveLength(4);
+    expect(screen.getAllByRole('button')).toHaveLength(6);
   });
 
   it('ouvre la création d’un lead depuis le plus en haut', () => {
