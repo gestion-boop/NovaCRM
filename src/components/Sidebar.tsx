@@ -490,7 +490,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: '100%', opacity: 0.3 }}
             transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed left-1/2 -translate-x-1/2 z-[80] w-[calc(100%-1.5rem)] sm:w-[460px] bg-[#081318]/95 backdrop-blur-2xl border border-[#F7BC5F]/50 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_30px_rgba(247,188,95,0.1)] flex flex-col overflow-hidden will-change-transform"
+            className="fixed inset-x-0 mx-auto z-[80] w-[calc(100%-1.5rem)] sm:w-[460px] bg-[#081318]/95 backdrop-blur-2xl border border-[#F7BC5F]/50 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_30px_rgba(247,188,95,0.1)] flex flex-col overflow-hidden will-change-transform"
             style={{
               top: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
               bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
