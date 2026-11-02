@@ -331,7 +331,7 @@ function App() {
     window.addEventListener('novasphere:search-state', maj);
     return () => window.removeEventListener('novasphere:search-state', maj);
   }, []);
-  const barreBasBureau = typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref !== 'main';
+  const barreBasBureau = true;
   const enteteMasquee = barreBasBureau;
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   // Signalé : "pense à mettre le mode jour sur le téléphone portable" — en

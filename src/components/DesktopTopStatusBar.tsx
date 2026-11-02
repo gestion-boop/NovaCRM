@@ -46,8 +46,8 @@ export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, r
   ];
 
   return (
-    <div className="hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2 bg-[#061317]/95 backdrop-blur-xl border-b border-white/10 shadow-[0_6px_20px_-8px_rgba(0,0,0,0.8)]">
-      <div className="grid grid-cols-5 gap-2 sm:gap-3 max-w-7xl mx-auto">
+    <div className="hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-1">
+      <div className="grid grid-cols-5 gap-2 sm:gap-3 max-w-7xl mx-auto p-2 sm:p-2.5 rounded-3xl bg-[#061317]/92 backdrop-blur-xl border border-[#F7BC5F]/55 shadow-[0_10px_28px_-8px_rgba(0,0,0,0.9),0_3px_0_0_rgba(247,188,95,0.12),inset_0_2px_3px_rgba(255,255,255,0.15),inset_0_-3px_5px_rgba(0,0,0,0.5),0_0_10px_rgba(247,188,95,0.1)]">
         {items.map(({ nav, label, statut, alerte, Icon, gradient }) => (
           <button
             key={nav}
