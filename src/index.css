@@ -2336,3 +2336,37 @@ html.agency-novavisio .nv-effet-jaune:active { background-color: rgba(255,255,25
 .nv-parametres button:not(:disabled):not([role="switch"]):not([class*="bg-[#F7BC5F]"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-emerald"]):active { background-color: rgba(247,188,95,.4) !important; box-shadow: 0 0 0 2px rgba(247,188,95,.95); transform: scale(.98); }
 html.agency-novavisio .nv-parametres button:not(:disabled):not([role="switch"]):not([class*="bg-[#F7BC5F]"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-emerald"]):hover { background-color: rgba(255,255,255,.2) !important; box-shadow: 0 0 0 2px rgba(255,255,255,.6); }
 html.agency-novavisio .nv-parametres button:not(:disabled):not([role="switch"]):not([class*="bg-[#F7BC5F]"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-emerald"]):active { background-color: rgba(255,255,255,.35) !important; box-shadow: 0 0 0 2px rgba(255,255,255,.95); }
+
+/* ── Fiche client sobre (mode nuit) : surfaces teal clair, filets blancs discrets,
+   sans dégradés noir/or ni lueurs. Limité à la fiche (.nv-fiche-sobre). ── */
+:root:not(.light-mode) .nv-fiche-sobre .nv-client-hero {
+  background: linear-gradient(180deg, #15363a 0%, #112e32 100%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+:root:not(.light-mode) .nv-fiche-sobre .nv-client-hero > .pointer-events-none { display: none; }
+:root:not(.light-mode) .nv-fiche-sobre .nv-bento-gold,
+:root:not(.light-mode) .nv-fiche-sobre .nv-bento-dark {
+  background: #163a3e !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow: none !important;
+}
+:root:not(.light-mode) .nv-fiche-sobre .nv-bento-gold:hover,
+:root:not(.light-mode) .nv-fiche-sobre .nv-bento-dark:hover {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  box-shadow: none !important;
+}
+:root:not(.light-mode) .nv-fiche-sobre .nv-copilot-banner {
+  background: #163a3e !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+:root:not(.light-mode) .nv-fiche-sobre .nv-activity-shell {
+  background: #112f33 !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow: none !important;
+}
+:root:not(.light-mode) .nv-fiche-sobre :is([class*="bg-black/"]):not(.fixed) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+:root:not(.light-mode) .nv-fiche-sobre [class*="border-[#F7BC5F]/"]:not(button):not(a) {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}

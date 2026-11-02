@@ -2581,7 +2581,7 @@ export default function ClientProfileView({
     // "h-full" ne se calculait pas correctement dans ce contexte, coupant le
     // contenu). Simplifié : ce composant flotte maintenant normalement dans
     // <main>, qui gère le défilement de toute la page — plus de double scroll.
-    <div ref={swipeBackRef} className="flex flex-col bg-[#051416] animate-fade-in relative">
+    <div ref={swipeBackRef} className="nv-fiche-sobre flex flex-col bg-[#0b2326] animate-fade-in relative">
       {(profileError || profileSuccess) && (
         <div className="px-6 pt-4">
           {profileError && (
