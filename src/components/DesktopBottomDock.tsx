@@ -91,7 +91,15 @@ export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
           {deplie ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           {rouge && !deplie && <span className="absolute top-0.5 right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-[#0d181c] animate-pulse" />}
         </button>
-        {deplie && pilule}
+        {/* Effet tiroir : la barre coulisse vers la droite depuis le bouton. */}
+        <div
+          aria-hidden={!deplie}
+          className={`overflow-hidden whitespace-nowrap py-3 -my-3 pr-3 -mr-3 transition-[max-width,opacity,transform] duration-300 ease-out ${
+            deplie ? 'max-w-[760px] opacity-100 translate-x-0 pointer-events-auto' : 'max-w-0 opacity-0 -translate-x-4 pointer-events-none'
+          }`}
+        >
+          {pilule}
+        </div>
       </nav>
     );
   }
