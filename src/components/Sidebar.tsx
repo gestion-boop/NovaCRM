@@ -472,10 +472,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           démontage instantané du composant, donc sans aucune transition. */}
       <div
         id="novasphere-nav-menu"
-        className={`fixed inset-0 z-50 flex items-stretch p-3 sm:p-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] ${
+        className={`fixed inset-0 z-50 flex items-end justify-center p-3 sm:p-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] ${
           mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
-        style={{ transition: 'opacity 350ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+        style={{ transition: mobileOpen ? 'opacity 350ms ease' : 'opacity 250ms ease 350ms' }}
         role="dialog"
         aria-modal="true"
         aria-label="Menu de navigation"
@@ -494,20 +494,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             panneau étroit à 85vw — texte serré, peu lisible. Il prend
             désormais tout l'écran sur mobile (grand écrit, séparateurs
             entre chaque entrée), et garde sa largeur fixe sur desktop. */}
-        {/* Effet tiroir (2 nov.) : le panneau se déplie depuis le bouton Menu
-            (bas gauche sur mobile, haut gauche sur ordinateur) avec un léger
-            rebond à l'ouverture, et se replie vers ce même point à la
-            fermeture. Transformation/durée en style inline (voir remarque
-            ci-dessus sur les classes arbitraires). */}
+        {/* Tiroir du bas (2 nov.) : le panneau est centré en bas de l'écran
+            et monte lentement comme un tiroir qu'on tire (0,75 s), puis
+            redescend à la fermeture (0,55 s). */}
         <div
-          className="relative w-full md:w-[270px] md:max-w-[270px] bg-[#081318] border border-[#F7BC5F]/50 rounded-3xl md:rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden origin-bottom-left md:origin-top-left"
+          className="relative w-full max-w-[460px] bg-[#081318] border border-[#F7BC5F]/50 rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden"
           style={{
-            transform: mobileOpen ? 'scale(1) translateY(0)' : 'scale(0.08) translateY(40px)',
-            opacity: mobileOpen ? 1 : 0,
+            height: 'min(86dvh, 760px)',
+            transform: mobileOpen ? 'translateY(0)' : 'translateY(calc(100% + 3rem))',
             transition: mobileOpen
-              ? 'transform 480ms cubic-bezier(0.34, 1.45, 0.64, 1), opacity 220ms ease-out'
-              : 'transform 300ms cubic-bezier(0.55, 0, 0.7, 0.2), opacity 260ms ease-in',
-            willChange: 'transform, opacity',
+              ? 'transform 750ms cubic-bezier(0.22, 1, 0.36, 1)'
+              : 'transform 550ms cubic-bezier(0.5, 0, 0.75, 0)',
+            willChange: 'transform',
           }}
         >
           {sidebarContent(true)}
