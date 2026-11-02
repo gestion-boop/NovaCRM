@@ -103,9 +103,7 @@ const AgencyLogoSwitcher: React.FC<Props> = ({ agencies, selectedId, onSelect, s
                 ? isNovavisio
                   ? 'bg-gradient-to-r from-[#1B7D8F]/45 to-[#264C8A]/55 ring-2 ring-[#38BDF8] opacity-100 shadow-[0_0_14px_rgba(34,211,238,0.35)]'
                   : 'bg-[#F7BC5F]/25 ring-2 ring-[#F7BC5F] opacity-100 shadow-[0_0_14px_rgba(247,188,95,0.25)]'
-                : isNovavisio
-                  ? 'bg-white/15 opacity-95 hover:opacity-100 hover:bg-white/30 hover:ring-2 hover:ring-white active:bg-white/45 active:ring-white active:scale-95'
-                  : 'bg-white/15 opacity-95 hover:opacity-100 hover:bg-[#F7BC5F]/25 hover:ring-2 hover:ring-[#F7BC5F]/70 active:bg-[#F7BC5F]/40 active:ring-[#F7BC5F] active:scale-95'
+                : 'bg-white/15 opacity-95 hover:opacity-100 nv-effet-jaune'
             }`}
           >
             <img

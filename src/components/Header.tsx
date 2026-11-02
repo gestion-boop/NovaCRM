@@ -266,6 +266,11 @@ export const Header: React.FC<
     }
   }, [isSearchModalOpen]);
 
+  // Les barres du bas mettent la loupe en « sélection » tant que la recherche est ouverte.
+  React.useEffect(() => {
+    window.dispatchEvent(new CustomEvent('novasphere:search-state', { detail: isSearchModalOpen }));
+  }, [isSearchModalOpen]);
+
   // Barre du bas mobile (loupe) : ouvre la même recherche que ⌘K.
   React.useEffect(() => {
     const ouvrir = () => setIsSearchModalOpen(true);

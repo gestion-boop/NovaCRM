@@ -324,6 +324,12 @@ function App() {
   // TEST (demandé le 2 novembre) : barre du bas sur tablette/ordinateur,
   // uniquement hors production (branche test) ; elle remplace la barre du
   // haut sur les fenêtres de travail (tout sauf l'accueil).
+  const [rechercheOuverte, setRechercheOuverte] = useState(false);
+  useEffect(() => {
+    const maj = (e: Event) => setRechercheOuverte(Boolean((e as CustomEvent<boolean>).detail));
+    window.addEventListener('novasphere:search-state', maj);
+    return () => window.removeEventListener('novasphere:search-state', maj);
+  }, []);
   const barreBasBureau = typeof __BUILD_INFO__ !== 'undefined' && __BUILD_INFO__.ref !== 'main';
   const enteteMasquee = barreBasBureau;
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
@@ -1882,6 +1888,7 @@ function App() {
           onOpenNova={() => openNovaFullscreen()}
           onOpenNotifications={() => setNotificationsPanelOpen((o) => !o)}
           unreadCount={(unreadNotificationsCount || 0) + (unreadMessagesCount || 0)}
+          actifs={{ menu: mobileMenuOpen, plus: showNouveauLead, nova: novaOpen || novaPopupOpen, search: rechercheOuverte, bell: notificationsPanelOpen }}
         />
       )}
 
@@ -1903,6 +1910,7 @@ function App() {
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onOpenNouveauLead={() => setShowNouveauLead(true)}
           onOpenSearch={() => window.dispatchEvent(new Event('novasphere:open-search'))}
+          actifs={{ plus: showNouveauLead, nova: novaOpen || novaPopupOpen, search: rechercheOuverte }}
           onOpenNotifications={() => setNotificationsPanelOpen((open) => !open)}
           // Signalé : le petit tiroir de saisie rapide (fenêtre noire) était
           // une étape en trop avant d'atteindre la vraie conversation —

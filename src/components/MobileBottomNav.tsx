@@ -8,6 +8,8 @@ interface MobileBottomNavProps {
   onOpenMobileMenu?: () => void;
   onOpenNouveauLead?: () => void;
   onOpenSearch?: () => void;
+  // Éléments « ouverts » (recherche, +, Nova) : icône jaune tant qu'ils le sont.
+  actifs?: Partial<Record<'plus' | 'nova' | 'search', boolean>>;
   onOpenNotifications: () => void;
   // Ouvre le tiroir de saisie rapide (MobileNovaSheet) au lieu de naviguer
   // directement — plus rapide sur mobile, pas de changement d'écran complet
@@ -27,6 +29,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onNavigate,
   onOpenNouveauLead,
   onOpenSearch,
+  actifs = {},
   onOpenNova,
   onOpenDictation,
   onOpenClientDictation,
@@ -132,7 +135,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             onClick={onOpenNouveauLead}
             title="Créer un lead"
             aria-label="Créer un lead"
-            className="flex items-center justify-center h-12 w-14 rounded-full text-slate-300 hover:text-[#F7BC5F] transition-all cursor-pointer active:scale-95"
+            className={`flex items-center justify-center h-12 w-14 rounded-full transition-all cursor-pointer active:scale-95 ${actifs.plus ? 'bg-white/15 text-[#F7BC5F] shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]' : 'text-slate-300 hover:text-[#F7BC5F]'}`}
           >
             <Plus className="w-7 h-7" strokeWidth={2.4} />
           </button>
@@ -141,7 +144,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             onClick={onOpenNova}
             title="Nova"
             aria-label="Nova"
-            className="relative flex items-center justify-center h-12 w-14 active:scale-90 transition-transform group cursor-pointer"
+            className={`relative flex items-center justify-center h-12 w-14 rounded-full active:scale-90 transition-transform group cursor-pointer ${actifs.nova ? 'bg-[#F7BC5F]/30' : ''}`}
           >
             <NovaMascotte taille={42} fixe />
           </button>
@@ -150,7 +153,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             onClick={onOpenSearch}
             title="Rechercher"
             aria-label="Rechercher"
-            className="flex items-center justify-center h-12 w-14 rounded-full text-slate-300 hover:text-[#F7BC5F] transition-all cursor-pointer active:scale-95"
+            className={`flex items-center justify-center h-12 w-14 rounded-full transition-all cursor-pointer active:scale-95 ${actifs.search ? 'bg-white/15 text-[#F7BC5F] shadow-[inset_0_1px_2px_rgba(255,255,255,0.25),0_2px_4px_rgba(0,0,0,0.5)]' : 'text-slate-300 hover:text-[#F7BC5F]'}`}
           >
             <Search className="w-7 h-7" strokeWidth={2} />
           </button>
