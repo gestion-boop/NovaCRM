@@ -1456,7 +1456,7 @@ export const deleteGmailMessagePermanently = async (
   }
 };
 
-export const sendGmailMessage = async (
+const envoyerGmailBrut = async (
   token: string,
   message: {
     to: string;
@@ -1559,4 +1559,24 @@ export const sendGmailMessage = async (
   }
 
   return await response.json();
+};
+
+// Jeton Google périmé (mis en cache, valable ~1 h) : Gmail répond « Request had
+// invalid authentication credentials ». On repart chercher un jeton frais
+// (renouvellement serveur, sinon session) et on retente une seule fois,
+// plutôt que d'échouer — vu sur le questionnaire confidentiel (3 novembre).
+export const sendGmailMessage = async (
+  token: string,
+  message: Parameters<typeof envoyerGmailBrut>[1]
+): Promise<{ id: string; threadId: string }> => {
+  try {
+    return await envoyerGmailBrut(token, message);
+  } catch (e) {
+    if (!isGoogleAuthError(e)) throw e;
+    const frais = await renewWorkspaceAccessToken(token);
+    if (!frais) {
+      throw new Error("Votre accès Google a expiré. Reconnectez Google (Paramètres) puis réessayez.");
+    }
+    return await envoyerGmailBrut(frais, message);
+  }
 };
