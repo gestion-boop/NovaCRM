@@ -264,7 +264,7 @@ export function isSafeToAutoReload(): boolean {
 export function applyUpdateOnNavigation(destination: {
   nav?: string;
   clientId?: string | null;
-  tab?: 'espace-client';
+  tab?: 'espace-client' | 'questionnaire';
 }): boolean {
   if (!isUpdatePending) return false;
   // Ne JAMAIS recharger si la destination est une fiche client

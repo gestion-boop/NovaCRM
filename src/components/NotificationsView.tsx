@@ -69,7 +69,7 @@ interface NotificationsViewProps {
   onNavigate: (
     nav: string
   ) => void;
-  onOpenContact?: (contactId: string, tab?: 'espace-client') => void;
+  onOpenContact?: (contactId: string, tab?: 'espace-client' | 'questionnaire') => void;
   // Ouvre directement la conversation/canal du message ciblé — sans ça, un
   // clic sur une notif "message" ne faisait que naviguer vers l'onglet Chat
   // générique (liste des projets), sans jamais ouvrir la bonne conversation.
@@ -149,7 +149,7 @@ type NotificationItem = {
   // Signalé : "le clic sur la notif du message du client doit envoyer sur
   // le chat Espace Client de la fiche" — plutôt que l'onglet RDV par
   // défaut de la fiche client.
-  contactTab?: 'espace-client';
+  contactTab?: 'espace-client' | 'questionnaire';
   messageId?: string;
   conversationId?: string;
   channelId?: string;
@@ -654,7 +654,7 @@ export const NotificationsView: React.FC<
     // type ci-dessous et retombait sur le bucket 'support' par défaut — or
     // sur mobile, la clochette est volontairement réduite à 'chat'/'camera'
     // (voir plus bas), donc ce type disparaissait silencieusement.
-    if (['message', 'mention', 'shared_message', 'reaction', 'task_message', 'announcement', 'daily_summary', 'shared_note', 'shared_chat_message', 'client_message'].includes(type)) {
+    if (['message', 'mention', 'shared_message', 'reaction', 'task_message', 'announcement', 'daily_summary', 'shared_note', 'shared_chat_message', 'client_message', 'confidential_questionnaire_completed'].includes(type)) {
       return 'chat';
     }
     return 'support';
@@ -699,7 +699,7 @@ export const NotificationsView: React.FC<
         date: n.created_at,
         navTarget: navTargetFor(n),
         contactId: n.link?.match(/\/clients\/([0-9a-f-]{36})/)?.[1],
-        contactTab: n.type === 'client_message' ? 'espace-client' : undefined,
+        contactTab: n.type === 'client_message' ? 'espace-client' : (n.link || '').includes('tab=questionnaire') ? 'questionnaire' : undefined,
         // Le lien réel est tantôt `?highlight=`, tantôt `?conversation=&message=`,
         // tantôt `?channel=&message=`. Sans les trois, le clic ouvrait le chat
         // sur la liste, jamais sur le message.

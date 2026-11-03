@@ -82,7 +82,7 @@ const ChargementEcran = () => (
   </div>
 );
 
-function getRestoredNavigation(): { nav: string; clientId: string | null; tab?: 'espace-client' } | null {
+function getRestoredNavigation(): { nav: string; clientId: string | null; tab?: 'espace-client' | 'questionnaire' } | null {
   try {
     const raw = sessionStorage.getItem('novasphere:restore-nav');
     if (raw) {
@@ -756,11 +756,11 @@ function App() {
     React.startTransition(() => setSelectedClientProfileIdImmediat(valeur));
   }, []);
 
-  const [selectedClientProfileTab, setSelectedClientProfileTab] = useState<'espace-client' | undefined>(
+  const [selectedClientProfileTab, setSelectedClientProfileTab] = useState<'espace-client' | 'questionnaire' | undefined>(
     restoredNav?.tab
   );
 
-  const openClientProfile = (contactId: string | null, tab?: 'espace-client') => {
+  const openClientProfile = (contactId: string | null, tab?: 'espace-client' | 'questionnaire') => {
     // RÈGLE ABSOLUE : Jamais de rechargement/mise à jour automatique lors de l'accès à une fiche client
     setSelectedClientProfileId(contactId);
     setSelectedClientProfileTab(contactId ? tab : undefined);
@@ -779,7 +779,7 @@ function App() {
     id: string;
     nav: string;
     selectedClientProfileId: string | null;
-    selectedClientProfileTab: 'espace-client' | undefined;
+    selectedClientProfileTab: 'espace-client' | 'questionnaire' | undefined;
     title: string;
   }
   const [tabs, setTabs] = useState<AppTab[]>(() => [{
@@ -803,7 +803,7 @@ function App() {
   // le cas échéant — ex. depuis une carte contact). Capture d'abord l'état
   // courant dans l'onglet qu'on quitte, pour le retrouver intact à son
   // prochain tour (voir switchToTab/closeTab, même principe).
-  const openInNewTab = React.useCallback((nav: string, clientId: string | null = null, clientTab?: 'espace-client') => {
+  const openInNewTab = React.useCallback((nav: string, clientId: string | null = null, clientTab?: 'espace-client' | 'questionnaire') => {
     const newId = crypto.randomUUID();
     const tabsAJour = tabs.map((t) =>
       t.id === activeTabId

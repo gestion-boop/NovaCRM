@@ -18,6 +18,7 @@ import TransactionChecklistModal, {
 import { ClipboardList } from 'lucide-react';
 import { couleurEtapeNovavisio, estAgenceNovavisio } from '@/lib/couleursNovavisio';
 import { clicMailCrm } from '@/lib/composerMail';
+import { sectionsQuestionnaire, telechargerQuestionnairePdf } from '@/lib/questionnairePdf';
 import { ChevronLeft, ChevronDown, Plus, Mail, Phone, Calendar, User, UserCheck, UserPlus, Pencil, Trash2, CheckCircle, Circle, FileEdit, Save, Clock, Check, CheckCheck, Mic, MicOff, Square, Pin, GripVertical, MessageSquare, X, FileText, Upload, Download, Folder, Eye, Lock, Share2, Send, UserX, Smile, Image as ImageIcon, Video as VideoIcon, Paperclip, ClipboardCheck, Landmark, Archive, ArchiveRestore, Copy, Loader2, ShieldCheck, Flame, Sun, Snowflake, MoreVertical, Sparkles } from 'lucide-react';
 
 // Sélecteur Chaud/Tiède/Froid de la fiche client — même logique que la
@@ -193,7 +194,7 @@ export default function ClientProfileView({
   // chat Espace Client de la fiche" — auparavant la fiche s'ouvrait
   // toujours sur l'onglet RDV par défaut, quel que soit le contexte du
   // clic (notification de message, lien, etc.).
-  initialTab?: 'rdv' | 'agenda' | 'notes' | 'emails' | 'documents' | 'chat' | 'espace-client';
+  initialTab?: 'rdv' | 'agenda' | 'notes' | 'emails' | 'documents' | 'chat' | 'espace-client' | 'questionnaire';
   // Demande explicite : "intégrer Nova dans la fiche du client" — ouvre
   // Nova (App.tsx lui transmet déjà currentClientId dès qu'une fiche est
   // affichée, donc Nova résout tout de suite le bon dossier sans qu'on ait
@@ -219,9 +220,9 @@ export default function ClientProfileView({
   // nouvel onglet séparé, avec un vrai rendez-vous Google Calendar (comme
   // Nova IA sait déjà le faire, cf. AssistantIAView.tsx `create_appointment`)
   // et la liste des prochains événements pour voir les disponibilités.
-  const [activeTab, setActiveTab] = useState<'rdv' | 'agenda' | 'notes' | 'emails' | 'documents' | 'chat' | 'espace-client'>(initialTab || 'rdv');
+  const [activeTab, setActiveTab] = useState<'rdv' | 'agenda' | 'notes' | 'emails' | 'documents' | 'chat' | 'espace-client'>(initialTab && initialTab !== 'questionnaire' ? initialTab : 'rdv');
   useEffect(() => {
-    if (initialTab) setActiveTab(initialTab);
+    if (initialTab && initialTab !== 'questionnaire') setActiveTab(initialTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, initialTab]);
 
@@ -1049,6 +1050,40 @@ export default function ClientProfileView({
   const [questionnaireEmail, setQuestionnaireEmail] = useState('');
   const [questionnaireSending, setQuestionnaireSending] = useState(false);
   const [expandedQuestionnaireId, setExpandedQuestionnaireId] = useState<string | null>(null);
+  // Clic sur la notification « Questionnaire reçu » : ouvre directement le
+  // questionnaire (modale + réponses dépliées) sur la fiche du client.
+  const ouvrirQuestionnaireRecuRef = useRef(false);
+  useEffect(() => {
+    if (initialTab === 'questionnaire') {
+      ouvrirQuestionnaireRecuRef.current = true;
+      setShowQuestionnaireModal(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, initialTab]);
+  useEffect(() => {
+    if (!ouvrirQuestionnaireRecuRef.current || !showQuestionnaireModal) return;
+    const recu = questionnaires.find((q) => q.status === 'completed' && q.answers);
+    if (recu) {
+      setExpandedQuestionnaireId(recu.id);
+      ouvrirQuestionnaireRecuRef.current = false;
+    }
+  }, [questionnaires, showQuestionnaireModal]);
+  const [pdfQuestionnaireId, setPdfQuestionnaireId] = useState<string | null>(null);
+  const handleDownloadQuestionnairePdf = async (q: QuestionnaireRow) => {
+    setPdfQuestionnaireId(q.id);
+    try {
+      await telechargerQuestionnairePdf({
+        reponses: q.answers,
+        nomClient: client?.name,
+        email: q.sentToEmail,
+        recuLe: q.completedAt ? new Date(q.completedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null,
+      });
+    } catch (e: any) {
+      toast.error(e?.message || 'Impossible de générer le PDF');
+    } finally {
+      setPdfQuestionnaireId(null);
+    }
+  };
   const pendingQuestionnairesCount = questionnaires.filter((q) => q.status === 'pending').length;
   const completedQuestionnairesCount = questionnaires.filter((q) => q.status === 'completed').length;
 
@@ -4979,17 +5014,44 @@ export default function ClientProfileView({
                       </div>
                     </div>
                     {q.status === 'completed' && q.answers && (
-                      <button
-                        onClick={() => setExpandedQuestionnaireId(expandedQuestionnaireId === q.id ? null : q.id)}
-                        className="text-[11px] text-[#F9C977] hover:text-[#FAD592] mt-2 font-semibold"
-                      >
-                        {expandedQuestionnaireId === q.id ? '▾ Masquer les réponses' : '▸ Voir les réponses'}
-                      </button>
+                      <div className="flex items-center gap-3 mt-2">
+                        <button
+                          onClick={() => setExpandedQuestionnaireId(expandedQuestionnaireId === q.id ? null : q.id)}
+                          className="text-[11px] text-[#F9C977] hover:text-[#FAD592] font-semibold"
+                        >
+                          {expandedQuestionnaireId === q.id ? '▾ Masquer les réponses' : '▸ Voir les réponses'}
+                        </button>
+                        <button
+                          onClick={() => void handleDownloadQuestionnairePdf(q)}
+                          disabled={pdfQuestionnaireId === q.id}
+                          className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F7BC5F] hover:bg-[#F9C977] disabled:opacity-50 text-slate-950 text-[11px] font-bold"
+                          title="Télécharger les réponses en PDF"
+                        >
+                          {pdfQuestionnaireId === q.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          PDF
+                        </button>
+                      </div>
                     )}
                     {expandedQuestionnaireId === q.id && q.answers && (
-                      <pre data-swipe-back-exclude="true" className="mt-2 p-3 rounded-lg bg-black/40 text-[10px] text-slate-300 overflow-x-auto max-h-64 whitespace-pre-wrap">
-                        {JSON.stringify(q.answers, null, 2)}
-                      </pre>
+                      <div data-swipe-back-exclude="true" className="mt-2 p-3 rounded-lg bg-black/30 border border-white/5 max-h-72 overflow-y-auto custom-scrollbar space-y-3">
+                        {sectionsQuestionnaire(q.answers).map((sec) => (
+                          <div key={sec.titre}>
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-[#F9C977] mb-1">{sec.titre}</p>
+                            {sec.groupes.map((g, gi) => (
+                              <div key={gi} className="mb-1.5">
+                                {g.sousTitre && <p className="text-[10px] font-semibold text-slate-400 mt-1">{g.sousTitre}</p>}
+                                {g.lignes.map((l) => (
+                                  <div key={l.libelle} className="flex gap-2 text-[11px] py-0.5 border-b border-white/5">
+                                    <span className="w-2/5 shrink-0 text-slate-400">{l.libelle}</span>
+                                    <span className="flex-1 text-slate-100 whitespace-pre-wrap break-words">{l.valeur}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                        {sectionsQuestionnaire(q.answers).length === 0 && <p className="text-[11px] text-slate-500">Aucune réponse renseignée.</p>}
+                      </div>
                     )}
                   </div>
                 ))
