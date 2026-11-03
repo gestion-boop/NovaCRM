@@ -528,8 +528,8 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
 
       {/* ── En-tête Bureau ── */}
       <div className="hidden md:block rounded-2xl border border-border bg-card/95 px-4 py-4 shadow-card backdrop-blur-sm">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
+        <div className="flex items-center gap-4">
+          <div className="flex-1 min-w-0">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground drop-shadow-sm">
               Gestion des Clients
             </h1>
@@ -546,7 +546,7 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
           </div>
 
           {/* Petite barre de recherche (la barre globale du haut n'existe plus) */}
-          <div className="relative w-full sm:w-80 lg:w-96">
+          <div className="relative w-full max-w-md shrink-0 basis-[26rem]">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="search"
@@ -566,6 +566,18 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                 <XCircle className="w-4 h-4" />
               </button>
             )}
+          </div>
+
+          <div className="flex-1 min-w-0 flex justify-end">
+            <button
+              type="button"
+              onClick={() => { setEditing(null); setOpen(true); }}
+              className="h-10 w-10 rounded-xl bg-gradient-to-r from-[#FAD592] via-[#F9C977] to-[#D9A34E] text-[#1a1230] flex items-center justify-center shadow-md hover:brightness-110 active:scale-95 transition"
+              title="Nouveau client / lead"
+              aria-label="Nouveau client / lead"
+            >
+              <Plus className="w-5 h-5 stroke-[3]" />
+            </button>
           </div>
         </div>
 
