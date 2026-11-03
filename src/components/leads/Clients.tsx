@@ -544,6 +544,29 @@ const Clients = ({ onSelectContact }: ClientsProps) => {
                     : " mes clients"}
             </p>
           </div>
+
+          {/* Petite barre de recherche (la barre globale du haut n'existe plus) */}
+          <div className="relative w-full sm:w-80 lg:w-96">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher un client (nom, e-mail, téléphone)…"
+              aria-label="Rechercher un client"
+              className="w-full bg-[#081e22]/90 border border-white/15 focus:border-[#F7BC5F] rounded-xl pl-10 pr-9 py-2.5 text-sm text-white placeholder-slate-400 outline-none transition-colors"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                title="Effacer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ── Scope : Mes clients / Partagés / Tous ── */}
