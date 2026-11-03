@@ -832,7 +832,7 @@ export const getOrCreateDriveFolder = async (token: string, folderName: string, 
 /**
  * Uploads video to Google Drive under "Messages CRM / <EntityName>" folder.
  */
-export const uploadVideoToDriveFolder = async (
+const deposerVideoDriveBrut = async (
   token: string,
   file: File,
   entityName: string
@@ -931,7 +931,7 @@ export const uploadVideoToDriveFolder = async (
 // Nova — dépose le fichier dans le Drive du compte connecté (dossier dédié
 // "Nova - Images générées"), même mécanisme d'upload que
 // uploadVideoToDriveFolder ci-dessus, généralisé à un Blob quelconque.
-export const uploadImageToDriveFolder = async (
+const deposerImageDriveBrut = async (
   token: string,
   blob: Blob,
   fileName: string
@@ -1578,5 +1578,38 @@ export const sendGmailMessage = async (
       throw new Error("Votre accès Google a expiré. Reconnectez Google (Paramètres) puis réessayez.");
     }
     return await envoyerGmailBrut(frais, message);
+  }
+};
+
+// Jeton Google périmé (~1 h) : l'envoi vers Drive échouait avec « Request had
+// invalid authentication credentials » (vu dans la messagerie, 3 novembre).
+// On repart chercher un jeton frais et on retente une fois.
+export const uploadVideoToDriveFolder = async (
+  token: string,
+  file: File,
+  entityName: string
+): Promise<DriveVideoUploadResult> => {
+  try {
+    return await deposerVideoDriveBrut(token, file, entityName);
+  } catch (e) {
+    if (!isGoogleAuthError(e)) throw e;
+    const frais = await renewWorkspaceAccessToken(token);
+    if (!frais) throw new Error("Votre accès Google a expiré. Reconnectez Google (Paramètres) puis réessayez.");
+    return await deposerVideoDriveBrut(frais, file, entityName);
+  }
+};
+
+export const uploadImageToDriveFolder = async (
+  token: string,
+  blob: Blob,
+  fileName: string
+): Promise<DriveVideoUploadResult> => {
+  try {
+    return await deposerImageDriveBrut(token, blob, fileName);
+  } catch (e) {
+    if (!isGoogleAuthError(e)) throw e;
+    const frais = await renewWorkspaceAccessToken(token);
+    if (!frais) throw new Error("Votre accès Google a expiré. Reconnectez Google (Paramètres) puis réessayez.");
+    return await deposerImageDriveBrut(frais, blob, fileName);
   }
 };
