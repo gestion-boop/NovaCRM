@@ -245,7 +245,7 @@ export function useDashboardStats() {
         .eq('user_id', currentUser.uid)
         .eq('is_read', false)
         .is('dismissed_at', null)
-        .not('type', 'in', '(app_update,task_assigned,shared_task,task_message)'),
+        .not('type', 'in', '(app_update,task_assigned,shared_task,task_message,internal_task,internal_task_message)'),
       supabase
         .from('notifications')
         .select('id', { count: 'exact', head: true })

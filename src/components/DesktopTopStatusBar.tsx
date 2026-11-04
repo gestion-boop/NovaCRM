@@ -53,7 +53,7 @@ export const DesktopTopStatusBar: React.FC<Props> = ({ currentNav, onNavigate, r
   ];
 
   return (
-    <div className={`${modaleOuverte ? 'invisible ' : ''}hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-1`} style={teinte ? { backgroundColor: `rgba(7,16,21,${teinte})` } : undefined}>
+    <div className={`${modaleOuverte ? 'invisible ' : ''}hidden md:block shrink-0 z-40 px-3 sm:px-5 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-1`} style={teinte ? { backgroundColor: `rgba(var(--nv-veil-rgb), var(${teinte < 0.45 ? '--nv-veil-accueil' : '--nv-veil-page'}))` } : undefined}>
       <div className="flex items-center gap-3 max-w-7xl mx-auto">
         {onRetour && (
           <button
