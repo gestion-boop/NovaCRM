@@ -454,8 +454,13 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName.trim() && !lastName.trim()) {
-      toast.error('Veuillez renseigner au moins un prénom ou un nom pour enregistrer.');
+    // Seule condition : au moins un champ renseigné (plus de nom/prénom
+    // obligatoire — demande du 4 novembre). Sans nom, la fiche s'appelle
+    // « Nouveau Prospect ».
+    const auMoinsUnChamp = [firstName, lastName, email, phone, secteur, typeBien, comments, budgetMax, honoraires, mandateNumber, caDevis]
+      .some((v) => String(v ?? '').trim() !== '') || conjointRenseigne(conjoint) || societeRenseignee(societe);
+    if (!modification && !auMoinsUnChamp) {
+      toast.error('Renseignez au moins un champ pour enregistrer.');
       return;
     }
     if (submitting) return;
@@ -607,7 +612,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                 {/* Prénom */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-200">
-                    Prénom <span className="text-[#F9C977]">*</span>
+                    Prénom
                   </label>
                   <input
                     data-tour="lead-firstname-field"
@@ -615,7 +620,6 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     placeholder="ex: Jean-Pierre"
                     value={firstName}
                     onChange={(e) => setFirstName(formatFirstName(e.target.value))}
-                    required
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors"
                   />
                 </div>
@@ -623,7 +627,7 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                 {/* Nom */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-200">
-                    Nom <span className="text-[#F9C977]">*</span>
+                    Nom
                   </label>
                   <input
                     data-tour="lead-name-field"
@@ -631,7 +635,6 @@ export const NouveauLeadModal: React.FC<NouveauLeadModalProps> = ({
                     placeholder="ex: DUPONT"
                     value={lastName}
                     onChange={(e) => setLastName(formatLastName(e.target.value))}
-                    required
                     className="w-full bg-[#07191b] border border-[#153c3f] rounded-lg px-3.5 py-2.5 text-sm text-white font-bold placeholder-slate-500 focus:outline-none focus:border-[#F7BC5F] transition-colors uppercase"
                   />
                 </div>
