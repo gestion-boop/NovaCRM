@@ -15,6 +15,7 @@ interface DesktopBottomDockProps {
   // Test : sur les fenêtres de travail, la barre se replie en un bouton burger
   // en bas à gauche qui la déplie à la demande.
   repliable?: boolean;
+  /** Conservé pour compatibilité : le voile couvre désormais tout l'écran (App.tsx, couche nv-veil). */
   teinte?: number;
   actifs?: Partial<Record<'menu' | 'plus' | 'nova' | 'search' | 'bell', boolean>>;
 }
@@ -70,7 +71,7 @@ export const DesktopBottomDock: React.FC<DesktopBottomDockProps> = ({
   // Fenêtres de travail : le bouton Retour est dans la barre du haut.
   if (repliable) return null;
   return (
-    <nav data-barre-bas className={`hidden md:flex shrink-0 relative z-40 justify-center pt-1.5 pb-3 pointer-events-none select-none transition-all duration-200 ${masque}`} style={teinte ? { backgroundColor: `rgba(var(--nv-veil-rgb), var(${teinte < 0.45 ? '--nv-veil-accueil' : '--nv-veil-page'}))` } : undefined}>
+    <nav data-barre-bas className={`hidden md:flex shrink-0 relative z-40 justify-center pt-1.5 pb-3 pointer-events-none select-none transition-all duration-200 ${masque}`} >
       {pilule}
     </nav>
   );
