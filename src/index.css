@@ -562,10 +562,12 @@ body {
    photo disparaissait complètement et le curseur d'opacité n'avait plus
    aucun effet. Il suit maintenant le thème via --nv-veil-rgb, avec les
    mêmes dosages dans les deux modes. */
-main[class*="bg-[#071015]/35" i] {
+main[class*="bg-[#071015]/35" i],
+.nv-veil[class*="bg-[#071015]/35" i] {
   background-color: rgba(var(--nv-veil-rgb), var(--nv-veil-accueil)) !important;
 }
-main[class*="bg-[#071015]/55" i] {
+main[class*="bg-[#071015]/55" i],
+.nv-veil[class*="bg-[#071015]/55" i] {
   background-color: rgba(var(--nv-veil-rgb), var(--nv-veil-page)) !important;
 }
 
