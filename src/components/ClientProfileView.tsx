@@ -52,7 +52,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-import { getCachedAccessToken, requestWorkspaceAccessToken, hydrateAccessTokenFromSession, reconnectGoogleWorkspace, deleteDriveFile, uploadVideoToDriveFolder, isDriveEmbedUrl, sendGmailMessage, fetchGmailMessages, GmailMessageSummary, fetchGoogleCalendarEvents, createGoogleCalendarEvent, GoogleCalendarEvent } from '@/lib/workspace';
+import { getCachedAccessToken, requestWorkspaceAccessToken, hydrateAccessTokenFromSession, reconnectGoogleWorkspace, deleteDriveFile, uploadVideoToDriveFolder, deposerVideoSecours, isDriveEmbedUrl, sendGmailMessage, fetchGmailMessages, GmailMessageSummary, fetchGoogleCalendarEvents, createGoogleCalendarEvent, GoogleCalendarEvent } from '@/lib/workspace';
 import { uploadDocumentToDrive } from '@/lib/documentDrive';
 import { getTaskDateStatus } from '@/lib/taskUtils';
 import { TEAM_MEMBERS, getAssignedUser } from '@/data/teamMembers';
@@ -1647,7 +1647,7 @@ export default function ClientProfileView({
         const res = await uploadVideoToDriveFolder(token, file, client?.name || 'Fiche client');
         await insertChatMessage({ video_url: res.fileUrl });
       } else {
-        await insertChatMessage({ video_url: URL.createObjectURL(file) });
+        await insertChatMessage({ video_url: await deposerVideoSecours(file) });
       }
     } catch (err: any) {
       toast.error(err?.message || "Impossible d'envoyer la vidéo");

@@ -17,7 +17,7 @@ import { pickVoiceMimeType } from '@/lib/audioRecording';
 // vite les quelques Mo que ça tolère). Même parade déjà en place côté fiche
 // client (ClientProfileView.tsx, handleChatVideoSelected) : on dépose le
 // fichier sur le Drive Google de l'utilisateur et on ne stocke que le lien.
-import { getCachedAccessToken, requestWorkspaceAccessToken, uploadVideoToDriveFolder, isDriveEmbedUrl } from '@/lib/workspace';
+import { getCachedAccessToken, requestWorkspaceAccessToken, uploadVideoToDriveFolder, isDriveEmbedUrl, deposerVideoSecours } from '@/lib/workspace';
 import { assemblerDictee } from '@/lib/dictee';
 import { ouvrirPieceJointe } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -458,15 +458,7 @@ async function preparerFichierVideo(file: File, contextName: string): Promise<st
     const res = await uploadVideoToDriveFolder(token, file, contextName);
     return res.fileUrl;
   }
-  if (file.size <= 15 * 1024 * 1024) {
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve((reader.result as string) || '');
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-  return URL.createObjectURL(file);
+  return deposerVideoSecours(file);
 }
 
 export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, initialConversationId, onConversationTargetConsumed, initialChannelId, onChannelTargetConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
@@ -3697,7 +3689,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
       const url = token
         ? (await uploadVideoToDriveFolder(token, file, 'Messagerie interne')).fileUrl
-        : URL.createObjectURL(file);
+        : await deposerVideoSecours(file);
       setConvPendingMedia({
         kind: 'video',
         url,
@@ -3892,7 +3884,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
       const url = token
         ? (await uploadVideoToDriveFolder(token, file, `Canal - ${activeChannel?.name || 'Messagerie'}`)).fileUrl
-        : URL.createObjectURL(file);
+        : await deposerVideoSecours(file);
       setChannelPendingMedia({
         kind: 'video',
         url,

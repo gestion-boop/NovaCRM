@@ -1613,3 +1613,26 @@ export const uploadImageToDriveFolder = async (
     return await deposerImageDriveBrut(frais, blob, fileName);
   }
 };
+
+// Repli quand aucun accès Google n'est disponible : on dépose la vidéo dans le
+// stockage de l'application (bucket « chat-media », dossier de l'utilisateur) et
+// on renvoie un lien signé valable un an. Auparavant, ce cas enregistrait un lien
+// `blob:` local au navigateur de l'expéditeur : illisible pour tout destinataire
+// (vu le 2 novembre : la vidéo de Diane ne se lisait pas).
+export const deposerVideoSecours = async (file: File): Promise<string> => {
+  const { data: u } = await supabase.auth.getUser();
+  const uid = u.user?.id;
+  if (!uid) throw new Error('Session expirée : reconnectez-vous pour envoyer la vidéo.');
+  const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
+  const chemin = `${uid}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from('chat-media').upload(chemin, file, {
+    contentType: file.type || 'video/mp4',
+    upsert: false,
+  });
+  if (error) {
+    throw new Error("Impossible d'envoyer la vidéo (Google non connecté et stockage refusé : " + error.message + '). Reconnectez Google puis réessayez.');
+  }
+  const { data, error: errLien } = await supabase.storage.from('chat-media').createSignedUrl(chemin, 60 * 60 * 24 * 365);
+  if (errLien || !data?.signedUrl) throw new Error(errLien?.message || 'Lien de la vidéo indisponible.');
+  return data.signedUrl;
+};
