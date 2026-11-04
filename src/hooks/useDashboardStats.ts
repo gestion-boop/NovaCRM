@@ -238,6 +238,11 @@ export function useDashboardStats() {
     // indéfiniment. "app_update" a son propre traitement (bandeau +
     // déduplication via localStorage dans UpdateBanner.tsx) : à exclure ici
     // comme il l'était déjà de MOBILE_VISIBLE_TYPES.
+    // Alignement (4 nov.) : la cloche affichait « 1 » alors que le panneau
+    // était vide — les notifications de cartes de projets internes
+    // (internal_task, internal_task_message) étaient comptées ici mais
+    // masquées par la liste (voir TYPES_ALERTE_TACHE, NotificationsView.tsx).
+    // Les deux listes d'exclusion doivent rester identiques.
     const [{ count }, { count: mobileCount }] = await Promise.all([
       supabase
         .from('notifications')

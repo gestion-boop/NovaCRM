@@ -1149,7 +1149,12 @@ function App() {
           // quel que soit son réglage. /85 et /97 ramenés à /35 et /55 :
           // teinte toujours plus marquée hors Accueil, mais le curseur
           // redevient réellement perceptible partout.
-          bgImage ? (currentNav === 'accueil' ? 'bg-[#071015]/35' : 'bg-[#071015]/55') : 'bg-[#071015]'
+          // Fond/voile : avec une photo, le voile est posé sur TOUT l'écran
+          // par la couche fixe `nv-veil` (portail ci-dessous) et non plus sur
+          // <main> seul — sinon, avec le thème NovaVisio (dégradé bleu opaque),
+          // le bleu s'arrêtait net sous la barre du haut / au-dessus de la
+          // barre du bas et laissait voir la photo en bandes (4 nov.).
+          bgImage ? 'bg-transparent' : 'bg-[#071015]'
         }`} ref={mainRef}>
           {/* Ticket #17 : ce fond n'apparaissait pas sur mobile — un ancêtre
               du layout applique une transformation CSS (animations de page,
@@ -1167,6 +1172,12 @@ function App() {
                 backgroundImage: `url(${bgImage})`,
                 opacity: bgOpacity / 100,
               }}
+            />,
+            document.body
+          )}
+          {bgImage && createPortal(
+            <div
+              className={`nv-veil fixed inset-0 pointer-events-none z-0 ${currentNav === 'accueil' ? 'bg-[#071015]/35' : 'bg-[#071015]/55'}`}
             />,
             document.body
           )}
