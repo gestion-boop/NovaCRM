@@ -1167,7 +1167,7 @@ function App() {
               // `nv-wallpaper` : cible dédiée pour la reprise de contraste
               // appliquée à la photo en mode jour (voir index.css) — le voile
               // clair posé par <main> la délave davantage qu'un voile sombre.
-              className="nv-wallpaper fixed inset-0 pointer-events-none z-0 transition-opacity duration-300 bg-cover bg-center bg-no-repeat no-invert"
+              className="nv-wallpaper nv-plein-ecran fixed pointer-events-none z-0 transition-opacity duration-300 bg-cover bg-center bg-no-repeat no-invert"
               style={{
                 backgroundImage: `url(${bgImage})`,
                 opacity: bgOpacity / 100,
@@ -1177,7 +1177,7 @@ function App() {
           )}
           {bgImage && createPortal(
             <div
-              className={`nv-veil fixed inset-0 pointer-events-none z-0 ${currentNav === 'accueil' ? 'bg-[#071015]/35' : 'bg-[#071015]/55'}`}
+              className={`nv-veil nv-plein-ecran fixed pointer-events-none z-0 ${currentNav === 'accueil' ? 'bg-[#071015]/35' : 'bg-[#071015]/55'}`}
             />,
             document.body
           )}

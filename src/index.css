@@ -553,6 +553,20 @@ body {
   color: var(--ink-1);
 }
 
+/* Fond et voile « plein écran » (5 nov., iPhone installé) : `inset: 0` s'arrête
+   à la hauteur de mise en page, plus courte que l'écran réel (zone de l'indicateur
+   d'accueil en bas) — la photo laissait une bande unie sous la barre du bas.
+   On prolonge la couche sous la zone de sécurité et on lui impose au moins la
+   hauteur « grande » du viewport. */
+.nv-plein-ecran {
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+  min-height: 100vh;
+  min-height: 100lvh;
+}
+
 /* ── 4. Fond d'écran et voile ────────────────────────────────────────────── */
 /* La photo de fond (App.tsx, portail `position:fixed` injecté dans <body>)
    est peinte sous <main>, qui pose par-dessus un voile semi-transparent
