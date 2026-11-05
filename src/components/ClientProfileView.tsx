@@ -799,6 +799,17 @@ export default function ClientProfileView({
   }, [clientId]);
 
   const isSharedWithSomeone = shares.length > 0;
+  // Chat du dossier partagé : réservé aux personnes de la MÊME société que le
+  // client (la base l'impose aussi, voir migration 20261105120000). Les super
+  // admins, présents dans toutes les sociétés, restent autorisés.
+  const peutDiscuterDossier = Boolean(
+    isSuperAdmin || (client?.agencyId && userProfile?.agencyIds?.includes(client.agencyId))
+  );
+  const idsMemeSociete = new Set(colleagues.map((m) => m.id));
+  const participantsChat = shares
+    .flatMap((s) => [s.sharedBy, s.sharedWith])
+    .filter((id, i, tous) => id !== currentUserId && tous.indexOf(id) === i && idsMemeSociete.has(id))
+    .map((id) => TEAM_MEMBERS.find((m) => m.id === id)?.name || 'Utilisateur');
   const isSharedForMe = shares.some((s) => s.sharedWith === currentUserId || s.sharedBy === currentUserId);
 
   // Ticket #55 : quand l'un des deux côtés d'un partage ajoute une note/un
@@ -816,8 +827,8 @@ export default function ClientProfileView({
   }) => {
     const recipients = new Set<string>();
     shares.forEach((s) => {
-      if (s.sharedBy !== currentUserId) recipients.add(s.sharedBy);
-      if (s.sharedWith !== currentUserId) recipients.add(s.sharedWith);
+      if (s.sharedBy !== currentUserId && idsMemeSociete.has(s.sharedBy)) recipients.add(s.sharedBy);
+      if (s.sharedWith !== currentUserId && idsMemeSociete.has(s.sharedWith)) recipients.add(s.sharedWith);
     });
     const link = `/clients/${clientId}?tab=chat`;
     for (const uid of recipients) {
@@ -3544,10 +3555,10 @@ export default function ClientProfileView({
             {[
               { id: 'rdv', label: 'Tâches' },
               { id: 'agenda', label: 'RDV' },
+              ...(isSharedWithSomeone && peutDiscuterDossier ? [{ id: 'chat', label: 'Chat' }] : []),
               { id: 'notes', label: 'Notes' },
               { id: 'emails', label: 'Emails' },
               { id: 'documents', label: 'Documents' },
-              ...(isSharedWithSomeone ? [{ id: 'chat', label: 'Chat' }] : []),
               ...(guestAccess ? [{ id: 'espace-client', label: 'Espace client' }] : []),
             ].map(tab => (
               <button
@@ -4458,6 +4469,12 @@ export default function ClientProfileView({
             )}
             {activeTab === 'chat' && (
               <div className="flex flex-col h-full min-h-[420px] animate-fade-in">
+                <div className="flex items-center gap-2 pb-3 text-[11px] text-slate-400">
+                  <MessageSquare className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
+                  <span className="truncate">
+                    Discussion avec {participantsChat.length ? participantsChat.join(', ') : 'les personnes invitées sur ce dossier'} · uniquement des membres de la société du client
+                  </span>
+                </div>
                 <div ref={chatScrollRef} className="flex-1 overflow-y-auto custom-scrollbar space-y-1 pb-4">
                   {chatLoading ? (
                     <div className="p-12 text-center text-slate-500">Chargement du chat...</div>
