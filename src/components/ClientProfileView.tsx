@@ -3555,7 +3555,7 @@ export default function ClientProfileView({
             {[
               { id: 'rdv', label: 'Tâches' },
               { id: 'agenda', label: 'RDV' },
-              ...(isSharedWithSomeone && peutDiscuterDossier ? [{ id: 'chat', label: 'Chat' }] : []),
+              ...(peutDiscuterDossier ? [{ id: 'chat', label: 'Chat' }] : []),
               { id: 'notes', label: 'Notes' },
               { id: 'emails', label: 'Emails' },
               { id: 'documents', label: 'Documents' },
@@ -4467,7 +4467,22 @@ export default function ClientProfileView({
                 )}
               </div>
             )}
-            {activeTab === 'chat' && (
+            {activeTab === 'chat' && !isSharedWithSomeone && (
+              <div className="flex flex-col items-center justify-center gap-3 min-h-[320px] p-8 text-center border border-dashed border-[#144447]/60 rounded-2xl bg-[#07191b] animate-fade-in">
+                <MessageSquare className="w-9 h-9 text-[#F7BC5F]" />
+                <p className="text-sm font-semibold text-white">Aucune personne invitée sur ce dossier</p>
+                <p className="text-xs text-slate-400 max-w-sm">Partagez la fiche avec un collègue de votre société pour discuter ensemble ici.</p>
+                <button
+                  type="button"
+                  onClick={() => setShowShareModal(true)}
+                  className="px-4 py-2 rounded-xl bg-[#F7BC5F] hover:bg-[#F9C977] text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  Partager la fiche
+                </button>
+              </div>
+            )}
+            {activeTab === 'chat' && isSharedWithSomeone && (
               <div className="flex flex-col h-full min-h-[420px] animate-fade-in">
                 <div className="flex items-center gap-2 pb-3 text-[11px] text-slate-400">
                   <MessageSquare className="w-3.5 h-3.5 text-[#F7BC5F] shrink-0" />
