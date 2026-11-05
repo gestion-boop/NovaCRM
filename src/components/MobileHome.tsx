@@ -16,7 +16,6 @@ import { useAuth } from '@/context/AuthContext';
 import { useAppUpdateStatus } from '@/lib/updateStatus';
 import { estDossierReserveConseilsFinances, estAgenceConseilsFinances } from '@/lib/dossiersConseilsFinances';
 import { estAgenceImmosphera, estBlocNotes, estDossierImmosphera, estDossierPasserelle } from '@/lib/tuilesAccueilVisibles';
-import { TEAM_MEMBERS } from '@/data/teamMembers';
 import { getCachedAccessToken, requestWorkspaceAccessToken, fetchGoogleCalendarEvents } from '@/lib/workspace';
 import { prochainRendezVous, texteProchainGeste, type RendezVousProchain } from '@/lib/prochainGeste';
 import { lireDispositionAgence, lireHorodatageLocal } from '@/lib/dispositionAccueil';
@@ -271,16 +270,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     return () => { cancelled = true; };
   }, []);
 
-  // ── Avatar & agence ───────────────────────────────────────────────────
-  // Recherche par ADRESSE E-MAIL et non par `id` : les identifiants de
-  // teamMembers.ts ont été resynchronisés le 31/08/2026, mais l'e-mail reste
-  // le seul repère stable entre ce fichier d'habillage et les vrais comptes.
-  // C'est ce qui privait Natacha de sa photo de profil.
-  const teamMember = TEAM_MEMBERS.find(
-    (m) => m.email.toLowerCase() === (currentUser?.email || '').toLowerCase(),
-  ) || TEAM_MEMBERS.find((m) => m.id === currentUser?.uid);
-  const avatarUrl = teamMember?.avatarUrl || currentUser?.photoURL || null;
-  const initials = (firstName || 'U').charAt(0).toUpperCase();
+  // ── Agence ────────────────────────────────────────────────────────────
   const normalizeAgencyName = (v?: string) => (v || '').trim().toLowerCase();
   const agencyLogo = AGENCY_LOGO_BY_NAME[normalizeAgencyName(activeAgency?.name)] || AGENCY_LOGO_BY_NAME['novasphere'];
 
@@ -913,52 +903,36 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {/* Clochette tricolore mobile : ROUGE (Màj/Retard), ORANGE (notifs/messages), VERT (Tout est bon) */}
+          {/* Clochette mobile (remplace l'ancien rond de profil) : ROUGE seulement
+              s'il y a des messages reçus / réservations caméra non lus (mêmes
+              types que la liste du panneau), VERT sinon. Une mise à jour en
+              attente s'ajoute par un anneau ORANGE qui clignote lentement,
+              quelle que soit la couleur de la cloche. */}
           {onOpenNotifications && (() => {
-            const hasRed = Boolean(isUpdatePending || (unreadRemindersCount && unreadRemindersCount > 0));
-            const hasOrange = !hasRed && ((unreadNotificationsCount || 0) + (unreadMessagesCount || 0) > 0);
-            const isGood = !hasRed && !hasOrange;
+            const rouge = (unreadNotificationsCount || 0) > 0;
             return (
               <button
                 onClick={onOpenNotifications}
-                title="Notifications"
+                title={isUpdatePending ? 'Notifications · mise à jour disponible' : 'Notifications'}
+                aria-label="Notifications"
                 className={`relative w-11 h-11 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 ${
-                  hasRed
+                  rouge
                     ? 'bg-rose-500/20 text-rose-400 border-rose-500/50 hover:bg-rose-500/30'
-                    : hasOrange
-                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30'
-                      : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35 hover:bg-emerald-500/25'
+                    : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35 hover:bg-emerald-500/25'
                 }`}
               >
                 <Bell className="w-5 h-5" />
-                {hasRed && (
-                  <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-rose-500 rounded-full ring-2 ring-[#050d0f] shadow-xs animate-pulse" />
+                {rouge && (
+                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-500 ring-2 ring-[#050d0f] text-white text-[9px] font-bold flex items-center justify-center">
+                    {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                  </span>
                 )}
-                {hasOrange && (
-                  <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-amber-500 rounded-full ring-2 ring-[#050d0f] shadow-xs" />
-                )}
-                {isGood && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full ring-2 ring-[#050d0f] shadow-xs" />
+                {isUpdatePending && (
+                  <span className="pointer-events-none absolute -inset-1 rounded-full border-2 border-orange-400 shadow-[0_0_10px_rgba(251,146,60,0.7)] animate-[pulse_2.8s_ease-in-out_infinite]" />
                 )}
               </button>
             );
           })()}
-          <button
-            onClick={() => onNavigate('parametres')}
-            className="relative w-11 h-11 rounded-full overflow-hidden border-2 border-teal-500/40 hover:border-[#F7BC5F]/70 shrink-0 bg-black/40 shadow-sm active:scale-95 transition-all cursor-pointer"
-            title="Mon profil"
-          >
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-white font-bold">{initials}</div>
-            )}
-            <img
-              src={agencyLogo}
-              alt=""
-              className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-[#071015] bg-[#071015] object-contain shadow-xs"
-            />
-          </button>
         </div>
       </div>
 
