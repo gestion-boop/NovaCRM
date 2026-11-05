@@ -893,7 +893,13 @@ export const Pipeline: React.FC<PipelineProps> = ({ onSelectContact, initialStag
 
       // Cloisonnement personnel : dans les pipelines personnels (hors Pipelines Transactions Immosphera),
       // les contacts qui n'appartiennent pas à l'utilisateur sont retirés de ce pipeline.
-      if (!estTransactions) {
+      // Pipeline sans propriétaire (pipeline commun de la société, ex. « Pipeline
+      // Novavisio principale ») : pas de cloisonnement par personne ici — c'est
+      // la sécurité de la base (RLS) qui décide ce que chacun voit. Avant, le
+      // propriétaire retombait sur l'utilisateur connecté : un client mis dans
+      // ce pipeline par un autre (assigné à Natacha, placé par Sylvain)
+      // n'apparaissait jamais (5 nov.).
+      if (!estTransactions && activePipeline.proprietaire) {
         const contact = contactsById.get(deal.contactId);
         const appartientAUtilisateur =
           (deal.advisorId && (deal.advisorId === proprietaire || deal.advisorId === currentUid || deal.advisorId.toLowerCase() === currentEmail)) ||

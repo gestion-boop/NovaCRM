@@ -18,6 +18,7 @@ import TransactionChecklistModal, {
 import { ClipboardList } from 'lucide-react';
 import { couleurEtapeNovavisio, estAgenceNovavisio } from '@/lib/couleursNovavisio';
 import { clicMailCrm } from '@/lib/composerMail';
+import { Linkified, contientUrl } from '@/components/Linkified';
 import { sectionsQuestionnaire, telechargerQuestionnairePdf } from '@/lib/questionnairePdf';
 import { ChevronLeft, ChevronDown, Plus, Mail, Phone, Calendar, User, UserCheck, UserPlus, Pencil, Trash2, CheckCircle, Circle, FileEdit, Save, Clock, Check, CheckCheck, Mic, MicOff, Square, Pin, GripVertical, MessageSquare, X, FileText, Upload, Download, Folder, Eye, Lock, Share2, Send, UserX, Smile, Image as ImageIcon, Video as VideoIcon, Paperclip, ClipboardCheck, Landmark, Archive, ArchiveRestore, Copy, Loader2, ShieldCheck, Flame, Sun, Snowflake, MoreVertical, Sparkles } from 'lucide-react';
 
@@ -704,6 +705,8 @@ export default function ClientProfileView({
 
   // Notes tab states
   const [contactComments, setContactComments] = useState(client?.comments || '');
+  const [commentaireEnEdition, setCommentaireEnEdition] = useState(false);
+  const commentaireRef = useRef<HTMLTextAreaElement>(null);
   const [savedCommentsSuccess, setSavedCommentsSuccess] = useState(false);
   const [clientNotes, setClientNotes] = useState<ClientNoteItem[]>([]);
   const [notesLoading, setNotesLoading] = useState(true);
@@ -3047,13 +3050,31 @@ export default function ClientProfileView({
                 )}
               </button>
             </div>
-            <textarea
-              rows={3}
-              value={contactComments}
-              onChange={(e) => setContactComments(e.target.value)}
-              placeholder="Éléments clés du dossier, situation, souhaits particuliers..."
-              className="w-full bg-[#030d0f] border border-[#153c3f] focus:border-[#F7BC5F] rounded-xl p-2.5 text-xs text-white focus:outline-none placeholder-slate-500 resize-none leading-relaxed transition-colors"
-            />
+            {/* Hors saisie, un commentaire contenant une adresse web s'affiche avec
+                le lien souligné et cliquable ; un clic ailleurs repasse en édition. */}
+            {commentaireEnEdition || !contientUrl(contactComments) ? (
+              <textarea
+                ref={commentaireRef}
+                rows={3}
+                value={contactComments}
+                onChange={(e) => setContactComments(e.target.value)}
+                onFocus={() => setCommentaireEnEdition(true)}
+                onBlur={() => setCommentaireEnEdition(false)}
+                placeholder="Éléments clés du dossier, situation, souhaits particuliers..."
+                className="w-full bg-[#030d0f] border border-[#153c3f] focus:border-[#F7BC5F] rounded-xl p-2.5 text-xs text-white focus:outline-none placeholder-slate-500 resize-none leading-relaxed transition-colors"
+              />
+            ) : (
+              <div
+                role="textbox"
+                tabIndex={0}
+                title="Cliquer pour modifier"
+                onClick={() => { setCommentaireEnEdition(true); setTimeout(() => commentaireRef.current?.focus(), 0); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { setCommentaireEnEdition(true); setTimeout(() => commentaireRef.current?.focus(), 0); } }}
+                className="w-full min-h-[4.6rem] max-h-40 overflow-y-auto bg-[#030d0f] border border-[#153c3f] hover:border-[#F7BC5F]/60 rounded-xl p-2.5 text-xs text-white leading-relaxed whitespace-pre-wrap break-words cursor-text select-text transition-colors"
+              >
+                <Linkified text={contactComments} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -3949,7 +3970,7 @@ export default function ClientProfileView({
                                     </div>
 
                                     <h4 className="font-bold text-white text-sm pl-7">{n.title}</h4>
-                                    <p className="text-xs text-slate-300 whitespace-pre-line leading-relaxed pl-7">{n.content}</p>
+                                    <p className="text-xs text-slate-300 whitespace-pre-line leading-relaxed pl-7 select-text"><Linkified text={n.content} /></p>
                                   </div>
                                 )}
                               </Draggable>
