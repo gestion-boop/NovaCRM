@@ -4,7 +4,7 @@ import {
   DragOverlay,
   DragStartEvent,
   DragEndEvent,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
@@ -225,7 +225,7 @@ const TaskCard = React.memo<{
       {...(selectable ? {} : attributes)}
       {...(selectable ? {} : listeners)}
       onClick={() => (selectable ? onToggleSelect?.(task.id) : onOpen(task))}
-      className={`relative p-3 rounded-xl bg-[#0b1719] border cursor-pointer transition-colors duration-150 touch-none select-none ${
+      className={`relative p-3 rounded-xl bg-[#0b1719] border cursor-pointer transition-colors duration-150 touch-auto select-none ${
         isDragging ? 'opacity-0' : selected ? 'border-[#F7BC5F] shadow-[0_0_0_2px_rgba(247,188,95,0.4)]' : 'border-white/10 hover:border-[#F7BC5F]/40 hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.5)]'
       }`}
     >
@@ -460,8 +460,14 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({
   };
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+    // Téléphone (5 nov.) : « on ne peut pas déplacer les cartes, l'écran est
+    // figé ». PointerSensor captait aussi le toucher dès le premier contact
+    // (donc plus aucun défilement) ; MouseSensor ne prend que la souris, et le
+    // toucher revient à TouchSensor : appui court = on fait défiler la page
+    // (verticalement comme horizontalement), appui maintenu ~0,2 s = la carte
+    // se « décolle » et se déplace. Même réglage que Pipeline.tsx.
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 10 } })
   );
 
   // Signalé : "ça saccade encore, va-et-vient, la carte ne se pose pas
@@ -668,10 +674,18 @@ export const InternalProjectBoard: React.FC<InternalProjectBoardProps> = ({
           // automatique est donc retabli.
           sensors={sensors}
           collisionDetection={collisionDetectionStrategy}
-          onDragStart={handleDragStart}
+          // Défilement automatique PENDANT le glissement (haut/bas comme
+          // gauche/droite) : amener la carte près du bord de l'écran fait
+          // défiler la page, pour atteindre une colonne ou un rang hors vue.
+          autoScroll={{ threshold: { x: 0.15, y: 0.2 }, acceleration: 14 }}
+          onDragStart={(e) => {
+            try { navigator.vibrate?.(12); } catch { /* ignore */ }
+            handleDragStart(e);
+          }}
+          onDragCancel={() => setActiveDragTask(null)}
           onDragEnd={(e) => void handleDragEnd(e)}
         >
-          <div className="flex gap-3 overflow-x-auto pb-4 -webkit-overflow-scrolling-touch touch-pan-x">
+          <div className="flex gap-3 overflow-x-auto pb-4 -webkit-overflow-scrolling-touch touch-auto">
             {COLUMNS.map((column) => (
               <BoardColumn
                 key={column.id}
