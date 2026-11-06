@@ -765,9 +765,12 @@ export default function ClientProfileView({
     const nom = assignableUsers.find((u) => u.id === client?.assignedTo)?.name || '';
     return nom.trim().split(/\s+/)[0] || '';
   })();
-  const colleagues = TEAM_MEMBERS.filter(
-    (m) => m.agencyId === client?.agencyId && m.id !== currentUserId
-  );
+  // Personnes de la société du client, depuis les vrais comptes (et non plus la
+  // liste figée de teamMembers.ts, où Josian Fernandez manquait : impossible
+  // de le choisir au partage, 5 nov.).
+  const colleagues = assignableUsers.filter((m) => m.id !== currentUserId);
+  const nomPersonne = (id: string) =>
+    assignableUsers.find((m) => m.id === id)?.name || TEAM_MEMBERS.find((m) => m.id === id)?.name || 'Utilisateur';
 
   const loadShares = async () => {
     if (!client) { setShares([]); setSharesLoading(false); return; }
@@ -810,7 +813,7 @@ export default function ClientProfileView({
   const participantsChat = shares
     .flatMap((s) => [s.sharedBy, s.sharedWith])
     .filter((id, i, tous) => id !== currentUserId && tous.indexOf(id) === i && idsMemeSociete.has(id))
-    .map((id) => TEAM_MEMBERS.find((m) => m.id === id)?.name || 'Utilisateur');
+    .map((id) => nomPersonne(id));
   const isSharedForMe = shares.some((s) => s.sharedWith === currentUserId || s.sharedBy === currentUserId);
 
   // Ticket #55 : quand l'un des deux côtés d'un partage ajoute une note/un
@@ -5133,10 +5136,9 @@ export default function ClientProfileView({
                   <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">Partagé avec</span>
                   {shares.map((s) => {
                     const otherId = s.sharedWith === currentUserId ? s.sharedBy : s.sharedWith;
-                    const member = TEAM_MEMBERS.find((m) => m.id === otherId);
                     return (
                       <div key={s.id} className="flex items-center justify-between bg-[#0a1e20] border border-[#144447]/60 rounded-xl px-3 py-2">
-                        <span className="text-sm text-slate-200 font-semibold">{member?.name || 'Utilisateur'}</span>
+                        <span className="text-sm text-slate-200 font-semibold">{nomPersonne(otherId)}</span>
                         <button
                           onClick={() => void handleUnshare(s.id)}
                           className="p-1.5 text-rose-400 hover:text-rose-300 rounded-lg hover:bg-rose-500/10"
