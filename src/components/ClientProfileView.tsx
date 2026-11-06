@@ -19,6 +19,7 @@ import { ClipboardList } from 'lucide-react';
 import { couleurEtapeNovavisio, estAgenceNovavisio } from '@/lib/couleursNovavisio';
 import { clicMailCrm } from '@/lib/composerMail';
 import { Linkified, contientUrl } from '@/components/Linkified';
+import MenuTrombone from '@/components/MenuTrombone';
 import { sectionsQuestionnaire, telechargerQuestionnairePdf } from '@/lib/questionnairePdf';
 import { ChevronLeft, ChevronDown, Plus, Mail, Phone, Calendar, User, UserCheck, UserPlus, Pencil, Trash2, CheckCircle, Circle, FileEdit, Save, Clock, Check, CheckCheck, Mic, MicOff, Square, Pin, GripVertical, MessageSquare, X, FileText, Upload, Download, Folder, Eye, Lock, Share2, Send, UserX, Smile, Image as ImageIcon, Video as VideoIcon, Paperclip, ClipboardCheck, Landmark, Archive, ArchiveRestore, Copy, Loader2, ShieldCheck, Flame, Sun, Snowflake, MoreVertical, Sparkles } from 'lucide-react';
 
@@ -4717,15 +4718,13 @@ export default function ClientProfileView({
 
                   <div className="grid grid-cols-3 items-center">
                     <div className="flex items-center gap-2 justify-self-start">
-                      <button
-                        type="button"
-                        onClick={() => chatImageInputRef.current?.click()}
+                      <MenuTrombone
+                        toutesLargeurs
+                        grand
                         disabled={uploadingChatMedia || isRecordingChat}
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
-                        title="Envoyer une image"
-                      >
-                        <ImageIcon className="w-5 h-5" />
-                      </button>
+                        onPhoto={() => chatImageInputRef.current?.click()}
+                        onVideo={() => chatVideoInputRef.current?.click()}
+                      />
                       <div className="relative">
                         <button
                           type="button"
@@ -4763,15 +4762,6 @@ export default function ClientProfileView({
                     </button>
 
                     <div className="flex items-center gap-2 justify-self-end">
-                      <button
-                        type="button"
-                        onClick={() => chatVideoInputRef.current?.click()}
-                        disabled={uploadingChatMedia || isRecordingChat}
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40"
-                        title="Envoyer une vidéo (150 Mo max)"
-                      >
-                        <VideoIcon className="w-5 h-5" />
-                      </button>
                       <button
                         type="submit"
                         disabled={chatSending || !chatInput.trim() || isRecordingChat}

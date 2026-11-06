@@ -36,6 +36,7 @@ import {
 } from '@/lib/affichageFil';
 import { fermerNotificationsSysteme } from '@/lib/notificationsLues';
 import { LiveVoiceWaveform } from '@/components/LiveVoiceWaveform';
+import MenuTrombone from '@/components/MenuTrombone';
 
 const MAX_VIDEO_SIZE = 150 * 1024 * 1024; // 150 Mo — même plafond que ClientProfileView.tsx
 
@@ -7035,33 +7036,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       className="flex-1 min-w-0 resize-none bg-transparent border-0 px-2 py-1.5 text-sm text-white placeholder-slate-400 leading-relaxed focus:outline-none disabled:opacity-40"
                     />
 
-                    <button
-                      type="button"
-                      onClick={() => convImageInputRef.current?.click()}
+                    <MenuTrombone
                       disabled={uploadingConvMedia || isRecordingConv}
-                      className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
-                      title="Envoyer une image"
-                    >
-                      <ImageIcon className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => convFileInputRef.current?.click()}
-                      disabled={uploadingConvMedia || isRecordingConv}
-                      className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
-                      title="Envoyer un PDF"
-                    >
-                      <Paperclip className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => convVideoInputRef.current?.click()}
-                      disabled={uploadingConvMedia || isRecordingConv}
-                      className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
-                      title="Envoyer une vidéo (150 Mo max)"
-                    >
-                      <VideoIcon className="w-4 h-4" />
-                    </button>
+                      onPhoto={() => convImageInputRef.current?.click()}
+                      onDocument={() => convFileInputRef.current?.click()}
+                      onVideo={() => convVideoInputRef.current?.click()}
+                    />
 
                     <div className="relative shrink-0" ref={convScheduleRef}>
                       <button
@@ -8025,33 +8005,12 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   className="hidden"
                   onChange={(e) => void handleChannelVideoPick(e.target.files?.[0] || null)}
                 />
-                <button
-                  type="button"
-                  onClick={() => channelImageInputRef.current?.click()}
+                <MenuTrombone
                   disabled={uploadingChannelMedia || isRecordingChannel}
-                  title="Envoyer une image"
-                  className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
-                >
-                  <ImageIcon className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => channelFileInputRef.current?.click()}
-                  disabled={uploadingChannelMedia || isRecordingChannel}
-                  title="Envoyer un PDF"
-                  className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
-                >
-                  <Paperclip className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => channelVideoInputRef.current?.click()}
-                  disabled={uploadingChannelMedia || isRecordingChannel}
-                  title="Envoyer une vidéo (150 Mo max)"
-                  className="w-8 h-8 rounded-xl hidden sm:flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-40 shrink-0"
-                >
-                  <VideoIcon className="w-4 h-4" />
-                </button>
+                  onPhoto={() => channelImageInputRef.current?.click()}
+                  onDocument={() => channelFileInputRef.current?.click()}
+                  onVideo={() => channelVideoInputRef.current?.click()}
+                />
                 <div className="relative shrink-0" ref={channelScheduleRef}>
                   <button
                     type="button"
