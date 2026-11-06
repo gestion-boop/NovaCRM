@@ -4497,13 +4497,14 @@ export default function ClientProfileView({
                 <div ref={chatScrollRef} className="flex-1 overflow-y-auto custom-scrollbar space-y-1 pb-4">
                   {chatLoading ? (
                     <div className="p-12 text-center text-slate-500">Chargement du chat...</div>
-                  ) : chatMessages.length === 0 ? (
+                  ) : chatMessages.filter((m) => !m.isDeleted).length === 0 ? (
                     <div className="p-12 text-center text-slate-500 border border-dashed border-[#144447]/60 rounded-2xl bg-[#07191b] flex flex-col items-center gap-2">
                       <MessageSquare className="w-8 h-8 text-slate-600" />
                       <span className="text-xs">Aucun message. Échangez ici avec la personne avec qui cette fiche est partagée.</span>
                     </div>
                   ) : (
-                    chatMessages.map((m) => {
+                    // Un message supprimé disparaît de la conversation (pas de « Message supprimé »).
+                    chatMessages.filter((m) => !m.isDeleted).map((m) => {
                       const mine = m.senderId === currentUserId;
                       const otherRead = m.readBy.some((r) => r.userId !== currentUserId);
                       const grouped: Record<string, ChatReaction[]> = {};
