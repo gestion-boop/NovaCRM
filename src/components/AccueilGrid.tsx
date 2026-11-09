@@ -723,6 +723,9 @@ const NOVAVISIO_EXTRA_TILE_IDS = ['carte-novavisio'];
 // `externalUrl` par `embedUrl` sur cette tuile — le reste est déjà en place.
 const CONSEILS_EXTRA_TILE_IDS = ['conseils-aura'];
 const NOVAGEN_TILE_ID = 'novagen';
+// NovaGen : société Novavisio uniquement, visible par Sylvain (super admin) et
+// Josian Fernandez (9 nov.).
+const NOVAGEN_UIDS_AUTORISES = new Set(['2294be9f-d5ef-4afb-add4-e766cd826d79']);
 
 const IMMOSPHERA_EXTRA_TILE_IDS = [
   'immosphera-academy',
@@ -1339,6 +1342,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Tuiles masquées cloisonnées par société : posé AVANT toute lecture de la liste.
   definirAgenceMasquees(activeAgency?.id);
   const isAdmin = Boolean(isSuperAdmin || userProfile?.role === 'super_admin' || userProfile?.role === 'admin');
+  const peutVoirNovagen = Boolean(isSuperAdmin || userProfile?.role === 'super_admin' || (currentUser?.uid && NOVAGEN_UIDS_AUTORISES.has(currentUser.uid)));
   // Vraie sélection globale, jamais substituée — voir le commentaire sur
   // l'import plus haut. Ne sert qu'au garde-fou dans enregistrerVerrous.
   const { activeAgency: agenceActiveReelle } = useAgenceReelle();
@@ -1724,8 +1728,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       const extraTiles = INITIAL_TILES.filter((t) => missingConseils.includes(t.id));
       base = [...base, ...extraTiles];
     }
-    // Tuile NovaGen : UNIQUEMENT pour le super admin
-    if (ajouterManquantes && (isSuperAdmin || userProfile?.role === 'super_admin') && estAbsent(NOVAGEN_TILE_ID)) {
+    // Tuile NovaGen : UNIQUEMENT Novavisio, pour Sylvain et Josian
+    if (ajouterManquantes && isNovavisio && peutVoirNovagen && estAbsent(NOVAGEN_TILE_ID)) {
       const novagenTile = INITIAL_TILES.find((t) => t.id === NOVAGEN_TILE_ID);
       if (novagenTile) base = [...base, novagenTile];
     }
@@ -3618,7 +3622,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     && (!IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
     && (!NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
     && (!CONSEILS_EXTRA_TILE_IDS.includes(t.id) || canSeeConseilsFinances)
-    && (t.id !== NOVAGEN_TILE_ID || Boolean(isSuperAdmin || userProfile?.role === 'super_admin'))
+    && (t.id !== NOVAGEN_TILE_ID || (estNovavisioAgency(activeAgency) && peutVoirNovagen))
     && ((t.id !== 'annonce' && t.id !== 'nova-lock-spacer') || canSeeAnnonceTile)
     && (!idsMasques.has(t.id) || findInitialTile(t.id)?.locked === true || (t.id === 'reserver-camera' && !canSeeConseilsFinances) || (t.id === 'statistiques-etiquettes' && canSeeImmospheraExtras));
 

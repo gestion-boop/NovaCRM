@@ -31,7 +31,7 @@ export interface VisibiliteTuiles {
   banquesAssurances: boolean;
   dossierImmosphera: boolean;
   annonce: boolean;
-  /** Tuile NovaGen : super admin seulement. */
+  /** Tuile NovaGen : Novavisio, Sylvain et Josian seulement. */
   novagen?: boolean;
   masquees: Set<string>;
 }
