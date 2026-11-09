@@ -31,6 +31,8 @@ export interface VisibiliteTuiles {
   banquesAssurances: boolean;
   dossierImmosphera: boolean;
   annonce: boolean;
+  /** Tuile NovaGen : super admin seulement. */
+  novagen?: boolean;
   masquees: Set<string>;
 }
 
@@ -146,6 +148,7 @@ function tuileVisible(tuile: TuilePartagee, visibilite: VisibiliteTuiles): boole
   if (IDS_IMMOSPHERA.has(tuile.id) && !visibilite.immosphera) return false;
   if (tuile.id === 'carte-novavisio' && !visibilite.novavisio) return false;
   if (tuile.id === 'conseils-aura' && !visibilite.conseilsFinances) return false;
+  if (tuile.id === 'novagen' && !visibilite.novagen) return false;
   if ((tuile.id === 'annonce' || tuile.id === 'nova-lock-spacer') && !visibilite.annonce) return false;
   if (visibilite.masquees.has(tuile.id) && !tuile.locked && !(tuile.id === 'reserver-camera' && !visibilite.conseilsFinances)) return false;
   return true;

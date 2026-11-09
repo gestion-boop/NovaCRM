@@ -454,6 +454,7 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     banquesAssurances: estAgenceConseilsFinances(activeAgency),
     dossierImmosphera: estAgenceImmosphera(activeAgency),
     annonce: userProfile?.role === 'super_admin' || currentUser?.uid === '3c6797de-456a-4988-8358-7e3d813e9474',
+    novagen: userProfile?.role === 'super_admin',
     masquees: idsMasques,
   }), [activeAgency, userProfile?.role, currentUser?.uid, idsMasques]);
   const espacesPartages = useMemo(() => {

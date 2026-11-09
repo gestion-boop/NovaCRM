@@ -522,6 +522,17 @@ const INITIAL_TILES: TileItemNode[] = [
     navTarget: '',
     externalUrl: 'https://conseils-finances.aura-ai.fr/',
   },
+  // NovaGen (outil de visites virtuelles et de pubs) — lien externe réservé au
+  // super admin (9 nov.). Jamais injecté chez les autres utilisateurs.
+  {
+    id: 'novagen',
+    title: 'NovaGen',
+    iconName: 'Globe',
+    gradient: 'from-[#2B899D] via-[#345C95] to-[#0B1F33]',
+    badgeCount: 0,
+    navTarget: '',
+    externalUrl: 'https://novagen-olive.vercel.app/',
+  },
   {
     id: 'immosphera-site',
     title: 'Site internet',
@@ -711,6 +722,7 @@ const NOVAVISIO_EXTRA_TILE_IDS = ['carte-novavisio'];
 // `frame-ancestors https://app.nova360.space`, il suffira de remplacer
 // `externalUrl` par `embedUrl` sur cette tuile — le reste est déjà en place.
 const CONSEILS_EXTRA_TILE_IDS = ['conseils-aura'];
+const NOVAGEN_TILE_ID = 'novagen';
 
 const IMMOSPHERA_EXTRA_TILE_IDS = [
   'immosphera-academy',
@@ -1711,6 +1723,11 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     if (missingConseils.length > 0) {
       const extraTiles = INITIAL_TILES.filter((t) => missingConseils.includes(t.id));
       base = [...base, ...extraTiles];
+    }
+    // Tuile NovaGen : UNIQUEMENT pour le super admin
+    if (ajouterManquantes && (isSuperAdmin || userProfile?.role === 'super_admin') && estAbsent(NOVAGEN_TILE_ID)) {
+      const novagenTile = INITIAL_TILES.find((t) => t.id === NOVAGEN_TILE_ID);
+      if (novagenTile) base = [...base, novagenTile];
     }
     // Tuile "Carte" (Novavisio) : UNIQUEMENT pour Novavisio
     const missingNovavisio = (ajouterManquantes && isNovavisio) ? NOVAVISIO_EXTRA_TILE_IDS.filter((id) => estAbsent(id)) : [];
@@ -3601,6 +3618,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     && (!IMMOSPHERA_EXTRA_TILE_IDS.includes(t.id) || canSeeImmospheraExtras)
     && (!NOVAVISIO_EXTRA_TILE_IDS.includes(t.id) || canSeeNovavisio)
     && (!CONSEILS_EXTRA_TILE_IDS.includes(t.id) || canSeeConseilsFinances)
+    && (t.id !== NOVAGEN_TILE_ID || Boolean(isSuperAdmin || userProfile?.role === 'super_admin'))
     && ((t.id !== 'annonce' && t.id !== 'nova-lock-spacer') || canSeeAnnonceTile)
     && (!idsMasques.has(t.id) || findInitialTile(t.id)?.locked === true || (t.id === 'reserver-camera' && !canSeeConseilsFinances) || (t.id === 'statistiques-etiquettes' && canSeeImmospheraExtras));
 
