@@ -1417,7 +1417,7 @@ function App() {
 
           {currentNav === 'support' && <SupportView />}
 
-          {currentNav === 'novagen' && <NovaGenView />}
+          {currentNav === 'novagen' && <NovaGenView onClose={() => setCurrentNav('accueil')} />}
 
           {currentNav === 'parametres' && (
             <ParametresView
