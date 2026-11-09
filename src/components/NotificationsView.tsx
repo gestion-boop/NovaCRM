@@ -47,7 +47,9 @@ import { UpdateStatusBadge } from './UpdateStatusBadge';
 import { formatBuildDate, useAppUpdateStatus, applyUpdateOnNavigation, fetchServerVersion, setServerVersion } from '@/lib/updateStatus';
 
 // Demande explicite (31 octobre) : plus d'alertes de tâches dans la clochette.
-const TYPES_ALERTE_TACHE = ['task_assigned', 'shared_task', 'task_message', 'internal_task', 'internal_task_message'];
+// Les messages et cartes des projets internes (internal_task*) y figurent de nouveau (9 nov.) :
+// la notification arrivait sur l'appareil sans jamais apparaître dans la clochette.
+const TYPES_ALERTE_TACHE = ['task_assigned', 'shared_task', 'task_message'];
 const estAlerteTache = (rawType?: string) => !!rawType && TYPES_ALERTE_TACHE.includes(rawType);
 
 interface RealNotificationRow {
@@ -654,7 +656,7 @@ export const NotificationsView: React.FC<
     // type ci-dessous et retombait sur le bucket 'support' par défaut — or
     // sur mobile, la clochette est volontairement réduite à 'chat'/'camera'
     // (voir plus bas), donc ce type disparaissait silencieusement.
-    if (['message', 'mention', 'shared_message', 'reaction', 'task_message', 'announcement', 'daily_summary', 'shared_note', 'shared_chat_message', 'client_message', 'confidential_questionnaire_completed'].includes(type)) {
+    if (['message', 'mention', 'shared_message', 'reaction', 'task_message', 'announcement', 'daily_summary', 'shared_note', 'shared_chat_message', 'client_message', 'confidential_questionnaire_completed', 'internal_task', 'internal_task_message'].includes(type)) {
       return 'chat';
     }
     return 'support';
