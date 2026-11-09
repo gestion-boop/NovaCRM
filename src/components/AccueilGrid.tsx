@@ -42,6 +42,7 @@ import {
 } from '@/lib/dispositionAccueil';
 import { EVENEMENT_OUVRIR_DOSSIER_ACCUEIL, consommerOuvrirDossierAccueil } from '@/lib/rechercheGlobale';
 import agencyImmosphera from '@/assets/agency-immosphera.png';
+import novagenLogo from '@/assets/novagen-logo.png';
 import { chargerMasqueesDepuisServeur, masquerTuile, lireMasquees, reafficherTuile, definirAgenceMasquees } from '@/lib/tuilesMasquees';
 import NovaMascotte from './NovaMascotte';
 import { NAV_ITEMS } from './Sidebar';
@@ -528,6 +529,7 @@ const INITIAL_TILES: TileItemNode[] = [
     id: 'novagen',
     title: 'NovaGen',
     iconName: 'Globe',
+    imageUrl: novagenLogo,
     gradient: 'from-[#2B899D] via-[#345C95] to-[#0B1F33]',
     badgeCount: 0,
     navTarget: '',
