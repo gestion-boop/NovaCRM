@@ -3299,6 +3299,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       // une seule fois par ParametresView à son montage.
       try { sessionStorage.setItem('novaOpenParametresSection', 'announcements'); } catch { /* stockage indisponible, tant pis */ }
       navigateToTile('parametres');
+    } else if (tile.id === 'novagen') {
+      // NovaGen s'affiche dans le CRM (cadre intégré) ; ses grilles déjà
+      // enregistrées portent encore l'ancien lien externe.
+      navigateToTile('novagen');
     } else if (tile.externalUrl) {
       let url = tile.externalUrl.trim();
       if (!url.startsWith('http://') && !url.startsWith('https://')) {

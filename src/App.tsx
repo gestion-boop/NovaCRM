@@ -51,6 +51,7 @@ const CarteProspectionView = lazy(() => import('./components/CarteProspectionVie
 const AcademyView = lazy(() => import('./components/AcademyView'));
 const NotesView = lazy(() => import('./components/NotesView'));
 const SupportView = lazy(() => import('./components/SupportView'));
+const NovaGenView = lazy(() => import('./components/NovaGenView'));
 const ParametresView = lazy(() => import('./components/ParametresView'));
 const AssistantIAView = lazy(() => import('./components/AssistantIAView'));
 const ReserverCameraView = lazy(() => import('./components/ReserverCameraView'));
@@ -1415,6 +1416,8 @@ function App() {
           {currentNav === 'notes' && <NotesView />}
 
           {currentNav === 'support' && <SupportView />}
+
+          {currentNav === 'novagen' && <NovaGenView />}
 
           {currentNav === 'parametres' && (
             <ParametresView
