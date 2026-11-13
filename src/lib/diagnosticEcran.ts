@@ -1,11 +1,14 @@
 // Aide au dépannage : ouvrir l'appli avec `?diag=ecran` affiche en haut de
 // l'écran les dimensions réelles vues par le navigateur (largeur de la page,
 // de l'écran, zoom…). Sert à comprendre un affichage décalé sur un appareil
-// pliable ; sans ce paramètre, rien n'est affiché.
+// pliable ; sans ce paramètre, rien n'est affiché. Appelé uniquement pour
+// Sylvain Grazia (voir App.tsx).
 export function installerDiagnosticEcran(): void {
   try {
     if (!/[?&]diag=ecran\b/.test(window.location.search)) return;
+    if (document.getElementById('nv-diag-ecran')) return;
     const boite = document.createElement('pre');
+    boite.id = 'nv-diag-ecran';
     boite.style.cssText =
       'position:fixed;top:0;left:0;z-index:2147483647;margin:0;padding:6px 8px;max-width:100%;font:11px/1.35 monospace;color:#fff;background:rgba(190,24,93,.92);white-space:pre-wrap;pointer-events:none';
     const maj = () => {

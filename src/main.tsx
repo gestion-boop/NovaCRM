@@ -6,10 +6,8 @@ import './index.css'
 import { AuthProvider } from './context/AuthContext'
 import { rechargerSiChunkPerime } from '@/lib/chunkPerime'
 import { installerStockageSecours } from '@/lib/stockageSecours'
-import { installerDiagnosticEcran } from '@/lib/diagnosticEcran'
 
 installerStockageSecours();
-window.addEventListener('DOMContentLoaded', installerDiagnosticEcran);
 
 const queryClient = new QueryClient();
 

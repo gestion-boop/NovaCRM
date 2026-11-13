@@ -66,6 +66,7 @@ import { EVENEMENT_COMPOSER_MAIL } from './lib/composerMail';
 import { EcranErrorBoundary } from './components/EcranErrorBoundary';
 import UpdateBanner from './components/UpdateBanner';
 import { applyUpdateOnNavigation } from './lib/updateStatus';
+import { installerDiagnosticEcran } from './lib/diagnosticEcran';
 import GoogleWorkspaceStatus from './components/GoogleWorkspaceStatus';
 import AutoEnablePush from './components/AutoEnablePush';
 import EnablePushPrompt from './components/EnablePushPrompt';
@@ -102,6 +103,10 @@ function getRestoredNavigation(): { nav: string; clientId: string | null; tab?: 
 function App() {
   const [restoredNav] = useState(() => getRestoredNavigation());
   const { currentUser, userProfile, activeAgency, setActiveAgency, authLoading, internGateMessage, logout } = useAuth();
+  // Outil de diagnostic d'écran (?diag=ecran) : réservé à Sylvain Grazia.
+  useEffect(() => {
+    if (currentUser?.uid === '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29') installerDiagnosticEcran();
+  }, [currentUser?.uid]);
   const { unreadNotificationsCount, unreadMobileNotificationsCount, unreadMessagesCount, unreadMailCount, openSupportTicketsCount, refreshUnreadNotifications, refreshUnreadMail } = useDashboardStats();
   const { addContact, contacts } = useContacts();
   const { tasks = [] } = useTasks();
