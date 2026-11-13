@@ -20,6 +20,7 @@ import { couleurEtapeNovavisio, estAgenceNovavisio } from '@/lib/couleursNovavis
 import { clicMailCrm } from '@/lib/composerMail';
 import { Linkified, contientUrl } from '@/components/Linkified';
 import MenuTrombone from '@/components/MenuTrombone';
+import { DECISIONS_BANQUE, estDecisionBanque, type DecisionBanque } from '@/lib/decisionBanque';
 import { sectionsQuestionnaire, telechargerQuestionnairePdf } from '@/lib/questionnairePdf';
 import { ChevronLeft, ChevronDown, Plus, Mail, Phone, Calendar, User, UserCheck, UserPlus, Pencil, Trash2, CheckCircle, Circle, FileEdit, Save, Clock, Check, CheckCheck, Mic, MicOff, Square, Pin, GripVertical, MessageSquare, X, FileText, Upload, Download, Folder, Eye, Lock, Share2, Send, UserX, Smile, Image as ImageIcon, Video as VideoIcon, Paperclip, ClipboardCheck, Landmark, Archive, ArchiveRestore, Copy, Loader2, ShieldCheck, Flame, Sun, Snowflake, MoreVertical, Sparkles } from 'lucide-react';
 
@@ -489,6 +490,17 @@ export default function ClientProfileView({
     qc.invalidateQueries({ queryKey: ['leads'] });
   };
 
+  // Décision de la banque (Conseils Finances) : un clic la pose, un second la retire.
+  const handleSetDecisionBanque = async (valeur: DecisionBanque | null) => {
+    if (!clientId) return;
+    const { error } = await supabase.from('leads').update({ decision_banque: valeur } as any).eq('id', clientId);
+    if (error) { toast.error("Impossible d'enregistrer la décision : " + error.message); return; }
+    qc.invalidateQueries({ queryKey: ['lead-stage', clientId] });
+    qc.invalidateQueries({ queryKey: ['deals'] });
+    qc.invalidateQueries({ queryKey: ['contacts_all'] });
+    qc.invalidateQueries({ queryKey: ['leads'] });
+  };
+
   const agencyId = client?.agencyId;
   const [activePipelineId, setActivePipelineId] = useState<string | null>(null);
 
@@ -498,10 +510,10 @@ export default function ClientProfileView({
     queryFn: async () => {
       const { data } = await supabase
         .from('leads')
-        .select('pipeline_id, stage_id')
+        .select('pipeline_id, stage_id, decision_banque')
         .eq('id', clientId)
         .maybeSingle();
-      return data as { pipeline_id: string | null; stage_id: string | null } | null;
+      return data as { pipeline_id: string | null; stage_id: string | null; decision_banque?: string | null } | null;
     },
   });
 
@@ -2739,6 +2751,27 @@ export default function ClientProfileView({
                     );
                   })}
                 </div>
+                {estConseilsFinances && (
+                  <div className="inline-flex items-center gap-1 rounded-full bg-black/35 border border-white/10 p-0.5" role="group" aria-label="Décision de la banque">
+                    {DECISIONS_BANQUE.map((d) => {
+                      const actif = estDecisionBanque(leadStage?.decision_banque) && leadStage?.decision_banque === d.value;
+                      return (
+                        <button
+                          key={d.value}
+                          type="button"
+                          title={`${d.label}${actif ? ' (cliquer pour retirer)' : ''}`}
+                          onClick={() => void handleSetDecisionBanque(actif ? null : d.value)}
+                          style={actif ? { backgroundColor: `${d.couleur}33`, borderColor: d.couleur, color: d.couleur } : undefined}
+                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border transition-all cursor-pointer ${
+                            actif ? '' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/5'
+                          }`}
+                        >
+                          {d.court}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <span className="text-xs text-slate-400">
                   Créé le {new Date(client.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </span>

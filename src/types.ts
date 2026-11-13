@@ -173,6 +173,8 @@ export interface Deal {
   archivedAt?: string | null;
   // Corbeille (3 septembre) : date de mise à la corbeille, null sinon.
   deletedAt?: string | null;
+  // Décision de la banque (Conseils Finances) : colore la carte du pipeline.
+  decisionBanque?: 'accord' | 'refus' | 'refus_accord_travail' | null;
 }
 
 export interface Task {

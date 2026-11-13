@@ -41,6 +41,7 @@ import {
   type PipelinePourAcces,
 } from '@/lib/pipelinesAcces';
 import { couleurNovavisio, couleurEtapeNovavisio, estAgenceNovavisio } from '@/lib/couleursNovavisio';
+import { couleurDecisionBanque } from '@/lib/decisionBanque';
 // Ticket #277 (suite) : même détection de mode jour que l'accueil, pour que
 // les colonnes du pipeline suivent la même bascule vers de vraies couleurs
 // claires (au lieu du filtre global qui pâlit juste le bleu canard).
@@ -346,14 +347,19 @@ const PipelineCard = React.memo<{
     id: deal.id,
     data: { type: 'card' as const, stage: deal.stage },
   });
-  const couleur = couleurNovavisio(deal);
+  // La décision de la banque (Conseils Finances) prime sur la couleur d'étape.
+  const couleur = couleurDecisionBanque(deal.decisionBanque) || couleurNovavisio(deal);
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
       onClick={() => { if (contact && onSelectContact) onSelectContact(contact.id); }}
-      style={couleur ? { borderLeft: `4px solid ${couleur}`, backgroundColor: `${couleur}15` } : undefined}
+      style={
+        deal.decisionBanque && couleur
+          ? { border: `1px solid ${couleur}`, borderLeft: `5px solid ${couleur}`, backgroundColor: `${couleur}30` }
+          : couleur ? { borderLeft: `4px solid ${couleur}`, backgroundColor: `${couleur}15` } : undefined
+      }
       className={`pipeline-card group relative p-3.5 rounded-2xl bg-gradient-to-b from-white/[0.07] via-white/[0.02] to-black/60 border transition-all duration-200 touch-auto select-none backdrop-blur-md shadow-md overflow-hidden ${
         contact ? 'cursor-pointer hover:-translate-y-0.5' : ''
       } ${

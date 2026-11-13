@@ -13,6 +13,7 @@ import { useAuth } from '@/context/AuthContext';
 import { matchesAgency } from '@/hooks/useContacts';
 import { toValidUuidOrNull, getAssignedUserIdAsUuid } from '@/data/teamMembers';
 import { majParId } from '@/lib/peintureImmediate';
+import { estDecisionBanque } from '@/lib/decisionBanque';
 
 const CONSEILS_FINANCES_ID = '30f96ea9-41da-41c2-a95e-f5e7898f8d8e';
 
@@ -71,6 +72,7 @@ function supabaseLeadToDeal(item: Record<string, unknown>, stageNameById: Record
     updatedAt: (item.updated_at as string) || undefined,
     archivedAt: (item.archived_at as string) || null,
     signedAt: (item.signed_at as string) || null,
+    decisionBanque: estDecisionBanque(item.decision_banque) ? item.decision_banque : null,
   };
 }
 
