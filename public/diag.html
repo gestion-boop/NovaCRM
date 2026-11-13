@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Diagnostic écran</title>
+<style>
+  :root { --haut: env(safe-area-inset-top, 0px); --bas: env(safe-area-inset-bottom, 0px); --gauche: env(safe-area-inset-left, 0px); --droite: env(safe-area-inset-right, 0px); }
+  html, body { margin: 0; background: #0b1f33; color: #fff; font: 14px/1.4 -apple-system, system-ui, sans-serif; }
+  #plein { position: fixed; inset: 0; border: 3px solid #f7bc5f; box-sizing: border-box; display: flex; flex-direction: column; }
+  pre { margin: 0; padding: 12px; white-space: pre-wrap; word-break: break-all; font: 13px/1.45 ui-monospace, monospace; overflow: auto; flex: 1; }
+  .barre { height: 18px; background: #2b899d; color: #0b1f33; font-weight: 700; font-size: 11px; text-align: center; }
+  .coins { position: fixed; width: 14px; height: 14px; background: #ef4444; }
+</style>
+</head>
+<body>
+<div id="plein">
+  <div class="barre">← largeur de la page (barre pleine largeur) →</div>
+  <pre id="sortie">Mesure en cours…</pre>
+  <div class="barre" style="background:#f97316">↓ bas de la page ↓</div>
+</div>
+<div class="coins" style="top:0;left:0"></div><div class="coins" style="top:0;right:0"></div>
+<div class="coins" style="bottom:0;left:0"></div><div class="coins" style="bottom:0;right:0"></div>
+<script>
+  function maj() {
+    var v = window.visualViewport, r = document.documentElement, cs = getComputedStyle(r);
+    var lignes = [
+      'Capture cet écran en entier (les 4 carrés rouges = coins de la page).',
+      '',
+      'innerWidth × innerHeight : ' + innerWidth + ' × ' + innerHeight,
+      'visualViewport : ' + (v ? Math.round(v.width) + ' × ' + Math.round(v.height) + ' (zoom ' + v.scale.toFixed(2) + ', décalage ' + Math.round(v.offsetLeft) + ',' + Math.round(v.offsetTop) + ')' : 'n/a'),
+      'html clientWidth × clientHeight : ' + r.clientWidth + ' × ' + r.clientHeight,
+      'screen : ' + screen.width + ' × ' + screen.height + ' (disponible ' + screen.availWidth + ' × ' + screen.availHeight + ')',
+      'devicePixelRatio : ' + devicePixelRatio,
+      'orientation : ' + ((screen.orientation && screen.orientation.type) || (innerWidth > innerHeight ? 'paysage' : 'portrait')),
+      'mode : ' + (matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'appli installée (plein écran)' : 'navigateur Safari'),
+      'zones de sécurité (haut/bas/gauche/droite) : ' + cs.getPropertyValue('--haut') + ' / ' + cs.getPropertyValue('--bas') + ' / ' + cs.getPropertyValue('--gauche') + ' / ' + cs.getPropertyValue('--droite'),
+      'écran partagé (viewport-segments) : ' + (matchMedia('(horizontal-viewport-segments: 2)').matches ? '2 horizontaux' : matchMedia('(vertical-viewport-segments: 2)').matches ? '2 verticaux' : 'non'),
+      '',
+      navigator.userAgent
+    ];
+    document.getElementById('sortie').textContent = lignes.join('\n');
+  }
+  maj(); addEventListener('resize', maj); addEventListener('orientationchange', maj);
+  if (window.visualViewport) visualViewport.addEventListener('resize', maj);
+</script>
+</body>
+</html>

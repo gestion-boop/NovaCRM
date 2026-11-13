@@ -5,7 +5,10 @@
 // Sylvain Grazia (voir App.tsx).
 export function installerDiagnosticEcran(): void {
   try {
-    if (!/[?&]diag=ecran\b/.test(window.location.search)) return;
+    // Le paramètre est mémorisé : une redirection (connexion…) peut le retirer de l'adresse.
+    if (/[?&]diag=off\b/.test(window.location.search)) { localStorage.removeItem('nv-diag-ecran'); return; }
+    if (/[?&]diag=ecran\b/.test(window.location.search)) localStorage.setItem('nv-diag-ecran', '1');
+    if (localStorage.getItem('nv-diag-ecran') !== '1') return;
     if (document.getElementById('nv-diag-ecran')) return;
     const boite = document.createElement('pre');
     boite.id = 'nv-diag-ecran';
