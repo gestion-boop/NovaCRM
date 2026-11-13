@@ -3,6 +3,23 @@
 // de l'écran, zoom…). Sert à comprendre un affichage décalé sur un appareil
 // pliable ; sans ce paramètre, rien n'est affiché. Appelé uniquement pour
 // Sylvain Grazia (voir App.tsx).
+/** Affiche ou masque le bandeau depuis l'appli (sans passer par l'adresse). */
+export function basculerDiagnosticEcran(): boolean {
+  try {
+    const present = !!document.getElementById('nv-diag-ecran');
+    if (present) {
+      document.getElementById('nv-diag-ecran')?.remove();
+      localStorage.removeItem('nv-diag-ecran');
+      return false;
+    }
+    localStorage.setItem('nv-diag-ecran', '1');
+    installerDiagnosticEcran();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function installerDiagnosticEcran(): void {
   try {
     // Le paramètre est mémorisé : une redirection (connexion…) peut le retirer de l'adresse.

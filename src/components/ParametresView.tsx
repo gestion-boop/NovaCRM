@@ -1,3 +1,4 @@
+import { basculerDiagnosticEcran } from '@/lib/diagnosticEcran';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -2669,6 +2670,7 @@ export default function ParametresView({ selectedAgency, onSelectAgency, onClose
               {ligne(Sparkles, 'Tutoriel', 'Revoir la visite guidée de NovaCRM.', actionsRapides.onOpenTutorial, 'Ouvrir')}
               {ligne(Camera, 'Réserver la caméra', 'Réserver la caméra 360.', actionsRapides.onOpenCameraReservation, 'Ouvrir')}
               {ligne(Mic, 'Dictée vocale client', 'Dicter une note vers une fiche client.', actionsRapides.onOpenClientDictation, 'Ouvrir')}
+              {currentUser?.uid === '4f6eea64-ce42-40ff-b0cd-bbd68cb5ca29' && ligne(Zap, "Diagnostic d'écran", "Affiche les dimensions réelles de la page (plein écran, Safari, appareil pliable).", () => { basculerDiagnosticEcran(); }, 'Afficher / masquer')}
               {isAdmin && ligne(Upload, 'Import SQL', 'Importer des fiches depuis un fichier SQL.', actionsRapides.onOpenSqlImport, 'Ouvrir')}
             </div>
           </div>
