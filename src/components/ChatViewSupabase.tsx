@@ -3640,9 +3640,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       });
 
       if (files.length > 1 && toastId) {
-        toast.success(`Carrousel de ${files.length} photos prêt. Tapez votre message et appuyez sur Envoyer.`, { id: toastId });
-      } else {
-        toast.info('Photo prête. Tapez votre message et appuyez sur Envoyer.');
+        toast.dismiss(toastId);
       }
       convTextareaRef.current?.focus();
     } catch (err: any) {
@@ -3671,7 +3669,6 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         fileName: file.name,
         mime: file.type || 'application/pdf',
       });
-      toast.info('Document prêt. Tapez votre message et appuyez sur Envoyer.');
       convTextareaRef.current?.focus();
     };
     reader.readAsDataURL(file);
@@ -3700,7 +3697,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         fileName: file.name,
         mime: file.type || 'video/mp4',
       });
-      toast.success('Vidéo prête. Tapez votre message et appuyez sur Envoyer.', { id: toastId });
+      toast.dismiss(toastId);
       convTextareaRef.current?.focus();
     } catch (err: any) {
       toast.error(err?.message || "Impossible de préparer la vidéo", { id: toastId });
@@ -3830,9 +3827,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
       });
 
       if (files.length > 1 && toastId) {
-        toast.success(`Carrousel de ${files.length} photos prêt. Tapez votre message et appuyez sur Envoyer.`, { id: toastId });
-      } else {
-        toast.info('Photo prête. Tapez votre message et appuyez sur Envoyer.');
+        toast.dismiss(toastId);
       }
       channelTextareaRef.current?.focus();
     } catch (err: any) {
@@ -3865,7 +3860,6 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         fileName: file.name,
         mime: file.type || 'application/pdf',
       });
-      toast.info('Document prêt. Tapez votre message et appuyez sur Envoyer.');
       channelTextareaRef.current?.focus();
     } finally {
       setUploadingChannelMedia(false);
@@ -3895,7 +3889,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
         fileName: file.name,
         mime: file.type || 'video/mp4',
       });
-      toast.success('Vidéo prête. Tapez votre message et appuyez sur Envoyer.', { id: toastId });
+      toast.dismiss(toastId);
       channelTextareaRef.current?.focus();
     } catch (err: any) {
       toast.error(err?.message || "Impossible de préparer la vidéo", { id: toastId });
@@ -7025,7 +7019,6 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                                   fileName: 'Image collée',
                                   mime: file.type || 'image/jpeg',
                                 });
-                                toast.info('Image collée prête. Tapez votre message et appuyez sur Envoyer.');
                                 convTextareaRef.current?.focus();
                               }
                             } finally {
