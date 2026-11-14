@@ -3595,10 +3595,13 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
   };
 
   const handleConvImageSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
+    // Les fichiers sont copiés AVANT de vider le champ : sur certains
+    // navigateurs (Safari récent), la liste fournie par le champ est vivante
+    // et se vide dès que `value` est remis à zéro — aucune photo n'était alors
+    // prise en compte, sans le moindre message.
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!fileList || fileList.length === 0) return;
-    const files = Array.from(fileList);
+    if (files.length === 0) return;
     setUploadingConvMedia(true);
     let toastId: string | number | undefined;
     if (files.length > 1) {

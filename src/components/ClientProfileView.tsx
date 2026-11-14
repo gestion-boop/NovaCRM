@@ -1621,10 +1621,10 @@ export default function ClientProfileView({
   };
 
   const handleChatImageSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
+    // Copie avant remise à zéro du champ (liste vivante sur certains navigateurs).
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!fileList || fileList.length === 0) return;
-    const files = Array.from(fileList);
+    if (files.length === 0) return;
     setUploadingChatMedia(true);
     let toastId: string | number | undefined;
     if (files.length > 1) {
