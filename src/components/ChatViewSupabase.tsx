@@ -326,10 +326,27 @@ function ChatImageCarousel({
   onOpenFullscreen: (index: number) => void;
 }) {
   const [index, setIndex] = useState(0);
+  const [enErreur, setEnErreur] = useState(false);
 
   if (!images || images.length === 0) return null;
 
+  // Une photo déjà dans le message (data:/blob:) n'a rien à télécharger : le
+  // chargement différé était inutile, et sur Safari il pouvait ne jamais se
+  // déclencher — la bulle restait vide (14 nov.). Zone minimale + repli lisible.
+  const enMemoire = (u: string) => u.startsWith('data:') || u.startsWith('blob:');
+
   if (images.length === 1) {
+    if (enErreur) {
+      return (
+        <button
+          type="button"
+          onClick={() => onOpenFullscreen(0)}
+          className="block rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-xs text-slate-300 text-left"
+        >
+          Photo impossible à afficher — toucher pour l'ouvrir
+        </button>
+      );
+    }
     return (
       <button
         type="button"
@@ -340,8 +357,10 @@ function ChatImageCarousel({
         <img
           src={images[0]}
           alt={alt || "Photo jointe"}
-          className="max-w-[240px] max-h-[260px] sm:max-w-[320px] sm:max-h-[320px] rounded-2xl object-cover group-hover:scale-[1.02] transition-transform duration-200"
-          loading="lazy"
+          onError={() => setEnErreur(true)}
+          className="min-w-[120px] min-h-[90px] bg-white/5 max-w-[240px] max-h-[260px] sm:max-w-[320px] sm:max-h-[320px] rounded-2xl object-cover group-hover:scale-[1.02] transition-transform duration-200"
+          loading={enMemoire(images[0]) ? 'eager' : 'lazy'}
+          decoding="async"
         />
       </button>
     );
@@ -363,7 +382,8 @@ function ChatImageCarousel({
           src={images[index]}
           alt={`${alt || "Photo"} ${index + 1}`}
           className="w-full h-full object-cover transition-transform duration-300 group-hover/carousel:scale-105"
-          loading="lazy"
+          loading={enMemoire(images[index]) ? 'eager' : 'lazy'}
+          decoding="async"
         />
 
         {/* Badge compteur discret en haut à droite */}
