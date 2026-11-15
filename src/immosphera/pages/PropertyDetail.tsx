@@ -489,9 +489,11 @@ export default function PropertyDetail() {
 
   // Pilote ImmoSphera360 : uniquement la fiche créée pour le test VR.
   // Ne modifie ni le lien classique, ni les autres fiches, ni les données CRM.
-  // Fiche pilote reconnue par son titre. Les champs localisation/email
-  // peuvent être absents sur une création manuelle, et bloquaient le bouton.
-  const isVrPilot = property.title.trim().toLocaleLowerCase("fr").replace(/\s+/g, " ").includes("test vr");
+  // La fiche pilote a pour titre « Maison - Narbonne » : « Test VR »
+  // a été saisi dans sa localisation. Éviter de cibler les autres biens.
+  const isVrPilot = (property.location || "").trim().toLocaleLowerCase("fr") === "test vr"
+    && property.title.trim().toLocaleLowerCase("fr") === "maison - narbonne"
+    && property.agent_email?.trim().toLowerCase() === "melanie@immosphera.fr";
   const pilotVrUrl = "https://novavisio-studio.vercel.app/share.html?t=32e38cb9f7114fd786e0277c123d1b723272e1be285f4d4ab99876f45e700b39&vr=1";
 
   return (
