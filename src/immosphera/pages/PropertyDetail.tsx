@@ -506,6 +506,18 @@ export default function PropertyDetail() {
           <span>Retour aux biens</span>
         </button>
 
+        {isVrPilot && (
+          <button
+            type="button"
+            onClick={() => { setTourFullscreen(false); setVrChoiceOpen(true); }}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#F7BC5F] px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-[#071317] shadow-lg hover:bg-[#ffd481] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F7BC5F]"
+            title="Ouvrir le choix visite classique / visite immersive"
+          >
+            <VrHeadsetIcon className="h-5 w-5" />
+            🥽 Test VR — Entrer en immersion
+          </button>
+        )}
+
         {user && isAdmin && (
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
@@ -549,6 +561,15 @@ export default function PropertyDetail() {
         const slide = slides[Math.min(galleryIndex, slides.length - 1)];
         return (
           <div className="relative w-full h-[38vh] sm:h-[52vh] lg:h-[68vh] rounded-2xl overflow-hidden bg-muted border border-border group">
+            {isVrPilot && slide?.type === "tour" && (
+              <button
+                type="button"
+                onClick={() => { setTourFullscreen(false); setVrChoiceOpen(true); }}
+                className="absolute right-3 top-3 z-30 inline-flex items-center gap-2 rounded-xl bg-[#F7BC5F] px-4 py-3 text-sm font-extrabold text-[#071317] shadow-xl hover:bg-[#ffd481]"
+              >
+                <VrHeadsetIcon className="h-5 w-5" /> 🥽 Ouvrir la visite immersive
+              </button>
+            )}
             {slide?.type === "tour" ? (
               <button
                 type="button"
