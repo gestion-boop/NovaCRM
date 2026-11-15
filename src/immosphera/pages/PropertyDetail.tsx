@@ -26,7 +26,7 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
 } from "lucide-react";
-import { VirtualTourIcon, Giraffe360Icon, WebsiteIcon } from "@/immosphera/components/PropertyIcons";
+import { VirtualTourIcon, Giraffe360Icon, WebsiteIcon, VrHeadsetIcon } from "@/immosphera/components/PropertyIcons";
 import React, { useState, useEffect, useRef } from "react";
 import { TourShareModal } from "@/immosphera/components/TourShareModal";
 import { PropertyFormModal } from "@/immosphera/components/PropertyFormModal";
@@ -469,6 +469,13 @@ export default function PropertyDetail() {
     );
   }
 
+  // Pilote ImmoSphera360 : uniquement la fiche créée pour le test VR.
+  // Ne modifie ni le lien classique, ni les autres fiches, ni les données CRM.
+  const isVrPilot = property.title.trim().toLocaleLowerCase("fr") === "test vr"
+    && /narbonne/i.test(property.location || property.address || "")
+    && property.agent_email?.trim().toLowerCase() === "melanie@immosphera.fr";
+  const pilotVrUrl = "https://novavisio-studio.vercel.app/share.html?t=32e38cb9f7114fd786e0277c123d1b723272e1be285f4d4ab99876f45e700b39&vr=1";
+
   return (
     <div className="w-full py-6 max-w-[1400px] mx-auto px-4 sm:px-6 space-y-6">
       <div className="flex items-center justify-between pb-2 border-b border-white/10">
@@ -813,6 +820,18 @@ export default function PropertyDetail() {
         </div>
 
         <div className="md:w-72 space-y-3 bg-card border border-border rounded-2xl p-4 h-fit shadow-sm">
+          {isVrPilot && (
+            <a
+              href={pilotVrUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full rounded-xl bg-[#F7BC5F] px-4 py-3 text-sm font-extrabold text-[#071317] shadow-md hover:bg-[#ffd17c] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F7BC5F]"
+              title="Tester cette visite dans le navigateur Meta Quest 3"
+            >
+              <VrHeadsetIcon className="h-5 w-5" /> Visiter en VR (test)
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          )}
           {/* La visite virtuelle est désormais dans la galerie principale
               (en 1ère position, à la place de la photo de couverture) —
               on garde ici uniquement le partage du lien temporaire. */}
