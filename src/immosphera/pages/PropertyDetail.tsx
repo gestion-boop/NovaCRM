@@ -491,7 +491,7 @@ export default function PropertyDetail() {
   // Ne modifie ni le lien classique, ni les autres fiches, ni les données CRM.
   // Fiche pilote reconnue par son titre. Les champs localisation/email
   // peuvent être absents sur une création manuelle, et bloquaient le bouton.
-  const isVrPilot = property.title.trim().toLocaleLowerCase("fr") === "test vr";
+  const isVrPilot = property.title.trim().toLocaleLowerCase("fr").replace(/\\s+/g, " ").includes("test vr");
   const pilotVrUrl = "https://novavisio-studio.vercel.app/share.html?t=32e38cb9f7114fd786e0277c123d1b723272e1be285f4d4ab99876f45e700b39&vr=1";
 
   return (
@@ -553,7 +553,9 @@ export default function PropertyDetail() {
               <button
                 type="button"
                 onClick={() => {
-                  if (isVrPilot && onQuestBrowser) setVrChoiceOpen(true);
+                  // La popup du pilote ne dépend plus du User-Agent / de WebXR :
+                  // certains Quest se présentent comme de simples navigateurs Android.
+                  if (isVrPilot) { setTourFullscreen(false); setVrChoiceOpen(true); }
                   else setTourFullscreen(true);
                 }}
                 className="relative w-full h-full block"
@@ -904,7 +906,7 @@ export default function PropertyDetail() {
 
       {/* Popup VR pilote : immédiatement après clic sur la visite haute,
           en dehors du plein écran pour rester visible dans Quest Browser. */}
-      {vrChoiceOpen && isVrPilot && onQuestBrowser && (
+      {vrChoiceOpen && isVrPilot && (
         <div
           role="presentation"
           className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4"
