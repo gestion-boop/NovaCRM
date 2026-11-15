@@ -348,15 +348,16 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
         if (cleanValue) cleanDetails[key] = cleanValue;
       });
 
-      // La table immosphera_properties impose latitude/longitude à la création.
-      // On géocode donc AVANT l'INSERT, mais uniquement pour un nouveau bien.
+      // Latitude/longitude sont facultatives en base : un échec du géocodage ne
+      // doit JAMAIS empêcher d'enregistrer le bien (15 nov. : « je ne peux pas
+      // l'enregistrer »). On tente la localisation avant l'INSERT ; sinon le bien
+      // est enregistré sans position, puis relocalisé en arrière-plan.
       let initialCoords: { lat: number; lng: number } | null = null;
       if (!editingProperty) {
-        initialCoords = await geocodeAddress(location, true);
-        if (!initialCoords) {
-          throw new Error(
-            "Impossible de localiser ce bien. Indique la commune ET le code postal, par exemple : Narbonne 11100.",
-          );
+        try {
+          initialCoords = await geocodeAddress(location, true);
+        } catch {
+          initialCoords = null;
         }
       }
 
@@ -459,7 +460,7 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
 
       // Géocodage et enrichissement IA en arrière-plan : ils ne bloquent plus le bouton Enregistrer.
       void (async () => {
-        if (editingProperty) {
+        if (editingProperty || !initialCoords) {
           try {
             const coords = await geocodeAddress(location, true);
             if (coords) {
@@ -467,6 +468,11 @@ export function PropertyFormModal({ open, onOpenChange, editingProperty }: Props
                 .from("immosphera_properties")
                 .update({ latitude: coords.lat, longitude: coords.lng } as any)
                 .eq("id", savedId);
+            } else if (!editingProperty) {
+              toast({
+                title: "Bien enregistré sans position sur la carte",
+                description: "Impossible de localiser ce lieu. Indique la commune ET le code postal (ex. Narbonne 11100) en modifiant le bien.",
+              });
             }
           } catch (error) {
             console.warn("Géocodage différé impossible", error);

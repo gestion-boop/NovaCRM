@@ -223,8 +223,9 @@ export function PropertyMap({ properties, partners = [], hoveredId, searchLocati
     if (!map) return;
     if (mapCenter) return;
 
-    if (activeTab === "biens" && properties.length > 0) {
-      const bounds = L.latLngBounds(properties.map((p) => [p.latitude, p.longitude] as [number, number]));
+    const biensLocalises = properties.filter((p) => p.latitude != null && p.longitude != null);
+    if (activeTab === "biens" && biensLocalises.length > 0) {
+      const bounds = L.latLngBounds(biensLocalises.map((p) => [p.latitude, p.longitude] as [number, number]));
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
     } else if (activeTab === "partenaires" && filteredPartners.length > 0) {
       const bounds = L.latLngBounds(filteredPartners.map((p) => [p.latitude!, p.longitude!] as [number, number]));
