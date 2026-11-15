@@ -23,8 +23,8 @@ export function toValidUuidOrNull(val?: string | null): string | null {
 //   • l'attribution d'un contact échouait sur la clé étrangère vers profiles.
 //
 // Les identifiants ci-dessous sont désormais ceux de `public.profiles`,
-// retrouvés par adresse e-mail. Cinq personnes (Eric Escourrou, Lucie Perree,
-// Coralia Ortega, Muriel Goepfert, Adrien Wyrwal) n'ont toujours aucun compte :
+// retrouvés par adresse e-mail. Quatre personnes (Eric Escourrou, Lucie Perree,
+// Muriel Goepfert, Adrien Wyrwal) n'ont toujours aucun compte :
 // leur identifiant reste fictif tant qu'elles ne sont pas activées.
 //
 // RÈGLE : ne jamais rechercher quelqu'un dans ce fichier par `id`. Toujours
@@ -159,17 +159,6 @@ export const TEAM_MEMBERS: TeamMember[] = [
     phone: '06 69 58 77 15',
     avatar: 'LP',
     avatarUrl: '/team/lucie_perree.png',
-    status: 'Actif',
-  },
-  {
-    id: '78325b51-8161-4c9c-ac83-9bb65d6cad9d',
-    name: 'Coralia Ortega',
-    email: 'coralia.ortega@conseilfinances.fr',
-    role: 'Mandataire de Courtage',
-    agencyId: '30f96ea9-41da-41c2-a95e-f5e7898f8d8e',
-    phone: '06 01 93 71 39',
-    avatar: 'CO',
-    avatarUrl: '/team/coralia_ortega.png',
     status: 'Actif',
   },
   // Philippe Serra (Conseils Finances) retiré de l'équipe le 7 septembre :

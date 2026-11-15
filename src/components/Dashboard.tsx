@@ -788,11 +788,11 @@ export default function Dashboard({
   );
 
   // Demandé le 6 septembre : seulement 5 cases nommées (Sylvain, Eric,
-  // Coralia, Lucie, Karine), dans cet ordre, plutôt que toute la liste
+  // Lucie, Karine), dans cet ordre, plutôt que toute la liste
   // triée par montant. On compare sur tous les mots du nom (pas juste le
   // premier) car « full_name » n'est pas toujours saisi « Prénom Nom » —
   // « Nom Prénom » ne doit pas faire disparaître la case de quelqu'un.
-  const prenomsCourtiersVises = ['Sylvain', 'Eric', 'Coralia', 'Lucie', 'Karine'];
+  const prenomsCourtiersVises = ['Sylvain', 'Eric', 'Lucie', 'Karine'];
   const caCourtiersVises = useMemo(() => {
     return prenomsCourtiersVises
       .map((prenom) => {
