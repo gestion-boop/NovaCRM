@@ -298,11 +298,24 @@ export default function PropertyDetail() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedAdvisor, setSelectedAdvisor] = useState<Advisor | null>(null);
   const [tourFullscreen, setTourFullscreen] = useState(false);
-  // Le raccourci WebXR du pilote n'est visible que dans le navigateur du casque.
-  // Aucun changement d'interface sur ordinateur, téléphone ou tablette classique.
-  const [onQuestBrowser] = useState(() =>
+  const [vrChoiceOpen, setVrChoiceOpen] = useState(false);
+  // Le Quest peut annoncer un UA Android standard. WebXR immersive-vr confirme
+  // alors le casque, sans déclencher de popup sur PC ou smartphone ordinaire.
+  const [onQuestBrowser, setOnQuestBrowser] = useState(() =>
     typeof navigator !== "undefined" && /OculusBrowser|Meta Quest|Oculus|Quest\//i.test(navigator.userAgent)
   );
+  useEffect(() => {
+    let mounted = true;
+    const xr = (navigator as Navigator & {
+      xr?: { isSessionSupported: (mode: "immersive-vr") => Promise<boolean> }
+    }).xr;
+    if (xr?.isSessionSupported) {
+      void xr.isSessionSupported("immersive-vr")
+        .then(yes => { if (mounted && yes) setOnQuestBrowser(true); })
+        .catch(() => {});
+    }
+    return () => { mounted = false; };
+  }, []);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const fullscreenRef = useRef<HTMLDivElement>(null);
@@ -476,9 +489,9 @@ export default function PropertyDetail() {
 
   // Pilote ImmoSphera360 : uniquement la fiche créée pour le test VR.
   // Ne modifie ni le lien classique, ni les autres fiches, ni les données CRM.
-  const isVrPilot = property.title.trim().toLocaleLowerCase("fr") === "test vr"
-    && /narbonne/i.test(property.location || property.address || "")
-    && property.agent_email?.trim().toLowerCase() === "melanie@immosphera.fr";
+  // Fiche pilote reconnue par son titre. Les champs localisation/email
+  // peuvent être absents sur une création manuelle, et bloquaient le bouton.
+  const isVrPilot = property.title.trim().toLocaleLowerCase("fr") === "test vr";
   const pilotVrUrl = "https://novavisio-studio.vercel.app/share.html?t=32e38cb9f7114fd786e0277c123d1b723272e1be285f4d4ab99876f45e700b39&vr=1";
 
   return (
@@ -539,7 +552,10 @@ export default function PropertyDetail() {
             {slide?.type === "tour" ? (
               <button
                 type="button"
-                onClick={() => setTourFullscreen(true)}
+                onClick={() => {
+                  if (isVrPilot && onQuestBrowser) setVrChoiceOpen(true);
+                  else setTourFullscreen(true);
+                }}
                 className="relative w-full h-full block"
                 title="Agrandir la visite virtuelle"
               >
@@ -885,6 +901,44 @@ export default function PropertyDetail() {
           désormais déclenchée depuis l'aperçu en haut à droite (ci-dessus)
           au lieu de cette section pleine largeur — retirée pour éviter la
           redondance ("même principe que sur immosphera.fr"). */}
+
+      {/* Popup VR pilote : immédiatement après clic sur la visite haute,
+          en dehors du plein écran pour rester visible dans Quest Browser. */}
+      {vrChoiceOpen && isVrPilot && onQuestBrowser && (
+        <div
+          role="presentation"
+          className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setVrChoiceOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choisir le mode de visite"
+            className="w-full max-w-lg rounded-2xl border border-[#F7BC5F]/50 bg-[#0b1c24] text-white p-6 shadow-2xl space-y-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-center space-y-2">
+              <VrHeadsetIcon className="w-12 h-12 mx-auto text-[#F7BC5F]" />
+              <h2 className="text-xl sm:text-2xl font-bold">Visite immersive — Test VR</h2>
+              <p className="text-sm text-slate-300">Choisis comment ouvrir la visite dans ton Meta Quest.</p>
+            </div>
+            <a
+              href={pilotVrUrl}
+              className="w-full flex items-center justify-center gap-3 rounded-xl bg-[#F7BC5F] px-5 py-4 font-extrabold text-[#0b1c24] hover:bg-[#ffd481]"
+            >
+              <VrHeadsetIcon className="h-6 w-6" />
+              🥽 Entrer dans la visite immersive
+            </a>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full py-5"
+              onClick={() => { setVrChoiceOpen(false); setTourFullscreen(true); }}
+            >Voir la visite classique</Button>
+            <button type="button" className="w-full text-center text-sm text-slate-300 py-2" onClick={() => setVrChoiceOpen(false)}>Annuler</button>
+          </div>
+        </div>
+      )}
 
       {/* Fullscreen tour */}
       {tourFullscreen && property.virtual_tour_url && (
