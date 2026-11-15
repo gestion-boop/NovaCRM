@@ -298,6 +298,11 @@ export default function PropertyDetail() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedAdvisor, setSelectedAdvisor] = useState<Advisor | null>(null);
   const [tourFullscreen, setTourFullscreen] = useState(false);
+  // Le raccourci WebXR du pilote n'est visible que dans le navigateur du casque.
+  // Aucun changement d'interface sur ordinateur, téléphone ou tablette classique.
+  const [onQuestBrowser] = useState(() =>
+    typeof navigator !== "undefined" && /OculusBrowser|Meta Quest|Oculus|Quest\//i.test(navigator.userAgent)
+  );
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const fullscreenRef = useRef<HTMLDivElement>(null);
@@ -820,7 +825,7 @@ export default function PropertyDetail() {
         </div>
 
         <div className="md:w-72 space-y-3 bg-card border border-border rounded-2xl p-4 h-fit shadow-sm">
-          {isVrPilot && (
+          {isVrPilot && onQuestBrowser && (
             <a
               href={pilotVrUrl}
               target="_blank"
@@ -884,10 +889,19 @@ export default function PropertyDetail() {
       {/* Fullscreen tour */}
       {tourFullscreen && property.virtual_tour_url && (
         <div ref={fullscreenRef} className="fixed inset-0 z-50 bg-black flex flex-col">
-          <div className="absolute top-4 left-4 z-10">
-            <Button variant="secondary" size="sm" className="shadow-lg" onClick={() => setTourFullscreen(false)}>
+          <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+            <Button variant="secondary" size="sm" className="pointer-events-auto shadow-lg" onClick={() => setTourFullscreen(false)}>
               <X className="h-4 w-4 mr-1" /> Fermer
             </Button>
+            {isVrPilot && onQuestBrowser && (
+              <a
+                href={pilotVrUrl}
+                className="pointer-events-auto inline-flex items-center gap-2 rounded-xl bg-[#F7BC5F] px-4 py-2.5 text-sm font-extrabold text-[#071317] shadow-xl border border-[#ffe4a4] hover:bg-[#ffd17c]"
+                title="Entrer en immersion WebXR dans le Meta Quest"
+              >
+                <VrHeadsetIcon className="h-5 w-5" /> 🥽 Entrer en VR
+              </a>
+            )}
           </div>
           <iframe
             src={property.virtual_tour_url}
