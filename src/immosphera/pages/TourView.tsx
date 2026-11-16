@@ -125,7 +125,7 @@ export default function TourView({ token }: Props) {
         </div>
       </div>
 
-      <iframe src={data.tour_url} className="flex-1 w-full border-0" allowFullScreen title="Visite virtuelle" />
+      <iframe src={data.tour_url} className="flex-1 w-full border-0" allowFullScreen allow="xr-spatial-tracking; fullscreen; accelerometer; gyroscope; autoplay" title="Visite virtuelle" />
     </div>
   );
 }

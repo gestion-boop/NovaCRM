@@ -496,6 +496,15 @@ export default function PropertyDetail() {
     && property.agent_email?.trim().toLowerCase() === "melanie@immosphera.fr";
   const pilotVrUrl = "https://novavisio-studio.vercel.app/share.html?t=32e38cb9f7114fd786e0277c123d1b723272e1be285f4d4ab99876f45e700b39&vr=1";
 
+  // Toute visite NovaVisio Studio (lien de partage) peut s'ouvrir en immersion
+  // WebXR dans le navigateur du Meta Quest, pas seulement la fiche pilote : le
+  // bouton « Entrer en VR » est donc proposé pour chacune d'elles (16 nov.).
+  const lienVisite = property.virtual_tour_url || "";
+  const visiteWebXR = /^https:\/\/novavisio-studio\.vercel\.app\/share\.html\?/.test(lienVisite);
+  const lienVrVisite = visiteWebXR && !/[?&]vr=1(?:&|$)/.test(lienVisite) ? `${lienVisite}&vr=1` : lienVisite;
+  const peutVr = isVrPilot || visiteWebXR;
+  const lienVr = isVrPilot ? pilotVrUrl : lienVrVisite;
+
   return (
     <div className="w-full py-6 max-w-[1400px] mx-auto px-4 sm:px-6 space-y-6">
       <div className="flex items-center justify-between pb-2 border-b border-white/10">
@@ -584,7 +593,7 @@ export default function PropertyDetail() {
                 className="relative w-full h-full block"
                 title="Agrandir la visite virtuelle"
               >
-                <iframe src={property.virtual_tour_url!} className="w-full h-full pointer-events-none" title="Visite virtuelle" />
+                <iframe src={property.virtual_tour_url!} className="w-full h-full pointer-events-none" title="Visite virtuelle" allow="xr-spatial-tracking; fullscreen; accelerometer; gyroscope; autoplay" />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
                   <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/95 text-[#0b1c1e] text-sm font-bold px-4 py-2 rounded-full flex items-center gap-2 shadow-lg">
                     <Maximize2 className="w-4 h-4" /> Agrandir la visite virtuelle
@@ -866,9 +875,9 @@ export default function PropertyDetail() {
         </div>
 
         <div className="md:w-72 space-y-3 bg-card border border-border rounded-2xl p-4 h-fit shadow-sm">
-          {isVrPilot && onQuestBrowser && (
+          {peutVr && onQuestBrowser && (
             <a
-              href={pilotVrUrl}
+              href={lienVr}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 w-full rounded-xl bg-[#F7BC5F] px-4 py-3 text-sm font-extrabold text-[#071317] shadow-md hover:bg-[#ffd17c] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F7BC5F]"
@@ -972,9 +981,9 @@ export default function PropertyDetail() {
             <Button variant="secondary" size="sm" className="pointer-events-auto shadow-lg" onClick={() => setTourFullscreen(false)}>
               <X className="h-4 w-4 mr-1" /> Fermer
             </Button>
-            {isVrPilot && onQuestBrowser && (
+            {peutVr && onQuestBrowser && (
               <a
-                href={pilotVrUrl}
+                href={lienVr}
                 className="pointer-events-auto inline-flex items-center gap-2 rounded-xl bg-[#F7BC5F] px-4 py-2.5 text-sm font-extrabold text-[#071317] shadow-xl border border-[#ffe4a4] hover:bg-[#ffd17c]"
                 title="Entrer en immersion WebXR dans le Meta Quest"
               >
@@ -986,6 +995,7 @@ export default function PropertyDetail() {
             src={property.virtual_tour_url}
             className="w-full h-full"
             allowFullScreen
+            allow="xr-spatial-tracking; fullscreen; accelerometer; gyroscope; autoplay"
             title="Visite virtuelle plein écran"
           />
         </div>
