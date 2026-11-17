@@ -43,6 +43,10 @@ export function usePushNotifications() {
 
   useEffect(() => {
     checkSubscription();
+    // AutoEnablePush répare l'abonnement en arrière-plan : on relit l'état.
+    const relire = () => { void checkSubscription(); };
+    window.addEventListener('nv-push-repare', relire);
+    return () => window.removeEventListener('nv-push-repare', relire);
   }, [checkSubscription]);
 
   const subscribe = useCallback(async () => {

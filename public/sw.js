@@ -212,7 +212,17 @@ self.addEventListener("push", (event) => {
       });
 
       if (isFocusedOnContext) {
-        // L'utilisateur regarde déjà — on saute la bannière et on ne touche pas au badge.
+        // L'utilisateur regarde déjà : pas de bannière visible ni de badge.
+        // MAIS un push reçu sans notification affichée est interdit
+        // (userVisibleOnly) : Apple révoque l'abonnement après quelques
+        // pushs « silencieux », Chrome affiche une bannière générique. C'est
+        // la cause des notifications qui « se désactivent » toutes seules.
+        // On affiche donc une notification muette et on la ferme aussitôt.
+        // (renotify doit être faux quand silent est vrai, sinon TypeError.)
+        await self.registration.showNotification(title, { ...options, silent: true, renotify: false, vibrate: undefined });
+        await new Promise((r) => setTimeout(r, 80));
+        const affichees = await self.registration.getNotifications({ tag: options.tag });
+        affichees.forEach((n) => n.close());
         return;
       }
 
@@ -225,6 +235,28 @@ self.addEventListener("push", (event) => {
       const previous = await readBadgeCount();
       const next = typeof data.badge === "number" && data.badge >= 0 ? data.badge : previous + 1;
       await applyBadge(next);
+    })(),
+  );
+});
+
+// Le navigateur a invalidé l'abonnement push (rotation de clé, expiration) :
+// on en recrée un tout de suite, puis on prévient les fenêtres ouvertes pour
+// qu'elles enregistrent le nouveau point d'accès en base. Sans fenêtre
+// ouverte, AutoEnablePush le fera au prochain lancement de l'app.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const options = event.oldSubscription && event.oldSubscription.options;
+        if (options && options.applicationServerKey) {
+          await self.registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: options.applicationServerKey,
+          });
+        }
+      } catch (_) { /* AutoEnablePush reprendra au prochain lancement */ }
+      const fenetres = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      fenetres.forEach((c) => c.postMessage({ type: "PUSH_SUBSCRIPTION_CHANGED" }));
     })(),
   );
 });

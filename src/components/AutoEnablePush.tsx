@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -20,13 +20,13 @@ import {
  *   navigateur, pas un choix applicatif) — dans ce cas on ne fait rien ici,
  *   l'utilisateur doit cliquer "Activer les alertes" dans Rappels & Alertes.
  */
+let reparationEnCours: Promise<void> | null = null;
+
 export const AutoEnablePush = () => {
   const { currentUser } = useAuth();
-  const triedRef = useRef(false);
 
   useEffect(() => {
     if (!currentUser) return;
-    if (triedRef.current) return;
 
     if (typeof window === 'undefined') return;
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
@@ -41,9 +41,11 @@ export const AutoEnablePush = () => {
     }
     if (inIframe) return;
 
-    triedRef.current = true;
-
     const subscribeNow = async () => {
+      // Une seule réparation à la fois (évite les abonnements en double créés
+      // à la même seconde quand plusieurs déclencheurs se chevauchent).
+      if (reparationEnCours) return reparationEnCours;
+      reparationEnCours = (async () => {
       try {
         const vapidPublicKey = await getVapidPublicKey();
         const existingInfo = await getPushSubscriptionInfo(vapidPublicKey);
@@ -79,20 +81,44 @@ export const AutoEnablePush = () => {
         if (staleEndpoint && staleEndpoint !== endpoint) {
           await supabase.from('push_subscriptions').delete().eq('endpoint', staleEndpoint);
         }
+        // Les interrupteurs (Paramètres, clochette) relisent l'état réel.
+        window.dispatchEvent(new Event('nv-push-repare'));
       } catch (e) {
         console.warn('[auto-push] subscription failed', e);
+      } finally {
+        reparationEnCours = null;
       }
+      })();
+      return reparationEnCours;
     };
 
     // Aucune demande automatique : seule une permission déjà accordée est
     // restaurée silencieusement si l'abonnement a expiré.
-    if (Notification.permission === 'granted') {
-      void subscribeNow();
-    }
-  }, [currentUser]);
+    const reparer = () => {
+      if (Notification.permission === 'granted') void subscribeNow();
+    };
+    reparer();
 
-  useEffect(() => {
-    triedRef.current = false;
+    // Un abonnement peut disparaître pendant que l'app reste ouverte
+    // (révocation par le navigateur, service worker remplacé) : on vérifie
+    // à chaque retour sur l'app, au plus une fois par minute.
+    let dernier = Date.now();
+    const surVisibilite = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - dernier < 60_000) return;
+      dernier = Date.now();
+      reparer();
+    };
+    const surMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'PUSH_SUBSCRIPTION_CHANGED') reparer();
+    };
+    document.addEventListener('visibilitychange', surVisibilite);
+    navigator.serviceWorker.addEventListener('message', surMessage);
+    return () => {
+      document.removeEventListener('visibilitychange', surVisibilite);
+      navigator.serviceWorker.removeEventListener('message', surMessage);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
 
   return null;
