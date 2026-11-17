@@ -39,6 +39,9 @@ import { assemblerDictee } from '@/lib/dictee';
 import {
   lireDispositionAgence, ecrireDispositionAgence, lireHorodatageLocal, ecrireHorodatageLocal,
   restaurerDispositionDepuisFige,
+  noterMajServeurVue,
+  forcerSynchronisationDisposition,
+  EVENEMENT_DISPOSITION_CONFLIT,
 } from '@/lib/dispositionAccueil';
 import { EVENEMENT_OUVRIR_DOSSIER_ACCUEIL, consommerOuvrirDossierAccueil } from '@/lib/rechercheGlobale';
 import agencyImmosphera from '@/assets/agency-immosphera.png';
@@ -1967,7 +1970,9 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
     const grid: (string | null)[] = Array(ROOT_GRID_SLOTS).fill(null);
     // RÈGLE ABSOLUE : si une position est sauvegardée, elle est préservée intacte.
     saved.slice(0, ROOT_GRID_SLOTS).forEach((id, i) => {
-      if (typeof id === 'string' && id !== ADD_TILE_ID) {
+      // 'folder-comm' : dossier Communication supprimé d'office, sa case
+      // fantôme restait vide en permanence.
+      if (typeof id === 'string' && id !== ADD_TILE_ID && id !== 'folder-comm') {
         grid[i] = id;
       }
     });
@@ -2000,6 +2005,7 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Incrémenté quand la grille serveur de l'agence est chargée : les effets
   // qui ne doivent écrire qu'après (voir plus bas) s'y accrochent.
   const [syncPrete, setSyncPrete] = useState(0);
+  const [relanceSync, setRelanceSync] = useState(0);
   const [rootSlots, setRootSlots] = useState<(string | null)[]>(() => loadRootSlots(ROOT_SLOTS_KEY, tiles, ROOT_SLOTS_KEY_ANON));
   const rootSlotsKeyRef = useRef(ROOT_SLOTS_KEY);
   const rootSlotsRef = useRef(rootSlots);
@@ -2020,7 +2026,10 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // juste en dessous pour `tiles`/HOME_TILES_KEY).
   if (rootSlotsKeyRef.current !== ROOT_SLOTS_KEY) {
     rootSlotsKeyRef.current = ROOT_SLOTS_KEY;
-    const recharges = loadRootSlots(ROOT_SLOTS_KEY, tiles, ROOT_SLOTS_KEY_ANON);
+    // Tuiles de la NOUVELLE société (et non l'état `tiles`, encore celui de
+    // l'ancienne ici) : sinon ses tuiles propres sont jugées « manquantes »
+    // et posées dans les premières cases libres de la nouvelle grille.
+    const recharges = loadRootSlots(ROOT_SLOTS_KEY, loadTilesForKey(HOME_TILES_KEY, HOME_TILES_KEY_ANON), ROOT_SLOTS_KEY_ANON);
     derniersSlotsRef.current = JSON.stringify(recharges);
     setRootSlots(recharges);
   }
@@ -2157,6 +2166,8 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         let tuilesLocales: TileItemNode[] = [];
         try { if (brutTuilesLocal) tuilesLocales = JSON.parse(brutTuilesLocal); } catch { /* ignore */ }
         const lectureTuiles = lireDispositionAgence((data as any)?.home_tiles, agencyId);
+        noterMajServeurVue('home_tiles', currentUser.uid, agencyId, lectureTuiles.maj);
+        noterMajServeurVue('home_root_slots', currentUser.uid, agencyId, lireDispositionAgence((data as any)?.home_root_slots, agencyId).maj);
         const tuilesServeur = lectureTuiles.items;
         const majLocaleTuiles = lireHorodatageLocal(cleTuiles) ?? 0;
         // Un serveur STRICTEMENT plus récent (autre appareil) l'emporte : on ne
@@ -2244,6 +2255,33 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
         setVersionMasquees((v) => v + 1);
       }
     })();
+  }, [currentUser?.uid, activeAgency?.id, relanceSync]);
+  // Un onglet resté ouvert ne relisait jamais le serveur : au retour sur
+  // l'onglet (ou si une écriture est refusée car un autre appareil a modifié
+  // la disposition), on vide les écritures en attente puis on relit.
+  useEffect(() => {
+    const relancer = async () => {
+      const agencyId = activeAgency?.id;
+      if (!currentUser?.uid || !agencyId) return;
+      await forcerSynchronisationDisposition();
+      homeSyncLoadedAgencies.delete(clefSyncTuiles(agencyId));
+      setRelanceSync((v) => v + 1);
+    };
+    let dernier = 0;
+    const surVisibilite = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - dernier < 30_000) return;
+      dernier = Date.now();
+      void relancer();
+    };
+    const surConflit = () => { dernier = Date.now(); void relancer(); };
+    document.addEventListener('visibilitychange', surVisibilite);
+    window.addEventListener(EVENEMENT_DISPOSITION_CONFLIT, surConflit);
+    return () => {
+      document.removeEventListener('visibilitychange', surVisibilite);
+      window.removeEventListener(EVENEMENT_DISPOSITION_CONFLIT, surConflit);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid, activeAgency?.id]);
   // `activeAgency` peut n'être connu qu'après le premier rendu (chargement
   // du profil), et un super admin peut aussi changer d'agence active SANS

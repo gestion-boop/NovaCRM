@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn(), auth: {} } }));
 
-import { lireDispositionAgence, restaurerDispositionDepuisFige } from './dispositionAccueil';
+import { lireDispositionAgence, restaurerDispositionDepuisFige, figerDispositionAvantMiseAJour, lireHorodatageLocal } from './dispositionAccueil';
 
 // Garde-fous : une mise à jour de l'application ne doit jamais changer l'ordre
 // ni la présence des tuiles de l'accueil d'un utilisateur.
@@ -40,5 +40,15 @@ describe('disposition de l’accueil — stabilité entre deux versions', () => 
     localStorage.setItem('novasphere_frozen_layout_snapshot_v1', JSON.stringify({ timestamp: 5, keys: { [cle]: '["ancien"]' } }));
     restaurerDispositionDepuisFige();
     expect(localStorage.getItem(cle)).toBe('["actuel"]');
+  });
+
+  it('le gel avant mise à jour garde les horodatages d’origine', async () => {
+    const cle = 'novasphere_home_tiles_v3_U_A';
+    localStorage.setItem(cle, '["t1"]');
+    localStorage.setItem(`${cle}__maj`, '1000');
+    await figerDispositionAvantMiseAJour();
+    expect(lireHorodatageLocal(cle)).toBe(1000);
+    const snap = JSON.parse(localStorage.getItem('novasphere_frozen_layout_snapshot_v1') || '{}');
+    expect(Object.keys(snap.keys)).toEqual([cle]);
   });
 });

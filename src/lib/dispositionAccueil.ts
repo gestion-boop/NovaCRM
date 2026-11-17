@@ -81,6 +81,16 @@ interface EcritureEnAttente {
 // dans la même entrée : la disposition de A ne partait jamais vers SA ligne
 // `user_ui_settings`, silencieusement. Clé composite utilisateur+agence.
 const clefLot = (userId: string, agencyId: string) => `${userId}::${agencyId}`;
+// Dernière date serveur vue (lue ou écrite par CET onglet), par utilisateur,
+// colonne et agence : si le serveur est passé devant sans que ce soit nous,
+// un autre appareil a écrit entre-temps et on ne recouvre pas sa version.
+const majVueServeur = new Map<string, number>();
+const clefVue = (colonne: string, userId: string, agencyId: string) => `${colonne}::${userId}::${agencyId}`;
+export function noterMajServeurVue(colonne: ColonneDisposition, userId: string, agencyId: string, maj: number | null | undefined) {
+  if (typeof maj === 'number' && maj > 0) majVueServeur.set(clefVue(colonne, userId, agencyId), maj);
+}
+/** Événement émis quand une écriture est refusée parce qu'un autre appareil est passé devant. */
+export const EVENEMENT_DISPOSITION_CONFLIT = 'nv-disposition-conflit';
 const enVol: Partial<Record<ColonneDisposition, Promise<void>>> = {};
 const enAttente: Partial<Record<ColonneDisposition, Map<string, EcritureEnAttente>>> = {};
 const timerDebounce: Partial<Record<ColonneDisposition, ReturnType<typeof setTimeout>>> = {};
@@ -111,6 +121,14 @@ async function ecrireMaintenant(colonne: ColonneDisposition, lot: Map<string, Ec
         e.resolveurs.forEach((r) => r({ error: null }));
         continue;
       }
+      const vue = majVueServeur.get(clefVue(colonne, e.userId, e.agencyId));
+      if (vue !== undefined && majServeur > vue) {
+        // Un autre appareil a écrit depuis notre dernière lecture : on
+        // abandonne cette écriture et on demande une relecture.
+        try { window.dispatchEvent(new CustomEvent(EVENEMENT_DISPOSITION_CONFLIT, { detail: { agencyId: e.agencyId } })); } catch { /* ignore */ }
+        e.resolveurs.forEach((r) => r({ error: null }));
+        continue;
+      }
       base[e.agencyId] = e.valeur;
       majs[e.agencyId] = e.maj;
       base._maj = majs;
@@ -118,6 +136,7 @@ async function ecrireMaintenant(colonne: ColonneDisposition, lot: Map<string, Ec
         .from('user_ui_settings')
         .upsert({ user_id: e.userId, [colonne]: base } as any, { onConflict: 'user_id' });
       resultat = { error: error ? { message: error.message } : null };
+      if (!error) majVueServeur.set(clefVue(colonne, e.userId, e.agencyId), e.maj);
     } catch (err) {
       resultat = { error: { message: (err as { message?: string })?.message || String(err) } };
     }
@@ -177,23 +196,28 @@ export async function figerDispositionAvantMiseAJour(): Promise<void> {
     // 1. Vider immédiatement toutes les files d'attente vers Supabase
     await forcerSynchronisationDisposition();
 
-    // 2. Figer toutes les clés de disposition dans un instantané immuable
+    // 2. Figer toutes les clés de disposition dans un instantané immuable.
+    // IMPORTANT : on garde les horodatages d'ORIGINE. Re-dater « maintenant »
+    // (ancien comportement) faisait passer une vieille copie locale pour la
+    // plus récente et écrasait la vraie disposition du compte au rechargement.
     const snapshot: Record<string, string> = {};
+    const horodatages: Record<string, number> = {};
     const now = Date.now();
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && (k.startsWith('novasphere_home_slots_v5_') || k.startsWith('novasphere_home_tiles_v3_'))) {
+      if (k && !k.endsWith('__maj') && (k.startsWith('novasphere_home_slots_v5_') || k.startsWith('novasphere_home_tiles_v3_'))) {
         const val = localStorage.getItem(k);
         if (val) {
           snapshot[k] = val;
-          ecrireHorodatageLocal(k, now);
+          const h = lireHorodatageLocal(k);
+          if (h) horodatages[k] = h;
         }
       }
     }
 
     // Copie de secours : on la saute si elle est trop volumineuse (le stockage
     // du navigateur est limité à ~5 Mo et se retrouvait saturé).
-    const serialise = JSON.stringify({ timestamp: now, keys: snapshot });
+    const serialise = JSON.stringify({ timestamp: now, keys: snapshot, maj: horodatages });
     if (serialise.length <= 400_000) localStorage.setItem('novasphere_frozen_layout_snapshot_v1', serialise);
   } catch (err) {
     console.warn('[figerDispositionAvantMiseAJour]', err);
@@ -212,7 +236,9 @@ export function restaurerDispositionDepuisFige(): void {
       for (const [key, val] of Object.entries(parsed.keys)) {
         if (typeof val === 'string' && !localStorage.getItem(key)) {
           localStorage.setItem(key, val);
-          ecrireHorodatageLocal(key, parsed.timestamp || Date.now());
+          // Date d'origine si connue ; sinon aucune (le serveur fait foi).
+          const h = parsed.maj && typeof parsed.maj[key] === 'number' ? parsed.maj[key] : null;
+          if (h) ecrireHorodatageLocal(key, h);
         }
       }
     }
