@@ -132,6 +132,8 @@ interface ClientDocItem extends DocItem {
   mimeType?: string;
 
   driveFileId: string;
+  /** Fichier déposé dans le stockage Supabase (repli quand Google Drive est indisponible). */
+  storagePath?: string;
   driveFolderName?: string;
   downloadUrl?: string;
 
@@ -1723,6 +1725,10 @@ export default function ClientProfileView({
     recorder.onstop = async () => {
       recorder.stream.getTracks().forEach((t) => t.stop());
       const blob = new Blob(chatAudioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      if (blob.size === 0) {
+        toast.error("Enregistrement vide : rien n'a été capté par le micro. Réessayez.");
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = async () => {
         const dataUrl = reader.result as string;
@@ -1735,6 +1741,7 @@ export default function ClientProfileView({
           setUploadingChatMedia(false);
         }
       };
+      reader.onerror = () => toast.error("Impossible de lire l'enregistrement vocal.");
       reader.readAsDataURL(blob);
     };
     recorder.stop();
@@ -1934,6 +1941,15 @@ export default function ClientProfileView({
         });
       }
 
+      // Fichiers déposés dans le stockage Nova (repli sans Google Drive) :
+      // liens signés temporaires, générés à chaque chargement.
+      const urlsSignees: Record<string, string> = {};
+      const chemins = (data || []).filter((d: any) => d.storage_path && !d.drive_web_view_link).map((d: any) => d.storage_path as string);
+      if (chemins.length > 0) {
+        const { data: signees } = await supabase.storage.from('documents').createSignedUrls(chemins, 3600);
+        (signees || []).forEach((u: any) => { if (u?.path && u?.signedUrl) urlsSignees[u.path] = u.signedUrl; });
+      }
+
       const rows: ClientDocItem[] = (data || []).map((item: any) => ({
         id: item.id,
         type: 'file',
@@ -1943,8 +1959,9 @@ export default function ClientProfileView({
         mimeType: item.mime_type || 'application/octet-stream',
         updatedAt: item.created_at || new Date().toISOString(),
         uploadedBy: uploaderNames[item.uploaded_by] || 'Collaborateur',
-        url: item.drive_web_view_link || '#',
+        url: item.drive_web_view_link || (item.storage_path ? urlsSignees[item.storage_path] : '') || '#',
         driveFileId: item.drive_file_id || '',
+        storagePath: item.storage_path || undefined,
         contactId: client.id,
         contactName: client.name,
         agencyId: client.agencyId,
@@ -2105,19 +2122,30 @@ export default function ClientProfileView({
     setProfileSuccess(null);
 
     try {
-      const token = await getGoogleToken();
-
       const agencyName =
         AGENCIES.find((agency) =>
           matchesAgency(client.agencyId, agency.id)
         )?.name || 'Nova CRM';
 
-      const upload = await uploadDocumentToDrive(
-        token,
-        docFile,
-        agencyName,
-        currentUser.email
-      );
+      // Google Drive d'abord ; si l'accès Google est expiré, refusé ou en
+      // panne, le fichier est déposé dans le stockage de l'application plutôt
+      // que de bloquer l'ajout (signalé : « on ne peut pas intégrer de PDF »).
+      let upload: { fileId: string; fileUrl: string; downloadUrl?: string; folderName: string } | null = null;
+      let storagePath: string | null = null;
+      try {
+        const token = await getGoogleToken();
+        upload = await uploadDocumentToDrive(token, docFile, agencyName, currentUser.email);
+      } catch (driveErr) {
+        console.warn('Dépôt Google Drive impossible, repli sur le stockage Nova :', driveErr);
+      }
+      if (!upload) {
+        const nomSur = docFile.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '_');
+        storagePath = `${client.agencyId}/${client.id}/${Date.now()}-${nomSur}`;
+        const { error: stoErr } = await supabase.storage
+          .from('documents')
+          .upload(storagePath, docFile, { contentType: docFile.type || 'application/octet-stream', upsert: false });
+        if (stoErr) throw new Error(`Impossible d'enregistrer le fichier : ${stoErr.message}`);
+      }
 
       const now = new Date().toISOString();
 
@@ -2145,10 +2173,11 @@ export default function ClientProfileView({
           currentUser.email ||
           'Utilisateur Nova CRM',
 
-        url: upload.fileUrl,
-        downloadUrl: upload.downloadUrl,
-        driveFileId: upload.fileId,
-        driveFolderName: upload.folderName,
+        url: upload?.fileUrl ?? '',
+        downloadUrl: upload?.downloadUrl,
+        driveFileId: upload?.fileId ?? '',
+        storagePath: storagePath ?? undefined,
+        driveFolderName: upload?.folderName,
 
         contactId: client.id,
         contactName: client.name,
@@ -2173,12 +2202,16 @@ export default function ClientProfileView({
         file_name: docName.trim(),
         mime_type: docFile.type || 'application/octet-stream',
         size_bytes: docFile.size,
-        drive_web_view_link: upload.fileUrl,
-        drive_file_id: upload.fileId,
+        drive_web_view_link: upload?.fileUrl ?? null,
+        drive_file_id: upload?.fileId ?? null,
+        storage_path: storagePath,
         created_at: now,
         is_shared: docIsShared,
       } as any);
-      if (docInsertErr) throw docInsertErr;
+      if (docInsertErr) {
+        if (storagePath) void supabase.storage.from('documents').remove([storagePath]);
+        throw docInsertErr;
+      }
 
       // Ticket #55 : pas de notification JS ici — un trigger base de
       // données (`trg_notify_shared_document`) prévient déjà tous les
@@ -2215,7 +2248,9 @@ export default function ClientProfileView({
     }
 
     const confirmed = window.confirm(
-      `Supprimer "${documentItem.name}" de la fiche client et de Google Drive ?`
+      documentItem.driveFileId
+        ? `Supprimer "${documentItem.name}" de la fiche client et de Google Drive ?`
+        : `Supprimer "${documentItem.name}" de la fiche client ?`
     );
 
     if (!confirmed) return;
@@ -2224,10 +2259,18 @@ export default function ClientProfileView({
     setProfileSuccess(null);
 
     try {
-      const token = await getGoogleToken();
-
       if (documentItem.driveFileId) {
-        await deleteDriveFile(token, documentItem.driveFileId);
+        // Google injoignable : on supprime quand même la fiche du document
+        // (le fichier Drive reste alors à retirer à la main).
+        try {
+          const token = await getGoogleToken();
+          await deleteDriveFile(token, documentItem.driveFileId);
+        } catch (driveErr) {
+          console.warn('Suppression Drive impossible :', driveErr);
+        }
+      }
+      if (documentItem.storagePath) {
+        await supabase.storage.from('documents').remove([documentItem.storagePath]);
       }
 
       const { error: delErr } = await supabase.from('documents').delete().eq('id', documentItem.id);
