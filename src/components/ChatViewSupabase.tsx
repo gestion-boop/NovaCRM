@@ -2831,6 +2831,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     if (!showChannelEmoji && !showChannelNovaPicker && !showConvEmoji && !showConvNovaPicker && !showChannelSchedule && !showConvSchedule) return;
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as Node;
+      if ((target as HTMLElement).closest?.('[data-emoji-picker]')) return;
       if (showChannelEmoji && channelEmojiRef.current && !channelEmojiRef.current.contains(target)) setShowChannelEmoji(false);
       if (showChannelNovaPicker && channelNovaPickerRef.current && !channelNovaPickerRef.current.contains(target)) setShowChannelNovaPicker(false);
       if (showConvEmoji && convEmojiRef.current && !convEmojiRef.current.contains(target)) setShowConvEmoji(false);
@@ -6974,8 +6975,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                       >
                         <Smile className="w-4 h-4" />
                       </button>
-                      {showConvEmoji && (
-                        <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center max-w-[min(440px,calc(100vw-1.5rem))] max-sm:max-w-none max-h-[340px] overflow-y-auto custom-scrollbar">
+                      {showConvEmoji && createPortal(
+                        <div data-emoji-picker className="fixed z-[80] bottom-24 left-1/2 -translate-x-1/2 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-2xl w-max max-w-[calc(100vw-1.5rem)] max-h-[50vh] overflow-y-auto custom-scrollbar justify-items-center">
                           {QUICK_EMOJIS.map((e) => (
                             <button
                               key={e}
@@ -6986,7 +6987,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                               {e}
                             </button>
                           ))}
-                        </div>
+                        </div>,
+                        document.body
                       )}
                     </div>
                     <div className="sm:relative shrink-0" ref={convNovaPickerRef}>
@@ -7933,8 +7935,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                   >
                     <Smile className="w-4 h-4" />
                   </button>
-                  {showChannelEmoji && (
-                    <div className="absolute z-20 bottom-full mb-2 left-0 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-xl w-max max-sm:w-auto max-sm:right-0 max-sm:justify-items-center max-w-[min(440px,calc(100vw-1.5rem))] max-sm:max-w-none max-h-[340px] overflow-y-auto custom-scrollbar">
+                  {showChannelEmoji && createPortal(
+                    <div data-emoji-picker className="fixed z-[80] bottom-24 left-1/2 -translate-x-1/2 grid grid-cols-6 gap-2 bg-[#0b1c1e] border border-white/20 rounded-xl p-3 shadow-2xl w-max max-w-[calc(100vw-1.5rem)] max-h-[50vh] overflow-y-auto custom-scrollbar justify-items-center">
                       {QUICK_EMOJIS.map((e) => (
                         <button
                           key={e}
@@ -7945,7 +7947,8 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
                           {e}
                         </button>
                       ))}
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </div>
                 <div className="sm:relative shrink-0" ref={channelNovaPickerRef}>

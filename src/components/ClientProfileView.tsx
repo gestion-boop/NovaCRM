@@ -4814,8 +4814,8 @@ export default function ClientProfileView({
                         >
                           <Smile className="w-5 h-5" />
                         </button>
-                        {showComposerEmoji && (
-                          <div className="absolute z-20 bottom-full mb-2 left-0 flex gap-1 bg-[#0a1e20] border border-[#144447]/60 rounded-xl p-1.5 shadow-xl">
+                        {showComposerEmoji && createPortal(
+                          <div className="fixed z-[80] bottom-24 left-1/2 -translate-x-1/2 flex gap-1 bg-[#0a1e20] border border-[#144447]/60 rounded-xl p-2 shadow-2xl">
                             {QUICK_EMOJIS.map((e) => (
                               <button
                                 key={e}
@@ -4826,7 +4826,8 @@ export default function ClientProfileView({
                                 {e}
                               </button>
                             ))}
-                          </div>
+                          </div>,
+                          document.body
                         )}
                       </div>
                     </div>
