@@ -16,6 +16,10 @@
       "destination": "/api/admin/drive/google-callback"
     },
     {
+      "source": "/immosphera360",
+      "destination": "/immosphera360.html"
+    },
+    {
       "source": "/((?!api/|assets/|version\\.json|sw\\.js).*)",
       "destination": "/index.html"
     }

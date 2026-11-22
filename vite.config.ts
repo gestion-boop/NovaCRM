@@ -35,6 +35,35 @@ function writeVersionFile() {
   };
 }
 
+
+// Page d'entrée dédiée à /immosphera360 : même application, mais avec le nom,
+// le manifeste et les icônes Immosphera dans l'en-tête HTML. Un raccourci
+// épinglé (panneau VR du casque Meta Quest, écran d'accueil) lit ces balises
+// au moment de l'ajout — il montre donc le logo Immosphera au lieu de celui de
+// NovaSphere. Le fichier est dérivé de dist/index.html pour garder les bons
+// noms de fichiers (hachés) de ce build.
+function writeImmospheraEntry() {
+  return {
+    name: "write-immosphera360-entry",
+    writeBundle() {
+      try {
+        const src = path.resolve(__dirname, "dist/index.html");
+        let html = fs.readFileSync(src, "utf8");
+        html = html
+          .replace(/<title>[^<]*<\/title>/, "<title>Immosphera 360</title>")
+          .replace(/<link rel="manifest"[^>]*>/, '<link rel="manifest" href="/immosphera/manifest.json" />')
+          .replace(/<link rel="apple-touch-icon"[^>]*>/, '<link rel="apple-touch-icon" href="/immosphera/apple-touch-icon.png" />')
+          .replace(/<link rel="icon"[^>]*>/, '<link rel="icon" href="/immosphera/favicon.png" type="image/png" />\n    <link rel="icon" href="/immosphera/icon-192.png" type="image/png" sizes="192x192" />\n    <link rel="icon" href="/immosphera/icon-512.png" type="image/png" sizes="512x512" />\n    <meta property="og:image" content="/immosphera/icon-512.png" />\n    <meta property="og:title" content="Immosphera 360" />')
+          .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, '<meta name="apple-mobile-web-app-title" content="Immosphera 360" />')
+          .replace(/<meta name="theme-color"[^>]*>/, '<meta name="theme-color" content="#14282b" />');
+        fs.writeFileSync(path.resolve(__dirname, "dist/immosphera360.html"), html);
+      } catch (e) {
+        console.warn("immosphera360.html non généré :", e);
+      }
+    },
+  };
+}
+
 // Identité du build, figée dans le paquet JavaScript lui-même (et non lue à
 // l'exécution) : la ligne affichée dans le menu décrit donc le code RÉELLEMENT
 // en train de tourner dans le navigateur, cache et service worker compris.
@@ -70,6 +99,7 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === 'development' && componentTagger(),
     mode !== 'development' && writeVersionFile(),
+    mode !== 'development' && writeImmospheraEntry(),
   ].filter(Boolean),
   resolve: {
     alias: {
