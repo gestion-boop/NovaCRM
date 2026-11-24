@@ -138,7 +138,21 @@ const TaskModal: React.FC<TaskModalProps> = ({
     })();
   }, [currentUser, activeAgency]);
 
-  const availablePresets = type === 'Rendez-vous' ? appointmentTitlesList : taskTitlesList;
+  const availablePresetsBruts = type === 'Rendez-vous' ? appointmentTitlesList : taskTitlesList;
+
+  // Demandé : les 4 derniers libellés utilisés passent en tête (1 clic), le
+  // reste reste dans « Autres… ». Mémorisé par navigateur, par société pour
+  // les tâches et à part pour les rendez-vous.
+  const cleRecents = `novasphere:titres-recents:${type === 'Rendez-vous' ? 'rdv' : 'tache'}:${activeAgency?.id || 'default'}`;
+  const lireRecents = (): string[] => {
+    try {
+      const v = JSON.parse(localStorage.getItem(cleRecents) || '[]');
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+    } catch { return []; }
+  };
+  const recents = lireRecents().filter((t) => availablePresetsBruts.includes(t));
+  const availablePresets = [...recents, ...availablePresetsBruts.filter((t) => !recents.includes(t))];
+  const NB_RAPIDES = 4;
 
   // Titre unifié : un seul état sans double champ
   const [title, setTitle] = useState(initialTask?.title || '');
@@ -211,6 +225,12 @@ const TaskModal: React.FC<TaskModalProps> = ({
           description: description.trim() || undefined,
         });
       }
+      try {
+        if (availablePresetsBruts.includes(finalTitle)) {
+          const suite = [finalTitle, ...lireRecents().filter((t) => t !== finalTitle)].slice(0, NB_RAPIDES);
+          localStorage.setItem(cleRecents, JSON.stringify(suite));
+        }
+      } catch { /* mémoire locale indisponible : sans effet */ }
       onClose();
     } catch (err) {
       console.error('Erreur enregistrement tâche :', err);
@@ -565,7 +585,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 {/* Suggestions rapides en 1 clic pour ce type d'action */}
                 <div className="space-y-1 pt-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {availablePresets.slice(0, 3).map((preset) => (
+                    {availablePresets.slice(0, NB_RAPIDES).map((preset) => (
                       <button
                         key={preset}
                         type="button"
@@ -581,17 +601,17 @@ const TaskModal: React.FC<TaskModalProps> = ({
                     ))}
 
                     {/* Menu déroulant pour le reste des libellés de l'agence */}
-                    {availablePresets.length > 3 && (
+                    {availablePresets.length > NB_RAPIDES && (
                       <div className="relative">
                         <select
-                          value={availablePresets.slice(3).includes(title) ? title : ''}
+                          value={availablePresets.slice(NB_RAPIDES).includes(title) ? title : ''}
                           onChange={(e) => {
                             if (e.target.value) setTitle(e.target.value);
                           }}
                           className="bg-[#051518] border border-teal-500/25 rounded-lg px-2 py-1 text-[11px] text-slate-300 hover:text-white focus:outline-none focus:border-[#F7BC5F] cursor-pointer appearance-none pr-6"
                         >
-                          <option value="">Autres ({availablePresets.length - 3})...</option>
-                          {availablePresets.slice(3).map((preset) => (
+                          <option value="">Autres ({availablePresets.length - NB_RAPIDES})...</option>
+                          {availablePresets.slice(NB_RAPIDES).map((preset) => (
                             <option key={preset} value={preset} className="bg-[#07191b] text-white">
                               {preset}
                             </option>
