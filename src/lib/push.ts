@@ -17,6 +17,13 @@ export function getVapidPublicKey() {
         const publicKey = (data as { publicKey?: string })?.publicKey;
         if (!publicKey) throw new Error('Clé de notification indisponible');
         return publicKey;
+      })
+      .catch((err) => {
+        // Un échec (réseau, session pas encore prête au lancement) ne doit pas
+        // rester mémorisé : sinon plus aucune réparation d'abonnement ne
+        // marche jusqu'au prochain rechargement de la page.
+        vapidPublicKeyPromise = null;
+        throw err;
       });
   }
   return vapidPublicKeyPromise;
