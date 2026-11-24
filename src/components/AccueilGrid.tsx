@@ -3152,6 +3152,19 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
       maj = Date.now();
       ecrireHorodatageLocal(HOME_TILES_KEY, maj);
     }
+    // Une tuile posée sur l'accueil ne doit plus figurer dans la liste des
+    // tuiles masquées. Signalé : « je mets Projets internes en affichage
+    // permanent et, à la connexion suivante, la tuile part » — la tuile était
+    // réajoutée à la grille sans sortir de la liste masquée (réajout par un
+    // autre chemin que « Réafficher »), et chaque chargement la retirait de
+    // nouveau, la liste du compte étant réunie à celle du navigateur.
+    if (change && currentUser?.uid) {
+      try {
+        lireMasquees()
+          .filter((m) => existsRecursive(tiles, m.id))
+          .forEach((m) => { void reafficherTuile(currentUser.uid, m.id); });
+      } catch { /* sans effet sur l'accueil */ }
+    }
     if (change && currentUser?.uid && activeAgency?.id && homeSyncReadyAgencies.has(clefSyncTuiles(activeAgency.id))) {
       ecrireDispositionAgence('home_tiles', currentUser.uid, activeAgency.id, tiles, maj)
         // Diagnostic temporaire (même raison que home_root_slots juste
