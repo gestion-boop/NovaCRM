@@ -2488,12 +2488,37 @@ export const AccueilGrid: React.FC<AccueilGridProps> = ({
   // Applique les verrouillages du super admin / admin par-dessus la personnalisation
   // locale — un utilisateur qui a déplacé/recoloré une tuile verrouillée
   // avant qu'elle ne le devienne verra quand même la version imposée.
+  // Signalé : « je crée Netty dans le dossier verrouillé, les autres
+  // utilisateurs ne le voient pas ». `lockedTiles` garde d'anciens verrous du
+  // même dossier (autres identifiants, même titre). Chez un utilisateur dont
+  // le dossier n'a pas le même identifiant que celui du super admin, le verrou
+  // était retrouvé par TITRE avec `.find` — donc le PREMIER de la liste, pas
+  // forcément le plus récent : les cartes ajoutées depuis n'arrivaient pas.
+  // On retient maintenant le verrou le plus récent (puis le plus fourni), y
+  // compris quand l'identifiant du dossier correspond à un ancien verrou.
+  const scoreVerrou = (v: Verrou) => (v.maj || 0) * 1000 + (v.children?.length || 0);
+  const meilleurVerrouPartage = (correspond: (v: Verrou) => boolean): Verrou | undefined => {
+    let meilleur: Verrou | undefined;
+    Object.values(lockedTiles).forEach((v) => {
+      if (!Array.isArray(v.children) || !correspond(v)) return;
+      if (!meilleur || scoreVerrou(v) > scoreVerrou(meilleur)) meilleur = v;
+    });
+    return meilleur;
+  };
+  const verrouDe = (item: TileItemNode): Verrou | undefined => {
+    const exact = lockedTiles[item.id];
+    const partage = estDossierPasserelle(item)
+      ? meilleurVerrouPartage((v) => estDossierPasserelle(v as any))
+      : estDossierImmosphera(item.title)
+        ? meilleurVerrouPartage((v) => estDossierImmosphera(v.title))
+        : undefined;
+    if (!partage) return exact;
+    if (!exact) return partage;
+    return scoreVerrou(partage) > scoreVerrou(exact) ? partage : exact;
+  };
   const applyLocks = (items: TileItemNode[]): TileItemNode[] =>
     items.map((item) => {
-      const lock =
-        lockedTiles[item.id] ||
-        (estDossierPasserelle(item) ? Object.values(lockedTiles).find((v) => estDossierPasserelle(v as any)) : undefined) ||
-        (estDossierImmosphera(item.title) ? Object.values(lockedTiles).find((v) => estDossierImmosphera(v.title)) : undefined);
+      const lock = verrouDe(item);
       const withChildren = item.children ? { ...item, children: applyLocks(item.children) } : item;
       if (!lock) return { ...withChildren, locked: false };
 
