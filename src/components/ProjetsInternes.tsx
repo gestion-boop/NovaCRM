@@ -1,3 +1,4 @@
+import { chargerEpinglesDepuisServeur, enregistrerEpinglesSurServeur } from '@/lib/epinglesProjets';
 import React, {
   useEffect,
   useMemo,
@@ -418,6 +419,21 @@ export const ProjetsInternes: React.FC<
     }
   }, [CLE_EPINGLES, currentUser?.uid]);
 
+  // Épingles du compte : elles suivent l'utilisateur d'un appareil à l'autre.
+  useEffect(() => {
+    const uid = currentUser?.uid;
+    if (!uid) return;
+    let actif = true;
+    let locales: string[] = [];
+    try { locales = JSON.parse(localStorage.getItem(`nova_projets_epingles_${uid}`) || '[]'); } catch { /* ignore */ }
+    void chargerEpinglesDepuisServeur(uid, Array.isArray(locales) ? locales : []).then((serveur) => {
+      if (!actif || !serveur) return;
+      setEpingles(serveur);
+      try { localStorage.setItem(`nova_projets_epingles_${uid}`, JSON.stringify(serveur)); } catch { /* ignore */ }
+    });
+    return () => { actif = false; };
+  }, [currentUser?.uid]);
+
   const basculerEpingle = (projectId: string) => {
     setEpingles((prev) => {
       const suivant = prev.includes(projectId)
@@ -428,6 +444,7 @@ export const ProjetsInternes: React.FC<
       } catch {
         toast.error("L'épingle n'a pas pu être enregistrée sur cet appareil (stockage du navigateur indisponible ou plein).");
       }
+      if (currentUser?.uid) void enregistrerEpinglesSurServeur(currentUser.uid, suivant);
       return suivant;
     });
   };

@@ -1,3 +1,4 @@
+import { Linkified } from '@/components/Linkified';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   DndContext,
@@ -1357,7 +1358,7 @@ const TaskDetailModal: React.FC<{
                                 pour tout le CRM, ce qui empêchait aussi de copier le texte d'un
                                 message — signalé (29/09/2026). Réactivé ici sans rien changer
                                 ailleurs. */}
-                            {m.kind === 'text' && <span className="whitespace-pre-wrap break-words select-text">{m.body}</span>}
+                            {m.kind === 'text' && <span className="whitespace-pre-wrap break-words select-text"><Linkified text={m.body || ''} /></span>}
                             {m.kind === 'image' && m.attachmentUrl && (
                               <button
                                 type="button"
