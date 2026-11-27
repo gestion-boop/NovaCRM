@@ -1636,3 +1636,27 @@ export const deposerVideoSecours = async (file: File): Promise<string> => {
   if (errLien || !data?.signedUrl) throw new Error(errLien?.message || 'Lien de la vidéo indisponible.');
   return data.signedUrl;
 };
+
+/**
+ * Envoi d'une vidéo de chat : le stockage de l'application d'abord (lecture
+ * immédiate dans une balise vidéo), Google Drive seulement en repli.
+ *
+ * Signalé : « la vidéo est toujours en cours de traitement, c'est trop long ».
+ * Un lien Drive est une page de visionneuse : Google doit d'abord transcoder
+ * la vidéo, ce qui peut durer de longues minutes et affiche « Ce fichier
+ * vidéo est toujours en cours de traitement ». Déposée dans le stockage de
+ * l'appli, la vidéo se lit tout de suite.
+ */
+export const envoyerVideoChat = async (file: File, dossierDrive: string): Promise<string> => {
+  try {
+    return await deposerVideoSecours(file);
+  } catch (errStockage) {
+    // Stockage refusé (taille, quota, droits) : on tente Google Drive.
+    console.warn('Dépôt vidéo dans le stockage Nova impossible, repli sur Google Drive :', errStockage);
+    let token = getCachedAccessToken();
+    if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
+    if (!token) throw errStockage;
+    const res = await uploadVideoToDriveFolder(token, file, dossierDrive);
+    return res.fileUrl;
+  }
+};

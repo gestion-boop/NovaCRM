@@ -17,7 +17,7 @@ import { pickVoiceMimeType } from '@/lib/audioRecording';
 // vite les quelques Mo que ça tolère). Même parade déjà en place côté fiche
 // client (ClientProfileView.tsx, handleChatVideoSelected) : on dépose le
 // fichier sur le Drive Google de l'utilisateur et on ne stocke que le lien.
-import { getCachedAccessToken, requestWorkspaceAccessToken, uploadVideoToDriveFolder, isDriveEmbedUrl, deposerVideoSecours } from '@/lib/workspace';
+import { isDriveEmbedUrl, envoyerVideoChat } from '@/lib/workspace';
 import { assemblerDictee } from '@/lib/dictee';
 import { ouvrirPieceJointe } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -473,13 +473,7 @@ async function preparerFichierVideo(file: File, contextName: string): Promise<st
   if (file.size > MAX_VIDEO_SIZE) {
     throw new Error('Vidéo trop volumineuse (150 Mo maximum).');
   }
-  let token = getCachedAccessToken();
-  if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
-  if (token) {
-    const res = await uploadVideoToDriveFolder(token, file, contextName);
-    return res.fileUrl;
-  }
-  return deposerVideoSecours(file);
+  return envoyerVideoChat(file, contextName);
 }
 
 export default function ChatViewSupabase({ initialHighlightMessageId, onHighlightConsumed, initialConversationId, onConversationTargetConsumed, initialChannelId, onChannelTargetConsumed, onExitMobile, isActive = true }: ChatViewSupabaseProps = {}) {
@@ -3707,11 +3701,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setUploadingConvMedia(true);
     const toastId = toast.loading('Préparation de la vidéo...');
     try {
-      let token = getCachedAccessToken();
-      if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
-      const url = token
-        ? (await uploadVideoToDriveFolder(token, file, 'Messagerie interne')).fileUrl
-        : await deposerVideoSecours(file);
+      const url = await envoyerVideoChat(file, 'Messagerie interne');
       setConvPendingMedia({
         kind: 'video',
         url,
@@ -3899,11 +3889,7 @@ export default function ChatViewSupabase({ initialHighlightMessageId, onHighligh
     setUploadingChannelMedia(true);
     const toastId = toast.loading('Préparation de la vidéo...');
     try {
-      let token = getCachedAccessToken();
-      if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
-      const url = token
-        ? (await uploadVideoToDriveFolder(token, file, `Canal - ${activeChannel?.name || 'Messagerie'}`)).fileUrl
-        : await deposerVideoSecours(file);
+      const url = await envoyerVideoChat(file, `Canal - ${activeChannel?.name || 'Messagerie'}`);
       setChannelPendingMedia({
         kind: 'video',
         url,

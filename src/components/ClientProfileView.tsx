@@ -55,7 +55,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-import { getCachedAccessToken, requestWorkspaceAccessToken, hydrateAccessTokenFromSession, reconnectGoogleWorkspace, deleteDriveFile, uploadVideoToDriveFolder, deposerVideoSecours, isDriveEmbedUrl, sendGmailMessage, fetchGmailMessages, GmailMessageSummary, fetchGoogleCalendarEvents, createGoogleCalendarEvent, GoogleCalendarEvent } from '@/lib/workspace';
+import { getCachedAccessToken, requestWorkspaceAccessToken, hydrateAccessTokenFromSession, reconnectGoogleWorkspace, deleteDriveFile, envoyerVideoChat, isDriveEmbedUrl, sendGmailMessage, fetchGmailMessages, GmailMessageSummary, fetchGoogleCalendarEvents, createGoogleCalendarEvent, GoogleCalendarEvent } from '@/lib/workspace';
 import { uploadDocumentToDrive } from '@/lib/documentDrive';
 import { getTaskDateStatus } from '@/lib/taskUtils';
 import { TEAM_MEMBERS, getAssignedUser } from '@/data/teamMembers';
@@ -1673,14 +1673,7 @@ export default function ClientProfileView({
     }
     setUploadingChatMedia(true);
     try {
-      let token = getCachedAccessToken();
-      if (!token) token = await requestWorkspaceAccessToken().catch(() => null);
-      if (token) {
-        const res = await uploadVideoToDriveFolder(token, file, client?.name || 'Fiche client');
-        await insertChatMessage({ video_url: res.fileUrl });
-      } else {
-        await insertChatMessage({ video_url: await deposerVideoSecours(file) });
-      }
+      await insertChatMessage({ video_url: await envoyerVideoChat(file, client?.name || 'Fiche client') });
     } catch (err: any) {
       toast.error(err?.message || "Impossible d'envoyer la vidéo");
     } finally {
